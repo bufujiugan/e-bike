@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.part.PartMapper">
+    <sql id="partWhere">
+        <where>
+            <if test="keyword != null and keyword != ''">AND (p.part_sn LIKE CONCAT('%', #{keyword}, '%') OR p.batch_no LIKE CONCAT('%', #{keyword}, '%'))</if>
+            <if test="partType != null and partType != ''">AND p.part_type = #{partType}</if>
+            <if test="status != null and status != ''">AND p.status = #{status}</if>
+            <if test="supplierId != null">AND p.supplier_id = #{supplierId}</if>
+        </where>
+    </sql>
+    <select id="selectPage" resultType="com.bike.server.part.PartView">
+        SELECT p.id, p.part_sn, p.part_type, p.supplier_id, s.supplier_name, p.batch_no, p.qc_status, p.bind_status,
+               p.current_vehicle_id, p.current_frame_sn, p.status, p.inbound_time, p.remark, p.created_at, p.updated_at
+        FROM bike_part p LEFT JOIN bike_supplier s ON s.id = p.supplier_id
+        <include refid="partWhere"/> ORDER BY p.updated_at DESC LIMIT #{offset}, #{limit}
+    </select>
+    <select id="count" resultType="long">
+        SELECT COUNT(*) FROM bike_part p <include refid="partWhere"/>
+    </select>
+    <select id="selectById" resultType="com.bike.server.part.PartView">
+        SELECT p.id, p.part_sn, p.part_type, p.supplier_id, s.supplier_name, p.batch_no, p.qc_status, p.bind_status,
+               p.current_vehicle_id, p.current_frame_sn, p.status, p.inbound_time, p.remark, p.created_at, p.updated_at
+        FROM bike_part p LEFT JOIN bike_supplier s ON s.id = p.supplier_id WHERE p.id = #{id}
+    </select>
+    <select id="selectBySn" resultType="com.bike.server.part.PartView">
+        SELECT p.id, p.part_sn, p.part_type, p.supplier_id, s.supplier_name, p.batch_no, p.qc_status, p.bind_status,
+               p.current_vehicle_id, p.current_frame_sn, p.status, p.inbound_time, p.remark, p.created_at, p.updated_at
+        FROM bike_part p LEFT JOIN bike_supplier s ON s.id = p.supplier_id WHERE p.part_sn = #{partSn}
+    </select>
+    <select id="countEnabledSupplier" resultType="int">SELECT COUNT(*) FROM bike_supplier WHERE id=#{supplierId} AND status='ENABLED'</select>
+    <insert id="insert">
+        INSERT INTO bike_part(part_sn, part_type, supplier_id, batch_no, qc_status, bind_status, status, inbound_time, remark)
+        VALUES(#{partSn}, #{partType}, #{supplierId}, #{batchNo}, #{qcStatus}, 'UNBOUND', 'AVAILABLE', NOW(3), #{remark})
+    </insert>
+    <update id="update">
+        UPDATE bike_part SET supplier_id = #{request.supplierId}, batch_no = #{request.batchNo}, qc_status = #{request.qcStatus},
+            status = COALESCE(#{request.status}, status), remark = #{request.remark} WHERE id = #{id}
+    </update>
+    <insert id="insertOperationLog">
+        INSERT INTO bike_operation_log(business_type,business_id,action,operator_id,operator_name,before_data,after_data,client_ip)
+        VALUES('PART_CHANGE',#{businessId},#{action},#{operatorId},#{operatorName},JSON_OBJECT('value',#{beforeData}),JSON_OBJECT('value',#{afterData}),#{clientIp})
+    </insert>
+</mapper>

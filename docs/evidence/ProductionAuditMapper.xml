@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="ProductionAudit">
+  <select id="counts">SELECT DATABASE() schemaName, (SELECT COUNT(*) FROM bike_vehicle) vehicles, (SELECT COUNT(*) FROM bike_production_task) tasks, (SELECT COUNT(*) FROM bike_production_scan) scans, (SELECT COUNT(*) FROM bike_production_print) prints, (SELECT COUNT(*) FROM bike_production_issue) issues, (SELECT COUNT(*) FROM bike_production_attachment) attachments</select>
+  <select id="taskStates">SELECT status, COUNT(*) qty FROM bike_production_task GROUP BY status</select>
+  <select id="printStates">SELECT status, COUNT(*) qty FROM bike_production_print GROUP BY status</select>
+  <select id="partialTasks">SELECT t.id,t.batch_no,t.status,t.vehicle_id,COUNT(s.id) scanCount,GROUP_CONCAT(CONCAT(s.code_type,':',s.code)) codes FROM bike_production_task t JOIN bike_production_scan s ON s.task_id=t.id WHERE t.status='OPEN' GROUP BY t.id ORDER BY t.updated_at DESC LIMIT 5</select>
+  <select id="vehicleOrigins">SELECT CASE WHEN frame_sn LIKE 'AC%' THEN 'AC_TEST' WHEN frame_sn LIKE 'EDGE%' THEN 'EDGE_TEST' WHEN frame_sn LIKE 'BROWSER%' THEN 'BROWSER_TEST' ELSE 'OTHER_OR_SEED' END origin,COUNT(*) qty FROM bike_vehicle GROUP BY origin</select>
+  <select id="otherFrames">SELECT frame_sn FROM bike_vehicle WHERE frame_sn NOT LIKE 'AC%' AND frame_sn NOT LIKE 'EDGE%' AND frame_sn NOT LIKE 'BROWSER%' ORDER BY frame_sn</select>
+  <select id="stockCoverage">SELECT COUNT(*) total, SUM(p.vehicle_id IS NOT NULL) withProductionSku, SUM(p.vehicle_id IS NULL) withoutProductionSku FROM bike_vehicle v LEFT JOIN bike_production_vehicle p ON p.vehicle_id=v.id WHERE v.status=2</select>
+  <select id="isolatedStock">SELECT v.frame_sn,COUNT(DISTINCT i.id) openIssues FROM bike_vehicle v JOIN bike_production_issue i ON (i.code COLLATE utf8mb4_unicode_ci=v.frame_sn COLLATE utf8mb4_unicode_ci OR EXISTS(SELECT 1 FROM bike_vehicle_part_binding b WHERE b.vehicle_id=v.id AND b.is_current=1 AND b.part_sn COLLATE utf8mb4_unicode_ci=i.code COLLATE utf8mb4_unicode_ci)) WHERE v.status=2 AND i.status='OPEN' GROUP BY v.id</select>
+</mapper>

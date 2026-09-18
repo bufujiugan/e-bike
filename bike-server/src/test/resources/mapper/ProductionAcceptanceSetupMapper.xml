@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="ProductionAcceptanceSetup">
+    <update id="createDatabase">CREATE DATABASE IF NOT EXISTS bike_production_acceptance_20260916 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci</update>
+    <select id="schemaAudit">SELECT (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_comment='') missing_tables,(SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND column_comment='') missing_columns,(SELECT MAX(installed_rank) FROM bike_schema_history WHERE success=1) migration_rank</select>
+    <update id="expireTestClaim">UPDATE bike_production_print SET claimed_at=DATE_SUB(NOW(),INTERVAL 6 MINUTE) WHERE id=%s AND terminal='acceptance-timeout'</update>
+</mapper>

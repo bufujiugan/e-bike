@@ -1,0 +1,68 @@
+name: e-bike
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: bike
+      MYSQL_USER: ${BIKE_DB_USERNAME:-bike}
+      MYSQL_PASSWORD: ${BIKE_DB_PASSWORD:?Run python tools/configure.py}
+      MYSQL_ROOT_PASSWORD: ${BIKE_MYSQL_ROOT_PASSWORD:?Run python tools/configure.py}
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_PASSWORD\" mysql --protocol=TCP -h 127.0.0.1 -u\"$$MYSQL_USER\" -D bike -e 'SELECT 1' >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+  server:
+    build:
+      context: .
+      dockerfile: deploy/server.Dockerfile
+    environment:
+      BIKE_DB_URL: jdbc:mysql://mysql:3306/bike?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      BIKE_DB_USERNAME: ${BIKE_DB_USERNAME:-bike}
+      BIKE_DB_PASSWORD: ${BIKE_DB_PASSWORD:?Run python tools/configure.py}
+      BIKE_JWT_SECRET: ${BIKE_JWT_SECRET:?Run python tools/configure.py}
+      BIKE_ADMIN_PASSWORD: ${BIKE_ADMIN_PASSWORD:?Run python tools/configure.py}
+      BIKE_FLYWAY_LOCATIONS: ${BIKE_FLYWAY_LOCATIONS:-classpath:db/migration-prod}
+      BIKE_JWT_TTL: ${BIKE_JWT_TTL:-PT8H}
+      BIKE_PRODUCTION_STORAGE: ${BIKE_PRODUCTION_STORAGE:-local}
+      BIKE_PRODUCTION_FILE_ROOT: /app/storage/production
+      BIKE_COS_REGION: ${BIKE_COS_REGION:-}
+      BIKE_COS_BUCKET: ${BIKE_COS_BUCKET:-}
+      BIKE_COS_SECRET_ID: ${BIKE_COS_SECRET_ID:-}
+      BIKE_COS_SECRET_KEY: ${BIKE_COS_SECRET_KEY:-}
+    ports:
+      - "${BIKE_BIND_ADDRESS:-127.0.0.1}:${BIKE_SERVER_PORT:-18080}:18080"
+    volumes:
+      - production-files:/app/storage/production
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+  web:
+    build:
+      context: .
+      dockerfile: deploy/frontend.Dockerfile
+      args:
+        APP: bike-web
+    ports:
+      - "${BIKE_BIND_ADDRESS:-127.0.0.1}:${BIKE_WEB_PORT:-5173}:80"
+    depends_on: [server]
+    restart: unless-stopped
+  h5:
+    build:
+      context: .
+      dockerfile: deploy/frontend.Dockerfile
+      args:
+        APP: bike-h5
+    ports:
+      - "${BIKE_BIND_ADDRESS:-127.0.0.1}:${BIKE_H5_PORT:-5174}:80"
+    depends_on: [server]
+    restart: unless-stopped
+volumes:
+  mysql-data:
+  production-files:

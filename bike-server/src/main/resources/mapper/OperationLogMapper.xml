@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.common.OperationLogMapper">
+    <insert id="insert">
+        INSERT INTO bike_operation_log(business_type,business_id,action,operator_id,operator_name,before_data,after_data,client_ip,remark)
+        VALUES(#{businessType},#{businessId},#{action},#{operatorId},#{operatorName},#{beforeData},#{afterData},#{clientIp},#{remark})
+    </insert>
+</mapper>

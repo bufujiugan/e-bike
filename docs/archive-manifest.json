@@ -1,0 +1,2433 @@
+{
+  "date": "2026-09-18",
+  "repository": "https://github.com/bufujiugan/e-bike",
+  "hash_basis": "Git index bytes (normalized text), excluding this manifest itself",
+  "provenance": {
+    "docs/requirements/生产及业务系统开发规划讨论_2026-09-15.pdf": "User-provided meeting PDF, archived unchanged",
+    "docs/requirements/E-Bike生产库存管理系统_项目进度与功能清单_原版.pdf": "User-provided original plan PDF, archived unchanged",
+    "docs/requirements/售后案例申报与查询管理系统需求.txt": "User-provided pasted requirements, text preserved",
+    "docs/communication/需求沟通记录.md": "Project user messages, secrets and tool context removed",
+    "docs/archive-tools/": "Historical document/prototype builder sources, copied from temporary project folders",
+    "docs/evidence/": "Selected shareable historical and fresh verification results"
+  },
+  "files": [
+    {
+      "path": ".dockerignore",
+      "category": "documentation-and-tooling",
+      "bytes": 125,
+      "sha256": "6e60e77011ca67a9594e3e5d5bad8aec9bbc66294663103066d2167c30a4b839"
+    },
+    {
+      "path": ".env.example",
+      "category": "documentation-and-tooling",
+      "bytes": 636,
+      "sha256": "64ed41799bb4e39e22c3961faa08f51c38d04aaff5359f81585560dc3a059a9c"
+    },
+    {
+      "path": ".gitattributes",
+      "category": "documentation-and-tooling",
+      "bytes": 271,
+      "sha256": "f10d13496701227a7a58a6d2d6b8c60b923399cf3c5d06d296f58a1e964a8dd0"
+    },
+    {
+      "path": ".github/workflows/build.yml",
+      "category": "documentation-and-tooling",
+      "bytes": 2517,
+      "sha256": "f3cc965bafec379f5ae8d22263b1ad6ac6c48df25af0f3288829a4ccee4fe45f"
+    },
+    {
+      "path": ".gitignore",
+      "category": "documentation-and-tooling",
+      "bytes": 581,
+      "sha256": "733ff251051bb551115c49f8f4a5aa07eed5e51293bf1e43d1d505b2f44b0382"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "category": "documentation-and-tooling",
+      "bytes": 1871,
+      "sha256": "b20cf240fcc60b406f8fc506fcbd29e63af11b3243c2b3e736f5e9ed7263d364"
+    },
+    {
+      "path": "E-Bike_高保真交互原型.html",
+      "category": "prototype-and-screenshots",
+      "bytes": 96061,
+      "sha256": "a5a301ad177b98944f17ddf074e4c2ddcf50ae0fd91084356b598c4a66c4e684"
+    },
+    {
+      "path": "README.md",
+      "category": "documentation-and-tooling",
+      "bytes": 13342,
+      "sha256": "366af4cf9327d5518927b16e22d3923e2a80db7588d1d3a11c6c58c9382e5177"
+    },
+    {
+      "path": "bike-h5/index.html",
+      "category": "source-and-database",
+      "bytes": 354,
+      "sha256": "302b2bbe58baee3aabf7814d39f6f3398d41d9aa5e12c2219da025a2b4f84800"
+    },
+    {
+      "path": "bike-h5/package.json",
+      "category": "source-and-database",
+      "bytes": 482,
+      "sha256": "c742cf9bd4e59fc80c82d0f9fa04c2ae6eab55868c22269ab2d06ec554f0b66a"
+    },
+    {
+      "path": "bike-h5/pnpm-lock.yaml",
+      "category": "source-and-database",
+      "bytes": 42396,
+      "sha256": "e34283ed928603d9902d56aec5b93bcdc361c49f21a54f2f8db364c670237ffc"
+    },
+    {
+      "path": "bike-h5/pnpm-workspace.yaml",
+      "category": "source-and-database",
+      "bytes": 29,
+      "sha256": "ac02d96368617c760f093cfe61fdec64b6244007ab3553e0d6621f706f54a353"
+    },
+    {
+      "path": "bike-h5/src/App.vue",
+      "category": "source-and-database",
+      "bytes": 23118,
+      "sha256": "8fce2377893b089c90caf6d12fb34d0ef024d3d594321bc952f09fb8018c35ef"
+    },
+    {
+      "path": "bike-h5/src/api.ts",
+      "category": "source-and-database",
+      "bytes": 710,
+      "sha256": "2108e18bba5f685bdf996ae46b78fd58316d6040d432f142473c8701d98140da"
+    },
+    {
+      "path": "bike-h5/src/components/ProductionStation.vue",
+      "category": "source-and-database",
+      "bytes": 9710,
+      "sha256": "1abb58b05e0e9db2f8ee7ee2e8b4904d492eea43dcc494af8a198a4a5a34c9c0"
+    },
+    {
+      "path": "bike-h5/src/main.ts",
+      "category": "source-and-database",
+      "bytes": 228,
+      "sha256": "a4f431d1dfc5f0ba70efe6fdcda7eac205f3ae0bde60b7d004ef80d9c7750f01"
+    },
+    {
+      "path": "bike-h5/src/permissions.ts",
+      "category": "source-and-database",
+      "bytes": 577,
+      "sha256": "1620ddb7aea316a9c4064d11c311175721b9153fb0c0bc9eee94041d3d3a6e82"
+    },
+    {
+      "path": "bike-h5/src/style.css",
+      "category": "source-and-database",
+      "bytes": 1374,
+      "sha256": "391bdc21359243898f4790e80845e5c0091d8c598807dc2fe5065bb4600f01df"
+    },
+    {
+      "path": "bike-h5/tsconfig.json",
+      "category": "source-and-database",
+      "bytes": 447,
+      "sha256": "9a4a2b2abcc416bd2ee95de3689f1141c9174d6cc3d35b9861692203c9bf9817"
+    },
+    {
+      "path": "bike-h5/vite.config.ts",
+      "category": "source-and-database",
+      "bytes": 372,
+      "sha256": "0fd0791e0c55aef1e7d82cac387832d1e2c9f00f16097c0ec803fd89daeabb78"
+    },
+    {
+      "path": "bike-server/pom.xml",
+      "category": "source-and-database",
+      "bytes": 4456,
+      "sha256": "4dd423c273b127885d186d17486e51f89882a26726c2676a6e6b3071aaa54407"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/BikeServerApplication.java",
+      "category": "source-and-database",
+      "bytes": 565,
+      "sha256": "92bcb2a02d558271f306fc8ce3f6e71527225387936f8ff73f5a5674f0d21ddf"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/agent/AgentController.java",
+      "category": "source-and-database",
+      "bytes": 2236,
+      "sha256": "6fc03071ba8ffdaf84b6b8fa679a9d1191ac29c4fd0a247ba3c729d2315f9d7d"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/agent/AgentInventoryService.java",
+      "category": "source-and-database",
+      "bytes": 2709,
+      "sha256": "508841c172a59a29968b6d6a7cdd893224e4d871f3e516c6fdee1635ed4a5147"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/agent/PurchaseIntentController.java",
+      "category": "source-and-database",
+      "bytes": 1011,
+      "sha256": "17a294b839bb871d9d48585c5fb72ea81006ce3186545b3ff3b3710395ab24d1"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/agent/PurchaseIntentCreateRequest.java",
+      "category": "source-and-database",
+      "bytes": 526,
+      "sha256": "44f57fb2cca5884cae7accd501b9edf8a9bf2541e6f2716cfd74e60f9ce3194c"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/agent/PurchaseIntentMapper.java",
+      "category": "source-and-database",
+      "bytes": 722,
+      "sha256": "2819cb1cf328e5bedcff4270a9be6f14b3a44e42997279e7373802963eaca642"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/agent/PurchaseIntentService.java",
+      "category": "source-and-database",
+      "bytes": 257,
+      "sha256": "9704c7255ce366bcd7e59fc88a28d11ef193175b74498a9ef59f2123c4bed728"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/agent/PurchaseIntentServiceImpl.java",
+      "category": "source-and-database",
+      "bytes": 3507,
+      "sha256": "945b5319c7855d48b3f2eb2aa5a1a64208c308944ef5ab46734115879afee59a"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/agent/PurchaseIntentView.java",
+      "category": "source-and-database",
+      "bytes": 344,
+      "sha256": "75d2a7b06c9b178bdba4db24229522f54ce86f4c4877c152ff030c240ca4f95b"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/assembly/AssemblyController.java",
+      "category": "source-and-database",
+      "bytes": 1686,
+      "sha256": "0192a9f1ba1b4bb12632e8476e5089a3c6cfe05b27b7eed64413f4bf9fb36492"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/assembly/AssemblyMapper.java",
+      "category": "source-and-database",
+      "bytes": 1246,
+      "sha256": "bf311825a7d8d83908434bdcf7b1d1e4f363f09cfdda881e7f02cc7a07701042"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/assembly/AssemblyPartRecord.java",
+      "category": "source-and-database",
+      "bytes": 1150,
+      "sha256": "5b65ae099c60fc7f0b59d6663ef699a68688cbfffdca0f20a828e67e249961f0"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/assembly/AssemblyScanRequest.java",
+      "category": "source-and-database",
+      "bytes": 398,
+      "sha256": "2a9a228538090c654d07c9e0d4d6110316d3038a35cfb6658a47403674078edb"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/assembly/AssemblyService.java",
+      "category": "source-and-database",
+      "bytes": 427,
+      "sha256": "c7995b29bd95428650b32365f3d236269860341f60701df444a1523bc3f7871f"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/assembly/AssemblyServiceImpl.java",
+      "category": "source-and-database",
+      "bytes": 7895,
+      "sha256": "16a048fb894bde74c2a85236a023dfeda777a8eb71df80e4de3b06ef33c84902"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/assembly/AssemblySubmitRequest.java",
+      "category": "source-and-database",
+      "bytes": 484,
+      "sha256": "d49039b7bc9fff6d0d0735bace2651eeffa0e6854ea907386f0e53b2588fdb2e"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/assembly/AssemblyValidationResult.java",
+      "category": "source-and-database",
+      "bytes": 156,
+      "sha256": "5fa17b784ab65d184b6c3f9d6cdfcf47ba7633a0c58f37fcf767f5c82834eda2"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/assembly/FrameScanRequest.java",
+      "category": "source-and-database",
+      "bytes": 181,
+      "sha256": "d679bac614145d4d1bbe16b0487a82b0f870783674134ea680a203132450c9de"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/auth/AuthContextResponse.java",
+      "category": "source-and-database",
+      "bytes": 585,
+      "sha256": "01ff34ce04d00f7699c9687f7e4938828806b40197b3599515f0c119960c8d4f"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/auth/AuthController.java",
+      "category": "source-and-database",
+      "bytes": 1853,
+      "sha256": "ab07a54c3b76164c266b0d54a5ee36a795ed559f3315c80f920bda08024d395d"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/auth/AuthService.java",
+      "category": "source-and-database",
+      "bytes": 361,
+      "sha256": "3b350a115871556b78e24e3c82f1813cbdfeb792621cea229566e7576eb9521e"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/auth/AuthServiceImpl.java",
+      "category": "source-and-database",
+      "bytes": 7029,
+      "sha256": "763c44578e0558da8d037f179a03b787af9b6a0c78cd57454205fca3c6a47522"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/auth/ChangePasswordRequest.java",
+      "category": "source-and-database",
+      "bytes": 394,
+      "sha256": "aea083d2ea4b9967a5fe70de71f877b4a39d3d4551fceef1379d58dc14428751"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/auth/LoginLogMapper.java",
+      "category": "source-and-database",
+      "bytes": 379,
+      "sha256": "951c8bc410ccf026b3b3c604ca18ae60fb373f2a2ec7a911d94e925416a57cbc"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/auth/LoginRequest.java",
+      "category": "source-and-database",
+      "bytes": 249,
+      "sha256": "d79f7acabeef72465125dc2752a6a2adf925991c601cb916b88a239b44110b4e"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/auth/LoginResponse.java",
+      "category": "source-and-database",
+      "bytes": 360,
+      "sha256": "c4ce8bf990b919b73a5b3e71fa638e1c83916d6b2b2eaa876f6ab44beadbf9c2"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/auth/UserAuthRecord.java",
+      "category": "source-and-database",
+      "bytes": 503,
+      "sha256": "27c91e72f5e40818c5c0c535b021d9a6929ad5541371748bfcb2e50b9a59067e"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/common/ApiResponse.java",
+      "category": "source-and-database",
+      "bytes": 508,
+      "sha256": "0f19c916dee1a3bedde2540729449769a6439840df6c2fd59d7b05644739c154"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/common/BusinessException.java",
+      "category": "source-and-database",
+      "bytes": 300,
+      "sha256": "ca812d75e4fa27ab50f9a3b05c2f2cbf25ab05d0a67d647572eab9e3f138cbb2"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/common/CurrentOperator.java",
+      "category": "source-and-database",
+      "bytes": 5145,
+      "sha256": "43100464093b44288b6c6bd29795794a89aef86170fc8f6a44ffb5aa60b6405b"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/common/GlobalExceptionHandler.java",
+      "category": "source-and-database",
+      "bytes": 4343,
+      "sha256": "5e445bfb18621f5420131447ee0360841997a59df46334a1d6b2267f6362ccf5"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/common/OperationLogMapper.java",
+      "category": "source-and-database",
+      "bytes": 651,
+      "sha256": "eb8c5026580641bf689520f3219bdf1c34faca66386f832b0829a8a8be3532da"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/common/PageResponse.java",
+      "category": "source-and-database",
+      "bytes": 146,
+      "sha256": "1939b72e7c2ac5819efdaf320724c78e91aef21ec7c47607cd9c988f07f4de62"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/config/AdminPasswordInitializer.java",
+      "category": "source-and-database",
+      "bytes": 2940,
+      "sha256": "c98ad8526cb74cfc472e26ad1e27713ec712885ea5920d8dd79049eb5edd7508"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/config/JwtAuthenticationFilter.java",
+      "category": "source-and-database",
+      "bytes": 4588,
+      "sha256": "69f5c2b8e5506f6b2909fdbd2625718738d57f4cf8e6f5a4b7f615b9fc80eecf"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/config/JwtTokenService.java",
+      "category": "source-and-database",
+      "bytes": 1861,
+      "sha256": "8ec8aaaa53ec46e44ce7d814cf98a1208dc85754d93d55aad430e5015c918709"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/config/SecurityConfig.java",
+      "category": "source-and-database",
+      "bytes": 3769,
+      "sha256": "0f67c4921bf46aad3c7eed06af28023ad72101bb734d4cf8bac647c823ffda84"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/dashboard/DashboardController.java",
+      "category": "source-and-database",
+      "bytes": 950,
+      "sha256": "50123fb02f83f12629b74cb93b79937f5f241fa28368cb43a1c9f05e3c8af0d5"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/dashboard/DashboardMapper.java",
+      "category": "source-and-database",
+      "bytes": 433,
+      "sha256": "fc3836f1d2c9bbe43a8bb5847e23ee8d2e7401cafb869554c2cf43a52c829bfb"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/dashboard/DashboardService.java",
+      "category": "source-and-database",
+      "bytes": 148,
+      "sha256": "1718fe3dcbca79430b1751b5dcc4ed91d4807f58322a14464d55ef9015feef41"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/dashboard/DashboardServiceImpl.java",
+      "category": "source-and-database",
+      "bytes": 4764,
+      "sha256": "546991571e7fec4ff56bda7a429300c80bce62ec1a7b205d5e27b58f997d60fe"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/dashboard/DashboardSummary.java",
+      "category": "source-and-database",
+      "bytes": 490,
+      "sha256": "6ded1591b80896cdef42446d53a434202b7785c7b5cc71efaf990baf0731039c"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/dashboard/DashboardTrend.java",
+      "category": "source-and-database",
+      "bytes": 199,
+      "sha256": "c6a3ea104e35914f443e13603daec38dc07097a6d43bc59829613365ea70bdd4"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/lock/InventoryLockController.java",
+      "category": "source-and-database",
+      "bytes": 1372,
+      "sha256": "ba713ae8d5a9e9625d4cf724c1fc66892bfa284607056fc5a7ec5ee2aa80ad48"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/lock/InventoryLockCreateRequest.java",
+      "category": "source-and-database",
+      "bytes": 542,
+      "sha256": "810b75858089e165556c914e44372f8b382e22474f2edede7be80c35a2d58f79"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/lock/InventoryLockExpiryJob.java",
+      "category": "source-and-database",
+      "bytes": 1145,
+      "sha256": "ea18d46198d7b88144aa56fc558b02ad4941d65bd1ff05ebac2d1024ccc4707d"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/lock/InventoryLockMapper.java",
+      "category": "source-and-database",
+      "bytes": 1456,
+      "sha256": "5af0b4b4be1bba11eb3e7d714706da3399ac929b38af7fbdd9b9d6cb9dfac7a4"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/lock/InventoryLockService.java",
+      "category": "source-and-database",
+      "bytes": 371,
+      "sha256": "b5afc79d9e9ab790e653cff8014641026d9831a44c0d540f8b5319a78d36c223"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/lock/InventoryLockServiceImpl.java",
+      "category": "source-and-database",
+      "bytes": 6168,
+      "sha256": "626bd8c9925c654f1e083f6cd7aa9855835af8ebd9f395895a3af40f2458de56"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/lock/InventoryLockView.java",
+      "category": "source-and-database",
+      "bytes": 1662,
+      "sha256": "941ff6bd1cc27ef92142498d33a462dde0bb72bf838fa2699944d82125484f58"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/master/LocationItem.java",
+      "category": "source-and-database",
+      "bytes": 202,
+      "sha256": "1a28878345cc4a901af23c9423a18823856cf608746d80bfd3d4e713480e73c2"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/master/LocationUpdateRequest.java",
+      "category": "source-and-database",
+      "bytes": 433,
+      "sha256": "781db048caea145eeb72c1f404f0485cf9d1b2866608e0a75896c0b8c671d12a"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/master/MasterController.java",
+      "category": "source-and-database",
+      "bytes": 2415,
+      "sha256": "8aaaff332e45c1a231249697b63fd7c295a6f2347b4e9980c30ddf8b4bccbf60"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/master/MasterCreateRequest.java",
+      "category": "source-and-database",
+      "bytes": 658,
+      "sha256": "ba40eb23d309d373066e2843ad48c0bd6116f7c51463d51fc958582b11b2bfe5"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/master/MasterItem.java",
+      "category": "source-and-database",
+      "bytes": 211,
+      "sha256": "d48d50a5fed434f50ca60bf80560835d54039e5614d7e07f298491b4dba09c00"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/master/MasterMapper.java",
+      "category": "source-and-database",
+      "bytes": 1403,
+      "sha256": "8d3b41592c27e431bf7eb3c3de62e8c431b3768868eb503fce4075bb87aee5a1"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/master/MasterService.java",
+      "category": "source-and-database",
+      "bytes": 639,
+      "sha256": "7d9ef80ed055174cc05cccecadc0df24e82bbedc3f4455c9b91751c4bfc7f9d6"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/master/MasterServiceImpl.java",
+      "category": "source-and-database",
+      "bytes": 10270,
+      "sha256": "dfc83503b68edbaa94d6028971b4d4f3231207c31c18a28bc8586cb6dd424f45"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/master/MasterUpdateRequest.java",
+      "category": "source-and-database",
+      "bytes": 658,
+      "sha256": "2057aa1e81f81e4dfa5b6498feffd494709e8c22c5df1221dca2be82928cbee1"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/module/ModuleController.java",
+      "category": "source-and-database",
+      "bytes": 1131,
+      "sha256": "97dfff11f48b54a0c2f8136bf2165901fea63fea335a5e2b7132089dfaeecacb"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/module/ModuleMapper.java",
+      "category": "source-and-database",
+      "bytes": 317,
+      "sha256": "8a129cd65033742ddd9f3bf0612e66c0df22167253cfc0b6441607e25202b346"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/module/ModulePageResponse.java",
+      "category": "source-and-database",
+      "bytes": 581,
+      "sha256": "06c826ed501046f923f775592045920255a701bcbe5777d0f252ae049bfe4c84"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/module/ModuleService.java",
+      "category": "source-and-database",
+      "bytes": 243,
+      "sha256": "aca54b15730677b5e93c740a505f1e27737b012b15d43473bf9825e241cb71f2"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/module/ModuleServiceImpl.java",
+      "category": "source-and-database",
+      "bytes": 12404,
+      "sha256": "307f6757f04fdaa00e5fcf0525356bb7543db1cd10650e06a0f3757f80d502c2"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/order/OrderController.java",
+      "category": "source-and-database",
+      "bytes": 1921,
+      "sha256": "0864000651d0f692d84790808f6e6bb5dc78ee5400fe99c6d2ed96e4629a7ba9"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/order/OrderMapper.java",
+      "category": "source-and-database",
+      "bytes": 1998,
+      "sha256": "cfb3fd07018eecb0e1d4996601a73223af9b53668c042778979a1860ecde3db2"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/order/OrderService.java",
+      "category": "source-and-database",
+      "bytes": 583,
+      "sha256": "73fb13cc946d271e0fc4f8bbf2f508c56d7ccf30e46e6f355ce73e1dc35b005a"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/order/OrderServiceImpl.java",
+      "category": "source-and-database",
+      "bytes": 5971,
+      "sha256": "031c79c00306b255f917b2585f76e56b080c38e903c741b6f30a818718254609"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/order/OrderVehicleView.java",
+      "category": "source-and-database",
+      "bytes": 259,
+      "sha256": "bacc1fcd729bd26995bd2872dfc2d9088fe0b2c9886b00eff4792f50ea48f4f0"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/order/SalesOrderCreateRequest.java",
+      "category": "source-and-database",
+      "bytes": 726,
+      "sha256": "5d4ab62f3f654f3ef4cf3cd262c935381993fd23de636424207fa0d632f66e45"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/order/SalesOrderView.java",
+      "category": "source-and-database",
+      "bytes": 2339,
+      "sha256": "5238b13c6fc6f04987b73e16c78779bd3838795981a1636e148d3462bb11c3ac"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/part/PartController.java",
+      "category": "source-and-database",
+      "bytes": 2143,
+      "sha256": "652bd98b0a15b54fea92107fbb8e311f38d50ff077e84e194da4db9da96e9f2b"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/part/PartCreateRequest.java",
+      "category": "source-and-database",
+      "bytes": 598,
+      "sha256": "9321a8912dc9db3a879021a017a5af71922bce0d30ec34c0ddcd40f7cfd1fb22"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/part/PartMapper.java",
+      "category": "source-and-database",
+      "bytes": 1194,
+      "sha256": "6b4d7f015ab45dc84dc80f55c448a2fe706f3ff218e990655721ffb7a9701bfe"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/part/PartService.java",
+      "category": "source-and-database",
+      "bytes": 598,
+      "sha256": "03906801a60ac2a403d723b89018ce81ad02bceb7c9dca02d6e68c78acb1ede6"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/part/PartServiceImpl.java",
+      "category": "source-and-database",
+      "bytes": 5312,
+      "sha256": "ce1b401f38cc92fc34ac763605d564596160b0643a85bc9ec8aacfa1da5a6a5c"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/part/PartUpdateRequest.java",
+      "category": "source-and-database",
+      "bytes": 352,
+      "sha256": "c3cf07607bd407d12f2e63ced4fe9597fc77f70519f64ec5b609ac321dd2bb63"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/part/PartView.java",
+      "category": "source-and-database",
+      "bytes": 2589,
+      "sha256": "6e0236ec2c1c990157cb6cdb325b0b47606a50420f9d852f6311c92d9c05c594"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/production/ProductionAccess.java",
+      "category": "source-and-database",
+      "bytes": 1882,
+      "sha256": "c66642a60400f27fd883ad14d4c3a4f68455ca515eaf73fe48d24386509b7cd4"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/production/ProductionAttachmentService.java",
+      "category": "source-and-database",
+      "bytes": 4536,
+      "sha256": "b2be8f1aacb98271afd46a5d93f6d326399fa90796e05b1bb14bafd033f01eac"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/production/ProductionContracts.java",
+      "category": "source-and-database",
+      "bytes": 1989,
+      "sha256": "d83befe9ef46954cb44f285d48d7399bf81a117f42bf0fc74b30255675c500f1"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/production/ProductionController.java",
+      "category": "source-and-database",
+      "bytes": 7563,
+      "sha256": "9c68edcf1fba8e6d029b6995c45625a6f5b6090d85c073f7265161a69aef19ae"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/production/ProductionExcelService.java",
+      "category": "source-and-database",
+      "bytes": 4629,
+      "sha256": "7ea46da5fc783a6b111248ca977c15d4932e01a4e99c605981aecd5a17f36d46"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/production/ProductionFileStore.java",
+      "category": "source-and-database",
+      "bytes": 3631,
+      "sha256": "602366cb2f0608982e8fb2cdc6c16c74cadf25449fc857c4f2d8aef8cf19703f"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/production/ProductionGuard.java",
+      "category": "source-and-database",
+      "bytes": 2624,
+      "sha256": "188c329df34ec6478fb82fe549e425e3710777f0689f6c224304b5f1e42ee5f8"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/production/ProductionLabelService.java",
+      "category": "source-and-database",
+      "bytes": 4714,
+      "sha256": "f763ee43deb3b8ade99eff57d566b736584846999e2ac83a032033d2972e9098"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/production/ProductionMapper.java",
+      "category": "source-and-database",
+      "bytes": 4495,
+      "sha256": "f89276eea077b17e169ab4f4164c3eb5a78c707202cb13bb0b5c077266be2459"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/production/ProductionMigrationConfig.java",
+      "category": "source-and-database",
+      "bytes": 410,
+      "sha256": "6ca750cf368c07f4f8cbe234cf29f7496f41277f05bbfb9596bdf054504b5f08"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/production/ProductionPrintRecovery.java",
+      "category": "source-and-database",
+      "bytes": 715,
+      "sha256": "e8c30af1a11786fd1d7dfadec87ed81f8c6310701d24aa216b94a7f35ad717ff"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/production/ProductionReworkGuard.java",
+      "category": "source-and-database",
+      "bytes": 1151,
+      "sha256": "81405334953c162382e4dd04fa71ea599d3341beb00fc21d68ab2e40ae679854"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/production/ProductionService.java",
+      "category": "source-and-database",
+      "bytes": 1381,
+      "sha256": "38758459df39db8d51e7b7fd4760caedc82abf60587c86e993d15aa986788de5"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/production/ProductionServiceImpl.java",
+      "category": "source-and-database",
+      "bytes": 20143,
+      "sha256": "c65a6206ed678106f5c61e3d1b8b5dff2c4ae9cb160ecdfcfd3b5b7bb0561a26"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/production/migration/V16__production_workflow.java",
+      "category": "source-and-database",
+      "bytes": 1728,
+      "sha256": "8a1b996f17fa6e62c0bb32da0409b0e8e3df78140f705e88d86e960867dc7c46"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/rework/ReworkController.java",
+      "category": "source-and-database",
+      "bytes": 920,
+      "sha256": "4cdbd3c428728e44a3dcf0b1d9ee00c8b621a8e708d1bf38d89ca49cedacecb3"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/rework/ReworkMapper.java",
+      "category": "source-and-database",
+      "bytes": 2808,
+      "sha256": "f1f007da90f49bdfbb1c38f8570a4fd4d06bdf0815d3fbf0e275020ad872a6b1"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/rework/ReworkRequest.java",
+      "category": "source-and-database",
+      "bytes": 449,
+      "sha256": "c5047d23ab62a5c6fe4970028ed3b84259529d2b62299a148994f4894b01b503"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/rework/ReworkService.java",
+      "category": "source-and-database",
+      "bytes": 236,
+      "sha256": "09f32dfbc3d2bdffe4ebdbd3e021a336d73f47b8a38fb7fa286967c7175ff7c7"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/rework/ReworkServiceImpl.java",
+      "category": "source-and-database",
+      "bytes": 5353,
+      "sha256": "5d1fd341925590ca36fadd23c36de62f067ff32249e04c6d7307f1f5cb96d57b"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/rework/ReworkView.java",
+      "category": "source-and-database",
+      "bytes": 1151,
+      "sha256": "52835cfece1688d6071baa61ecb81abe221721223a5ff7b9f762d1943d8d254b"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/stock/InventoryRow.java",
+      "category": "source-and-database",
+      "bytes": 1737,
+      "sha256": "af3ca2f61e1505ce9689acc0cf175627a62401ddc22d50b8cb0a53970a8c8370"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/stock/StockController.java",
+      "category": "source-and-database",
+      "bytes": 3222,
+      "sha256": "8257e96694620d44b0eb5085b917f0d248ac25e5e2c516038c7851dc6f3883ad"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/stock/StockInRequest.java",
+      "category": "source-and-database",
+      "bytes": 409,
+      "sha256": "3a95018aee41ad96db208b4b94c750f905091ef605c71a74d18c94ead405bf09"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/stock/StockMapper.java",
+      "category": "source-and-database",
+      "bytes": 2921,
+      "sha256": "979e6508f0a69a400ab2e3358b09e4a9d8920a80894c91a276407383538f458d"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/stock/StockOutRequest.java",
+      "category": "source-and-database",
+      "bytes": 436,
+      "sha256": "1edca547a438a16da790efbf6024ca4532689c03ffc361ae7b983a7d050f9f98"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/stock/StockRecordView.java",
+      "category": "source-and-database",
+      "bytes": 2693,
+      "sha256": "9f281209b403359c9f31e578f372e126a92123b54595d4ba508828c5044643f3"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/stock/StockService.java",
+      "category": "source-and-database",
+      "bytes": 732,
+      "sha256": "c0190efa4695030e857d4fa24bb81e4b3f812992fd489199257cae32a3b06d8a"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/stock/StockServiceImpl.java",
+      "category": "source-and-database",
+      "bytes": 13490,
+      "sha256": "8034399bd8ef1674e45466492d55dac110cb2812105a9e4d0664dd2aacf5a9a2"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/stock/StockValidationRequest.java",
+      "category": "source-and-database",
+      "bytes": 508,
+      "sha256": "0a77f9d9394184596fbdb83c0a55288852bdb8aad8781ce00933aab83d5ec35c"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/stock/StockValidationResult.java",
+      "category": "source-and-database",
+      "bytes": 134,
+      "sha256": "7fae33464837fdb713a464c4eac3dd40dba1c4a3f5d691720a873f1fae2eaffc"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/PermissionView.java",
+      "category": "source-and-database",
+      "bytes": 143,
+      "sha256": "7e7c28dcc767d6af4fcbe588fcfedec45b5dc66a19a04da9abcdacf9f402fe7e"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/RoleController.java",
+      "category": "source-and-database",
+      "bytes": 1670,
+      "sha256": "fea79f9cd82edd165d2092e1ef2f2c96cfab40ad77d2d2a969450ea61bf2d93a"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/RoleCreateRequest.java",
+      "category": "source-and-database",
+      "bytes": 240,
+      "sha256": "654bce274547a057cc1276827e30f82d7e5b34fa6f812e48f4e51a8fe5070c6a"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/RoleMapper.java",
+      "category": "source-and-database",
+      "bytes": 897,
+      "sha256": "ee17337a5e9371e03dccef3d6fcb903b7b2069f54a00f53473d6a8b02bc019b4"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/RolePermissionRequest.java",
+      "category": "source-and-database",
+      "bytes": 214,
+      "sha256": "c52dff7c19cccb809fd47fcd1f25644367136f0639840a9d39608b55de974cdc"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/RoleService.java",
+      "category": "source-and-database",
+      "bytes": 440,
+      "sha256": "a29836ed74f2500695010162576552d23a9a050b2c948ab8f2565748b6c1e39e"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/RoleServiceImpl.java",
+      "category": "source-and-database",
+      "bytes": 5051,
+      "sha256": "eee69a9c1fd8d6151e421d6f7f498ea9050f464a3bdacccd47c0889d04160c38"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/RoleView.java",
+      "category": "source-and-database",
+      "bytes": 811,
+      "sha256": "c639e7f113fcc83e9a198f1512aa08d5331a2c37a50f2f71bc3f8348336b9537"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/SystemConfigController.java",
+      "category": "source-and-database",
+      "bytes": 968,
+      "sha256": "54c6fd9a339e04b8cf93b6943395303db0ebedcf0a70fe57ed86f26a96a2573e"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/SystemConfigMapper.java",
+      "category": "source-and-database",
+      "bytes": 774,
+      "sha256": "10218e616d40f5b365684510d3a97da9b86f5adcd1f8bf80da8987a7f2d463a8"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/SystemConfigRequest.java",
+      "category": "source-and-database",
+      "bytes": 226,
+      "sha256": "c757e12a97936871a0b181779c7a29c8fae21df18024709a6460923261ba3187"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/SystemConfigService.java",
+      "category": "source-and-database",
+      "bytes": 253,
+      "sha256": "2fc273556d8b545e0827c1567061e8e2e0638e1f666f40e22e1774e3800adb72"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/SystemConfigServiceImpl.java",
+      "category": "source-and-database",
+      "bytes": 1672,
+      "sha256": "8e98e00807d05f5f1ffb212dcfc04ef82d32fa873a0488bf31a28833c34c5b66"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/SystemConfigView.java",
+      "category": "source-and-database",
+      "bytes": 179,
+      "sha256": "ed288706017efa6321ad839851dcd44642007a21370294efa50fbbad9e1ac54d"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/UserController.java",
+      "category": "source-and-database",
+      "bytes": 1427,
+      "sha256": "500bfb06c64a63e89cc0d4d8b27d2669638f4ddcc5fde544533d46612557e14f"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/UserCreateRequest.java",
+      "category": "source-and-database",
+      "bytes": 831,
+      "sha256": "49b31f5d7b5195eb66b69b68744ebd42e700570de534d444016ae80ec4a24860"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/UserMapper.java",
+      "category": "source-and-database",
+      "bytes": 1948,
+      "sha256": "06df93e9c3b742f8e5af064618d56ea018c70c369cc72f9d043ec5acc128ec84"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/UserRoleQueryController.java",
+      "category": "source-and-database",
+      "bytes": 771,
+      "sha256": "61d529fc9be934c49e5f6d1c0a5fd2b690ff47203f7c496191d9b89db8094d9e"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/UserRoleQueryService.java",
+      "category": "source-and-database",
+      "bytes": 140,
+      "sha256": "9b74542654a53b935cd942daddf41c6989e9e90c8c0aa142e335ff5962005c8d"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/UserRoleQueryServiceImpl.java",
+      "category": "source-and-database",
+      "bytes": 758,
+      "sha256": "1e55a7498096d9a8944f6679d71ff8ca69e10682839b83da94374b97ef73587a"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/UserRoleRequest.java",
+      "category": "source-and-database",
+      "bytes": 203,
+      "sha256": "80f39374d5268a8c409bbf61b5f43ad04eb2e6d8ad01352c017b3641c9e3c4f9"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/UserService.java",
+      "category": "source-and-database",
+      "bytes": 379,
+      "sha256": "b2ccf6b8663da664204626d1f24a98e4f67a6c848252a4ab390de98a002928e7"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/UserServiceImpl.java",
+      "category": "source-and-database",
+      "bytes": 7819,
+      "sha256": "37079ab8c207428861b75bbbdc597942d973b2861a6131a26502d2913f63162a"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/UserUpdateRequest.java",
+      "category": "source-and-database",
+      "bytes": 359,
+      "sha256": "30e8da0b248c9d8a1dfb4a4c91cb67fcb34d5198b669cbdf997e3e719aa1c97b"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/UserView.java",
+      "category": "source-and-database",
+      "bytes": 1368,
+      "sha256": "bf8224343eb2b3fcbb03ac18a4a9150e1c2e73f7316e22cc5b6a72b906929715"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/WorkstationController.java",
+      "category": "source-and-database",
+      "bytes": 1144,
+      "sha256": "4dfecec4a06c5831c369815386c6c34835601eeff8666faa48affce2f58e00fa"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/WorkstationMapper.java",
+      "category": "source-and-database",
+      "bytes": 564,
+      "sha256": "518fb1047fcf7b53c55f085aed8bdfedce05e93bc238646cb051213c637e2a26"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/WorkstationRequest.java",
+      "category": "source-and-database",
+      "bytes": 324,
+      "sha256": "98b27a6c8d03bef94758ed6dc534f2fd1e7dc9f1bda55ed73e2e31b072785921"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/WorkstationService.java",
+      "category": "source-and-database",
+      "bytes": 306,
+      "sha256": "4ded8f4a0bc6759cd1165c8d22f5258e6250a5ab5cff1f70974915aa88eade47"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/WorkstationServiceImpl.java",
+      "category": "source-and-database",
+      "bytes": 4653,
+      "sha256": "977303a24b7715d6fc0d1dd9c0a6448ae48fe3f850303cd1a6723ccfae2f4e60"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/system/WorkstationView.java",
+      "category": "source-and-database",
+      "bytes": 886,
+      "sha256": "67c9ec3b70a94d1d131cc3459bf303a24054e3ee7ee5a9a5d5a4ddce7cedc6a8"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/trace/TraceController.java",
+      "category": "source-and-database",
+      "bytes": 836,
+      "sha256": "364474f19603d3c122cc3c830638dc4399a49b5ad79b1e06a2fe88ba9458c441"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/trace/TraceEvent.java",
+      "category": "source-and-database",
+      "bytes": 943,
+      "sha256": "7538070a343f36f8897f1a9f71405ceaa6f39b90ab78ef2f5d9b1840c5b071a4"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/trace/TraceMapper.java",
+      "category": "source-and-database",
+      "bytes": 1151,
+      "sha256": "c362ea6845d51b30880a6a7fb65ce4ec1e966bc6214d98fbf6f8b5bbc2d34a08"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/trace/TraceResponse.java",
+      "category": "source-and-database",
+      "bytes": 905,
+      "sha256": "eed4fe412609a9ef6b4ca0559ab4f9db2281cf614d254e12284fd2e779cb829d"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/trace/TraceReworkRecord.java",
+      "category": "source-and-database",
+      "bytes": 1427,
+      "sha256": "cde1156500c617e178b2c79c8b427a8e7d40df8a247dfeabb27cdf1e8037eacc"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/trace/TraceService.java",
+      "category": "source-and-database",
+      "bytes": 198,
+      "sha256": "cf8ca67b0da27938499cb87ed5301a74b5c6f4b0337cb5ee655feb39f40ada63"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/trace/TraceServiceImpl.java",
+      "category": "source-and-database",
+      "bytes": 2002,
+      "sha256": "686f7c627b58f080fcef962a62aa3ee555ea509f1663044a22ec56910c03465d"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/trace/TraceStockInRecord.java",
+      "category": "source-and-database",
+      "bytes": 1184,
+      "sha256": "82f2bca0692437263a6a2f6537ff9167713f1c7a794a1e33f18630dbc3ae2850"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/trace/TraceStockOutRecord.java",
+      "category": "source-and-database",
+      "bytes": 1150,
+      "sha256": "9cc2df3d13f91bc96d1f0ba54fcf58e711508bad427c7c6a45e4d15d542b4dbe"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/transfer/ExcelTransferController.java",
+      "category": "source-and-database",
+      "bytes": 2341,
+      "sha256": "2ea9ebe3f8577c563d68a514c65e3e44217fb6e20f018e69b0ba277e4afbd524"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/transfer/ExcelTransferService.java",
+      "category": "source-and-database",
+      "bytes": 8965,
+      "sha256": "26e84d5867c786f19806327af0e194884303b86709b79a9a8df4862e9733ed3e"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/transfer/ImportResult.java",
+      "category": "source-and-database",
+      "bytes": 235,
+      "sha256": "3e3695ebc0c4a8ac4f53680df9073f196ac27f8f3b2b9f03de18bcd983c13825"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/transfer/TransferAuditMapper.java",
+      "category": "source-and-database",
+      "bytes": 470,
+      "sha256": "1adfa87b638953a02620e5333a2caa9adb1f3a2e2122d4bd19ac131cb6ef8d4a"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/validation/SnRuleService.java",
+      "category": "source-and-database",
+      "bytes": 175,
+      "sha256": "0e44de11257a1260790efb9a431c650d886afd616f45b4aec965aec08ea56974"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/validation/SnRuleServiceImpl.java",
+      "category": "source-and-database",
+      "bytes": 4478,
+      "sha256": "3fcd627007f16b7edf9bbe554210c5043ef16bbf4d1928fc2242c555f78a068c"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/vehicle/VehicleController.java",
+      "category": "source-and-database",
+      "bytes": 4720,
+      "sha256": "5a825411a45794d01b2575f52829c924b0922cb27dae2d87ff5cfbe47b67f67f"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/vehicle/VehicleCreateRequest.java",
+      "category": "source-and-database",
+      "bytes": 322,
+      "sha256": "1eadf9397ad77a9cfc268ea4451c3ba235d61cb5e319ee69163b1163fc9a7de0"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/vehicle/VehicleMapper.java",
+      "category": "source-and-database",
+      "bytes": 1931,
+      "sha256": "77cb13ba49b682a3685ec0db48342da6ebc46c5ce156a7c5a08d30770beb5989"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/vehicle/VehicleQrCodeService.java",
+      "category": "source-and-database",
+      "bytes": 1979,
+      "sha256": "c6581f92d2e27f8b0ce67c7c61c0d701bbc4f1ee6ce7a5af4a301f868770c4c9"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/vehicle/VehicleService.java",
+      "category": "source-and-database",
+      "bytes": 778,
+      "sha256": "8fe9384db4a10612642fbc9c196edd8d6186e555eb6ba309c30b17cf487e2a10"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/vehicle/VehicleServiceImpl.java",
+      "category": "source-and-database",
+      "bytes": 5462,
+      "sha256": "da8919f4da318a6db8c9ca96191f4ef00685d8d291fcfb9e42909f395c033e6e"
+    },
+    {
+      "path": "bike-server/src/main/java/com/bike/server/vehicle/VehicleView.java",
+      "category": "source-and-database",
+      "bytes": 5083,
+      "sha256": "cc2b207f31476132a7d4111160a613e48e5013b35183d8239d89860d0345d757"
+    },
+    {
+      "path": "bike-server/src/main/resources/application.yml",
+      "category": "source-and-database",
+      "bytes": 1476,
+      "sha256": "db669ed5db445f051c0f58effbe3a1dbd5f03743b2a606bdb1629aebe6c4b029"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration-prod/V10__backfill_vehicle_qr_generated_at.sql",
+      "category": "source-and-database",
+      "bytes": 143,
+      "sha256": "76fbd2a6a2dfe93e0e997e17f53836874d3d3d70d8e9c9d83d73fdf6ce68dbe9"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration-prod/V11__sn_validation_config.sql",
+      "category": "source-and-database",
+      "bytes": 562,
+      "sha256": "2765b8967415ac7d150ffa26092ba9ac5111e71310cbadc148acd525e8081527"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration-prod/V12__repair_development_admin_password.sql",
+      "category": "source-and-database",
+      "bytes": 106,
+      "sha256": "30a16413dd7c4751f017fd4e838e41c96727885d0761af17aa2763c194871acf"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration-prod/V13__allow_restocked_order_vehicle_history.sql",
+      "category": "source-and-database",
+      "bytes": 257,
+      "sha256": "f97d772221d7745c738fa3e14cbe54d1a74c92954c1fe5653b678e73340b9b9f"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration-prod/V14__add_table_and_column_comments.sql",
+      "category": "source-and-database",
+      "bytes": 23212,
+      "sha256": "02ed85540410b1c55bdf977cd2aee558e7574d5c1443b5d4136f826f2eec6b81"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration-prod/V15__comment_flyway_schema_history.sql",
+      "category": "source-and-database",
+      "bytes": 976,
+      "sha256": "0d22d6896b062cf9b307acc602c5d293212272678a5bd38aa58c2d9411f44bdc"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration-prod/V1__init.sql",
+      "category": "source-and-database",
+      "bytes": 8166,
+      "sha256": "1d0b81d6ec2456983f9b3ca3b343d22e1c82468011b7a48d7835bf18ae4c7ab4"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration-prod/V2__master_and_order_tables.sql",
+      "category": "source-and-database",
+      "bytes": 6096,
+      "sha256": "e016969dffdd2f572ce1bd8ada2f03e6e697ed4d0a74b7fc2fc52052ddff69dc"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration-prod/V3__workflow_and_audit_tables.sql",
+      "category": "source-and-database",
+      "bytes": 3145,
+      "sha256": "05fcbd8c26ec4c4dc0d81e74ca141fda6a4cf5b0738dfcee235083def752b89d"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration-prod/V4__production_seed.sql",
+      "category": "source-and-database",
+      "bytes": 1149,
+      "sha256": "b5ffb33d1736af060a298e75d469db397befcf61ade7d255cfbdc374ff781604"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration-prod/V5__security_and_permissions.sql",
+      "category": "source-and-database",
+      "bytes": 1590,
+      "sha256": "c0f70698f33358ea871273489ca2470f2ab17d128e797cf50f26ca049c71263e"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration-prod/V6__default_system_config.sql",
+      "category": "source-and-database",
+      "bytes": 232,
+      "sha256": "0a2dfb45f8ce720eceb948ef444e102e30cd2b074c947bad52119fae1f7a58ff"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration-prod/V7__default_role_permissions.sql",
+      "category": "source-and-database",
+      "bytes": 853,
+      "sha256": "91de25d1204ffdf68c71e589c49a2df8240c750497854b02ca7b8ca802a2090e"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration-prod/V8__permission_scope_and_purchase_intent.sql",
+      "category": "source-and-database",
+      "bytes": 2187,
+      "sha256": "5c3e04183cb230fa4eb2b9379039cdcb58d4ae8ab28628e025a5b8fda7c26728"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration-prod/V9__vehicle_qr_generated_at.sql",
+      "category": "source-and-database",
+      "bytes": 97,
+      "sha256": "c098a2c88b0d973cc63420d25cd74c04164e4d9483daf812d9f3208e4e36abd1"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration/V10__backfill_vehicle_qr_generated_at.sql",
+      "category": "source-and-database",
+      "bytes": 143,
+      "sha256": "76fbd2a6a2dfe93e0e997e17f53836874d3d3d70d8e9c9d83d73fdf6ce68dbe9"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration/V11__sn_validation_config.sql",
+      "category": "source-and-database",
+      "bytes": 562,
+      "sha256": "2765b8967415ac7d150ffa26092ba9ac5111e71310cbadc148acd525e8081527"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration/V12__repair_development_admin_password.sql",
+      "category": "source-and-database",
+      "bytes": 300,
+      "sha256": "4b4587509f98f12f16adb4e226b63c91489150aaaed2ad77f63ae7738cbc978c"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration/V13__allow_restocked_order_vehicle_history.sql",
+      "category": "source-and-database",
+      "bytes": 257,
+      "sha256": "f97d772221d7745c738fa3e14cbe54d1a74c92954c1fe5653b678e73340b9b9f"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration/V14__add_table_and_column_comments.sql",
+      "category": "source-and-database",
+      "bytes": 23212,
+      "sha256": "02ed85540410b1c55bdf977cd2aee558e7574d5c1443b5d4136f826f2eec6b81"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration/V15__comment_flyway_schema_history.sql",
+      "category": "source-and-database",
+      "bytes": 976,
+      "sha256": "0d22d6896b062cf9b307acc602c5d293212272678a5bd38aa58c2d9411f44bdc"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration/V1__init.sql",
+      "category": "source-and-database",
+      "bytes": 8166,
+      "sha256": "1d0b81d6ec2456983f9b3ca3b343d22e1c82468011b7a48d7835bf18ae4c7ab4"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration/V2__master_and_order_tables.sql",
+      "category": "source-and-database",
+      "bytes": 6096,
+      "sha256": "e016969dffdd2f572ce1bd8ada2f03e6e697ed4d0a74b7fc2fc52052ddff69dc"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration/V3__workflow_and_audit_tables.sql",
+      "category": "source-and-database",
+      "bytes": 3145,
+      "sha256": "05fcbd8c26ec4c4dc0d81e74ca141fda6a4cf5b0738dfcee235083def752b89d"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration/V4__development_sample_data.sql",
+      "category": "source-and-database",
+      "bytes": 11290,
+      "sha256": "b97b856cdadcc6bf181f06234b7f210be28227f8b0387e867691ac20fafd3a49"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration/V5__security_and_permissions.sql",
+      "category": "source-and-database",
+      "bytes": 1590,
+      "sha256": "c0f70698f33358ea871273489ca2470f2ab17d128e797cf50f26ca049c71263e"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration/V6__default_system_config.sql",
+      "category": "source-and-database",
+      "bytes": 232,
+      "sha256": "0a2dfb45f8ce720eceb948ef444e102e30cd2b074c947bad52119fae1f7a58ff"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration/V7__default_role_permissions.sql",
+      "category": "source-and-database",
+      "bytes": 853,
+      "sha256": "91de25d1204ffdf68c71e589c49a2df8240c750497854b02ca7b8ca802a2090e"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration/V8__permission_scope_and_purchase_intent.sql",
+      "category": "source-and-database",
+      "bytes": 2187,
+      "sha256": "5c3e04183cb230fa4eb2b9379039cdcb58d4ae8ab28628e025a5b8fda7c26728"
+    },
+    {
+      "path": "bike-server/src/main/resources/db/migration/V9__vehicle_qr_generated_at.sql",
+      "category": "source-and-database",
+      "bytes": 97,
+      "sha256": "c098a2c88b0d973cc63420d25cd74c04164e4d9483daf812d9f3208e4e36abd1"
+    },
+    {
+      "path": "bike-server/src/main/resources/mapper/AssemblyMapper.xml",
+      "category": "source-and-database",
+      "bytes": 1777,
+      "sha256": "6c9c46c60cf5f5cb870ae321360238098f32daf4c4db3ce88f45eaa5c83c300b"
+    },
+    {
+      "path": "bike-server/src/main/resources/mapper/DashboardMapper.xml",
+      "category": "source-and-database",
+      "bytes": 2986,
+      "sha256": "08c40ebeb3a80c16315f189e79c2c18fed03aef41ad510d25fabca4f89ca6f58"
+    },
+    {
+      "path": "bike-server/src/main/resources/mapper/InventoryLockMapper.xml",
+      "category": "source-and-database",
+      "bytes": 3730,
+      "sha256": "f083742260d9f342b444a7c6233a23e63f790dbab533b401b521742bf084b0a3"
+    },
+    {
+      "path": "bike-server/src/main/resources/mapper/LoginLogMapper.xml",
+      "category": "source-and-database",
+      "bytes": 383,
+      "sha256": "18eca92a9e884af85fda0b453c3d80d2b54cac42a6cc8e1fe8a1b23c9b84a877"
+    },
+    {
+      "path": "bike-server/src/main/resources/mapper/MasterMapper.xml",
+      "category": "source-and-database",
+      "bytes": 8392,
+      "sha256": "52c94e14412138515ec0968ed4f6da8fb2e05bed9381f625f100d17990d0f4fb"
+    },
+    {
+      "path": "bike-server/src/main/resources/mapper/ModuleMapper.xml",
+      "category": "source-and-database",
+      "bytes": 18504,
+      "sha256": "05d5e86c5ffc12ea2404e6c83dbfecce0be7bea5416fed7ef8aca8a3b36fbd95"
+    },
+    {
+      "path": "bike-server/src/main/resources/mapper/OperationLogMapper.xml",
+      "category": "source-and-database",
+      "bytes": 535,
+      "sha256": "88f53feed8c59a0840b394746251528ce7def52e3c178790862f5f7bf156f6d7"
+    },
+    {
+      "path": "bike-server/src/main/resources/mapper/OrderMapper.xml",
+      "category": "source-and-database",
+      "bytes": 4318,
+      "sha256": "158b1ab2de7e257c50bf099d2b282818772c5f5958a1735c99d6dc7deb85820e"
+    },
+    {
+      "path": "bike-server/src/main/resources/mapper/PartMapper.xml",
+      "category": "source-and-database",
+      "bytes": 3208,
+      "sha256": "86759ae347ac5fb96546a5abd5c84debba361ddd9d509d159b7b9e8813973353"
+    },
+    {
+      "path": "bike-server/src/main/resources/mapper/ProductionMapper.xml",
+      "category": "source-and-database",
+      "bytes": 11674,
+      "sha256": "db4937df98b1ac46d0f0545bf5f9e9175b4db9cce28e04ff9b3585b77fc1a4a1"
+    },
+    {
+      "path": "bike-server/src/main/resources/mapper/ProductionSchemaMapper.xml",
+      "category": "source-and-database",
+      "bytes": 6876,
+      "sha256": "5f836304ec3f2eb98d6efa5b145daa1345208c2eb82f50f3e9b64b00df78af86"
+    },
+    {
+      "path": "bike-server/src/main/resources/mapper/PurchaseIntentMapper.xml",
+      "category": "source-and-database",
+      "bytes": 1887,
+      "sha256": "a4dfd454339698333bd58f78fc94b5fb9f7c4b544dbeed77c3910e6ff6e606de"
+    },
+    {
+      "path": "bike-server/src/main/resources/mapper/ReworkMapper.xml",
+      "category": "source-and-database",
+      "bytes": 4623,
+      "sha256": "aeeed20bc42b3e7581f64244ac71408968618dfed15045a0f661aaca9da8442c"
+    },
+    {
+      "path": "bike-server/src/main/resources/mapper/RoleMapper.xml",
+      "category": "source-and-database",
+      "bytes": 2401,
+      "sha256": "12cc4047bc2ab9ada38b84b8f99e389e9a782ccc9df7f5c1ba1b8e9c7ebadab4"
+    },
+    {
+      "path": "bike-server/src/main/resources/mapper/StockMapper.xml",
+      "category": "source-and-database",
+      "bytes": 8830,
+      "sha256": "00550525381a2dee1c4ecc707bb7cfd02ef151cae4881f0e86855aff21f9fe15"
+    },
+    {
+      "path": "bike-server/src/main/resources/mapper/SystemConfigMapper.xml",
+      "category": "source-and-database",
+      "bytes": 1391,
+      "sha256": "edb8cbfce8845725447e9f28c74b74bb06e4fc283d520bf56def69f1ad958c73"
+    },
+    {
+      "path": "bike-server/src/main/resources/mapper/TraceMapper.xml",
+      "category": "source-and-database",
+      "bytes": 6038,
+      "sha256": "93b6dff278a57faba9625df5b8312d62db90f9d529e23f5d54eb933768ae8024"
+    },
+    {
+      "path": "bike-server/src/main/resources/mapper/TransferAuditMapper.xml",
+      "category": "source-and-database",
+      "bytes": 533,
+      "sha256": "14c723109c82036660b29fc5052a44e46714d24757c9b553fe525fcdd52e6f12"
+    },
+    {
+      "path": "bike-server/src/main/resources/mapper/UserMapper.xml",
+      "category": "source-and-database",
+      "bytes": 4707,
+      "sha256": "9dfbd5beb78b7dbfaead53efe8bd8d7762e04a3b792ba9972ce413aca4b82759"
+    },
+    {
+      "path": "bike-server/src/main/resources/mapper/VehicleMapper.xml",
+      "category": "source-and-database",
+      "bytes": 4941,
+      "sha256": "9d6f228cf6e32d06f402f7e8634862acaf8a5882ec77c68584aa017f97824cd4"
+    },
+    {
+      "path": "bike-server/src/main/resources/mapper/WorkstationMapper.xml",
+      "category": "source-and-database",
+      "bytes": 1514,
+      "sha256": "8889f7f3c81acf88d647992085b9696bab76e86e5e85122bc17cd33d84c04ad9"
+    },
+    {
+      "path": "bike-server/src/test/java/com/bike/server/agent/PurchaseIntentServiceTest.java",
+      "category": "source-and-database",
+      "bytes": 2835,
+      "sha256": "c6410eecae617ef880c19cc05b9a35bd58153d0e0d21bcd88892d0d9461938e5"
+    },
+    {
+      "path": "bike-server/src/test/java/com/bike/server/assembly/AssemblyServiceTest.java",
+      "category": "source-and-database",
+      "bytes": 10944,
+      "sha256": "804a19b0c2c6d09464ddee2988a160e75641e67841264306023619ef95bc3e89"
+    },
+    {
+      "path": "bike-server/src/test/java/com/bike/server/auth/AuthServiceTest.java",
+      "category": "source-and-database",
+      "bytes": 2297,
+      "sha256": "352415242cbcfe596b975dcf69668675940047870c8f875128e3946142554538"
+    },
+    {
+      "path": "bike-server/src/test/java/com/bike/server/common/CurrentOperatorTest.java",
+      "category": "source-and-database",
+      "bytes": 1828,
+      "sha256": "e49cad21e6b153c0dd79eeb3248a3d435e88c93db0c3ea268090e65dbdd48763"
+    },
+    {
+      "path": "bike-server/src/test/java/com/bike/server/lock/InventoryLockExpiryJobTest.java",
+      "category": "source-and-database",
+      "bytes": 1442,
+      "sha256": "eddc69557ecc00fb5493e2669f83c31f9fabf929fbb822651df4a6708d4f4255"
+    },
+    {
+      "path": "bike-server/src/test/java/com/bike/server/lock/InventoryLockServiceTest.java",
+      "category": "source-and-database",
+      "bytes": 11924,
+      "sha256": "6cc97e7d0d2312fa62a0645e5f5f0942a3f1f00fa1a66aa8b24008bbb3195a18"
+    },
+    {
+      "path": "bike-server/src/test/java/com/bike/server/master/MasterServiceTest.java",
+      "category": "source-and-database",
+      "bytes": 2908,
+      "sha256": "e28d07e316030ce5a29e4dfda1bca9565202b91a0928eb3a3b041b5123cd3009"
+    },
+    {
+      "path": "bike-server/src/test/java/com/bike/server/module/ModuleServiceTest.java",
+      "category": "source-and-database",
+      "bytes": 4874,
+      "sha256": "2bb15fe3042f98452ffa28a9ea62cd5d523a39a15931d411d450351b71c2e653"
+    },
+    {
+      "path": "bike-server/src/test/java/com/bike/server/order/OrderServiceTest.java",
+      "category": "source-and-database",
+      "bytes": 3105,
+      "sha256": "f84f7266a119ef8275b03ee01b239944b7b414953b1e95a36e7cd48786f54419"
+    },
+    {
+      "path": "bike-server/src/test/java/com/bike/server/production/ProductionLabelServiceTest.java",
+      "category": "source-and-database",
+      "bytes": 1715,
+      "sha256": "b6c6510c999f81f52b31bb80fc3b342ac6cb991d20872b224994402f8e256c23"
+    },
+    {
+      "path": "bike-server/src/test/java/com/bike/server/production/ProductionServiceTest.java",
+      "category": "source-and-database",
+      "bytes": 8500,
+      "sha256": "069bdf8e5786442e5d49bbb19706c1b4cd55c6645037074fb0020c1298e75c1c"
+    },
+    {
+      "path": "bike-server/src/test/java/com/bike/server/rework/ReworkServiceTest.java",
+      "category": "source-and-database",
+      "bytes": 6158,
+      "sha256": "ee175c9664feb2bc33da5cb47a87048485551aeb7a23d3c2718eed5db1127372"
+    },
+    {
+      "path": "bike-server/src/test/java/com/bike/server/stock/StockServiceTest.java",
+      "category": "source-and-database",
+      "bytes": 19139,
+      "sha256": "75a0268efee1635dbb420f4bba83c6c1e42455d93713de493c90ed7c38634e6b"
+    },
+    {
+      "path": "bike-server/src/test/java/com/bike/server/system/UserServiceTest.java",
+      "category": "source-and-database",
+      "bytes": 3570,
+      "sha256": "1f8e8647ef6e866f79279fe285c09c11cddd46113b88c24af9f502e74aadb56a"
+    },
+    {
+      "path": "bike-server/src/test/java/com/bike/server/system/WorkstationServiceTest.java",
+      "category": "source-and-database",
+      "bytes": 3508,
+      "sha256": "b4dc4be7a459368a4d7b7ca879e64e9f7c5642e4c456e5b5c1d6de2e930e1644"
+    },
+    {
+      "path": "bike-server/src/test/java/com/bike/server/trace/TraceServiceTest.java",
+      "category": "source-and-database",
+      "bytes": 4167,
+      "sha256": "ace4294c775cef7dcd0c44813e78b913e360f24d1eaa3f8e2b08b258a44935fd"
+    },
+    {
+      "path": "bike-server/src/test/java/com/bike/server/transfer/ExcelTransferServiceTest.java",
+      "category": "source-and-database",
+      "bytes": 6867,
+      "sha256": "12106a13e02fbc15603e3ba1008ffabe36bdd727c3072e352ccc7dd4e2d77230"
+    },
+    {
+      "path": "bike-server/src/test/java/com/bike/server/validation/SnRuleServiceTest.java",
+      "category": "source-and-database",
+      "bytes": 1855,
+      "sha256": "f42869186dda57b1abbf67e1f0d7f6e3358fd6ab9dbf8c88d477b53342e604aa"
+    },
+    {
+      "path": "bike-server/src/test/java/com/bike/server/vehicle/VehicleQrCodeServiceTest.java",
+      "category": "source-and-database",
+      "bytes": 1427,
+      "sha256": "1c7b09a8cc14a0d13ee70979606ce48ef0b8e10422dc21c944e583630eb3e8f4"
+    },
+    {
+      "path": "bike-server/src/test/java/com/bike/server/vehicle/VehicleServiceTest.java",
+      "category": "source-and-database",
+      "bytes": 3422,
+      "sha256": "2d404c89f42695ed545c721ecd1ad743738c66b6bb8d6e97e7bbe51a6eb6cc4e"
+    },
+    {
+      "path": "bike-server/src/test/resources/mapper/ProductionAcceptanceSetupMapper.xml",
+      "category": "source-and-database",
+      "bytes": 781,
+      "sha256": "1fdc47fd4a19208e2b02c51d14a599e443f81c9b1a493bd25b2d4b51ed2caec3"
+    },
+    {
+      "path": "bike-web/index.html",
+      "category": "source-and-database",
+      "bytes": 355,
+      "sha256": "bbe9e899d9b201da82b4afc23d70f7f017669c9cd4aa0f79bf5701118ee1e392"
+    },
+    {
+      "path": "bike-web/package.json",
+      "category": "source-and-database",
+      "bytes": 514,
+      "sha256": "9462b65acde1af115296b728c2f2dbb6fbd1e2f245dc7eb428aead5c6acc44d1"
+    },
+    {
+      "path": "bike-web/pnpm-lock.yaml",
+      "category": "source-and-database",
+      "bytes": 47683,
+      "sha256": "a0c260d8211450ea1664bce99eb8d8e8312959249f45afd9f2a23fbb3595d42c"
+    },
+    {
+      "path": "bike-web/pnpm-workspace.yaml",
+      "category": "source-and-database",
+      "bytes": 29,
+      "sha256": "ac02d96368617c760f093cfe61fdec64b6244007ab3553e0d6621f706f54a353"
+    },
+    {
+      "path": "bike-web/src/App.vue",
+      "category": "source-and-database",
+      "bytes": 69517,
+      "sha256": "8f3e9893174b182c191b10467ecdd35111eda1f99385049a6ce1a4e1de9b4168"
+    },
+    {
+      "path": "bike-web/src/api.ts",
+      "category": "source-and-database",
+      "bytes": 710,
+      "sha256": "d1de5720cac0051c43fb4d7ee35dc61f02fb4e31943d1762f4dfbdf3aca1cf56"
+    },
+    {
+      "path": "bike-web/src/components/PermissionGate.vue",
+      "category": "source-and-database",
+      "bytes": 121,
+      "sha256": "0446641db47719ff0cfb75abc536365b8de96cccef9d199d9424005a68297e2f"
+    },
+    {
+      "path": "bike-web/src/components/ProductionManager.vue",
+      "category": "source-and-database",
+      "bytes": 23247,
+      "sha256": "dcea7f7773670c33844d260d039c37692859758de0f09a2843ae1e52ac2fee82"
+    },
+    {
+      "path": "bike-web/src/main.ts",
+      "category": "source-and-database",
+      "bytes": 259,
+      "sha256": "71e152b4671c70f40c8db664dc16608a55f59c7aa53363c76acc888264f74299"
+    },
+    {
+      "path": "bike-web/src/permissions.ts",
+      "category": "source-and-database",
+      "bytes": 811,
+      "sha256": "a2f442e5b93cd8e45863796ec62d963ea9a2babd4d37d54cc641c9d607c86ee0"
+    },
+    {
+      "path": "bike-web/src/style.css",
+      "category": "source-and-database",
+      "bytes": 17277,
+      "sha256": "635be047ae1f5f3df4e2f4e1339bdbb6b41de36a2901d1612ebe1963814f4a17"
+    },
+    {
+      "path": "bike-web/tsconfig.json",
+      "category": "source-and-database",
+      "bytes": 447,
+      "sha256": "9a4a2b2abcc416bd2ee95de3689f1141c9174d6cc3d35b9861692203c9bf9817"
+    },
+    {
+      "path": "bike-web/vite.config.ts",
+      "category": "source-and-database",
+      "bytes": 372,
+      "sha256": "f3232272e5e70831ea5b005e7528a4397506e6aef8556b73d34fa2897ecb6795"
+    },
+    {
+      "path": "bike_codex_project_spec.md",
+      "category": "original-requirements",
+      "bytes": 29093,
+      "sha256": "e80e2de5a1facae1226a54d5fc39804c44475fdc5bfac8c66e38b50194f8589f"
+    },
+    {
+      "path": "compose.yaml",
+      "category": "documentation-and-tooling",
+      "bytes": 2456,
+      "sha256": "ae071b19c5cc3903b7988642ff8d570d3dc17a4855c63cd4caf0dacdc47ff126"
+    },
+    {
+      "path": "db/migration-prod/V10__backfill_vehicle_qr_generated_at.sql",
+      "category": "source-and-database",
+      "bytes": 143,
+      "sha256": "76fbd2a6a2dfe93e0e997e17f53836874d3d3d70d8e9c9d83d73fdf6ce68dbe9"
+    },
+    {
+      "path": "db/migration-prod/V11__sn_validation_config.sql",
+      "category": "source-and-database",
+      "bytes": 562,
+      "sha256": "2765b8967415ac7d150ffa26092ba9ac5111e71310cbadc148acd525e8081527"
+    },
+    {
+      "path": "db/migration-prod/V12__repair_development_admin_password.sql",
+      "category": "source-and-database",
+      "bytes": 106,
+      "sha256": "30a16413dd7c4751f017fd4e838e41c96727885d0761af17aa2763c194871acf"
+    },
+    {
+      "path": "db/migration-prod/V13__allow_restocked_order_vehicle_history.sql",
+      "category": "source-and-database",
+      "bytes": 257,
+      "sha256": "f97d772221d7745c738fa3e14cbe54d1a74c92954c1fe5653b678e73340b9b9f"
+    },
+    {
+      "path": "db/migration-prod/V14__add_table_and_column_comments.sql",
+      "category": "source-and-database",
+      "bytes": 23212,
+      "sha256": "02ed85540410b1c55bdf977cd2aee558e7574d5c1443b5d4136f826f2eec6b81"
+    },
+    {
+      "path": "db/migration-prod/V15__comment_flyway_schema_history.sql",
+      "category": "source-and-database",
+      "bytes": 976,
+      "sha256": "0d22d6896b062cf9b307acc602c5d293212272678a5bd38aa58c2d9411f44bdc"
+    },
+    {
+      "path": "db/migration-prod/V1__init.sql",
+      "category": "source-and-database",
+      "bytes": 8166,
+      "sha256": "1d0b81d6ec2456983f9b3ca3b343d22e1c82468011b7a48d7835bf18ae4c7ab4"
+    },
+    {
+      "path": "db/migration-prod/V2__master_and_order_tables.sql",
+      "category": "source-and-database",
+      "bytes": 6096,
+      "sha256": "e016969dffdd2f572ce1bd8ada2f03e6e697ed4d0a74b7fc2fc52052ddff69dc"
+    },
+    {
+      "path": "db/migration-prod/V3__workflow_and_audit_tables.sql",
+      "category": "source-and-database",
+      "bytes": 3145,
+      "sha256": "05fcbd8c26ec4c4dc0d81e74ca141fda6a4cf5b0738dfcee235083def752b89d"
+    },
+    {
+      "path": "db/migration-prod/V4__production_seed.sql",
+      "category": "source-and-database",
+      "bytes": 1149,
+      "sha256": "b5ffb33d1736af060a298e75d469db397befcf61ade7d255cfbdc374ff781604"
+    },
+    {
+      "path": "db/migration-prod/V5__security_and_permissions.sql",
+      "category": "source-and-database",
+      "bytes": 1590,
+      "sha256": "c0f70698f33358ea871273489ca2470f2ab17d128e797cf50f26ca049c71263e"
+    },
+    {
+      "path": "db/migration-prod/V6__default_system_config.sql",
+      "category": "source-and-database",
+      "bytes": 232,
+      "sha256": "0a2dfb45f8ce720eceb948ef444e102e30cd2b074c947bad52119fae1f7a58ff"
+    },
+    {
+      "path": "db/migration-prod/V7__default_role_permissions.sql",
+      "category": "source-and-database",
+      "bytes": 853,
+      "sha256": "91de25d1204ffdf68c71e589c49a2df8240c750497854b02ca7b8ca802a2090e"
+    },
+    {
+      "path": "db/migration-prod/V8__permission_scope_and_purchase_intent.sql",
+      "category": "source-and-database",
+      "bytes": 2187,
+      "sha256": "5c3e04183cb230fa4eb2b9379039cdcb58d4ae8ab28628e025a5b8fda7c26728"
+    },
+    {
+      "path": "db/migration-prod/V9__vehicle_qr_generated_at.sql",
+      "category": "source-and-database",
+      "bytes": 97,
+      "sha256": "c098a2c88b0d973cc63420d25cd74c04164e4d9483daf812d9f3208e4e36abd1"
+    },
+    {
+      "path": "db/migration/V10__backfill_vehicle_qr_generated_at.sql",
+      "category": "source-and-database",
+      "bytes": 143,
+      "sha256": "76fbd2a6a2dfe93e0e997e17f53836874d3d3d70d8e9c9d83d73fdf6ce68dbe9"
+    },
+    {
+      "path": "db/migration/V11__sn_validation_config.sql",
+      "category": "source-and-database",
+      "bytes": 562,
+      "sha256": "2765b8967415ac7d150ffa26092ba9ac5111e71310cbadc148acd525e8081527"
+    },
+    {
+      "path": "db/migration/V12__repair_development_admin_password.sql",
+      "category": "source-and-database",
+      "bytes": 300,
+      "sha256": "4b4587509f98f12f16adb4e226b63c91489150aaaed2ad77f63ae7738cbc978c"
+    },
+    {
+      "path": "db/migration/V13__allow_restocked_order_vehicle_history.sql",
+      "category": "source-and-database",
+      "bytes": 257,
+      "sha256": "f97d772221d7745c738fa3e14cbe54d1a74c92954c1fe5653b678e73340b9b9f"
+    },
+    {
+      "path": "db/migration/V14__add_table_and_column_comments.sql",
+      "category": "source-and-database",
+      "bytes": 23212,
+      "sha256": "02ed85540410b1c55bdf977cd2aee558e7574d5c1443b5d4136f826f2eec6b81"
+    },
+    {
+      "path": "db/migration/V15__comment_flyway_schema_history.sql",
+      "category": "source-and-database",
+      "bytes": 976,
+      "sha256": "0d22d6896b062cf9b307acc602c5d293212272678a5bd38aa58c2d9411f44bdc"
+    },
+    {
+      "path": "db/migration/V1__init.sql",
+      "category": "source-and-database",
+      "bytes": 8166,
+      "sha256": "1d0b81d6ec2456983f9b3ca3b343d22e1c82468011b7a48d7835bf18ae4c7ab4"
+    },
+    {
+      "path": "db/migration/V2__master_and_order_tables.sql",
+      "category": "source-and-database",
+      "bytes": 6096,
+      "sha256": "e016969dffdd2f572ce1bd8ada2f03e6e697ed4d0a74b7fc2fc52052ddff69dc"
+    },
+    {
+      "path": "db/migration/V3__workflow_and_audit_tables.sql",
+      "category": "source-and-database",
+      "bytes": 3145,
+      "sha256": "05fcbd8c26ec4c4dc0d81e74ca141fda6a4cf5b0738dfcee235083def752b89d"
+    },
+    {
+      "path": "db/migration/V4__development_sample_data.sql",
+      "category": "source-and-database",
+      "bytes": 11290,
+      "sha256": "b97b856cdadcc6bf181f06234b7f210be28227f8b0387e867691ac20fafd3a49"
+    },
+    {
+      "path": "db/migration/V5__security_and_permissions.sql",
+      "category": "source-and-database",
+      "bytes": 1590,
+      "sha256": "c0f70698f33358ea871273489ca2470f2ab17d128e797cf50f26ca049c71263e"
+    },
+    {
+      "path": "db/migration/V6__default_system_config.sql",
+      "category": "source-and-database",
+      "bytes": 232,
+      "sha256": "0a2dfb45f8ce720eceb948ef444e102e30cd2b074c947bad52119fae1f7a58ff"
+    },
+    {
+      "path": "db/migration/V7__default_role_permissions.sql",
+      "category": "source-and-database",
+      "bytes": 853,
+      "sha256": "91de25d1204ffdf68c71e589c49a2df8240c750497854b02ca7b8ca802a2090e"
+    },
+    {
+      "path": "db/migration/V8__permission_scope_and_purchase_intent.sql",
+      "category": "source-and-database",
+      "bytes": 2187,
+      "sha256": "5c3e04183cb230fa4eb2b9379039cdcb58d4ae8ab28628e025a5b8fda7c26728"
+    },
+    {
+      "path": "db/migration/V9__vehicle_qr_generated_at.sql",
+      "category": "source-and-database",
+      "bytes": 97,
+      "sha256": "c098a2c88b0d973cc63420d25cd74c04164e4d9483daf812d9f3208e4e36abd1"
+    },
+    {
+      "path": "deploy/frontend.Dockerfile",
+      "category": "documentation-and-tooling",
+      "bytes": 348,
+      "sha256": "f4afe92eb1ca3c594850ed43e92f937d29250cb31330c3027854d0587455b993"
+    },
+    {
+      "path": "deploy/nginx.conf",
+      "category": "documentation-and-tooling",
+      "bytes": 567,
+      "sha256": "2c18b09e81cba427070bf4e209ab32d39295c4d69382fd0de99ff8d5941ba7e3"
+    },
+    {
+      "path": "deploy/server.Dockerfile",
+      "category": "documentation-and-tooling",
+      "bytes": 494,
+      "sha256": "cedaeb7a7dcb299f683a4a828cc8bf2933826398691843b785673fb2072a9bfd"
+    },
+    {
+      "path": "docs/README.md",
+      "category": "documentation-and-tooling",
+      "bytes": 4432,
+      "sha256": "a7d6d0e51d12ef4aef1029d38d433e3ca87cd85b44514dcd1d3c589e3bb615f7"
+    },
+    {
+      "path": "docs/api.md",
+      "category": "documentation-and-tooling",
+      "bytes": 7304,
+      "sha256": "f99e3364b91cb0bde6d84e458d2be4a9e01d19447633beda72f5469a7d12e6e7"
+    },
+    {
+      "path": "docs/architecture.md",
+      "category": "documentation-and-tooling",
+      "bytes": 3112,
+      "sha256": "00332cbfd77152abc7fa409df474eec8e10a3296a69eba20e912e4c146a45f4d"
+    },
+    {
+      "path": "docs/archive-tools/README.md",
+      "category": "documentation-and-tooling",
+      "bytes": 678,
+      "sha256": "f31f80156399f8fa1b1a68f9e2c1a066563a277bc9554cbb5c9995ad3c7f9632"
+    },
+    {
+      "path": "docs/archive-tools/build_customer_brief.py",
+      "category": "documentation-and-tooling",
+      "bytes": 18024,
+      "sha256": "ee40fa65ee54cee990b06c97b24f954af9d4c017dcd75165644aff59a95c3db4"
+    },
+    {
+      "path": "docs/archive-tools/build_updated_pdf.py",
+      "category": "documentation-and-tooling",
+      "bytes": 35834,
+      "sha256": "92fbaaddc622120333abd7bba391dcc4f4d8c4b48022e4b1d681991f69bc309a"
+    },
+    {
+      "path": "docs/archive-tools/capture-final-prototype.js",
+      "category": "documentation-and-tooling",
+      "bytes": 2584,
+      "sha256": "4f92e5ae5195b33137b1c4c29b231f9986abcf4872337a07fa6244228c6435d7"
+    },
+    {
+      "path": "docs/archive-tools/check_updated_pdf.py",
+      "category": "documentation-and-tooling",
+      "bytes": 2082,
+      "sha256": "3cd5354514ea387f07831e8728b6cd7cb01ca7e201991b09e2c742d3d8521489"
+    },
+    {
+      "path": "docs/archive-tools/package-prototype-images.py",
+      "category": "documentation-and-tooling",
+      "bytes": 3706,
+      "sha256": "b1d0d502e5cb24e9d69de0cb8a75774760c1093832cc86a881b342389e93a5a5"
+    },
+    {
+      "path": "docs/archive-tools/package-prototype.mjs",
+      "category": "documentation-and-tooling",
+      "bytes": 872,
+      "sha256": "861ac4b6b86e3d523f1bb090fd0cc84b3263eb08b078fbb756a575202005431e"
+    },
+    {
+      "path": "docs/archive-tools/prototype-browser-check.js",
+      "category": "documentation-and-tooling",
+      "bytes": 5845,
+      "sha256": "81446f6abc29d20f47311ab234175fbea7ab7d71205f9e1f6670ea3b0defe090"
+    },
+    {
+      "path": "docs/business-rules.md",
+      "category": "documentation-and-tooling",
+      "bytes": 1271,
+      "sha256": "cf6860e4ce80ec185d696f393a53140e1e825d556a3c008f4b3c8806c9e0323f"
+    },
+    {
+      "path": "docs/communication/需求决策与版本关系.md",
+      "category": "communication-and-deliverables",
+      "bytes": 2803,
+      "sha256": "4a5517bd9e93e86d58d654248f9b9827b21330295aa52a831f965bb47d145356"
+    },
+    {
+      "path": "docs/communication/需求沟通记录.md",
+      "category": "communication-and-deliverables",
+      "bytes": 4434,
+      "sha256": "74a9109e394f4fb2dc9547dff12f6205ae417021bd614751b99e67e7cb4c7841"
+    },
+    {
+      "path": "docs/database.md",
+      "category": "documentation-and-tooling",
+      "bytes": 2841,
+      "sha256": "17ecdf6a8b6e926b06c4dacad99ea000cea44e97d0a204f292b5b6a207138095"
+    },
+    {
+      "path": "docs/deployment.md",
+      "category": "documentation-and-tooling",
+      "bytes": 6957,
+      "sha256": "c6ee757665ff6dfbc8e887d2d32746bb7cb32110ec0cdfe5d0ab57dad891a83b"
+    },
+    {
+      "path": "docs/evidence/2026-09-16-boundary-results.json",
+      "category": "verification-evidence",
+      "bytes": 266,
+      "sha256": "8fb3118c3beae326e9bb4894ed9f7902c5119d45267de9b57bbcc1c47d49797c"
+    },
+    {
+      "path": "docs/evidence/2026-09-16-smoke-results.json",
+      "category": "verification-evidence",
+      "bytes": 1847,
+      "sha256": "472a188e1715aee86b7ba4df45d7bb5f53b8306b6e2ebe97cd5063883dac6724"
+    },
+    {
+      "path": "docs/evidence/2026-09-16-virtual-printer-label.pdf",
+      "category": "verification-evidence",
+      "bytes": 102232,
+      "sha256": "84cbb81cdb04c9dd6c2cca4cd93ad2fd296deee9d1733c4d86a29985dcc5d047"
+    },
+    {
+      "path": "docs/evidence/2026-09-18-independent-startup.json",
+      "category": "verification-evidence",
+      "bytes": 479,
+      "sha256": "827578d029ccf3f4f4d29002b36035f6863b8b2fa7fcc753cbcbf5775095f442"
+    },
+    {
+      "path": "docs/evidence/ProductionAuditMapper.xml",
+      "category": "verification-evidence",
+      "bytes": 2107,
+      "sha256": "cc56d7a83696258faaccfe3e0fb29241aecc71f54c1c867672ddc6d7c525eb26"
+    },
+    {
+      "path": "docs/evidence/README.md",
+      "category": "verification-evidence",
+      "bytes": 741,
+      "sha256": "f3fcc316ea39a2e17ecc09bca06981ca9652b8af00376270649d9a2ce7bf55cd"
+    },
+    {
+      "path": "docs/permission.md",
+      "category": "documentation-and-tooling",
+      "bytes": 1054,
+      "sha256": "62b708a07126821f3da7d1eb074fc3c0a597ed189a3e398737a8517c7ad4f8d2"
+    },
+    {
+      "path": "docs/progress.md",
+      "category": "documentation-and-tooling",
+      "bytes": 19323,
+      "sha256": "744486ca57f8d20919480fb942ffefe6270be3e25ed9f1ad1e839aae559f6aa6"
+    },
+    {
+      "path": "docs/requirement-conflicts.md",
+      "category": "documentation-and-tooling",
+      "bytes": 2449,
+      "sha256": "c2fafcd8c1cc946f98b1b263ec0621d6742614d2a55f2eb2a4137314ba947b79"
+    },
+    {
+      "path": "docs/requirements/E-Bike生产库存管理系统_项目进度与功能清单_原版.pdf",
+      "category": "original-requirements",
+      "bytes": 417664,
+      "sha256": "ad4a48536ec05e506b5bd6b4fc15ee44b84a4c9979dc886fb025924ab0b37b9d"
+    },
+    {
+      "path": "docs/requirements/business-overview.png",
+      "category": "original-requirements",
+      "bytes": 427020,
+      "sha256": "da22ad232f6b63d05bc6c5a2b9e03b3761743ac6bfa78b971c28dcfbc84b0bc0"
+    },
+    {
+      "path": "docs/requirements/meeting-requirements.doc",
+      "category": "original-requirements",
+      "bytes": 16896,
+      "sha256": "0a98f3a6ddf5f55e901f28a66a59f8707d6935dcc89fe159f72f03da9df0953c"
+    },
+    {
+      "path": "docs/requirements/project-schedule.pdf",
+      "category": "original-requirements",
+      "bytes": 417664,
+      "sha256": "ad4a48536ec05e506b5bd6b4fc15ee44b84a4c9979dc886fb025924ab0b37b9d"
+    },
+    {
+      "path": "docs/requirements/售后案例申报与查询管理系统需求.txt",
+      "category": "original-requirements",
+      "bytes": 11995,
+      "sha256": "259df89da6a4a29d46e978d178a8fd8089e36e8a893ac97598d4da2b73428079"
+    },
+    {
+      "path": "docs/requirements/生产及业务系统开发规划讨论_2026-09-15.pdf",
+      "category": "original-requirements",
+      "bytes": 1058989,
+      "sha256": "d6e3ea7a2dda9610ea245015468eba788de5910270e1279ae62bc7e16aa0f3cf"
+    },
+    {
+      "path": "docs/test-cases.md",
+      "category": "documentation-and-tooling",
+      "bytes": 2233,
+      "sha256": "25d574eabf241e659914e0555c38d7f9da9043f57b8b0d36951395da51aa91de"
+    },
+    {
+      "path": "docs/verification-2026-09-18.md",
+      "category": "documentation-and-tooling",
+      "bytes": 2281,
+      "sha256": "1b38521f85ee8b2e9b65c9faaed2ebb6a07ab520407d54e1a91da3a6d4393256"
+    },
+    {
+      "path": "docs/生产与PI订单接入_PRD_v1.0.md",
+      "category": "documentation-and-tooling",
+      "bytes": 72573,
+      "sha256": "443bf163b829f7a2058b8b44a4a15e183fa3415de292807a53e407eb68e4f6c4"
+    },
+    {
+      "path": "docs/生产与PI订单系统_项目建设方案.md",
+      "category": "documentation-and-tooling",
+      "bytes": 21821,
+      "sha256": "9d1130e536a6232cf173d7165fdf4a0bc5bcf8fb4f1d3f8c89d13c512aa84d9b"
+    },
+    {
+      "path": "docs/生产与PI订单系统_项目建设方案.pdf",
+      "category": "documentation-and-tooling",
+      "bytes": 391374,
+      "sha256": "faa0e507a23ea76ba297f8d253fb7b3fe877b0bae0e29989e1a2abb0d97a1f6e"
+    },
+    {
+      "path": "docs/生产端实施任务.md",
+      "category": "documentation-and-tooling",
+      "bytes": 3445,
+      "sha256": "cbb8c435b2a68fb23d269c799fe7efe1343663b6b7690c8571e14b2599770065"
+    },
+    {
+      "path": "docs/生产端需求核查报告_2026-09-16.md",
+      "category": "documentation-and-tooling",
+      "bytes": 19462,
+      "sha256": "8a40ef526196f10cde6a57b8ebe1e8a30bfef68799bd25f2f758e5df7fa42561"
+    },
+    {
+      "path": "docs/生产端验收与部署.md",
+      "category": "documentation-and-tooling",
+      "bytes": 8763,
+      "sha256": "8be293ab05b2ebad686be4e883c02719222b8e88a5770f8e6c8c9010221cb01d"
+    },
+    {
+      "path": "docs/项目归档任务.md",
+      "category": "documentation-and-tooling",
+      "bytes": 2083,
+      "sha256": "be9fae1de5e28fb62729aa42656cb5684d19f86a06bd6612ba1190bc966512ab"
+    },
+    {
+      "path": "output/pdf/E-Bike生产库存管理系统_项目进度与功能清单_售后需求增补版_V1.1_20260909.pdf",
+      "category": "communication-and-deliverables",
+      "bytes": 421162,
+      "sha256": "4b61cd610641b1a744c7e7652790926fc199954b1316a57c212e14eaf57be2da"
+    },
+    {
+      "path": "output/pdf/E-Bike项目_客户沟通与谈判提纲_重点加粗版_20260914.pdf",
+      "category": "communication-and-deliverables",
+      "bytes": 445649,
+      "sha256": "c39b7554f74c8264553a1db2c71448e68e7a37dab4de93ec804ff5c3a2734589"
+    },
+    {
+      "path": "output/playwright/audit-h5-trace-summary.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 24950,
+      "sha256": "e16dbf1f2fb563701f52f33de07befec267ea6f36efc490b793f78d21830c943"
+    },
+    {
+      "path": "output/playwright/audit-trace-wrong-dialog.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 75269,
+      "sha256": "1746c6438c2e2db30437f483935a3853c89acbbe350156412e33663b6ef4c804"
+    },
+    {
+      "path": "output/playwright/bike-vehicles.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 80001,
+      "sha256": "9e29546c6380cf01134d8e826c97c8a5bc895d2540f86c0f4f5692a84a2ebdba"
+    },
+    {
+      "path": "output/playwright/dashboard-mobile.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 42458,
+      "sha256": "1efc2be309d57ad37a10236cd3e35ff8114ea2aab7911856f880b15e3ae786f3"
+    },
+    {
+      "path": "output/playwright/dashboard.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 82439,
+      "sha256": "dcdaea55adfa5fc708944eac32e64319d5625019e9f86bacba90f80740dfa41d"
+    },
+    {
+      "path": "output/playwright/ebike-hifi/01-admin-dashboard.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 187992,
+      "sha256": "adb1684babb71589a14883f992a23c47f55d0bb5f5dd9986a7d6890676b0029c"
+    },
+    {
+      "path": "output/playwright/ebike-hifi/02-case-list.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 146989,
+      "sha256": "ae713dcf8b7d4c8990836292a06002701d7aeeadbd1b6af5ec22ef0814f1f777"
+    },
+    {
+      "path": "output/playwright/ebike-hifi/03-case-detail.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 153629,
+      "sha256": "420eac8af917daab6e7273978d98580049c871a2dc721e346d50be12ac310885"
+    },
+    {
+      "path": "output/playwright/ebike-hifi/04-repair-plan.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 137054,
+      "sha256": "01d616b8e2a93d759f1c15a882353d45a9e1bf0d56e394cf21c767a6a4d3fdae"
+    },
+    {
+      "path": "output/playwright/ebike-hifi/05-shipping-detail.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 121599,
+      "sha256": "61935750610eeb606fed326951ac338c4e6c9543883209c72a53de515f7f13b8"
+    },
+    {
+      "path": "output/playwright/ebike-hifi/06-old-parts.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 123079,
+      "sha256": "861814ad70971465996014f9eccfdf88fedd3d12ef3428fe04bb64d0fec797fc"
+    },
+    {
+      "path": "output/playwright/ebike-hifi/07-case-history.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 121489,
+      "sha256": "694fa04ac4dcbc5d639f63bbdf5c9da4c53ec94cfdadb0e424164df7c253a13e"
+    },
+    {
+      "path": "output/playwright/ebike-hifi/08-warehouse.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 127845,
+      "sha256": "40abd558707db329eee8679b96c8b61e35172b4cad5aaf2d28f75586682e5207"
+    },
+    {
+      "path": "output/playwright/ebike-hifi/09-customers.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 82371,
+      "sha256": "6b349d8a30021dbc82501361cf786a265946b63afc0d62acea59b3a468289d95"
+    },
+    {
+      "path": "output/playwright/ebike-hifi/10-vehicle.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 105423,
+      "sha256": "60bfd542509811fb670c11dd29f883a2b9292906af08d9b3718bc6d4c8a76ac8"
+    },
+    {
+      "path": "output/playwright/ebike-hifi/11-inventory.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 110968,
+      "sha256": "f5ca2aaa6d00219fcd0023b54afeda7dae57f974fdecc758cccfaedf3f923fb3"
+    },
+    {
+      "path": "output/playwright/ebike-hifi/12-production.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 96815,
+      "sha256": "77c972721180e6453dc92534775584105f862c39c9352a8f0c663a48f81dfae0"
+    },
+    {
+      "path": "output/playwright/ebike-hifi/13-approval-dialog.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 253491,
+      "sha256": "d1a067d97ef32f03e6ad2a41e760e766b57a08f4897edb7edd80a8b799c97e36"
+    },
+    {
+      "path": "output/playwright/ebike-hifi/14-customer-dashboard.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 171521,
+      "sha256": "432513196ae2f0edc2bab96103ffad57d037a0a3e9e0c02a3f21ee5d6d53a1ed"
+    },
+    {
+      "path": "output/playwright/ebike-hifi/15-new-case.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 154617,
+      "sha256": "65cb63363db091ad9194d7df4e9afc185bd1704175b79a7f6131e089c9eaa7d7"
+    },
+    {
+      "path": "output/playwright/ebike-hifi/16-mobile-customer.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 65279,
+      "sha256": "64d2acee321cc2cdc0f72605d88ea12f2abbfbeca805bca5aabdd935e5ae0715"
+    },
+    {
+      "path": "output/playwright/h5-assembly-runtime.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 21795,
+      "sha256": "96222c22b2f3788689bb8b23193e62a0dc5085dd04d6d75cf5f7a056851637a8"
+    },
+    {
+      "path": "output/playwright/h5-stock-out.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 27316,
+      "sha256": "585b0d3f424766566caa7c093b40828b515faf405b6703d470a1dfb0beb17e86"
+    },
+    {
+      "path": "output/playwright/header-main.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 60593,
+      "sha256": "f0616e1f73d6cee4f7820f20c6933a4fca88d7d066e6d936c9904ddd5abd7bfa"
+    },
+    {
+      "path": "output/playwright/header-mobile-fixed.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 40053,
+      "sha256": "634ce167ace18c75584aa968d8d05d14ef40d53dd6c9a93af136d8be98b529ca"
+    },
+    {
+      "path": "output/playwright/header-mobile.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 40244,
+      "sha256": "4d259cae47497afe216041e94320f166916a6db29c72049bfb6741a38be5e2a5"
+    },
+    {
+      "path": "output/playwright/header-viewport.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 80308,
+      "sha256": "2022c8890717db7838af8985ba959c30e6bff2519c0ab3bf3b5f03510b5fba1e"
+    },
+    {
+      "path": "output/playwright/hifi-dashboard.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 153901,
+      "sha256": "e9d63d56f44340b1c938409e7700202857aa50529dc72221faad2d68cd3ba9a8"
+    },
+    {
+      "path": "output/playwright/hifi-detail.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 142520,
+      "sha256": "af8e60778e52d2edc88eb2dc6896d2573a6c696ff4d39f7d2235d7cd0c0819e3"
+    },
+    {
+      "path": "output/playwright/production-completed.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 47280,
+      "sha256": "9a845305183e7ef77245469f4a5a397e612844dc05e3496216992fa1148238a3"
+    },
+    {
+      "path": "output/playwright/production-mobile.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 36186,
+      "sha256": "24940db17c1b424bcbd28a9ba0511d3493121cd7bd5b1bf13341a0ba4a71dc2b"
+    },
+    {
+      "path": "output/playwright/production-skus.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 68180,
+      "sha256": "2a8934f845d1b5c80fb17897a6652c073fcabb43cd88c1482c7b855b2b768329"
+    },
+    {
+      "path": "output/playwright/web-dashboard-echarts-full.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 76146,
+      "sha256": "ed309290e908b23eeb976918eb38f19deb8175accd4a3d1c338a84e1783b2fa3"
+    },
+    {
+      "path": "output/playwright/web-dashboard-echarts.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 66470,
+      "sha256": "ab5bd254a6fc47fd847e798bf1d0037fb9f2a532fdb3a5dbf5ae8b4ee73e52c9"
+    },
+    {
+      "path": "output/playwright/web-dashboard-mobile-runtime.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 37249,
+      "sha256": "bfb7a64ae16582c4e61cd83808966f3f2d349fe5b579c69bfe681a550ddf18a5"
+    },
+    {
+      "path": "output/playwright/web-dashboard-runtime.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 65071,
+      "sha256": "4c87b43307fe604abef85462dba65c533b605e4f843805a4a2e7e22962820069"
+    },
+    {
+      "path": "output/playwright/web-dashboard.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 75562,
+      "sha256": "fc804216dfc935bf873e73163ddd1956b122285a6ef72df92e5d021748f58a61"
+    },
+    {
+      "path": "output/playwright/web-login.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 83405,
+      "sha256": "e6e5c8f923b91482a1ee4bf02772ef75c4b526247ccb0075a516d1367a72afb9"
+    },
+    {
+      "path": "output/playwright/web-orders-edit-runtime.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 37994,
+      "sha256": "9a5a4c2318ed599c98e886ce30769065229be744ec33643745df1d7bc4995c90"
+    },
+    {
+      "path": "output/playwright/web-vehicle-detail.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 83990,
+      "sha256": "f6d623a93a4df81ea7e20c4ed2fde96dde84825b352b977ac5be4bbc6df4c7cc"
+    },
+    {
+      "path": "output/prototype/E-Bike_高保真原型与界面图.zip",
+      "category": "prototype-and-screenshots",
+      "bytes": 3135760,
+      "sha256": "e53f3a923c9735b44c6df9bae7513ce02b786822cfb0799bdb86edcb6651e3c0"
+    },
+    {
+      "path": "output/prototype/E-Bike_高保真原型总览.png",
+      "category": "prototype-and-screenshots",
+      "bytes": 1088337,
+      "sha256": "c4255cdf78d2849d589cb9468a221c8e04b0dcb1d1cb053de9204a6cfd7fd341"
+    },
+    {
+      "path": "output/prototype/index.html",
+      "category": "prototype-and-screenshots",
+      "bytes": 737,
+      "sha256": "1f72f3302f8e2ffe77fd2b256e1d59f2f906c5503f00c6dbcdaa06b6784fd555"
+    },
+    {
+      "path": "output/prototype/prototype.css",
+      "category": "prototype-and-screenshots",
+      "bytes": 26884,
+      "sha256": "c1fe785aa999a8f8c27b0a9e956bf8437bc93969c6c2d14eb667df0c359980fa"
+    },
+    {
+      "path": "output/prototype/prototype.js",
+      "category": "prototype-and-screenshots",
+      "bytes": 68491,
+      "sha256": "e7142cb3fd7a2392597a8860bc4f86700b49bf557c14377da162d3fdf0518b50"
+    },
+    {
+      "path": "output/prototype/使用说明.md",
+      "category": "prototype-and-screenshots",
+      "bytes": 2652,
+      "sha256": "b89e67747b8bf45d183d51a128097e0f45dd4c9796120a5a2ceb9d9b061e24d2"
+    },
+    {
+      "path": "tools/README.md",
+      "category": "documentation-and-tooling",
+      "bytes": 859,
+      "sha256": "449c6afcf305115f218c3d8655d211700afc3f4a3baa1731f5410f3b9d40873e"
+    },
+    {
+      "path": "tools/configure.py",
+      "category": "documentation-and-tooling",
+      "bytes": 775,
+      "sha256": "74bdeb3dfbdbd715e0d2de962b24192d7c590faeaf863b7ab8c58e8a89b8916a"
+    },
+    {
+      "path": "tools/print-client/client.mjs",
+      "category": "documentation-and-tooling",
+      "bytes": 4402,
+      "sha256": "cf4c4ff6829802db724f2889f311148f53321254516c8c88b95aea23b7fea4ee"
+    },
+    {
+      "path": "tools/print-client/package-lock.json",
+      "category": "documentation-and-tooling",
+      "bytes": 1657,
+      "sha256": "fa9f0b66f0f327e15b9ce4cecadd8dfc6f4eff28e8eb2e34c50d7228e9625218"
+    },
+    {
+      "path": "tools/print-client/package.json",
+      "category": "documentation-and-tooling",
+      "bytes": 175,
+      "sha256": "80025788cd4a24949e5d1f80bb62d3b9b3e72aa2e6721248a243e9d51d3a3667"
+    },
+    {
+      "path": "tools/print-client/print-image.ps1",
+      "category": "documentation-and-tooling",
+      "bytes": 1598,
+      "sha256": "4e0206af0f3575f96f471e30f5b43caef3d54b209fb4071b8e5b780a42e7003d"
+    },
+    {
+      "path": "tools/production_acceptance.py",
+      "category": "documentation-and-tooling",
+      "bytes": 3264,
+      "sha256": "38101754456be15bc58579d7c1828df087bfe06aea0c0e17ea6c25407f898a80"
+    },
+    {
+      "path": "tools/production_boundaries.py",
+      "category": "documentation-and-tooling",
+      "bytes": 6121,
+      "sha256": "453802ed101a99992a74734f2ba5f0c674aea728f22a8a056ac0a1ed938ab16f"
+    },
+    {
+      "path": "tools/production_smoke.py",
+      "category": "documentation-and-tooling",
+      "bytes": 9169,
+      "sha256": "b6defc7136ac7bf66207509f03dc0a23b860789c98f8965f3ce8838d096bbe28"
+    },
+    {
+      "path": "tools/requirements-acceptance.txt",
+      "category": "documentation-and-tooling",
+      "bytes": 46,
+      "sha256": "3a226e64b9d501b82c695853454067ce886f3486080650af0a317edd486aa11c"
+    },
+    {
+      "path": "tools/start-local.ps1",
+      "category": "documentation-and-tooling",
+      "bytes": 1301,
+      "sha256": "5cc9ab230802518f7bcf0bdf0c67622e8eb6f4d1600b63f33f9aafcc8624aad1"
+    }
+  ]
+}

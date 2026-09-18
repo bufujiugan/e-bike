@@ -1,0 +1,30 @@
+{
+  "health": "UP",
+  "first_login_requires_change": true,
+  "changed_password_login": true,
+  "auth_context": "SUCCESS",
+  "production_skus": [],
+  "openapi_paths": 110,
+  "anonymous_http_status": 401,
+  "migration_versions": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "11",
+    "12",
+    "13",
+    "14",
+    "15",
+    "16"
+  ],
+  "tables_without_comments": 0,
+  "columns_without_comments": 0,
+  "initial_vehicle_count": 0
+}

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.production.ProductionSchemaMapper">
+    <!-- 结构 SQL 仅由 V16 Java 迁移按顺序执行，不在业务请求中建表。 -->
+    <update id="createMutex">CREATE TABLE bike_production_mutex (id INT NOT NULL COMMENT '互斥记录标识', PRIMARY KEY(id)) COMMENT='生产一致性互斥记录'</update>
+    <insert id="seedMutex">INSERT INTO bike_production_mutex(id) VALUES(1)</insert>
+    <update id="createTemplate">CREATE TABLE bike_production_template (
+        id BIGINT NOT NULL AUTO_INCREMENT COMMENT '模板主键', name VARCHAR(100) NOT NULL COMMENT '模板名称',
+        width_mm INT NOT NULL COMMENT '标签宽毫米', height_mm INT NOT NULL COMMENT '标签高毫米',
+        layout VARCHAR(20) NOT NULL COMMENT '版式编码', heading VARCHAR(100) NOT NULL COMMENT '标签标题',
+        version INT NOT NULL DEFAULT 1 COMMENT '模板版本', PRIMARY KEY(id)) COMMENT='生产标签模板'</update>
+    <insert id="seedTemplate">INSERT INTO bike_production_template(name,width_mm,height_mm,layout,heading) VALUES
+        ('标准外箱标签',100,150,'STANDARD','E-BIKE'),('紧凑外箱标签',100,100,'COMPACT','E-BIKE')</insert>
+    <update id="createSku">CREATE TABLE bike_production_sku (
+        id BIGINT NOT NULL AUTO_INCREMENT COMMENT 'SKU主键', model_id BIGINT NOT NULL COMMENT '车型主键',
+        sku_code VARCHAR(64) NOT NULL COMMENT 'SKU编码', product_name VARCHAR(100) NOT NULL COMMENT '商品名称',
+        specification VARCHAR(100) NULL COMMENT '规格', ean VARCHAR(32) NULL COMMENT 'EAN商品码', upc VARCHAR(32) NULL COMMENT 'UPC商品码',
+        template_id BIGINT NOT NULL COMMENT '标签模板', enabled TINYINT NOT NULL DEFAULT 1 COMMENT '是否启用',
+        PRIMARY KEY(id), UNIQUE KEY uk_production_sku(sku_code), FOREIGN KEY(model_id) REFERENCES bike_product_model(id),
+        FOREIGN KEY(template_id) REFERENCES bike_production_template(id)) COMMENT='生产SKU资料'</update>
+    <insert id="seedSku">INSERT INTO bike_production_sku(model_id,sku_code,product_name,template_id,enabled)
+        SELECT id,model_code,model_name,1,enabled FROM bike_product_model</insert>
+    <update id="createTask">CREATE TABLE bike_production_task (
+        id VARCHAR(64) NOT NULL COMMENT '任务及幂等标识', sku_id BIGINT NOT NULL COMMENT '生产SKU', batch_no VARCHAR(64) NULL COMMENT '生产批次',
+        status VARCHAR(20) NOT NULL DEFAULT 'OPEN' COMMENT '作业状态', vehicle_id BIGINT NULL COMMENT '完成整车主键',
+        created_by VARCHAR(64) NOT NULL COMMENT '创建账号', created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
+        updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
+        PRIMARY KEY(id), KEY idx_production_task_status(status,updated_at), FOREIGN KEY(sku_id) REFERENCES bike_production_sku(id)) COMMENT='无序扫码生产任务'</update>
+    <update id="createScan">CREATE TABLE bike_production_scan (
+        id BIGINT NOT NULL AUTO_INCREMENT COMMENT '扫描记录主键', task_id VARCHAR(64) NOT NULL COMMENT '生产任务',
+        code_type VARCHAR(20) NOT NULL COMMENT '编码类型', code VARCHAR(128) NOT NULL COMMENT '扫描编码',
+        operator_name VARCHAR(64) NOT NULL COMMENT '扫码账号', scanned_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '扫码时间',
+        active TINYINT NOT NULL DEFAULT 1 COMMENT '是否有效预占',
+        active_code VARCHAR(128) GENERATED ALWAYS AS (CASE WHEN active=1 THEN code ELSE NULL END) STORED COMMENT '有效预占唯一编码',
+        PRIMARY KEY(id), UNIQUE KEY uk_production_task_type(task_id,code_type), UNIQUE KEY uk_production_active_code(active_code),
+        FOREIGN KEY(task_id) REFERENCES bike_production_task(id)) COMMENT='生产扫描记录及部件预占'</update>
+    <update id="createProduct">CREATE TABLE bike_production_vehicle (
+        vehicle_id BIGINT NOT NULL COMMENT '整车主键', task_id VARCHAR(64) NOT NULL COMMENT '来源生产任务',
+        sku_id BIGINT NOT NULL COMMENT 'SKU主键', batch_no VARCHAR(64) NULL COMMENT '生产批次',
+        PRIMARY KEY(vehicle_id), UNIQUE KEY uk_production_vehicle_task(task_id), FOREIGN KEY(vehicle_id) REFERENCES bike_vehicle(id)) COMMENT='整车生产扩展资料'</update>
+    <update id="createIssue">CREATE TABLE bike_production_issue (
+        id VARCHAR(64) NOT NULL COMMENT '异常编号', code VARCHAR(128) NOT NULL COMMENT '车架或部件编码',
+        reason VARCHAR(500) NOT NULL COMMENT '异常原因', status VARCHAR(20) NOT NULL DEFAULT 'OPEN' COMMENT '异常状态',
+        created_by VARCHAR(64) NOT NULL COMMENT '登记账号', created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '登记时间',
+        resolved_by VARCHAR(64) NULL COMMENT '解除账号', resolved_at DATETIME(3) NULL COMMENT '解除时间', resolution VARCHAR(500) NULL COMMENT '解除原因',
+        PRIMARY KEY(id), KEY idx_production_issue_code(code,status)) COMMENT='生产异常及隔离记录'</update>
+    <update id="createAttachment">CREATE TABLE bike_production_attachment (
+        id VARCHAR(64) NOT NULL COMMENT '图片标识', issue_id VARCHAR(64) NULL COMMENT '异常编号', sku_id BIGINT NULL COMMENT '商品主键', object_key VARCHAR(255) NOT NULL COMMENT '文件存储键',
+        content_type VARCHAR(64) NOT NULL COMMENT '图片类型', file_size BIGINT NOT NULL COMMENT '字节数', created_by VARCHAR(64) NOT NULL COMMENT '上传账号',
+        created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '上传时间', PRIMARY KEY(id), FOREIGN KEY(issue_id) REFERENCES bike_production_issue(id)) COMMENT='生产异常图片'</update>
+    <update id="createPrint">CREATE TABLE bike_production_print (
+        id VARCHAR(64) NOT NULL COMMENT '打印任务号', vehicle_id BIGINT NOT NULL COMMENT '整车主键', snapshot JSON NOT NULL COMMENT '不可变标签快照',
+        status VARCHAR(20) NOT NULL DEFAULT 'PENDING' COMMENT '打印状态', reason VARCHAR(500) NOT NULL COMMENT '首打或补打原因',
+        created_by VARCHAR(64) NOT NULL COMMENT '创建账号', created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
+        terminal VARCHAR(64) NULL COMMENT '领取终端', claimed_by VARCHAR(64) NULL COMMENT '领取账号', claimed_at DATETIME(3) NULL COMMENT '领取时间',
+        finished_at DATETIME(3) NULL COMMENT '回报时间', message VARCHAR(500) NULL COMMENT '回报说明',
+        PRIMARY KEY(id), KEY idx_production_print_status(status,created_at), KEY idx_production_print_vehicle(vehicle_id)) COMMENT='外箱标签打印队列'</update>
+</mapper>

@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.production.ProductionMapper">
+    <select id="selectMutexForUpdate" resultType="int">SELECT id FROM bike_production_mutex WHERE id=1 FOR UPDATE</select>
+    <select id="selectProductionInventory" resultType="map">
+        SELECT s.sku_code skuCode,s.product_name productName,w.warehouse_name warehouseName,l.location_name locationName,
+        COUNT(*) physicalQty,SUM(EXISTS(SELECT 1 FROM bike_production_issue i WHERE i.status='OPEN' AND (i.code COLLATE utf8mb4_unicode_ci=v.frame_sn COLLATE utf8mb4_unicode_ci OR EXISTS(SELECT 1 FROM bike_vehicle_part_binding b WHERE b.vehicle_id=v.id AND b.is_current=1 AND b.part_sn COLLATE utf8mb4_unicode_ci=i.code COLLATE utf8mb4_unicode_ci)))) quarantinedQty
+        FROM bike_vehicle v JOIN bike_production_vehicle p ON p.vehicle_id=v.id JOIN bike_production_sku s ON s.id=p.sku_id
+        LEFT JOIN bike_warehouse w ON w.id=v.current_warehouse_id LEFT JOIN bike_warehouse_location l ON l.id=v.current_location_id
+        WHERE v.status=2 <if test="skuId != null">AND p.sku_id=#{skuId}</if><if test="warehouseId != null">AND v.current_warehouse_id=#{warehouseId}</if>
+        GROUP BY s.id,s.sku_code,s.product_name,w.id,w.warehouse_name,l.id,l.location_name ORDER BY s.id,w.id,l.id
+    </select>
+    <sql id="skuSelect">SELECT s.id,s.model_id modelId,m.model_name modelName,s.sku_code skuCode,s.product_name productName,s.specification,s.ean,s.upc,s.template_id templateId,s.enabled FROM bike_production_sku s JOIN bike_product_model m ON m.id=s.model_id</sql>
+    <select id="selectSkus" resultType="map"><include refid="skuSelect"/> ORDER BY s.id DESC</select>
+    <select id="selectSku" resultType="map"><include refid="skuSelect"/> WHERE s.id=#{id}</select>
+    <insert id="insertSku">INSERT INTO bike_production_sku(model_id,sku_code,product_name,specification,ean,upc,template_id,enabled) VALUES(#{r.modelId},#{r.skuCode},#{r.productName},#{r.specification},#{r.ean},#{r.upc},#{r.templateId},#{r.enabled})</insert>
+    <update id="updateSku">UPDATE bike_production_sku SET product_name=#{r.productName},specification=#{r.specification},ean=#{r.ean},upc=#{r.upc},template_id=#{r.templateId},enabled=#{r.enabled} WHERE id=#{id}</update>
+    <sql id="templateSelect">SELECT id,name,width_mm widthMm,height_mm heightMm,layout,heading,version FROM bike_production_template</sql>
+    <select id="selectTemplates" resultType="map"><include refid="templateSelect"/> ORDER BY id</select>
+    <select id="selectTemplate" resultType="map"><include refid="templateSelect"/> WHERE id=#{id}</select>
+    <update id="updateTemplate">UPDATE bike_production_template SET name=#{r.name},width_mm=#{r.widthMm},height_mm=#{r.heightMm},layout=#{r.layout},heading=#{r.heading},version=version+1 WHERE id=#{id}</update>
+    <insert id="insertTask">INSERT INTO bike_production_task(id,sku_id,batch_no,created_by) VALUES(#{id},#{r.skuId},#{r.batchNo},#{operator})</insert>
+    <sql id="taskSelect">SELECT t.id,t.sku_id skuId,t.batch_no batchNo,t.status,t.vehicle_id vehicleId,t.created_by createdBy,t.created_at createdAt,t.updated_at updatedAt,s.sku_code skuCode,s.product_name productName,v.frame_sn frameSn,v.vehicle_qr_code qrCode FROM bike_production_task t JOIN bike_production_sku s ON s.id=t.sku_id LEFT JOIN bike_vehicle v ON v.id=t.vehicle_id</sql>
+    <select id="selectTask" resultType="map"><include refid="taskSelect"/> WHERE t.id=#{id}</select>
+    <sql id="taskFilter"><where><if test="keyword != null">t.id LIKE CONCAT('%',#{keyword},'%') OR t.batch_no LIKE CONCAT('%',#{keyword},'%') OR v.frame_sn LIKE CONCAT('%',#{keyword},'%') OR EXISTS(SELECT 1 FROM bike_production_scan sc WHERE sc.task_id=t.id AND sc.code=#{keyword})</if></where></sql>
+    <select id="selectTasks" resultType="map"><include refid="taskSelect"/><include refid="taskFilter"/> ORDER BY t.updated_at DESC LIMIT #{offset},50</select>
+    <select id="countTasks" resultType="int">SELECT COUNT(*) FROM bike_production_task t LEFT JOIN bike_vehicle v ON v.id=t.vehicle_id <include refid="taskFilter"/></select>
+    <select id="selectScans" resultType="map">SELECT code_type codeType,code,operator_name operatorName,scanned_at scannedAt,active FROM bike_production_scan WHERE task_id=#{taskId} ORDER BY id</select>
+    <select id="selectReservation" resultType="map">SELECT task_id taskId,code_type codeType FROM bike_production_scan WHERE active_code=#{code}</select>
+    <insert id="insertScan">INSERT INTO bike_production_scan(task_id,code_type,code,operator_name) VALUES(#{taskId},#{type},#{code},#{operator})</insert>
+    <update id="deleteTaskReservations">UPDATE bike_production_scan SET active=0 WHERE task_id=#{taskId} AND active=1</update>
+    <update id="updateTaskStatus">UPDATE bike_production_task SET status=#{status},vehicle_id=#{vehicleId},updated_at=NOW(3) WHERE id=#{id}</update>
+    <select id="selectPart" resultType="map">SELECT id,part_sn code,part_type codeType,bind_status bindStatus,status,qc_status qcStatus FROM bike_part WHERE part_sn=#{code}</select>
+    <select id="selectFrame" resultType="map">SELECT id,frame_sn code,model_id modelId,status FROM bike_vehicle WHERE frame_sn=#{code}</select>
+    <insert id="insertVehicle">INSERT INTO bike_vehicle(frame_sn,model_id,status,qr_status) VALUES(#{frameSn},#{modelId},0,'ACTIVE')</insert>
+    <insert id="insertProduct">INSERT INTO bike_production_vehicle(vehicle_id,task_id,sku_id,batch_no) VALUES(#{vehicleId},#{taskId},#{skuId},#{batchNo})</insert>
+    <select id="selectProduct" resultType="map">SELECT vehicle_id vehicleId,task_id taskId,sku_id skuId,batch_no batchNo FROM bike_production_vehicle WHERE vehicle_id=#{vehicleId}</select>
+    <select id="countOpenIssues" resultType="int">SELECT COUNT(*) FROM bike_production_issue WHERE code=#{code} AND status='OPEN'</select>
+    <select id="selectQuarantinedParts" resultType="map">SELECT part_sn code,part_type codeType,qc_status qcStatus FROM bike_part WHERE status='QUARANTINED' ORDER BY id DESC LIMIT 500</select>
+    <update id="updatePartReleased">UPDATE bike_part SET status='AVAILABLE',qc_status='PASSED' WHERE part_sn=#{code} AND status='QUARANTINED' AND bind_status='UNBOUND'</update>
+    <select id="selectCurrentBindings" resultType="map">SELECT part_type codeType,part_sn code FROM bike_vehicle_part_binding WHERE vehicle_id=#{vehicleId} AND is_current=1</select>
+    <select id="countVehicleOpenIssues" resultType="int">SELECT COUNT(*) FROM bike_production_issue i WHERE i.status='OPEN' AND (i.code COLLATE utf8mb4_unicode_ci=(SELECT frame_sn COLLATE utf8mb4_unicode_ci FROM bike_vehicle WHERE id=#{vehicleId}) OR EXISTS(SELECT 1 FROM bike_vehicle_part_binding b WHERE b.vehicle_id=#{vehicleId} AND b.is_current=1 AND b.part_sn COLLATE utf8mb4_unicode_ci=i.code COLLATE utf8mb4_unicode_ci))</select>
+    <insert id="insertIssue">INSERT INTO bike_production_issue(id,code,reason,created_by) VALUES(#{id},#{code},#{reason},#{operator})</insert>
+    <sql id="issueSelect">SELECT id,code,reason,status,created_by createdBy,created_at createdAt,resolved_by resolvedBy,resolved_at resolvedAt,resolution FROM bike_production_issue</sql>
+    <select id="selectIssue" resultType="map"><include refid="issueSelect"/> WHERE id=#{id}</select>
+    <sql id="issueFilter"><where><if test="keyword != null">code LIKE CONCAT('%',#{keyword},'%') OR reason LIKE CONCAT('%',#{keyword},'%')</if></where></sql>
+    <select id="selectIssues" resultType="map"><include refid="issueSelect"/><include refid="issueFilter"/> ORDER BY created_at DESC LIMIT #{offset},50</select>
+    <select id="countIssues" resultType="int">SELECT COUNT(*) FROM bike_production_issue <include refid="issueFilter"/></select>
+    <update id="updateIssueResolved">UPDATE bike_production_issue SET status='RESOLVED',resolved_by=#{operator},resolved_at=NOW(3),resolution=#{reason} WHERE id=#{id} AND status='OPEN'</update>
+    <insert id="insertAttachment">INSERT INTO bike_production_attachment(id,issue_id,object_key,content_type,file_size,created_by) VALUES(#{id},#{issueId},#{objectKey},#{contentType},#{size},#{operator})</insert>
+    <select id="selectAttachment" resultType="map">SELECT id,issue_id issueId,object_key objectKey,content_type contentType,file_size fileSize FROM bike_production_attachment WHERE id=#{id}</select>
+    <select id="selectAttachments" resultType="map">SELECT id,content_type contentType,file_size fileSize,created_at createdAt FROM bike_production_attachment WHERE issue_id=#{issueId}</select>
+    <select id="selectSkuAttachments" resultType="map">SELECT id,content_type contentType,file_size fileSize,created_at createdAt FROM bike_production_attachment WHERE sku_id=#{skuId}</select>
+    <insert id="insertSkuAttachment">INSERT INTO bike_production_attachment(id,sku_id,object_key,content_type,file_size,created_by) VALUES(#{id},#{skuId},#{objectKey},#{contentType},#{size},#{operator})</insert>
+    <insert id="insertPrint">INSERT INTO bike_production_print(id,vehicle_id,snapshot,reason,created_by) VALUES(#{id},#{vehicleId},#{snapshot},#{reason},#{operator})</insert>
+    <sql id="printSelect">SELECT id,vehicle_id vehicleId,snapshot,status,reason,created_by createdBy,created_at createdAt,terminal,claimed_by claimedBy,claimed_at claimedAt,finished_at finishedAt,message FROM bike_production_print</sql>
+    <select id="selectPrint" resultType="map"><include refid="printSelect"/> WHERE id=#{id}</select>
+    <select id="selectPrints" resultType="map"><include refid="printSelect"/> ORDER BY created_at DESC LIMIT #{offset},50</select>
+    <select id="countPrints" resultType="int">SELECT COUNT(*) FROM bike_production_print</select>
+    <select id="selectPendingPrint" resultType="map"><include refid="printSelect"/> WHERE status='PENDING' AND NOT EXISTS(SELECT 1 FROM bike_production_issue i WHERE i.status='OPEN' AND (i.code COLLATE utf8mb4_unicode_ci=(SELECT frame_sn COLLATE utf8mb4_unicode_ci FROM bike_vehicle v WHERE v.id=bike_production_print.vehicle_id) OR EXISTS(SELECT 1 FROM bike_vehicle_part_binding b WHERE b.vehicle_id=bike_production_print.vehicle_id AND b.is_current=1 AND b.part_sn COLLATE utf8mb4_unicode_ci=i.code COLLATE utf8mb4_unicode_ci))) ORDER BY created_at,id LIMIT 1</select>
+    <update id="updateObsoletePrints">UPDATE bike_production_print SET status='FAILED',message=#{reason},finished_at=NOW(3) WHERE vehicle_id=#{vehicleId} AND status='PENDING'</update>
+    <select id="countProcessingPrints" resultType="int">SELECT COUNT(*) FROM bike_production_print WHERE vehicle_id=#{vehicleId} AND status='PROCESSING'</select>
+    <select id="countActivePrints" resultType="int">SELECT COUNT(*) FROM bike_production_print WHERE vehicle_id=#{vehicleId} AND status IN ('PENDING','PROCESSING')</select>
+    <update id="updatePrintClaim">UPDATE bike_production_print SET status='PROCESSING',terminal=#{terminal},claimed_by=#{operator},claimed_at=NOW(3) WHERE id=#{id} AND status='PENDING'</update>
+    <update id="updatePrintResult">UPDATE bike_production_print SET status=#{status},message=#{message},finished_at=NOW(3) WHERE id=#{id} AND status='PROCESSING'</update>
+    <update id="updateStalePrints">UPDATE bike_production_print SET status='UNKNOWN',message='终端超时未回报，请核对实物后补打',finished_at=NOW(3) WHERE status='PROCESSING' AND claimed_at &lt; DATE_SUB(NOW(3),INTERVAL 5 MINUTE)</update>
+    <insert id="insertAudit">INSERT INTO bike_operation_log(business_type,business_id,action,operator_name,remark) VALUES('PRODUCTION',#{businessId},#{action},#{operator},#{reason})</insert>
+</mapper>

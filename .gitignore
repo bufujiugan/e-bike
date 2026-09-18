@@ -1,0 +1,38 @@
+# Dependencies and build products
+**/node_modules/
+**/target/
+**/dist/
+**/__pycache__/
+*.pyc
+*.log
+*.tsbuildinfo
+
+# Local credentials and runtime data
+.env
+.env.*
+!.env.example
+*.local
+*.pem
+*.key
+*.p12
+*.jks
+**/storage/
+backups/
+tmp/
+.tmp_*/
+.playwright-cli/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Deliverables are retained; raw runtime and browser session dumps are excluded
+output/*
+!output/pdf/
+!output/prototype/
+!output/playwright/
+output/playwright/*
+!output/playwright/*.png
+!output/playwright/ebike-hifi/
+output/playwright/ebike-hifi/*
+!output/playwright/ebike-hifi/*.png

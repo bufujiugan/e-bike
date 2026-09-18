@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.lock.InventoryLockMapper">
+    <select id="lockModelForUpdate" resultType="int">SELECT id FROM bike_product_model WHERE id=#{modelId} AND enabled=1 FOR UPDATE</select>
+    <select id="selectPhysicalForUpdate" resultType="long">SELECT COUNT(*) FROM bike_vehicle WHERE model_id=#{modelId} AND status=2 FOR UPDATE</select>
+    <select id="selectActiveLockedForUpdate" resultType="long">SELECT COALESCE(SUM(lock_qty-released_qty-converted_qty),0) FROM bike_inventory_lock WHERE product_model_id=#{modelId} AND status IN ('LOCKED','PARTIAL_CONVERTED') AND expire_time&gt;NOW() FOR UPDATE</select>
+    <insert id="insert">INSERT INTO bike_inventory_lock(lock_no,agent_id,product_model_id,lock_qty,expire_time,created_by,status,remark) SELECT #{lockNo},a.id,#{request.productModelId},#{request.lockQty},#{expireTime},COALESCE(#{createdBy},0),'LOCKED',#{request.remark} FROM bike_agent a WHERE a.id=#{request.agentId} AND a.status='ENABLED'</insert>
+    <insert id="insertDetail">INSERT INTO bike_inventory_lock_detail(lock_id,product_model_id,lock_qty) SELECT id,#{productModelId},#{lockQty} FROM bike_inventory_lock WHERE lock_no=#{lockNo}</insert>
+    <sql id="selectBase">SELECT l.id,l.lock_no,a.id agent_id,a.agent_name,m.id product_model_id,m.model_name,l.lock_qty,l.released_qty,l.converted_qty,l.status,l.expire_time,l.created_at,l.remark FROM bike_inventory_lock l JOIN bike_agent a ON a.id=l.agent_id JOIN bike_product_model m ON m.id=l.product_model_id</sql>
+    <select id="selectById" resultType="com.bike.server.lock.InventoryLockView"><include refid="selectBase"/> WHERE l.id=#{id}</select>
+    <select id="selectIdByNo" resultType="long">SELECT id FROM bike_inventory_lock WHERE lock_no=#{lockNo}</select>
+    <select id="selectPage" resultType="com.bike.server.lock.InventoryLockView"><include refid="selectBase"/><where><if test="agentId != null">l.agent_id=#{agentId}</if></where> ORDER BY l.created_at DESC LIMIT #{offset},#{limit}</select>
+    <select id="count" resultType="long">SELECT COUNT(*) FROM bike_inventory_lock l <where><if test="agentId != null">l.agent_id=#{agentId}</if></where></select>
+    <update id="release">UPDATE bike_inventory_lock SET released_qty=lock_qty-converted_qty,status='RELEASED',released_at=NOW(3),remark=CONCAT(COALESCE(remark,''),' ',#{reason}) WHERE id=#{id} AND status IN ('LOCKED','PARTIAL_CONVERTED') AND expire_time&gt;NOW(3)</update>
+    <update id="convert">UPDATE bike_inventory_lock SET converted_qty=converted_qty+#{qty},status=CASE WHEN converted_qty+#{qty} >= lock_qty-released_qty THEN 'CONVERTED' ELSE 'PARTIAL_CONVERTED' END WHERE id=#{id} AND converted_qty+released_qty+#{qty} &lt;= lock_qty AND status IN ('LOCKED','PARTIAL_CONVERTED') AND expire_time&gt;NOW(3)</update>
+    <update id="expireLocks">UPDATE bike_inventory_lock SET status='EXPIRED',released_at=NOW(3) WHERE status IN ('LOCKED','PARTIAL_CONVERTED') AND expire_time&lt;=NOW()</update>
+    <select id="selectExpiredForAudit" resultType="com.bike.server.lock.InventoryLockView"><include refid="selectBase"/> WHERE l.status IN ('LOCKED','PARTIAL_CONVERTED') AND l.expire_time&lt;=NOW()</select>
+    <insert id="insertOperationLog">INSERT INTO bike_operation_log(business_type,business_id,action,operator_id,operator_name,before_data,after_data,client_ip,remark) VALUES(CASE WHEN #{action}='释放库存锁定' THEN 'INVENTORY_RELEASE' ELSE 'INVENTORY_LOCK' END,#{businessId},#{action},#{operatorId},#{operatorName},JSON_OBJECT('status','LOCKED'),JSON_OBJECT('action',#{action}),#{clientIp},#{remark})</insert>
+</mapper>

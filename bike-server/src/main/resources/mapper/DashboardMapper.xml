@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.dashboard.DashboardMapper">
+    <select id="selectSummaryCounts" resultType="map">
+        SELECT
+            (SELECT COUNT(*) FROM bike_vehicle WHERE assemble_time &gt;= CURRENT_DATE()) AS todayAssembled,
+            (SELECT COUNT(*) FROM bike_vehicle WHERE status = 2) AS physicalInventory,
+            (SELECT COUNT(*) FROM bike_stock_in_record WHERE operation_time &gt;= CURRENT_DATE() AND status = 'COMPLETED') AS todayStockIn,
+            (SELECT COUNT(*) FROM bike_stock_out_record WHERE operation_time &gt;= CURRENT_DATE() AND status = 'COMPLETED') AS todayStockOut
+            ,(SELECT COALESCE(SUM(lock_qty - released_qty - converted_qty), 0) FROM bike_inventory_lock WHERE status IN ('LOCKED','PARTIAL_CONVERTED') AND expire_time &gt; NOW() AND lock_qty &gt; released_qty + converted_qty) AS lockedInventory
+    </select>
+    <select id="selectVehicleStatusCounts" resultType="map">
+        SELECT CASE status WHEN 0 THEN '待组装' WHEN 1 THEN '组装完成' WHEN 2 THEN '已入库' WHEN 3 THEN '已出库'
+                    WHEN 4 THEN '返工中' WHEN 5 THEN '售后维修' WHEN 6 THEN '报废' ELSE '未知' END AS label,
+               COUNT(*) AS count,
+               CASE status WHEN 0 THEN '#94a3b8' WHEN 1 THEN '#1677c8' WHEN 2 THEN '#16a36a' WHEN 3 THEN '#8b5cf6'
+                    WHEN 4 THEN '#f59e0b' WHEN 5 THEN '#ef4444' ELSE '#64748b' END AS color
+        FROM bike_vehicle GROUP BY status ORDER BY status
+    </select>
+    <select id="selectRecentOperations" resultType="map">
+        SELECT DATE_FORMAT(operation_time, '%H:%i:%s') AS time, action,
+               COALESCE(frame_sn, business_id, '-') AS target,
+               COALESCE(operator_name, '-') AS operator,
+               '已完成' AS status
+        FROM bike_operation_log ORDER BY operation_time DESC LIMIT 10
+    </select>
+    <select id="selectTrend" resultType="map">
+        SELECT event_date AS date,
+               SUM(assembled) AS assembled,
+               SUM(stock_in) AS stockIn,
+               SUM(stock_out) AS stockOut
+        FROM (
+            SELECT DATE_FORMAT(assemble_time, '%Y-%m-%d') event_date, 1 assembled, 0 stock_in, 0 stock_out
+            FROM bike_vehicle WHERE assemble_time &gt;= DATE_SUB(CURRENT_DATE(), INTERVAL #{days} DAY)
+            UNION ALL
+            SELECT DATE_FORMAT(operation_time, '%Y-%m-%d'), 0, 1, 0
+            FROM bike_stock_in_record WHERE status = 'COMPLETED' AND operation_time &gt;= DATE_SUB(CURRENT_DATE(), INTERVAL #{days} DAY)
+            UNION ALL
+            SELECT DATE_FORMAT(operation_time, '%Y-%m-%d'), 0, 0, 1
+            FROM bike_stock_out_record WHERE status = 'COMPLETED' AND operation_time &gt;= DATE_SUB(CURRENT_DATE(), INTERVAL #{days} DAY)
+        ) events
+        GROUP BY event_date ORDER BY event_date
+    </select>
+</mapper>

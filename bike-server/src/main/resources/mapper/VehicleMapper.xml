@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.vehicle.VehicleMapper">
+    <sql id="vehicleSelect">
+        SELECT v.id, v.frame_sn, v.model_id, m.model_name,
+               v.status, CASE v.status WHEN 0 THEN '待组装' WHEN 1 THEN '组装完成' WHEN 2 THEN '已入库' WHEN 3 THEN '已出库' WHEN 4 THEN '返工中' WHEN 5 THEN '售后维修' WHEN 6 THEN '报废' ELSE '未知' END status_name,
+               v.vehicle_qr_code, v.vehicle_qr_token, v.qr_generated_at, v.qr_version, v.assemble_operator_id, u.display_name assemble_operator_name,
+               v.assemble_time, v.current_warehouse_id, w.warehouse_name, v.current_location_id, l.location_name,
+               v.stock_in_time, v.stock_out_time, v.current_customer_id, c.customer_name, v.current_order_no,
+               MAX(CASE WHEN b.part_type = 'MOTOR' AND b.is_current = 1 THEN b.part_sn END) motor_sn,
+               MAX(CASE WHEN b.part_type = 'BATTERY' AND b.is_current = 1 THEN b.part_sn END) battery_sn,
+               MAX(CASE WHEN b.part_type = 'DISPLAY' AND b.is_current = 1 THEN b.part_sn END) display_sn,
+               v.created_at, v.updated_at
+        FROM bike_vehicle v LEFT JOIN bike_product_model m ON m.id = v.model_id LEFT JOIN bike_sys_user u ON u.id = v.assemble_operator_id
+        LEFT JOIN bike_warehouse w ON w.id = v.current_warehouse_id LEFT JOIN bike_warehouse_location l ON l.id = v.current_location_id
+        LEFT JOIN bike_customer c ON c.id = v.current_customer_id LEFT JOIN bike_vehicle_part_binding b ON b.vehicle_id = v.id
+    </sql>
+    <sql id="vehicleWhere">
+        <where>
+            <if test="keyword != null and keyword != ''">AND (v.frame_sn LIKE CONCAT('%', #{keyword}, '%') OR v.vehicle_qr_code LIKE CONCAT('%', #{keyword}, '%') OR v.current_order_no LIKE CONCAT('%', #{keyword}, '%') OR EXISTS (SELECT 1 FROM bike_vehicle_part_binding bx WHERE bx.vehicle_id = v.id AND bx.part_sn LIKE CONCAT('%', #{keyword}, '%')) OR EXISTS (SELECT 1 FROM bike_customer cx WHERE cx.id = v.current_customer_id AND cx.customer_name LIKE CONCAT('%', #{keyword}, '%')))</if>
+            <if test="status != null">AND v.status = #{status}</if>
+            <if test="modelId != null">AND v.model_id = #{modelId}</if>
+            <if test="customerId != null">AND v.current_customer_id = #{customerId}</if>
+            <if test="orderNo != null and orderNo != ''">AND v.current_order_no LIKE CONCAT('%', #{orderNo}, '%')</if>
+            <if test="fromDate != null">AND v.assemble_time &gt;= #{fromDate}</if>
+            <if test="toDate != null">AND v.assemble_time &lt; DATE_ADD(#{toDate}, INTERVAL 1 DAY)</if>
+        </where>
+    </sql>
+    <select id="selectPage" resultType="com.bike.server.vehicle.VehicleView"><include refid="vehicleSelect"/><include refid="vehicleWhere"/> GROUP BY v.id ORDER BY v.updated_at DESC LIMIT #{offset}, #{limit}</select>
+    <select id="count" resultType="long">SELECT COUNT(*) FROM bike_vehicle v <include refid="vehicleWhere"/></select>
+    <select id="selectById" resultType="com.bike.server.vehicle.VehicleView"><include refid="vehicleSelect"/> WHERE v.id = #{id} GROUP BY v.id</select>
+    <select id="selectByFrame" resultType="com.bike.server.vehicle.VehicleView"><include refid="vehicleSelect"/> WHERE v.frame_sn = #{frameSn} GROUP BY v.id</select>
+    <select id="selectByFrameForUpdate" resultType="com.bike.server.vehicle.VehicleView"><include refid="vehicleSelect"/> WHERE v.frame_sn = #{frameSn} GROUP BY v.id FOR UPDATE</select>
+    <select id="selectByQr" resultType="com.bike.server.vehicle.VehicleView"><include refid="vehicleSelect"/> WHERE v.vehicle_qr_code = #{qrCode} OR v.vehicle_qr_token = #{qrCode} GROUP BY v.id</select>
+    <insert id="insert">INSERT INTO bike_vehicle(frame_sn, model_id, status, qr_status) VALUES(#{frameSn}, #{modelId}, 0, 'ACTIVE')</insert>
+    <select id="countEnabledModel" resultType="int">SELECT COUNT(*) FROM bike_product_model WHERE id=#{modelId} AND enabled=1</select>
+    <update id="updateQr">UPDATE bike_vehicle SET vehicle_qr_code = #{qrCode}, vehicle_qr_token = #{token}, qr_generated_at = NOW(3), qr_version = #{version}, qr_status = 'ACTIVE' WHERE id = #{id}</update>
+    <update id="updateAssembled">UPDATE bike_vehicle SET status = 1, assemble_operator_id = #{operatorId}, assemble_time = NOW(3), vehicle_qr_code = #{qrCode}, vehicle_qr_token = #{token}, qr_generated_at = NOW(3), qr_version = #{version}, qr_status = 'ACTIVE' WHERE id = #{id} AND status = 0</update>
+    <insert id="insertOperationLog">INSERT INTO bike_operation_log(business_type,business_id,action,operator_id,operator_name,before_data,after_data,client_ip) VALUES('VEHICLE_CHANGE',#{businessId},#{action},#{operatorId},#{operatorName},JSON_OBJECT('value',#{beforeData}),JSON_OBJECT('value',#{afterData}),#{clientIp})</insert>
+</mapper>

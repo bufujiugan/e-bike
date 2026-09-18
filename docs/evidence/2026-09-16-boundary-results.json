@@ -1,0 +1,11 @@
+{
+  "prefix": "EDGEB60DC0",
+  "checks": [
+    "工位权限与交接",
+    "Excel错误行",
+    "打印超时和越权回报",
+    "旧组装预占门禁"
+  ],
+  "taskId": "26b83dfa-9a1f-4f27-887d-c4fb03fc4bad",
+  "printId": "4fe94cad-dd69-4b54-91a3-ed39d81e00d7"
+}

@@ -1,0 +1,60 @@
+{
+  "prefix": "AC1DF6286F",
+  "checks": [
+    "24种扫码顺序、车架最后、重复完成、唯一聚合码及首打",
+    "并发抢件仅一个成功，取消后释放",
+    "第四码失败整笔回滚、前三码保留、解除后重试成功",
+    "隔离阻止入库",
+    "隔离阻止指定标签领取",
+    "伪装图片拒绝",
+    "图片未登录不可读",
+    "解除隔离后可入库且重复入库被阻止",
+    "换件保留聚合码，旧标签失效，新标签含新件；旧件必须复检",
+    "打印领取互斥及回报幂等、总码和旧件追溯"
+  ],
+  "vehicle": {
+    "batchNo": "AC1DF6286F",
+    "frameSn": "AC1DF6286F-0-FRAME",
+    "productName": "导入验收",
+    "createdAt": "2026-09-16T14:55:15.876",
+    "qrCode": "BIKE:59:2889c698365048e38ca0920cacc61977",
+    "createdBy": "admin",
+    "scans": [
+      {
+        "scannedAt": "2026-09-16T14:55:15.921",
+        "code": "AC1DF6286F-0-FRAME",
+        "codeType": "FRAME",
+        "active": 0,
+        "operatorName": "admin"
+      },
+      {
+        "scannedAt": "2026-09-16T14:55:15.948",
+        "code": "AC1DF6286F-0-MOTOR",
+        "codeType": "MOTOR",
+        "active": 0,
+        "operatorName": "admin"
+      },
+      {
+        "scannedAt": "2026-09-16T14:55:16",
+        "code": "AC1DF6286F-0-BATTERY",
+        "codeType": "BATTERY",
+        "active": 0,
+        "operatorName": "admin"
+      },
+      {
+        "scannedAt": "2026-09-16T14:55:16.023",
+        "code": "AC1DF6286F-0-DISPLAY",
+        "codeType": "DISPLAY",
+        "active": 0,
+        "operatorName": "admin"
+      }
+    ],
+    "id": "c72901d3-2491-4903-bfb9-025a62889bf4",
+    "vehicleId": 59,
+    "skuId": 8,
+    "skuCode": "EDGE3F05FC-SKU",
+    "status": "COMPLETED",
+    "updatedAt": "2026-09-16T14:55:16.064"
+  },
+  "printId": "50fabba0-396e-40c8-a959-31972c371ae7"
+}

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.system.UserMapper">
+    <select id="selectPage" resultType="com.bike.server.system.UserView">SELECT id,username,display_name,user_type,agent_id,workstation_id,enabled,must_change_password,last_login_at,created_at FROM bike_sys_user <if test="keyword != null">WHERE username LIKE CONCAT('%',#{keyword},'%') OR display_name LIKE CONCAT('%',#{keyword},'%')</if> ORDER BY updated_at DESC LIMIT #{offset},#{limit}</select>
+    <select id="count" resultType="long">SELECT COUNT(*) FROM bike_sys_user <if test="keyword != null">WHERE username LIKE CONCAT('%',#{keyword},'%') OR display_name LIKE CONCAT('%',#{keyword},'%')</if></select>
+    <select id="selectById" resultType="com.bike.server.system.UserView">SELECT id,username,display_name,user_type,agent_id,workstation_id,enabled,must_change_password,last_login_at,created_at FROM bike_sys_user WHERE id=#{id}</select>
+    <select id="selectByUsername" resultType="com.bike.server.system.UserView">SELECT id,username,display_name,user_type,agent_id,workstation_id,enabled,must_change_password,last_login_at,created_at FROM bike_sys_user WHERE username=#{username}</select>
+    <select id="selectRoleIds" resultType="long">SELECT role_id FROM bike_sys_user_role WHERE user_id=#{userId} ORDER BY role_id</select>
+    <select id="countEnabledAgent" resultType="int">SELECT COUNT(*) FROM bike_agent WHERE id=#{agentId} AND status='ENABLED'</select>
+    <select id="countEnabledWorkstation" resultType="int">SELECT COUNT(*) FROM bike_workstation WHERE id=#{workstationId} AND enabled=1</select>
+    <insert id="insert">INSERT INTO bike_sys_user(username,password_hash,display_name,user_type,agent_id,workstation_id) VALUES(#{request.username},#{passwordHash},#{request.displayName},COALESCE(#{request.userType},'WEB_ADMIN'),#{request.agentId},#{request.workstationId})</insert>
+    <update id="updateStatus">UPDATE bike_sys_user SET enabled=#{enabled} WHERE id=#{id}</update>
+    <update id="updateProfile">UPDATE bike_sys_user SET display_name=#{request.displayName},user_type=#{request.userType},agent_id=#{request.agentId},workstation_id=#{request.workstationId} WHERE id=#{id}</update>
+    <delete id="clearRoles">DELETE FROM bike_sys_user_role WHERE user_id=#{userId}</delete>
+    <insert id="insertRoles">INSERT INTO bike_sys_user_role(user_id,role_id) VALUES <foreach collection="roleIds" item="roleId" separator=",">(#{userId},#{roleId})</foreach></insert>
+    <select id="countExistingRoles" resultType="long">SELECT COUNT(*) FROM bike_sys_role WHERE enabled=1 AND id IN <foreach collection="roleIds" item="roleId" open="(" separator="," close=")">#{roleId}</foreach></select>
+    <select id="selectAuthByUsername" resultType="com.bike.server.auth.UserAuthRecord">SELECT id,username,password_hash,user_type,agent_id,workstation_id,enabled,must_change_password FROM bike_sys_user WHERE username=#{username}</select>
+    <select id="selectRoleCodes" resultType="string">SELECT r.role_code FROM bike_sys_role r JOIN bike_sys_user_role ur ON ur.role_id=r.id JOIN bike_sys_user u ON u.id=ur.user_id WHERE u.username=#{username} AND u.enabled=1 AND r.enabled=1</select>
+    <select id="selectPermissionCodes" resultType="string">SELECT p.permission_code FROM bike_sys_permission p JOIN bike_sys_role_permission rp ON rp.permission_id=p.id JOIN bike_sys_user_role ur ON ur.role_id=rp.role_id JOIN bike_sys_user u ON u.id=ur.user_id JOIN bike_sys_role r ON r.id=ur.role_id WHERE u.username=#{username} AND u.enabled=1 AND r.enabled=1</select>
+    <select id="selectWorkstationTypes" resultType="string">SELECT w.workstation_type FROM bike_workstation w JOIN bike_sys_user u ON u.workstation_id=w.id WHERE u.username=#{username} AND u.enabled=1 AND w.enabled=1</select>
+    <update id="updateLastLogin">UPDATE bike_sys_user SET last_login_at=NOW(3) WHERE username=#{username}</update>
+    <update id="updatePassword">UPDATE bike_sys_user SET password_hash=#{passwordHash},must_change_password=0 WHERE username=#{username} AND enabled=1</update>
+    <update id="updatePasswordForFirstLogin">UPDATE bike_sys_user SET password_hash=#{passwordHash},must_change_password=1 WHERE username=#{username} AND enabled=1 AND must_change_password=1</update>
+    <insert id="insertOperationLog">INSERT INTO bike_operation_log(business_type,business_id,action,operator_id,operator_name,before_data,after_data,client_ip) VALUES('USER_CHANGE',#{businessId},#{action},#{operatorId},#{operatorName},JSON_OBJECT('value',#{beforeData}),JSON_OBJECT('value',#{afterData}),#{clientIp})</insert>
+</mapper>

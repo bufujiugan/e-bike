@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.stock.StockMapper">
+    <select id="selectVehicleByQrForUpdate" resultType="com.bike.server.vehicle.VehicleView"><include refid="com.bike.server.vehicle.VehicleMapper.vehicleSelect"/> WHERE (v.vehicle_qr_code = #{qrCode} OR v.vehicle_qr_token = #{qrCode}) GROUP BY v.id FOR UPDATE</select>
+    <update id="updateVehicleStockIn">UPDATE bike_vehicle SET status=2, current_warehouse_id=#{warehouseId}, current_location_id=#{locationId}, stock_in_time=NOW(3) WHERE id=#{vehicleId} AND status=1</update>
+    <update id="updateVehicleStockOut">UPDATE bike_vehicle v JOIN bike_sales_order o ON o.id=#{orderId} AND o.customer_id=#{customerId} JOIN bike_sales_order_item i ON i.order_id=o.id AND i.product_model_id=v.model_id SET v.status=3, v.stock_out_time=NOW(3), v.current_customer_id=#{customerId}, v.current_order_no=o.order_no WHERE v.id=#{vehicleId} AND v.status=2</update>
+    <update id="updateVehicleStockInCancel">UPDATE bike_vehicle SET status=1, current_warehouse_id=NULL, current_location_id=NULL, stock_in_time=NULL WHERE id=#{vehicleId} AND status=2</update>
+    <update id="updateVehicleStockOutCancel">
+        UPDATE bike_vehicle
+        SET status=2, stock_out_time=NULL, current_customer_id=NULL, current_order_no=NULL
+        WHERE id=#{vehicleId}
+          AND status=3
+          AND current_customer_id=#{customerId}
+          AND current_order_no=#{orderNo}
+          AND NOT EXISTS (
+              SELECT 1 FROM bike_stock_out_record newer
+              WHERE newer.vehicle_id=#{vehicleId}
+                AND newer.status='COMPLETED'
+                AND newer.id &gt; #{stockOutRecordId}
+          )
+    </update>
+    <select id="countEnabledLocation" resultType="int">SELECT COUNT(*) FROM bike_warehouse_location l JOIN bike_warehouse w ON w.id=l.warehouse_id WHERE l.id=#{locationId} AND l.warehouse_id=#{warehouseId} AND l.status='ENABLED' AND w.status='ENABLED'</select>
+    <select id="countAuthorizedModel" resultType="int">SELECT COUNT(*) FROM bike_inventory_lock WHERE agent_id=#{agentId} AND product_model_id=#{modelId} AND status IN ('LOCKED','PARTIAL_CONVERTED') AND expire_time &gt; NOW() AND lock_qty &gt; released_qty + converted_qty</select>
+    <update id="updateOrderStatusAfterCancel">UPDATE bike_sales_order o JOIN bike_sales_order_item i ON i.order_id=o.id SET o.status=CASE WHEN i.shipped_qty=0 THEN 'CONFIRMED' WHEN i.shipped_qty &lt; i.ordered_qty THEN 'PARTIAL_SHIPPED' ELSE 'SHIPPED' END WHERE o.id=#{orderId}</update>
+    <insert id="insertStockIn">INSERT INTO bike_stock_in_record(stock_in_no,vehicle_id,warehouse_id,location_id,operator_id,status) VALUES(#{stockNo},#{vehicleId},#{warehouseId},#{locationId},#{operatorId},'COMPLETED')</insert>
+    <insert id="insertStockOut">INSERT INTO bike_stock_out_record(stock_out_no,vehicle_id,customer_id,order_id,operator_id,status) VALUES(#{stockNo},#{vehicleId},#{customerId},#{orderId},#{operatorId},'COMPLETED')</insert>
+    <insert id="insertOrderVehicle">INSERT INTO bike_sales_order_vehicle(order_id,vehicle_id,stock_out_record_id) SELECT #{orderId},#{vehicleId},id FROM bike_stock_out_record WHERE stock_out_no=#{stockNo}</insert>
+    <sql id="stockInSelect">SELECT si.id,si.stock_in_no stock_no,'IN' type,si.vehicle_id,v.frame_sn,si.warehouse_id,w.warehouse_name,si.location_id,l.location_name,si.status,si.operation_time,si.cancel_reason FROM bike_stock_in_record si JOIN bike_vehicle v ON v.id=si.vehicle_id JOIN bike_warehouse w ON w.id=si.warehouse_id JOIN bike_warehouse_location l ON l.id=si.location_id</sql>
+    <sql id="stockOutSelect">SELECT so.id,so.stock_out_no stock_no,'OUT' type,so.vehicle_id,v.frame_sn,so.customer_id,c.customer_name,so.order_id,o.order_no,so.status,so.operation_time,so.cancel_reason FROM bike_stock_out_record so JOIN bike_vehicle v ON v.id=so.vehicle_id JOIN bike_customer c ON c.id=so.customer_id JOIN bike_sales_order o ON o.id=so.order_id</sql>
+    <select id="selectStockIn" resultType="com.bike.server.stock.StockRecordView"><include refid="stockInSelect"/> WHERE si.id=#{id}</select>
+    <select id="selectStockOut" resultType="com.bike.server.stock.StockRecordView"><include refid="stockOutSelect"/> WHERE so.id=#{id}</select>
+    <select id="selectStockInByNo" resultType="com.bike.server.stock.StockRecordView"><include refid="stockInSelect"/> WHERE si.stock_in_no=#{stockNo}</select>
+    <select id="selectStockOutByNo" resultType="com.bike.server.stock.StockRecordView"><include refid="stockOutSelect"/> WHERE so.stock_out_no=#{stockNo}</select>
+    <update id="cancelStockIn">UPDATE bike_stock_in_record SET status='CANCELLED',cancel_reason=#{reason},cancelled_by=#{operatorId},cancelled_at=NOW(3) WHERE id=#{id} AND status='COMPLETED'</update>
+    <update id="cancelStockOut">UPDATE bike_stock_out_record SET status='CANCELLED',cancel_reason=#{reason},cancelled_by=#{operatorId},cancelled_at=NOW(3) WHERE id=#{id} AND status='COMPLETED'</update>
+    <select id="selectStockRecords" resultType="com.bike.server.stock.StockRecordView"><choose><when test="type == 'IN'"><include refid="stockInSelect"/></when><otherwise><include refid="stockOutSelect"/></otherwise></choose> ORDER BY operation_time DESC LIMIT #{offset},#{limit}</select>
+    <select id="countStockRecords" resultType="long"><choose><when test="type == 'IN'">SELECT COUNT(*) FROM bike_stock_in_record</when><otherwise>SELECT COUNT(*) FROM bike_stock_out_record</otherwise></choose></select>
+    <select id="selectInventory" resultType="com.bike.server.stock.InventoryRow">
+        WITH inventory_rows AS (
+            SELECT m.id model_id,m.model_name,w.id warehouse_id,w.warehouse_name,l.id location_id,l.location_name,
+                   COUNT(v.id) physical_qty,COALESCE(il.locked_qty,0) model_locked_qty,
+                   COALESCE(DATEDIFF(CURRENT_DATE(),MIN(v.stock_in_time)),0) age_days,
+                   ROW_NUMBER() OVER (PARTITION BY m.id ORDER BY COALESCE(w.id,0),COALESCE(l.id,0)) row_no
+            FROM bike_vehicle v LEFT JOIN bike_product_model m ON m.id=v.model_id
+            LEFT JOIN bike_warehouse w ON w.id=v.current_warehouse_id LEFT JOIN bike_warehouse_location l ON l.id=v.current_location_id
+            LEFT JOIN (SELECT product_model_id,SUM(lock_qty-released_qty-converted_qty) locked_qty
+                       FROM bike_inventory_lock
+                       WHERE status IN ('LOCKED','PARTIAL_CONVERTED') AND expire_time&gt;NOW() AND lock_qty &gt; released_qty + converted_qty
+                       <if test="agentId != null">AND agent_id=#{agentId}</if>
+                       GROUP BY product_model_id) il ON il.product_model_id=v.model_id
+            WHERE v.status=2 <if test="modelId != null">AND v.model_id=#{modelId}</if><if test="warehouseId != null">AND v.current_warehouse_id=#{warehouseId}</if>
+            GROUP BY m.id,m.model_name,w.id,w.warehouse_name,l.id,l.location_name,il.locked_qty
+        ), allocated_rows AS (
+            SELECT inventory_rows.*,
+                   GREATEST(LEAST(model_locked_qty - COALESCE(SUM(physical_qty) OVER (
+                       PARTITION BY model_id ORDER BY row_no ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0), physical_qty), 0) locked_qty
+            FROM inventory_rows
+        )
+        SELECT model_id,model_name,warehouse_id,warehouse_name,location_id,location_name,physical_qty,locked_qty,
+               physical_qty-locked_qty available_qty,age_days
+        FROM allocated_rows ORDER BY physical_qty DESC
+    </select>
+    <select id="countPhysicalInventory" resultType="long">SELECT COUNT(*) FROM bike_vehicle WHERE status=2</select>
+    <select id="countLockedInventory" resultType="long">SELECT COALESCE(SUM(lock_qty-released_qty-converted_qty),0) FROM bike_inventory_lock WHERE status IN ('LOCKED','PARTIAL_CONVERTED') AND expire_time&gt;NOW() AND lock_qty &gt; released_qty + converted_qty</select>
+    <insert id="insertOperationLog">INSERT INTO bike_operation_log(business_type,business_id,action,frame_sn,operator_id,operator_name,before_data,after_data,client_ip,remark) VALUES(#{businessType},#{businessId},#{action},#{frameSn},#{operatorId},#{operatorName},JSON_OBJECT('status', CASE WHEN #{businessType}='STOCK_IN' THEN '组装完成' WHEN #{businessType}='STOCK_OUT' THEN '已入库' WHEN #{businessType}='STOCK_IN_CANCEL' THEN '已入库' WHEN #{businessType}='STOCK_OUT_CANCEL' THEN '已出库' ELSE '未知' END),JSON_OBJECT('status', CASE WHEN #{businessType}='STOCK_IN' THEN '已入库' WHEN #{businessType}='STOCK_OUT' THEN '已出库' WHEN #{businessType}='STOCK_IN_CANCEL' THEN '组装完成' WHEN #{businessType}='STOCK_OUT_CANCEL' THEN '已入库' ELSE '未知' END),#{clientIp},#{remark})</insert>
+</mapper>

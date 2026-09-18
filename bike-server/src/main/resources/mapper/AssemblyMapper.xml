@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.assembly.AssemblyMapper">
+    <select id="selectPartForUpdate" resultType="com.bike.server.assembly.AssemblyPartRecord">
+        SELECT id, part_sn, part_type, status, bind_status, current_frame_sn, qc_status FROM bike_part WHERE part_sn = #{partSn} FOR UPDATE
+    </select>
+    <insert id="insertBinding">
+        INSERT INTO bike_vehicle_part_binding(vehicle_id, frame_sn, part_id, part_sn, part_type, bind_operator_id, bind_reason, is_current)
+        VALUES(#{vehicleId}, #{frameSn}, #{partId}, #{partSn}, #{partType}, #{operatorId}, CONCAT('组装操作员:', #{operatorName}), 1)
+    </insert>
+    <update id="markPartBound">
+        UPDATE bike_part SET bind_status = 'BOUND', current_vehicle_id = #{vehicleId}, current_frame_sn = #{frameSn}, status = 'IN_USE' WHERE id = #{partId} AND status = 'AVAILABLE' AND bind_status = 'UNBOUND'
+    </update>
+    <insert id="insertPartBindingLog">
+        INSERT INTO bike_operation_log(business_type,business_id,action,frame_sn,operator_id,operator_name,after_data,client_ip)
+        VALUES('PART_BIND',#{partSn},'零部件绑定',#{frameSn},#{operatorId},#{operatorName},JSON_OBJECT('partSn',#{partSn}),#{clientIp})
+    </insert>
+    <insert id="insertOperationLog">
+        INSERT INTO bike_operation_log(business_type, business_id, action, frame_sn, operator_id, operator_name, before_data, after_data, client_ip, remark)
+        VALUES('ASSEMBLE', #{businessId}, #{action}, #{frameSn}, #{operatorId}, #{operatorName}, JSON_OBJECT('status', '待组装'), JSON_OBJECT('status', '组装完成'), #{clientIp}, #{remark})
+    </insert>
+</mapper>

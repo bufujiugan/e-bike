@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.module.ModuleMapper">
+    <select id="selectRows" resultType="map">
+        <choose>
+            <when test="module == 'assembly'">
+                SELECT v.frame_sn AS `车架 SN`, '总装工位' AS `当前工位`,
+                       CONCAT(CASE WHEN v.status = 0 THEN 0 WHEN v.status = 1 THEN 4 ELSE 4 END, ' / 4') AS `完成进度`,
+                       COALESCE(u.display_name, '-') AS `操作员`, v.assemble_time AS `开始时间`,
+                       CASE v.status WHEN 0 THEN '待处理' WHEN 1 THEN '已完成' ELSE '已完成' END AS `状态`
+                FROM bike_vehicle v LEFT JOIN bike_sys_user u ON u.id = v.assemble_operator_id ORDER BY v.updated_at DESC
+            </when>
+            <when test="module == 'vehicles'">
+                SELECT CONCAT('V', LPAD(v.id, 10, '0')) AS `整车编号`, v.frame_sn AS `车架 SN`,
+                       COALESCE(MAX(CASE WHEN b.part_type = 'MOTOR' AND b.is_current = 1 THEN b.part_sn END), '-') AS `电机 SN`,
+                       COALESCE(MAX(CASE WHEN b.part_type = 'BATTERY' AND b.is_current = 1 THEN b.part_sn END), '-') AS `电池 SN`,
+                       COALESCE(MAX(CASE WHEN b.part_type = 'DISPLAY' AND b.is_current = 1 THEN b.part_sn END), '-') AS `仪表 SN`,
+                       CASE v.status WHEN 0 THEN '待组装' WHEN 1 THEN '组装完成' WHEN 2 THEN '已入库' WHEN 3 THEN '已出库' WHEN 4 THEN '返工中' WHEN 5 THEN '售后维修' WHEN 6 THEN '报废' ELSE '未知' END AS `整车状态`,
+                       COALESCE(m.model_name, '-') AS `车型`, v.assemble_time AS `组装时间`, v.stock_in_time AS `入库时间`, v.stock_out_time AS `出库时间`,
+                       COALESCE(c.customer_name, '-') AS `客户`, COALESCE(v.current_order_no, '-') AS `订单`, COALESCE(w.warehouse_name, '-') AS `仓库`, COALESCE(l.location_name, '-') AS `库位`
+                FROM bike_vehicle v LEFT JOIN bike_product_model m ON m.id = v.model_id LEFT JOIN bike_vehicle_part_binding b ON b.vehicle_id = v.id
+                LEFT JOIN bike_customer c ON c.id = v.current_customer_id LEFT JOIN bike_warehouse w ON w.id = v.current_warehouse_id LEFT JOIN bike_warehouse_location l ON l.id = v.current_location_id
+                GROUP BY v.id, v.frame_sn, m.model_name, v.status, v.assemble_time ORDER BY v.updated_at DESC
+            </when>
+            <when test="module == 'inventory'">
+                WITH inventory_rows AS (
+                    SELECT m.id model_id, COALESCE(m.model_name, '-') model_name,
+                           COALESCE(w.warehouse_name, '成品仓') warehouse_name, COALESCE(l.location_name, '-') location_name,
+                           COUNT(v.id) physical_qty, COALESCE(il.locked_qty, 0) model_locked_qty,
+                           COALESCE(DATEDIFF(CURRENT_DATE(), MIN(v.stock_in_time)), 0) age_days, MIN(v.stock_in_time) stock_in_date,
+                           ROW_NUMBER() OVER (PARTITION BY m.id ORDER BY COALESCE(w.id, 0), COALESCE(l.id, 0)) row_no
+                    FROM bike_vehicle v LEFT JOIN bike_product_model m ON m.id = v.model_id
+                    LEFT JOIN bike_warehouse w ON w.id = v.current_warehouse_id LEFT JOIN bike_warehouse_location l ON l.id = v.current_location_id
+                    LEFT JOIN (SELECT product_model_id, SUM(lock_qty - released_qty - converted_qty) locked_qty
+                               FROM bike_inventory_lock
+                               WHERE status IN ('LOCKED','PARTIAL_CONVERTED') AND expire_time &gt; NOW() AND lock_qty &gt; released_qty + converted_qty
+                               GROUP BY product_model_id) il ON il.product_model_id = v.model_id
+                    WHERE v.status = 2
+                    GROUP BY m.id, m.model_name, w.id, w.warehouse_name, l.id, l.location_name, il.locked_qty
+                ), allocated_rows AS (
+                    SELECT inventory_rows.*,
+                           GREATEST(LEAST(model_locked_qty - COALESCE(SUM(physical_qty) OVER (
+                               PARTITION BY model_id ORDER BY row_no ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0), physical_qty), 0) locked_qty
+                    FROM inventory_rows
+                )
+                SELECT model_name AS `车型`, warehouse_name AS `仓库`, location_name AS `库位`, physical_qty AS `物理库存`,
+                       locked_qty AS `锁定库存`, physical_qty - locked_qty AS `可用库存`, age_days AS `库龄`, stock_in_date AS `入库日期`
+                FROM allocated_rows ORDER BY `物理库存` DESC
+            </when>
+            <when test="module == 'stock-in'">
+                SELECT si.stock_in_no AS `业务单号`, '整车入库' AS `类型`, '1 台' AS `整车数量`, CONCAT(COALESCE(w.warehouse_name, '-'), ' / ', COALESCE(l.location_name, '-')) AS `客户 / 仓库`, COALESCE(u.display_name, '-') AS `操作人`, si.operation_time AS `操作时间`, CASE si.status WHEN 'COMPLETED' THEN '已完成' ELSE si.status END AS `状态`
+                FROM bike_stock_in_record si LEFT JOIN bike_warehouse w ON w.id = si.warehouse_id LEFT JOIN bike_warehouse_location l ON l.id = si.location_id LEFT JOIN bike_sys_user u ON u.id = si.operator_id
+                ORDER BY si.operation_time DESC
+            </when>
+            <when test="module == 'stock-out'">
+                SELECT so.stock_out_no AS `业务单号`, '整车出库' AS `类型`, '1 台' AS `整车数量`, COALESCE(c.customer_name, '-') AS `客户 / 仓库`, COALESCE(u.display_name, '-') AS `操作人`, so.operation_time AS `操作时间`, CASE so.status WHEN 'COMPLETED' THEN '已完成' ELSE so.status END AS `状态`
+                FROM bike_stock_out_record so LEFT JOIN bike_customer c ON c.id = so.customer_id LEFT JOIN bike_sys_user u ON u.id = so.operator_id
+                ORDER BY so.operation_time DESC
+            </when>
+            <when test="module == 'stock'">
+                SELECT stock_no AS `业务单号`, type AS `类型`, '1 台' AS `整车数量`, destination AS `客户 / 仓库`, operator_name AS `操作人`, operation_time AS `操作时间`, status AS `状态`
+                FROM (SELECT si.stock_in_no stock_no, '整车入库' type, CONCAT(COALESCE(w.warehouse_name, '-'), ' / ', COALESCE(l.location_name, '-')) destination, COALESCE(u.display_name, '-') operator_name, si.operation_time, CASE si.status WHEN 'COMPLETED' THEN '已完成' ELSE si.status END status FROM bike_stock_in_record si LEFT JOIN bike_warehouse w ON w.id = si.warehouse_id LEFT JOIN bike_warehouse_location l ON l.id = si.location_id LEFT JOIN bike_sys_user u ON u.id = si.operator_id UNION ALL SELECT so.stock_out_no, '整车出库', COALESCE(c.customer_name, '-'), COALESCE(u.display_name, '-'), so.operation_time, CASE so.status WHEN 'COMPLETED' THEN '已完成' ELSE so.status END FROM bike_stock_out_record so LEFT JOIN bike_customer c ON c.id = so.customer_id LEFT JOIN bike_sys_user u ON u.id = so.operator_id) records ORDER BY operation_time DESC
+            </when>
+            <when test="module == 'orders'">
+                SELECT o.order_no AS `订单号`, c.customer_name AS `客户`, m.model_name AS `车型`, CONCAT(i.ordered_qty, ' 台') AS `订单数量`, CONCAT(i.shipped_qty, ' 台') AS `已出库`, o.planned_ship_date AS `计划发货`, CASE o.status WHEN 'DRAFT' THEN '草稿' WHEN 'CONFIRMED' THEN '待出库' WHEN 'PARTIAL_SHIPPED' THEN '部分出库' WHEN 'SHIPPED' THEN '已完成' WHEN 'CANCELLED' THEN '已作废' ELSE o.status END AS `状态`
+                FROM bike_sales_order o JOIN bike_customer c ON c.id = o.customer_id JOIN bike_sales_order_item i ON i.order_id = o.id JOIN bike_product_model m ON m.id = i.product_model_id <if test="agentId != null">WHERE o.agent_id = #{agentId}</if> ORDER BY o.created_at DESC
+            </when>
+            <when test="module == 'agents'">
+                SELECT agent_code AS `代理商编号`, agent_name AS `代理商名称`, COALESCE(contact_name, '-') AS `联系人`, COALESCE(contact_phone, '-') AS `联系电话`, CASE status WHEN 'ENABLED' THEN '启用' ELSE status END AS `状态`, updated_at AS `更新时间`
+                FROM bike_agent
+                ORDER BY updated_at DESC
+            </when>
+            <when test="module == 'agent-dashboard'">
+                SELECT a.agent_name AS `代理商`, m.model_name AS `授权车型`, CONCAT(il.lock_qty - il.released_qty - il.converted_qty, ' 台') AS `锁定库存`, il.expire_time AS `有效期`, '-' AS `关联订单`, '-' AS `负责人`, CASE il.status WHEN 'LOCKED' THEN '锁定中' ELSE il.status END AS `状态`
+                FROM bike_inventory_lock il JOIN bike_agent a ON a.id = il.agent_id JOIN bike_product_model m ON m.id = il.product_model_id <if test="agentId != null">WHERE il.agent_id = #{agentId}</if> ORDER BY il.created_at DESC
+            </when>
+            <when test="module == 'inventory-locks'">
+                SELECT il.lock_no AS `锁定单号`, a.agent_name AS `代理商`, m.model_name AS `车型`, il.lock_qty AS `锁定数量`, il.released_qty AS `已释放`, il.converted_qty AS `已转订单`, il.expire_time AS `到期时间`,
+                       CASE il.status WHEN 'LOCKED' THEN '锁定中' WHEN 'PARTIAL_CONVERTED' THEN '部分转订单' ELSE il.status END AS `状态`
+                FROM bike_inventory_lock il JOIN bike_agent a ON a.id=il.agent_id JOIN bike_product_model m ON m.id=il.product_model_id
+                <where><if test="agentId != null">il.agent_id=#{agentId}</if></where> ORDER BY il.created_at DESC
+            </when>
+            <when test="module == 'agent-inventory'">
+                WITH inventory_rows AS (
+                    SELECT m.id model_id, COALESCE(m.model_name, '-') model_name,
+                           COALESCE(w.warehouse_name, '成品仓') warehouse_name, COALESCE(l.location_name, '-') location_name,
+                           COUNT(v.id) physical_qty, il.locked_qty model_locked_qty,
+                           COALESCE(DATEDIFF(CURRENT_DATE(), MIN(v.stock_in_time)), 0) age_days,
+                           ROW_NUMBER() OVER (PARTITION BY m.id ORDER BY COALESCE(w.id, 0), COALESCE(l.id, 0)) row_no
+                    FROM bike_vehicle v
+                    JOIN (SELECT product_model_id, SUM(lock_qty-released_qty-converted_qty) locked_qty
+                          FROM bike_inventory_lock
+                          WHERE status IN ('LOCKED','PARTIAL_CONVERTED') AND expire_time&gt;NOW() AND lock_qty &gt; released_qty + converted_qty
+                          <if test="agentId != null">AND agent_id=#{agentId}</if>
+                          GROUP BY product_model_id) il ON il.product_model_id=v.model_id
+                    LEFT JOIN bike_product_model m ON m.id=v.model_id LEFT JOIN bike_warehouse w ON w.id=v.current_warehouse_id
+                    LEFT JOIN bike_warehouse_location l ON l.id=v.current_location_id
+                    WHERE v.status=2 GROUP BY m.id,m.model_name,w.id,w.warehouse_name,l.id,l.location_name,il.locked_qty
+                ), allocated_rows AS (
+                    SELECT inventory_rows.*,
+                           GREATEST(LEAST(model_locked_qty - COALESCE(SUM(physical_qty) OVER (
+                               PARTITION BY model_id ORDER BY row_no ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0), physical_qty), 0) locked_qty
+                    FROM inventory_rows
+                )
+                SELECT model_name AS `车型`, warehouse_name AS `仓库`, location_name AS `库位`, physical_qty AS `物理库存`,
+                       locked_qty AS `锁定库存`, physical_qty - locked_qty AS `可用库存`, age_days AS `库龄`
+                FROM allocated_rows ORDER BY `物理库存` DESC
+            </when>
+            <when test="module == 'trace'">
+                SELECT COALESCE(l.frame_sn, l.business_id, '-') AS `查询对象`, COALESCE(v.frame_sn, '-') AS `整车 / 车架`, COALESCE(CASE v.status WHEN 0 THEN '待组装' WHEN 1 THEN '组装完成' WHEN 2 THEN '已入库' WHEN 3 THEN '已出库' ELSE '其他' END, '-') AS `当前状态`, l.action AS `最近操作`, COALESCE(v.current_order_no, '-') AS `订单号`, COALESCE(c.customer_name, '-') AS `客户`, l.operation_time AS `查询时间`
+                FROM bike_operation_log l LEFT JOIN bike_vehicle v ON v.frame_sn = l.frame_sn LEFT JOIN bike_customer c ON c.id = v.current_customer_id ORDER BY l.operation_time DESC
+            </when>
+            <when test="module == 'parts'">
+                SELECT p.part_sn AS `零部件 SN`, p.part_type AS `类型`, COALESCE(s.supplier_name, '-') AS `供应商`, COALESCE(p.batch_no, '-') AS `批次`, CASE p.bind_status WHEN 'BOUND' THEN '已绑定' ELSE '未绑定' END AS `绑定状态`, COALESCE(p.current_frame_sn, '-') AS `当前车架`, p.status AS `状态` FROM bike_part p LEFT JOIN bike_supplier s ON s.id = p.supplier_id ORDER BY p.updated_at DESC
+            </when>
+            <when test="module == 'customers'">
+                SELECT customer_code AS `客户编号`, customer_name AS `客户名称`, COALESCE(contact_name, '-') AS `联系人`, COALESCE(contact_phone, '-') AS `联系电话`, CASE status WHEN 'ENABLED' THEN '启用' ELSE status END AS `状态`, created_at AS `创建时间` FROM bike_customer ORDER BY created_at DESC
+            </when>
+            <when test="module == 'suppliers'">
+                SELECT supplier_code AS `供应商编号`, supplier_name AS `供应商名称`, COALESCE(contact_name, '-') AS `联系人`, COALESCE(contact_phone, '-') AS `联系电话`, CASE status WHEN 'ENABLED' THEN '启用' ELSE status END AS `状态`, created_at AS `创建时间` FROM bike_supplier ORDER BY created_at DESC
+            </when>
+            <when test="module == 'models'">
+                SELECT model_code AS `车型编码`, model_name AS `车型名称`, CASE enabled WHEN 1 THEN '启用' ELSE '停用' END AS `启用状态`, updated_at AS `更新时间` FROM bike_product_model ORDER BY updated_at DESC
+            </when>
+            <when test="module == 'warehouses'">
+                SELECT w.warehouse_name AS `仓库`, COALESCE(l.location_name, '-') AS `库位`, COALESCE(l.location_code, '-') AS `库位编码`, CASE COALESCE(l.status, w.status) WHEN 'ENABLED' THEN '启用' ELSE COALESCE(l.status, w.status) END AS `状态`, COALESCE(l.updated_at, w.updated_at) AS `更新时间` FROM bike_warehouse w LEFT JOIN bike_warehouse_location l ON l.warehouse_id = w.id ORDER BY w.updated_at DESC
+            </when>
+            <when test="module == 'users'">
+                SELECT username AS `用户名`, display_name AS `姓名`, user_type AS `账号类型`, CASE enabled WHEN 1 THEN '启用' ELSE '停用' END AS `启用状态`, last_login_at AS `最近登录` FROM bike_sys_user ORDER BY updated_at DESC
+            </when>
+            <when test="module == 'roles'">
+                SELECT r.role_code AS `角色编码`, r.role_name AS `角色名称`, COUNT(rp.permission_id) AS `权限数量`, CASE r.enabled WHEN 1 THEN '启用' ELSE '停用' END AS `启用状态`, r.updated_at AS `更新时间` FROM bike_sys_role r LEFT JOIN bike_sys_role_permission rp ON rp.role_id = r.id GROUP BY r.id ORDER BY r.updated_at DESC
+            </when>
+            <when test="module == 'workstations'">
+                SELECT workstation_code AS `工位编码`, workstation_name AS `工位名称`, workstation_type AS `工位类型`, CASE enabled WHEN 1 THEN '启用' ELSE '停用' END AS `启用状态`, updated_at AS `更新时间` FROM bike_workstation ORDER BY updated_at DESC
+            </when>
+            <when test="module == 'logs'">
+                SELECT operation_time AS `时间`, action AS `操作`, COALESCE(frame_sn, business_id, '-') AS `业务对象`, COALESCE(operator_name, '-') AS `操作人`, business_type AS `业务类型`, COALESCE(remark, '-') AS `备注` FROM bike_operation_log ORDER BY operation_time DESC
+            </when>
+            <when test="module == 'customs'">
+                SELECT v.frame_sn AS `车架 SN`, COALESCE(m.model_name, '-') AS `车型`, COALESCE(v.vehicle_qr_code, '-') AS `总二维码`, COALESCE(c.customer_name, '-') AS `客户`, COALESCE(v.current_order_no, '-') AS `订单号`, v.stock_out_time AS `出库时间`, '待申报' AS `报关状态`
+                FROM bike_vehicle v LEFT JOIN bike_product_model m ON m.id=v.model_id LEFT JOIN bike_customer c ON c.id=v.current_customer_id
+                WHERE v.status=3 ORDER BY v.stock_out_time DESC
+            </when>
+            <when test="module == 'locations'">
+                SELECT w.warehouse_name AS `仓库`, w.warehouse_code AS `仓库编码`, l.location_name AS `库位`,
+                       l.location_code AS `库位编码`, CASE l.status WHEN 'ENABLED' THEN '启用' ELSE l.status END AS `状态`, l.updated_at AS `更新时间`
+                FROM bike_warehouse_location l JOIN bike_warehouse w ON w.id=l.warehouse_id
+                ORDER BY l.updated_at DESC
+            </when>
+            <when test="module == 'rework'">
+                SELECT r.rework_no AS `返工单号`, r.frame_sn AS `车架 SN`, r.reason AS `返工原因`, r.status AS `状态`,
+                       COALESCE(u.display_name, '-') AS `操作人`, r.operation_time AS `操作时间`
+                FROM bike_rework_record r LEFT JOIN bike_sys_user u ON u.id=r.operator_id
+                ORDER BY r.operation_time DESC
+            </when>
+            <when test="module == 'config'">
+                SELECT config_key AS `配置键`, config_value AS `配置值`, COALESCE(remark, '-') AS `说明`, updated_at AS `更新时间`
+                FROM bike_system_config ORDER BY updated_at DESC
+            </when>
+            <when test="module == 'purchase-intents'">
+                SELECT a.agent_name AS `代理商`, m.model_name AS `授权车型`, i.intent_qty AS `意向数量`, i.expire_time AS `有效期`, i.status AS `状态`
+                FROM bike_agent_purchase_intent i JOIN bike_agent a ON a.id=i.agent_id JOIN bike_product_model m ON m.id=i.product_model_id
+                <where><if test="agentId != null">i.agent_id=#{agentId}</if></where> ORDER BY i.created_at DESC
+            </when>
+            <otherwise>SELECT NULL AS `查询结果` WHERE 1 = 0</otherwise>
+        </choose>
+    </select>
+</mapper>
