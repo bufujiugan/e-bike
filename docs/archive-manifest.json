@@ -80,8 +80,8 @@
     {
       "path": "bike-h5/pnpm-workspace.yaml",
       "category": "source-and-database",
-      "bytes": 29,
-      "sha256": "ac02d96368617c760f093cfe61fdec64b6244007ab3553e0d6621f706f54a353"
+      "bytes": 47,
+      "sha256": "683b2ab4e361bdd5f736ad10393f3bdbd414ee44f57702d219f561879d1959fa"
     },
     {
       "path": "bike-h5/src/App.vue",
@@ -1568,8 +1568,8 @@
     {
       "path": "bike-web/pnpm-workspace.yaml",
       "category": "source-and-database",
-      "bytes": 29,
-      "sha256": "ac02d96368617c760f093cfe61fdec64b6244007ab3553e0d6621f706f54a353"
+      "bytes": 47,
+      "sha256": "683b2ab4e361bdd5f736ad10393f3bdbd414ee44f57702d219f561879d1959fa"
     },
     {
       "path": "bike-web/src/App.vue",
