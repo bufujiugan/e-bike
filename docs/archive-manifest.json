@@ -56,8 +56,8 @@
     {
       "path": "README.md",
       "category": "documentation-and-tooling",
-      "bytes": 13342,
-      "sha256": "366af4cf9327d5518927b16e22d3923e2a80db7588d1d3a11c6c58c9382e5177"
+      "bytes": 13554,
+      "sha256": "2ad40a9e8524d6882c12b2f8de4f6f5d487fc4e4c443272f21b6cc04b106fc9e"
     },
     {
       "path": "bike-h5/index.html",
@@ -1928,8 +1928,8 @@
     {
       "path": "docs/deployment.md",
       "category": "documentation-and-tooling",
-      "bytes": 6957,
-      "sha256": "c6ee757665ff6dfbc8e887d2d32746bb7cb32110ec0cdfe5d0ab57dad891a83b"
+      "bytes": 7209,
+      "sha256": "119816eb46ab9ddfd33dec66cbfb055ccd2b44e8bffd6dd0292d23779808d8fd"
     },
     {
       "path": "docs/evidence/2026-09-16-boundary-results.json",
@@ -2030,8 +2030,8 @@
     {
       "path": "docs/verification-2026-09-18.md",
       "category": "documentation-and-tooling",
-      "bytes": 2281,
-      "sha256": "1b38521f85ee8b2e9b65c9faaed2ebb6a07ab520407d54e1a91da3a6d4393256"
+      "bytes": 2997,
+      "sha256": "3a9be5e14cac720c75febf8e0ca63a079966b47de406490368292380d21c7163"
     },
     {
       "path": "docs/生产与PI订单接入_PRD_v1.0.md",
@@ -2072,8 +2072,8 @@
     {
       "path": "docs/项目归档任务.md",
       "category": "documentation-and-tooling",
-      "bytes": 2083,
-      "sha256": "be9fae1de5e28fb62729aa42656cb5684d19f86a06bd6612ba1190bc966512ab"
+      "bytes": 2175,
+      "sha256": "3635ad3fa100d9116e6e5929dc518f8926a678ef2f6a08dbf3446bcfee8dcef7"
     },
     {
       "path": "output/pdf/E-Bike生产库存管理系统_项目进度与功能清单_售后需求增补版_V1.1_20260909.pdf",

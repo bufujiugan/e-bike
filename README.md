@@ -53,7 +53,7 @@ docker compose logs --tail=100 server
 
 默认绑定本机回环地址、使用生产迁移目录，不导入开发业务样例。数据库不暴露宿主机端口；数据库与图片用独立持久卷。停止并保留数据：`docker compose down`。不要删除持久卷来解决启动问题。
 
-本次环境没有 Docker，Compose 已做配置检查，镜像构建与容器端到端尚待运行；已完成的本机空库启动验证见 [验证记录](docs/verification-2026-09-18.md)。
+已在 [GitHub Actions 全新 Linux 环境](https://github.com/bufujiugan/e-bike/actions/runs/35337290704) 验证容器镜像构建、MySQL8.4初始化、API健康、Web/H5入口及经Nginx的首次登录。本机独立库验证和完整证据见 [验证记录](docs/verification-2026-09-18.md)。
 
 ### 方式二：本机开发
 
@@ -82,12 +82,13 @@ pwsh -File tools/start-local.ps1 h5
 
 没有 PowerShell 7 时可以使用 `powershell -ExecutionPolicy Bypass -File ...`。脚本读取 `.env`，后端运行打包 JAR，前端以回环地址启动开发服务器；每个终端按 Ctrl+C 停止对应进程。
 
-Linux/macOS 后端示例（仅加载自己生成并确认内容的 `.env`）：
+Linux/macOS Bash 后端示例（仅加载自己生成并确认内容的 `.env`）：
 
 ```sh
-set -a
-. ./.env
-set +a
+while IFS='=' read -r key value; do
+  value=${value%$'\r'}
+  case "$key" in BIKE_*) export "$key=$value" ;; esac
+done < .env
 cd bike-server
 java -jar target/bike-server-0.1.0-SNAPSHOT.jar
 ```

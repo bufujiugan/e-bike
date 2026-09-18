@@ -41,18 +41,19 @@ MySQL健康后后端才启动；前端可能早于后端就绪，暂时502时查
 
 `mysql-data` 保存数据库，`production-files` 保存本地图片。`docker compose down` 仅停服务和移除容器/网络，不带删除卷参数。修改 MYSQL_PASSWORD/ROOT_PASSWORD 环境变量不会更改已初始化卷中的数据库账号密码，轮换需在数据库同步操作。
 
-本次没有Docker运行环境，未实际构建或启动这些容器；当前本机验证与容器验证明确区分。
+本机无Docker，已在 [GitHub Actions](https://github.com/bufujiugan/e-bike/actions/runs/35337290704) 完成真实容器构建与启动，MySQL8.4、API健康、两个前端与Nginx登录冒烟全部通过。此结果不代替现场设备和生产容量验收。
 
 ## 本机与服务器进程
 
 构建 `mvn -B -f bike-server/pom.xml verify`，在仓库根目录以 PowerShell 运行 `tools/start-local.ps1 server`。脚本读取 `.env`，在 bike-server 工作目录运行可执行 JAR。另开终端运行脚本的 web/h5 参数。
 
-Linux/macOS 只加载自己确认的 `.env`：
+Linux/macOS Bash 只加载自己确认的 `.env`：
 
 ```sh
-set -a
-. ./.env
-set +a
+while IFS='=' read -r key value; do
+  value=${value%$'\r'}
+  case "$key" in BIKE_*) export "$key=$value" ;; esac
+done < .env
 cd bike-server
 java -jar target/bike-server-0.1.0-SNAPSHOT.jar
 ```
