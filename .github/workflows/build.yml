@@ -35,6 +35,30 @@ jobs:
         working-directory: ${{ matrix.app }}
       - run: pnpm build
         working-directory: ${{ matrix.app }}
+  mysql-business:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ci-only-isolated-test-password
+          MYSQL_DATABASE: bike_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=5s --health-timeout=3s --health-retries=30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - run: mvn -B -f bike-server/pom.xml -Dtest=InventoryLockMysqlTest,InventoryProjectionMysqlTest,SkuCommitmentMysqlTest,PiConversionMysqlTest,PiDispatchMysqlTest,PiLogisticsMysqlTest,PurchaseIntentMysqlTest,LegacyConversionAuditMysqlTest,AfterSalesMysqlTest,AfterSalesAttachmentMysqlTest,AfterSalesCompanyMysqlTest,PiReceiptAttachmentMysqlTest,PiMysqlTest,PaidOrderReservationMysqlTest,StockOutOrderOptionsMysqlTest,AuditPrivacyMysqlTest,MapperResourcesTest test
+        env:
+          BIKE_MYSQL_TEST_URL: jdbc:mysql://127.0.0.1:3306/bike_test?useSSL=false&allowPublicKeyRetrieval=true
+          BIKE_MYSQL_TEST_USER: root
+          BIKE_MYSQL_TEST_PASSWORD: ci-only-isolated-test-password
   compose-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 20

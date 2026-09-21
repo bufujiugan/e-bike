@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class InventoryLockExpiryJob {
     private static final Logger LOGGER = LoggerFactory.getLogger(InventoryLockExpiryJob.class);
     private final InventoryLockMapper mapper;
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.production.ProductionGuard guard;
 
     public InventoryLockExpiryJob(InventoryLockMapper mapper) {
         this.mapper = mapper;
@@ -18,6 +19,7 @@ public class InventoryLockExpiryJob {
     @Scheduled(fixedDelayString = "${bike.inventory-lock.expiry-check-ms:60000}")
     @Transactional
     public void expireLocks() {
+        if(guard!=null)guard.lock();
         var expired = mapper.selectExpiredForAudit();
         if (expired.isEmpty()) return;
         int updated = mapper.expireLocks();

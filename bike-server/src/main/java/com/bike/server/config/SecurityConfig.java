@@ -22,7 +22,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtTokenService jwtTokenService, com.bike.server.system.UserMapper userMapper) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtTokenService jwtTokenService, com.bike.server.system.UserMapper userMapper, com.bike.server.auth.TokenRevocationMapper revocations) throws Exception {
         http.csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(exception -> exception
@@ -31,14 +31,17 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/api/auth/login", "/actuator/health", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
                         .requestMatchers("/api/agent/**").hasAnyRole("WEB_AGENT", "SUPER_ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/vehicles/**", "/api/parts/**", "/api/inventory/**", "/api/stock-in", "/api/stock-out").hasAnyRole("SUPER_ADMIN", "WEB_OPERATOR")
-                        .requestMatchers(HttpMethod.GET, "/api/master/**").hasAnyRole("SUPER_ADMIN", "WEB_OPERATOR", "WEB_AGENT", "PDA_OPERATOR")
-                        .requestMatchers(HttpMethod.GET, "/api/orders/**").hasAnyRole("SUPER_ADMIN", "WEB_OPERATOR", "WEB_AGENT", "PDA_OPERATOR")
+                        .requestMatchers(HttpMethod.POST, "/api/parts", "/api/parts/import").hasAnyAuthority("ROLE_SUPER_ADMIN", "PERM_PART_WRITE")
+                        .requestMatchers(HttpMethod.PUT, "/api/parts/**").hasAnyAuthority("ROLE_SUPER_ADMIN", "PERM_PART_WRITE")
+                        .requestMatchers(HttpMethod.POST, "/api/orders", "/api/orders/import").hasAnyAuthority("ROLE_SUPER_ADMIN", "PERM_ORDER_WRITE")
+                        .requestMatchers(HttpMethod.POST, "/api/inventory-locks").hasAnyAuthority("ROLE_SUPER_ADMIN", "PERM_AGENT_LOCK_WRITE")
+                        // 功能权限和账号数据范围由 Service 检查，不能把可配置角色限制为固定角色名。
+                        .requestMatchers(HttpMethod.GET, "/api/vehicles/**", "/api/parts/**", "/api/inventory/**", "/api/stock-in/**", "/api/stock-out/**", "/api/master/**", "/api/orders/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/system-config/**", "/api/users/**", "/api/roles/**", "/api/workstations/**").hasRole("SUPER_ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/parts", "/api/parts/import", "/api/vehicles", "/api/orders", "/api/orders/import", "/api/inventory-locks", "/api/master/**", "/api/users", "/api/roles", "/api/workstations").hasRole("SUPER_ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/parts/**", "/api/master/**", "/api/users/**", "/api/roles/**", "/api/workstations/**", "/api/system-config/**").hasRole("SUPER_ADMIN")
                         .anyRequest().authenticated())
-                .addFilterBefore(new JwtAuthenticationFilter(jwtTokenService, userMapper), UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(new JwtAuthenticationFilter(jwtTokenService, userMapper, revocations), UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 

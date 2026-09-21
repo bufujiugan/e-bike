@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.order.OrderReservationMapper">
+  <sql id="snapshotQuery">
+    SELECT (SELECT COUNT(*) FROM bike_vehicle v WHERE v.model_id=#{modelId} AND v.status=2 AND NOT <include refid="com.bike.server.stock.InventoryPolicyMapper.quarantined"/>) physical_qty,
+      (SELECT COALESCE(SUM(qty),0) FROM (<include refid="com.bike.server.stock.InventoryPolicyMapper.commitments"/>) c WHERE model_id=#{modelId}) committed_qty,
+      (SELECT COUNT(*) FROM bike_order_reservation WHERE order_id=#{orderId}) reservation_count,
+      (SELECT COALESCE(SUM(GREATEST(r.reserved_qty-i.shipped_qty,0)),0) FROM bike_order_reservation r JOIN bike_sales_order o ON o.id=r.order_id JOIN bike_sales_order_item i ON i.order_id=o.id AND i.product_model_id=r.model_id
+       WHERE r.order_id=#{orderId} AND <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/>) owned_qty
+  </sql>
+  <select id="snapshot" resultType="com.bike.server.order.OrderInventorySnapshot"><include refid="snapshotQuery"/></select>
+  <select id="expiredForOrder" resultType="int">
+    SELECT COUNT(*) FROM bike_order_reservation WHERE order_id=#{orderId}
+    AND (hold_mode='RELEASED' OR (hold_mode='TIMED' AND expires_at&lt;=NOW(3)))
+  </select>
+  <select id="expiredForAudit" resultType="com.bike.server.order.SalesOrderView">
+    <include refid="com.bike.server.order.OrderMapper.orderSelect"/>
+    WHERE r.hold_mode='TIMED' AND r.expiry_audited_at IS NULL AND r.expires_at&lt;=NOW(3)
+      AND o.status IN ('DRAFT','PENDING','CONFIRMED','PARTIAL_SHIPPED') AND i.shipped_qty&lt;i.ordered_qty
+    ORDER BY r.expires_at,o.id LIMIT 200
+  </select>
+  <update id="markExpiryAudited">UPDATE bike_order_reservation SET expiry_audited_at=NOW(3) WHERE order_id=#{orderId} AND hold_mode='TIMED' AND expiry_audited_at IS NULL AND expires_at&lt;=NOW(3)</update>
+  <select id="ordersForLock" resultType="com.bike.server.order.SalesOrderView"><include refid="com.bike.server.order.OrderMapper.orderSelect"/> WHERE r.source_lock_id=#{lockId} ORDER BY o.id DESC LIMIT #{offset},#{limit}</select>
+  <select id="countForLock" resultType="long">SELECT COUNT(*) FROM bike_order_reservation WHERE source_lock_id=#{lockId}</select>
+  <select id="vehicleModel" resultType="long">SELECT model_id FROM bike_vehicle WHERE id=#{vehicleId}</select>
+  <update id="renew">
+    UPDATE bike_order_reservation SET expires_at=DATE_ADD(NOW(3),INTERVAL #{hours} HOUR),expiry_audited_at=NULL
+    WHERE order_id=#{orderId} AND hold_mode='TIMED'
+  </update>
+  <select id="selectForUpdate" resultType="com.bike.server.order.OrderReservationView">
+    SELECT r.order_id,o.order_no,o.status order_status,r.hold_mode,
+      <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationStatus"/> reservation_status,
+      r.expires_at,r.reserved_qty,i.shipped_qty,r.payment_hold_pi_id,r.payment_held_at,r.released_at
+    FROM bike_order_reservation r JOIN bike_sales_order o ON o.id=r.order_id
+    JOIN bike_sales_order_item i ON i.order_id=o.id AND i.product_model_id=r.model_id
+    WHERE r.order_id=#{orderId} FOR UPDATE
+  </select>
+  <update id="holdAfterPayment">
+    UPDATE bike_order_reservation r JOIN bike_sales_order o ON o.id=r.order_id
+    JOIN bike_pi p ON p.id=#{piId} AND p.source_order_id=o.id
+    SET r.hold_mode='PAID',r.payment_hold_pi_id=p.id,r.payment_held_at=NOW(3),
+        r.payment_held_by=#{operatorId},r.payment_held_amount=#{paidAmount}
+    WHERE r.order_id=#{orderId} AND r.hold_mode='TIMED' AND r.expires_at&gt;NOW(3)
+      AND o.status IN ('DRAFT','PENDING','CONFIRMED','PARTIAL_SHIPPED')
+      AND p.status IN ('CONFIRMED','RELEASED') AND #{paidAmount}&gt;=p.deposit_required_amount
+  </update>
+  <update id="release">
+    UPDATE bike_order_reservation SET hold_mode='RELEASED',released_at=NOW(3)
+    WHERE order_id=#{orderId} AND hold_mode IN ('TIMED','PAID')
+  </update>
+  <select id="findOrder" resultType="long">SELECT order_id FROM bike_order_reservation WHERE source_lock_id=#{lockId} AND request_id=#{requestId}</select>
+  <insert id="insert">INSERT INTO bike_order_reservation(order_id,source_lock_id,request_id,model_id,reserved_qty,expires_at) VALUES(#{orderId},#{lockId},#{requestId},#{modelId},#{qty},#{expiresAt})</insert>
+  <select id="countForOrder" resultType="int">SELECT COUNT(*) FROM bike_order_reservation WHERE order_id=#{orderId}</select>
+  <select id="expiry" resultType="java.time.LocalDateTime">SELECT expires_at FROM bike_order_reservation WHERE order_id=#{orderId}</select>
+</mapper>

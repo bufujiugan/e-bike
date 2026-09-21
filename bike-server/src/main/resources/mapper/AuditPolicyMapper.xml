@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.common.AuditPolicyMapper">
+    <!-- Keep receipt/release notes out of generic logs, search, exports and dashboard previews. -->
+    <sql id="financialVisibility">
+        <!-- After-sales history is exposed only by its company/case-scoped endpoints. -->
+        AND business_type NOT IN ('AFTER_SALES','AFTER_SALES_COMPANY')
+        <if test="!financialAudit">
+            AND NOT (
+                (business_type='PI' AND action IN ('登记 PI 收款','放行 PI 发货','上传 PI 收款凭证'))
+                OR (business_type='ORDER_RESERVATION' AND action IN ('收款达标保留订单占用','收款已达条件但占用已到期'))
+            )
+        </if>
+    </sql>
+</mapper>

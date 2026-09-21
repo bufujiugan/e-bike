@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.pi.PiReceiptAttachmentMapper">
+    <select id="selectReceipt" resultType="com.bike.server.pi.PiReceiptAttachmentMapper$Receipt">
+        SELECT id,pi_id,status FROM bike_pi_payment WHERE pi_id=#{piId} AND id=#{paymentId}
+    </select>
+    <select id="lockPi" resultType="java.lang.Long">SELECT id FROM bike_pi WHERE id=#{piId} FOR UPDATE</select>
+    <select id="lockReceipt" resultType="com.bike.server.pi.PiReceiptAttachmentMapper$Receipt">
+        SELECT id,pi_id,status FROM bike_pi_payment WHERE pi_id=#{piId} AND id=#{paymentId} FOR UPDATE
+    </select>
+    <select id="selectAttachments" resultType="com.bike.server.pi.PiReceiptAttachmentView">
+        SELECT id,payment_id,file_name,content_type,file_size,sha256,created_by,created_at
+        FROM bike_pi_payment_attachment WHERE payment_id=#{paymentId} ORDER BY created_at,id
+    </select>
+    <select id="selectByRequest" resultType="com.bike.server.pi.PiReceiptAttachmentMapper$Stored">
+        SELECT id,payment_id,request_id,object_key,file_name,content_type,file_size,sha256,created_by,created_at
+        FROM bike_pi_payment_attachment WHERE payment_id=#{paymentId} AND request_id=#{requestId} FOR UPDATE
+    </select>
+    <select id="selectStored" resultType="com.bike.server.pi.PiReceiptAttachmentMapper$Stored">
+        SELECT id,payment_id,request_id,object_key,file_name,content_type,file_size,sha256,created_by,created_at
+        FROM bike_pi_payment_attachment WHERE payment_id=#{paymentId} AND id=#{id}
+    </select>
+    <insert id="insert">
+        INSERT INTO bike_pi_payment_attachment(id,payment_id,request_id,object_key,file_name,content_type,file_size,sha256,created_by)
+        VALUES(#{id},#{paymentId},#{requestId},#{objectKey},#{fileName},#{contentType},#{fileSize},#{sha256},#{createdBy})
+    </insert>
+</mapper>

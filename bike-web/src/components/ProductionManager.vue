@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted } from "vue";
+import { computed, ref, reactive, onMounted, onUnmounted } from "vue";
 import api from "../api";
 import { ElMessage, ElMessageBox } from "element-plus";
 const props = defineProps<{
+  username: string;
   canManage: boolean;
   canOperate?: boolean;
   canReportIssue?: boolean;
@@ -24,6 +25,8 @@ const skuVisible = ref(false),
   detail = ref<any>(),
   labelHtml = ref(""),
   previewVisible = ref(false);
+const previewJob = ref<any>(), labelFrame = ref<HTMLIFrameElement>(), labelReady = ref(false);
+const canReportPrint = computed(() => props.canOperate && previewJob.value?.status === 'PROCESSING' && previewJob.value.claimedBy === props.username);
 const sku = reactive({
   modelId: 0,
   skuCode: "",
@@ -47,12 +50,20 @@ const issue = reactive({ code: "", reason: "" }),
   lastIssueId = ref(""),
   imageUrl = ref("");
 const quarantinedParts = ref<any[]>([]);
+const scanFailures = ref<any[]>([]);
 const inventoryRows = ref<any[]>([]),
   warehouseId = ref<number>(),
   inventorySkuId = ref<number>(),
   warehouses = ref<any[]>([]),
   importFile = ref<File>(),
   importResult = ref<any>();
+const taskSkuId = ref<number>(), taskStatus = ref(''), taskDates = ref<string[]>([]);
+const locationId = ref<number>(), locations = ref<any[]>([]);
+async function warehouseChanged() {
+  locationId.value=undefined;
+  locations.value=warehouseId.value ? (await api.get(`/api/master/warehouses/${warehouseId.value}/locations`)).data.data : [];
+  await load();
+}
 async function downloadTemplate() {
   await perform(async () => {
     const blob = (
@@ -81,6 +92,24 @@ async function importSkus() {
 }
 const skuImages = ref<any[]>([]),
   skuImageFile = ref<File>();
+const galleryVisible = ref(false), galleryImages = ref<any[]>([]);
+async function viewSkuImages(id: number) {
+  await perform(async () => {
+    galleryImages.value = (await api.get(`/api/production/skus/${id}/images`)).data.data;
+    galleryVisible.value = true;
+  });
+}
+async function downloadImage(id: string) {
+  await perform(async () => {
+    const blob = (await api.get(`/api/production/images/${id}`, {responseType: 'blob'})).data;
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `image-${id}.${blob.type === 'image/png' ? 'png' : 'jpg'}`;
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+}
 const states: Record<string, string> = {
   OPEN: "作业中 / 未处理",
   COMPLETED: "已完成",
@@ -111,16 +140,18 @@ async function load() {
   if (tab.value === "inventory") {
     inventoryRows.value = (
       await api.get("/api/production/inventory", {
-        params: { skuId: inventorySkuId.value, warehouseId: warehouseId.value },
+        params: { skuId: inventorySkuId.value, warehouseId: warehouseId.value, locationId: locationId.value },
       })
     ).data.data;
     warehouses.value = (await api.get("/api/master/warehouses")).data.data;
     return;
   }
   if (tab.value === "quarantine") {
-    quarantinedParts.value = (
-      await api.get("/api/production/quarantined-parts")
+    const result = (
+      await api.get("/api/production/quarantined-parts", {params: {keyword: keyword.value || undefined, page: page.value}})
     ).data.data;
+    quarantinedParts.value = result.records;
+    total.value = result.total;
     return;
   }
   const path =
@@ -130,17 +161,18 @@ async function load() {
         ? "issues"
         : tab.value === "prints"
           ? "prints"
-          : null;
+          : tab.value === "scan-failures" ? "scan-failures" : null;
   if (path) {
     const result = (
       await api.get(`/api/production/${path}`, {
-        params: { keyword: keyword.value || undefined, page: page.value },
+        params: { keyword: keyword.value || undefined, page: page.value, ...(path==='tasks' ? {skuId:taskSkuId.value,status:taskStatus.value||undefined,fromDate:taskDates.value?.[0],toDate:taskDates.value?.[1]} : {}) },
       })
     ).data.data;
     total.value = result.total;
     if (path === "tasks") tasks.value = result.records;
     if (path === "issues") issues.value = result.records;
     if (path === "prints") prints.value = result.records;
+    if (path === "scan-failures") scanFailures.value = result.records;
   } else {
     skus.value = (await api.get("/api/production/skus")).data.data;
     templates.value = (await api.get("/api/production/templates")).data.data;
@@ -220,12 +252,32 @@ async function viewTask(id: string) {
 }
 async function preview(id: string) {
   await perform(async () => {
+    labelReady.value = false;
+    previewJob.value = (await api.get(`/api/production/prints/${id}`)).data.data;
     labelHtml.value = (
       await api.get(`/api/production/prints/${id}/label`, {
         responseType: "text",
       })
     ).data;
     previewVisible.value = true;
+  });
+}
+async function printManual() {
+  await perform(async () => {
+    if (!previewJob.value || !labelReady.value || !labelFrame.value?.contentWindow) throw new Error('标签尚未加载完成');
+    previewJob.value = (await api.post(`/api/production/prints/${previewJob.value.id}/claim`, {terminal:'web-manual'})).data.data;
+    labelFrame.value.contentWindow.print();
+    ElMessage.info('请核对打印结果，再回报所选任务');
+    await load();
+  });
+}
+async function reportManual(status: string) {
+  await perform(async () => {
+    if (!canReportPrint.value) throw new Error('只能回报当前账号领取的任务');
+    await api.post(`/api/production/prints/${previewJob.value.id}/result`, {status,message:status==='SUBMITTED'?'操作员确认已提交浏览器打印':status==='FAILED'?'操作员确认打印失败':'实物结果待核对'});
+    previewJob.value = (await api.get(`/api/production/prints/${previewJob.value.id}`)).data.data;
+    await load();
+    ElMessage.success('打印结果已记录');
   });
 }
 async function resolve(row: any) {
@@ -315,7 +367,8 @@ onMounted(() =>
   perform(async () => {
     skus.value = (await api.get("/api/production/skus")).data.data;
     templates.value = (await api.get("/api/production/templates")).data.data;
-    models.value = (await api.get("/api/master/models")).data.data;
+    // 车型清单仅用于有生产管理权限的岗位编辑 SKU。
+    if (props.canManage) models.value = (await api.get("/api/master/models")).data.data;
     await load();
   }),
 );
@@ -340,7 +393,7 @@ onMounted(() =>
         label="旧件复检"
         name="quarantine" /><el-tab-pane
         label="打印队列"
-        name="prints" /><el-tab-pane label="生产库存" name="inventory"
+        name="prints" /><el-tab-pane label="失败扫码" name="scan-failures" /><el-tab-pane label="生产库存" name="inventory"
     /></el-tabs>
     <template v-if="tab === 'inventory'"
       ><div class="toolbar">
@@ -358,13 +411,14 @@ onMounted(() =>
           v-model="warehouseId"
           clearable
           placeholder="所有仓库"
-          @change="perform(load)"
+          @change="perform(warehouseChanged)"
           ><el-option
             v-for="w in warehouses"
             :key="w.id"
             :value="w.id"
             :label="w.name"
         /></el-select>
+        <el-select v-model="locationId" clearable placeholder="所有库位" :disabled="!warehouseId" @change="perform(load)"><el-option v-for="location in locations" :key="location.id" :label="location.name" :value="location.id" /></el-select>
       </div>
       <el-table :data="inventoryRows"
         ><el-table-column prop="skuCode" label="SKU" /><el-table-column
@@ -380,7 +434,7 @@ onMounted(() =>
           label="其中隔离"
       /></el-table>
       <p>
-        显示通过生产任务建立的整车；销售锁定与订单占用将在 PI 阶段接入。
+        包含全部已入库车辆，旧车标记“历史未关联”；隔离车辆不能流转。车型锁定数量请在库存管理查看。
       </p></template
     >
     <div v-if="tab === 'skus' && canManage" class="toolbar">
@@ -418,8 +472,13 @@ onMounted(() =>
       ></el-table
     >
     <div class="toolbar">
+      <template v-if="tab === 'tasks'">
+        <el-select v-model="taskSkuId" clearable placeholder="所有 SKU"><el-option v-for="s in skus" :key="s.id" :value="s.id" :label="s.skuCode" /></el-select>
+        <el-select v-model="taskStatus" clearable placeholder="所有状态"><el-option label="作业中" value="OPEN"/><el-option label="已完成" value="COMPLETED"/><el-option label="已取消" value="CANCELLED"/></el-select>
+        <el-date-picker v-model="taskDates" type="daterange" value-format="YYYY-MM-DD" start-placeholder="创建开始日期" end-placeholder="创建结束日期" />
+      </template>
       <el-input
-        v-if="['tasks', 'issues'].includes(tab)"
+        v-if="['tasks', 'issues', 'quarantine', 'scan-failures'].includes(tab)"
         v-model="keyword"
         placeholder="搜索任务、编码或批次"
         @keyup.enter="
@@ -439,6 +498,15 @@ onMounted(() =>
         >新增 SKU</el-button
       >
     </div>
+    <el-table v-if="tab === 'scan-failures'" :data="scanFailures">
+      <el-table-column prop="createdAt" label="时间" min-width="170" />
+      <el-table-column prop="taskId" label="任务" min-width="210" />
+      <el-table-column prop="code" label="输入编码" min-width="160" />
+      <el-table-column prop="codeType" label="类型" />
+      <el-table-column prop="operatorName" label="操作人" />
+      <el-table-column prop="errorCode" label="失败代码" min-width="170" />
+      <el-table-column prop="reason" label="原因" min-width="220" />
+    </el-table>
     <el-table v-if="tab === 'tasks'" :data="tasks"
       ><el-table-column
         prop="id"
@@ -475,9 +543,10 @@ onMounted(() =>
         ><template #default="s">{{
           s.row.enabled ? "启用" : "停用"
         }}</template></el-table-column
-      ><el-table-column v-if="canManage" label="操作"
+      ><el-table-column label="操作"
         ><template #default="s"
-          ><el-button link type="primary" @click="editSku(s.row)"
+          ><el-button link type="primary" @click="viewSkuImages(s.row.id)">商品图片</el-button
+          ><el-button v-if="canManage" link type="primary" @click="editSku(s.row)"
             >编辑</el-button
           ></template
         ></el-table-column
@@ -583,13 +652,19 @@ onMounted(() =>
       ></template
     >
     <el-pagination
-      v-if="['tasks', 'issues', 'prints'].includes(tab)"
+      v-if="['tasks', 'issues', 'prints', 'quarantine', 'scan-failures'].includes(tab)"
       v-model:current-page="page"
       :page-size="50"
       :total="total"
       layout="prev,pager,next,total"
       @current-change="perform(load)"
     />
+    <el-dialog v-model="galleryVisible" title="商品图片" width="550px">
+      <el-empty v-if="!galleryImages.length" description="暂无商品图片" />
+      <div v-for="(a, index) in galleryImages" :key="a.id" class="toolbar">
+        <span>图片 {{ index + 1 }}</span><el-button @click="showImage(a.id)">查看</el-button><el-button @click="downloadImage(a.id)">下载</el-button>
+      </div>
+    </el-dialog>
     <el-dialog v-model="skuVisible" title="生产商品 SKU" width="550px">
       <div v-if="editingId" class="toolbar">
         <input
@@ -690,12 +765,19 @@ onMounted(() =>
       ></el-dialog
     >
     <el-dialog v-model="previewVisible" title="外箱标签预览"
-      ><iframe
+      ><p v-if="previewJob">{{ states[previewJob.status] }} · {{ previewJob.message || previewJob.reason }}</p><iframe
+        ref="labelFrame"
+        @load="labelReady = true"
         :srcdoc="labelHtml"
         title="标签"
         sandbox="allow-same-origin allow-modals"
         style="width: 100%; height: 620px; border: 0"
-    /></el-dialog>
+    /><template #footer>
+      <el-button v-if="canOperate && previewJob?.status === 'PENDING'" :disabled="loading || !labelReady" type="primary" @click="printManual">人工打印此任务</el-button>
+      <el-button v-if="canReportPrint" :disabled="loading" @click="reportManual('SUBMITTED')">确认已提交打印</el-button>
+      <el-button v-if="canReportPrint" :disabled="loading" @click="reportManual('FAILED')">确认失败</el-button>
+      <el-button v-if="canReportPrint" :disabled="loading" @click="reportManual('UNKNOWN')">结果待核对</el-button>
+    </template></el-dialog>
     <el-dialog
       :model-value="!!imageUrl"
       title="生产异常图片"

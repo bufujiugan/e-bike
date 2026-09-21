@@ -8,6 +8,7 @@ import java.util.List;
 
 @Mapper
 public interface StockMapper {
+    java.util.Map<String,Object> selectInventorySummary();
     VehicleView selectVehicleByQrForUpdate(@Param("qrCode") String qrCode);
     int updateVehicleStockIn(@Param("vehicleId") long vehicleId, @Param("warehouseId") long warehouseId, @Param("locationId") long locationId);
     int updateVehicleStockOut(@Param("vehicleId") long vehicleId, @Param("customerId") long customerId, @Param("orderId") long orderId);
@@ -27,8 +28,10 @@ public interface StockMapper {
     int cancelStockOut(@Param("id") long id, @Param("reason") String reason, @Param("operatorId") Long operatorId);
     List<StockRecordView> selectStockRecords(@Param("type") String type, @Param("offset") long offset, @Param("limit") long limit);
     long countStockRecords(@Param("type") String type);
-    List<InventoryRow> selectInventory(@Param("modelId") Long modelId, @Param("warehouseId") Long warehouseId, @Param("agentId") Long agentId);
+    List<InventoryRow> selectInventory(@Param("modelId") Long modelId, @Param("warehouseId") Long warehouseId, @Param("agentId") Long agentId,@Param("offset") long offset,@Param("limit") long limit);
+    long countInventory(@Param("modelId") Long modelId,@Param("warehouseId") Long warehouseId,@Param("agentId") Long agentId);
     long countPhysicalInventory();
+    long countQuarantinedInventory();
     long countLockedInventory();
     int insertOperationLog(@Param("businessType") String businessType, @Param("businessId") String businessId, @Param("action") String action, @Param("frameSn") String frameSn, @Param("operatorId") Long operatorId, @Param("operatorName") String operatorName, @Param("remark") String remark, @Param("clientIp") String clientIp);
 }

@@ -23,10 +23,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenService jwtTokenService;
     private final UserMapper userMapper;
+    private final com.bike.server.auth.TokenRevocationMapper revocations;
 
     public JwtAuthenticationFilter(JwtTokenService jwtTokenService, UserMapper userMapper) {
+        this(jwtTokenService, userMapper, null);
+    }
+
+    public JwtAuthenticationFilter(JwtTokenService jwtTokenService, UserMapper userMapper,
+                                   com.bike.server.auth.TokenRevocationMapper revocations) {
         this.jwtTokenService = jwtTokenService;
         this.userMapper = userMapper;
+        this.revocations = revocations;
     }
 
     @Override
@@ -35,9 +42,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String header = request.getHeader("Authorization");
         if (header != null && header.startsWith("Bearer ")) {
             try {
-                String username = jwtTokenService.parseUsername(header.substring(7));
+                var identity = jwtTokenService.parse(header.substring(7));
+                String username = identity.username();
                 UserAuthRecord user = userMapper == null ? null : userMapper.selectAuthByUsername(username);
-                if (user != null && !user.enabled()) throw new IllegalStateException("用户已禁用");
+                if (user == null || !user.enabled()) throw new IllegalStateException("用户不存在或已禁用");
+                if (user.authVersion() != identity.authVersion()
+                        || (revocations != null && revocations.countRevoked(identity.id()) > 0))
+                    throw new IllegalStateException("登录凭证已撤销，请重新登录");
                 if (user != null && user.mustChangePassword() && requiresPasswordChange(request)) {
                     response.setStatus(HttpServletResponse.SC_FORBIDDEN);
                     response.setCharacterEncoding(java.nio.charset.StandardCharsets.UTF_8.name());
@@ -47,13 +58,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 }
                 List<SimpleGrantedAuthority> authorities = new ArrayList<>();
                 List<String> roleCodes = userMapper == null ? List.of() : userMapper.selectRoleCodes(username);
-                if (roleCodes.isEmpty()) {
-                    String fallbackRole = "admin".equals(username) || (user != null && "WEB_ADMIN".equals(user.userType()))
-                            ? "ROLE_SUPER_ADMIN" : (user != null && "PDA_OPERATOR".equals(user.userType()) ? "ROLE_PDA_OPERATOR" : (user != null && "AGENT".equals(user.userType()) ? "ROLE_WEB_AGENT" : "ROLE_WEB_OPERATOR"));
-                    authorities.add(new SimpleGrantedAuthority(fallbackRole));
-                } else {
-                    roleCodes.forEach(code -> authorities.add(new SimpleGrantedAuthority("ROLE_" + code)));
-                }
+                // 空角色或全部角色已停用必须撤权，不能按账号类型恢复管理权限。
+                if (roleCodes.isEmpty()) throw new IllegalStateException("用户没有启用的角色");
+                roleCodes.forEach(code -> authorities.add(new SimpleGrantedAuthority("ROLE_" + code)));
+                // 数据范围和工位限制由账号类型兜底，避免自定义角色丢失隔离边界。
+                if ("AGENT".equals(user.userType())) authorities.add(new SimpleGrantedAuthority("ROLE_WEB_AGENT"));
+                if ("PDA_OPERATOR".equals(user.userType())) authorities.add(new SimpleGrantedAuthority("ROLE_PDA_OPERATOR"));
                 if (userMapper != null) userMapper.selectPermissionCodes(username).forEach(code -> authorities.add(new SimpleGrantedAuthority("PERM_" + code)));
                 if (userMapper != null) userMapper.selectWorkstationTypes(username).forEach(type -> authorities.add(new SimpleGrantedAuthority("WORKSTATION_" + type.toUpperCase(java.util.Locale.ROOT))));
                 UsernamePasswordAuthenticationToken authentication =

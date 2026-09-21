@@ -47,7 +47,7 @@ class ProductionServiceTest {
             assembly,
             vehicles,
             new SnRuleServiceImpl(null),
-            new ObjectMapper());
+            new ObjectMapper(), mock(ScanFailureService.class));
     task = new HashMap<>(Map.of("id", "task-123456789012", "skuId", 1L, "status", "OPEN"));
     scans = new ArrayList<>();
     when(mapper.selectTask(anyString())).thenReturn(task);

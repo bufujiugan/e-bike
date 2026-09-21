@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.lock.SkuLockMapper">
+  <select id="now" resultType="java.time.LocalDateTime">SELECT NOW(3)</select>
+  <select id="request" resultType="com.bike.server.lock.SkuLockMapper$RequestRow">SELECT id,payload_hash FROM bike_sku_lock_request WHERE operator_id=#{operatorId} AND request_id=#{requestId}</select>
+  <insert id="insertRequest">INSERT INTO bike_sku_lock_request(operator_id,request_id,payload_hash) VALUES(#{operatorId},#{requestId},#{payloadHash})</insert>
+  <select id="locks" resultType="com.bike.server.lock.InventoryLockView"><include refid="com.bike.server.lock.InventoryLockMapper.selectBase"/> WHERE l.lock_request_id=#{requestId} ORDER BY l.sku_id</select>
+  <insert id="insertLock">INSERT INTO bike_inventory_lock(lock_no,agent_id,customer_id,sku_id,product_model_id,scope_type,lock_request_id,lock_qty,expire_time,created_by,status,remark)
+    VALUES(#{lockNo},#{request.agentId},#{request.customerId},#{skuId},#{modelId},'SKU',#{requestId},#{quantity},#{expiresAt},#{operatorId},'LOCKED',#{request.remark})</insert>
+</mapper>

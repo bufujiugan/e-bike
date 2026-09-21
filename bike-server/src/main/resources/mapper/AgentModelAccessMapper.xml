@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.agent.AgentModelAccessMapper">
+  <sql id="authorized">EXISTS(SELECT 1 FROM bike_agent_model_access access
+    JOIN bike_agent access_agent ON access_agent.id=access.agent_id AND access_agent.status='ENABLED'
+    JOIN bike_product_model access_model ON access_model.id=access.model_id AND access_model.enabled=1
+    WHERE access.agent_id=#{agentId} AND access.model_id=#{modelId} AND access.enabled=1)</sql>
+  <select id="countAuthorized" resultType="int">SELECT <include refid="authorized"/></select>
+  <select id="selectModels" resultType="long">SELECT model_id FROM bike_agent_model_access WHERE agent_id=#{agentId} AND enabled=1 ORDER BY model_id</select>
+  <select id="lockAgent" resultType="long">SELECT id FROM bike_agent WHERE id=#{agentId} FOR UPDATE</select>
+  <select id="countEnabledModels" resultType="int">SELECT COUNT(*) FROM bike_product_model WHERE enabled=1 AND id IN <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach></select>
+  <update id="disableAll">UPDATE bike_agent_model_access SET enabled=0 WHERE agent_id=#{agentId}</update>
+  <insert id="grant">INSERT INTO bike_agent_model_access(agent_id,model_id,enabled) VALUES(#{agentId},#{modelId},1) ON DUPLICATE KEY UPDATE enabled=1</insert>
+</mapper>

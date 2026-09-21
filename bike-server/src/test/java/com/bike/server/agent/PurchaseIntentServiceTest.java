@@ -28,9 +28,10 @@ class PurchaseIntentServiceTest {
         authentication.setDetails(new UserAuthRecord(11L, "agent-a", "hash", "AGENT", 101L, null, true, false));
         SecurityContextHolder.getContext().setAuthentication(authentication);
         PurchaseIntentMapper mapper = Mockito.mock(PurchaseIntentMapper.class);
+        Mockito.when(mapper.lockAgentAccess(101L)).thenReturn(101L);
         Mockito.when(mapper.countAuthorizedModel(101L, 1L)).thenReturn(1);
         Mockito.when(mapper.insert(Mockito.any(), Mockito.eq(101L), Mockito.eq(11L))).thenReturn(1);
-        Mockito.when(mapper.selectLatestId(101L)).thenReturn(7L);
+        Mockito.when(mapper.selectInsertedId()).thenReturn(7L);
         PurchaseIntentView view = new PurchaseIntentView(7L, 101L, "Agent A", 1L, "City", 2, "OPEN", null, "test", null);
         Mockito.when(mapper.selectById(7L)).thenReturn(view);
 

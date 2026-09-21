@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.order.StockOutOrderOptionsMapper">
+    <sql id="eligibleOrders">
+        FROM bike_sales_order o
+        JOIN bike_sales_order_item i ON i.order_id=o.id
+        JOIN bike_product_model m ON m.id=i.product_model_id
+        WHERE o.customer_id=#{customerId}
+          AND o.status IN ('CONFIRMED','PARTIAL_SHIPPED')
+          AND i.ordered_qty&gt;i.shipped_qty
+        <if test="keyword != null">
+            AND (o.order_no LIKE CONCAT('%',#{keyword},'%') OR m.model_name LIKE CONCAT('%',#{keyword},'%'))
+        </if>
+    </sql>
+    <select id="selectPage" resultType="com.bike.server.order.StockOutOrderOption">
+        SELECT o.id,o.order_no,o.customer_id,m.model_name,i.ordered_qty order_qty,i.shipped_qty,o.status
+        <include refid="eligibleOrders"/>
+        ORDER BY o.updated_at DESC,o.id DESC LIMIT #{offset},#{limit}
+    </select>
+    <select id="count" resultType="long">SELECT COUNT(*) <include refid="eligibleOrders"/></select>
+</mapper>

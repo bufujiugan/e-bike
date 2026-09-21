@@ -59,6 +59,13 @@ public class ProductionAttachmentService {
             || reader.getHeight(0) > 12000
             || (long) reader.getWidth(0) * reader.getHeight(0) > 40000000)
           throw new BusinessException("IMAGE_INVALID", "仅支持不超过4000万像素的JPG或PNG");
+        // 只读文件头会接受缺少像素数据的截断图片；在尺寸检查后解码确认内容可用。
+        reader.addIIOReadWarningListener((source, warning) -> {
+          throw new BusinessException("IMAGE_INVALID", "图片数据不完整，请重新上传");
+        });
+        var decoded = reader.read(0);
+        if (decoded == null) throw new BusinessException("IMAGE_INVALID", "图片数据损坏，无法读取");
+        decoded.flush();
       } finally {
         reader.dispose();
       }

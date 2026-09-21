@@ -10,10 +10,11 @@
                MAX(CASE WHEN b.part_type = 'MOTOR' AND b.is_current = 1 THEN b.part_sn END) motor_sn,
                MAX(CASE WHEN b.part_type = 'BATTERY' AND b.is_current = 1 THEN b.part_sn END) battery_sn,
                MAX(CASE WHEN b.part_type = 'DISPLAY' AND b.is_current = 1 THEN b.part_sn END) display_sn,
-               v.created_at, v.updated_at
+               v.created_at, v.updated_at, pv.sku_id, sku.sku_code, sku.product_name, pv.batch_no
         FROM bike_vehicle v LEFT JOIN bike_product_model m ON m.id = v.model_id LEFT JOIN bike_sys_user u ON u.id = v.assemble_operator_id
         LEFT JOIN bike_warehouse w ON w.id = v.current_warehouse_id LEFT JOIN bike_warehouse_location l ON l.id = v.current_location_id
         LEFT JOIN bike_customer c ON c.id = v.current_customer_id LEFT JOIN bike_vehicle_part_binding b ON b.vehicle_id = v.id
+        LEFT JOIN bike_production_vehicle pv ON pv.vehicle_id=v.id LEFT JOIN bike_production_sku sku ON sku.id=pv.sku_id
     </sql>
     <sql id="vehicleWhere">
         <where>

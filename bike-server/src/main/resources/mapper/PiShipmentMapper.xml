@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.pi.PiShipmentMapper">
+    <select id="selectForOrder" resultType="com.bike.server.pi.PiShipmentGate">
+        SELECT p.id,p.customer_id,p.status,p.release_status,p.shipment_required_amount,
+          COALESCE((SELECT SUM(pay.amount) FROM bike_pi_payment pay WHERE pay.pi_id=p.id AND pay.status='CONFIRMED' FOR UPDATE),0) paid_amount
+        FROM bike_pi p WHERE p.source_order_id=#{orderId} ORDER BY p.id FOR UPDATE
+    </select>
+    <select id="remainingForVehicle" resultType="java.lang.Integer">
+        SELECT i.ordered_qty - (
+            SELECT COUNT(*) FROM bike_stock_out_record so
+            JOIN bike_production_vehicle shipped ON shipped.vehicle_id=so.vehicle_id
+            WHERE so.order_id=#{orderId} AND so.status='COMPLETED' AND shipped.sku_id=i.sku_id
+            FOR UPDATE
+        )
+        FROM bike_pi_item i JOIN bike_production_vehicle pv ON pv.sku_id=i.sku_id
+        WHERE i.pi_id=#{piId} AND pv.vehicle_id=#{vehicleId} FOR UPDATE
+    </select>
+    <select id="countForOrder" resultType="int">SELECT COUNT(*) FROM bike_pi WHERE source_order_id=#{orderId}</select>
+</mapper>

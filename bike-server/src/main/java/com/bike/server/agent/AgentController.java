@@ -21,6 +21,7 @@ public class AgentController {
     }
 
     @GetMapping("/inventory") public ApiResponse<PageResponse<InventoryRow>> inventory(@RequestParam(defaultValue="1") long page, @RequestParam(defaultValue="20") long pageSize) { return ApiResponse.success("查询成功", service.inventory(page, pageSize)); }
+    @GetMapping("/inventory-locks/by-no/{lockNo}") public ApiResponse<InventoryLockView> getLock(@PathVariable String lockNo) { return ApiResponse.success("查询成功", lockService.getByNo(lockNo)); }
     @GetMapping("/inventory-locks") public ApiResponse<PageResponse<InventoryLockView>> locks(@RequestParam(defaultValue="1") long page, @RequestParam(defaultValue="20") long pageSize) { return ApiResponse.success("查询成功", service.locks(page, pageSize)); }
     @PostMapping("/inventory-locks") public ApiResponse<InventoryLockView> create(@Valid @RequestBody InventoryLockCreateRequest request) { CurrentOperator.requireAnyRole("WEB_AGENT", "SUPER_ADMIN"); return ApiResponse.success("库存锁定成功", lockService.create(request)); }
     @PostMapping("/inventory-locks/{id}/release") public ApiResponse<InventoryLockView> release(@PathVariable long id, @RequestParam(defaultValue="代理商主动释放") String reason) { CurrentOperator.requireAnyRole("WEB_AGENT", "SUPER_ADMIN"); return ApiResponse.success("库存锁定已释放", lockService.release(id, reason)); }

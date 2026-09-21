@@ -1,14 +1,17 @@
 <script setup lang="ts">
+import TraceDetails, { type TraceData } from './components/TraceDetails.vue'
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import axios from './api'
 import { showFailToast, showSuccessToast } from 'vant'
 import { hasPermission, isSuperAdmin } from './permissions'
 import ProductionStation from './components/ProductionStation.vue'
+import PiDispatchPanel from './components/PiDispatchPanel.vue'
 
 const username = ref('admin')
 const password = ref('')
 const loading = ref(false)
 const loggedIn = ref(Boolean(localStorage.getItem('bike_access_token')))
+const dispatchMode = ref('order')
 const pathMode: Record<string, 'assembly' | 'stockIn' | 'stockOut' | 'rework' | 'trace'> = {
   '/pda/home': 'assembly', '/pda/assembly': 'assembly', '/pda/stock-in': 'stockIn', '/pda/stock-out': 'stockOut', '/pda/rework': 'rework', '/pda/trace': 'trace'
 }
@@ -43,11 +46,17 @@ const orderId = ref<number | null>(null)
 const warehouseId = ref<number | null>(null)
 const locationId = ref<number | null>(null)
 const customers = ref<Array<{ id: number; name: string; code: string }>>([])
-const orders = ref<Array<{ id: number; orderNo: string; customerId: number; modelName: string; orderQty: number; shippedQty: number; status: string }>>([])
+type StockOutOrder = { id: number; orderNo: string; customerId: number; modelName: string; orderQty: number; shippedQty: number; status: string }
+const orders = ref<StockOutOrder[]>([]), selectedOrder = ref<StockOutOrder | null>(null)
+const orderKeyword = ref(''), appliedOrderKeyword = ref(''), orderPage = ref(1), orderTotal = ref(0)
+const orderPageSize = 20, orderOptionsLoading = ref(false), orderOptionsError = ref('')
+let orderRequestVersion = 0, customerRequestVersion = 0
+const orderPageCount = computed(() => Math.max(1, Math.ceil(orderTotal.value / orderPageSize)))
 const warehouses = ref<Array<{ id: number; name: string; code: string; status: string }>>([])
 const locations = ref<Array<{ id: number; name: string; code: string; status: string }>>([])
 const traceKey = ref('')
 const traceType = ref<'frame' | 'part' | 'qr'>('frame')
+const traceData = ref<TraceData | null>(null)
 const reworkFrameSn = ref('')
 const reworkPartType = ref('BATTERY')
 const reworkNewPartSn = ref('')
@@ -55,16 +64,20 @@ const reworkReason = ref('')
 const resultMessage = ref('')
 const resultSuccess = ref(false)
 const busy = ref(false)
-const tokenHeaders = computed(() => ({ Authorization: `Bearer ${localStorage.getItem('bike_access_token')}` }))
+// 每次请求读取当前凭证，避免重新登录后继续使用 computed 缓存的旧 token。
+const tokenHeaders = { get value() { return { Authorization: `Bearer ${localStorage.getItem('bike_access_token')}` } } }
 const customerOptions = computed(() => customers.value.map(customer => ({ text: `${customer.name} (${customer.code})`, value: customer.id })))
-const orderOptions = computed(() => orders.value
-  .filter(order => customerId.value === null || order.customerId === customerId.value)
-  .filter(order => order.orderQty - order.shippedQty > 0)
+const orderOptions = computed(() => {
+  const selected = selectedOrder.value
+  const options = selected && selected.customerId === customerId.value && !orders.value.some(order => order.id === selected.id)
+    ? [selected, ...orders.value] : orders.value
+  return options
+  .filter(order => order.customerId === customerId.value && order.orderQty > order.shippedQty)
   .map(order => ({
     text: `${order.orderNo} · ${order.modelName} · 剩余 ${Math.max(0, order.orderQty - order.shippedQty - (order.id === orderId.value ? scannedVehicleQrs.value.length : 0))} 台`,
     value: order.id,
-  })))
-const selectedOrder = computed(() => orders.value.find(order => order.id === orderId.value) ?? null)
+  }))
+})
 const orderTotalQty = computed(() => selectedOrder.value?.orderQty ?? 0)
 const orderShippedQty = computed(() => selectedOrder.value?.shippedQty ?? 0)
 const orderRemainingQty = computed(() => Math.max(0, orderTotalQty.value - orderShippedQty.value - scannedVehicleQrs.value.length))
@@ -77,18 +90,43 @@ async function loadAuthContext() {
 }
 
 async function loadStockOutOptions() {
+  const version = ++customerRequestVersion
   try {
-    const [customerResponse, orderResponse] = await Promise.all([
-      axios.get('/api/master/customers', { headers: tokenHeaders.value }),
-      axios.get('/api/orders?page=1&pageSize=100', { headers: tokenHeaders.value })
-    ])
+    const customerResponse = await axios.get('/api/master/customers', { headers: tokenHeaders.value })
+    if (version !== customerRequestVersion || !loggedIn.value) return
     customers.value = customerResponse.data.data.filter((customer: { status: string }) => customer.status === 'ENABLED')
-    orders.value = orderResponse.data.data.records.filter((order: { status: string; orderQty: number; shippedQty: number }) =>
-      ['CONFIRMED', 'PARTIAL_SHIPPED'].includes(order.status) && order.orderQty > order.shippedQty)
-    if (customerId.value === null && customers.value.length > 0) customerId.value = customers.value[0].id
+    if (customerId.value === null || !customers.value.some(customer => customer.id === customerId.value)) {
+      customerId.value = customers.value[0]?.id ?? null
+    } else await loadStockOutOrders(1)
   } catch (error) {
-    showFailToast(axios.isAxiosError(error) ? error.response?.data?.message ?? '客户和订单加载失败' : '客户和订单加载失败')
+    if (version === customerRequestVersion) showFailToast(axios.isAxiosError(error) ? error.response?.data?.message ?? '客户加载失败' : '客户加载失败')
   }
+}
+
+async function loadStockOutOrders(page: number) {
+  const version = ++orderRequestVersion, customer = customerId.value
+  if (customer === null || !loggedIn.value || mode.value !== 'stockOut') { orders.value = []; orderTotal.value = 0; orderOptionsLoading.value = false; return }
+  orderOptionsLoading.value = true; orderOptionsError.value = ''
+  try {
+    const response = await axios.get('/api/orders/stock-out-options', {
+      headers: tokenHeaders.value,
+      params: { customerId: customer, keyword: appliedOrderKeyword.value || undefined, page, pageSize: orderPageSize },
+    })
+    if (version !== orderRequestVersion || customer !== customerId.value || !loggedIn.value) return
+    orders.value = response.data.data.records; orderTotal.value = response.data.data.total; orderPage.value = response.data.data.page
+    const refreshed = orders.value.find(order => order.id === orderId.value)
+    if (refreshed) selectedOrder.value = refreshed
+  } catch (error) {
+    if (version === orderRequestVersion) {
+      orders.value = []; orderTotal.value = 0
+      orderOptionsError.value = axios.isAxiosError(error) ? error.response?.data?.message ?? '订单加载失败，请重试' : '订单加载失败，请重试'
+    }
+  } finally { if (version === orderRequestVersion) orderOptionsLoading.value = false }
+}
+
+function searchStockOutOrders() {
+  appliedOrderKeyword.value = orderKeyword.value.trim()
+  void loadStockOutOrders(1)
 }
 
 async function loadStockInOptions() {
@@ -122,9 +160,8 @@ async function submitPasswordChange() {
     newPassword.value = ''
     confirmPassword.value = ''
     passwordChangeVisible.value = false
-    if (authContext.value) authContext.value = { ...authContext.value, mustChangePassword: false }
-    showSuccessToast('密码已更新')
-    await loadOptionsForMode(mode.value)
+    clearSession()
+    showSuccessToast('密码已更新，请使用新密码重新登录')
   } catch (error) {
     showFailToast(axios.isAxiosError(error) ? error.response?.data?.message ?? '密码修改失败' : '密码修改失败')
   } finally {
@@ -202,6 +239,8 @@ async function submitStockOut() {
     resultSuccess.value = true
     scannedVehicleQrs.value = []
     vehicleQrCode.value = ''
+    orderId.value = null; selectedOrder.value = null
+    await loadStockOutOrders(1)
     focusField(vehicleQrField)
     showSuccessToast('出库完成')
   } catch (error) { resultMessage.value = axios.isAxiosError(error) ? error.response?.data?.message ?? '出库失败' : '出库失败'; resultSuccess.value = false; showFailToast(resultMessage.value) } finally { busy.value = false }
@@ -273,14 +312,22 @@ async function submitRework() {
 
 async function queryTrace() {
   busy.value = true
+  traceData.value = null
   try {
     if (!traceKey.value.trim()) throw new Error('请输入追溯标识')
     const response = await axios.get(`/api/trace/${traceType.value}/${encodeURIComponent(traceKey.value.trim())}`, { headers: tokenHeaders.value })
     const vehicle = response.data.data.vehicle
+    traceData.value = response.data.data
     resultMessage.value = `${vehicle.frameSn} · ${vehicle.statusName} · ${vehicle.modelName ?? '-'} · 绑定历史 ${response.data.data.bindingHistory.length} 条`
     resultSuccess.value = true
     showSuccessToast('追溯查询完成')
   } catch (error) { resultMessage.value = axios.isAxiosError(error) ? error.response?.data?.message ?? '追溯失败' : error instanceof Error ? error.message : '追溯失败'; resultSuccess.value = false; showFailToast(resultMessage.value) } finally { busy.value = false; focusField(traceField) }
+}
+
+async function traceRelatedFrame(frame: string) {
+  traceType.value = 'frame'
+  traceKey.value = frame
+  await queryTrace()
 }
 
 async function validateStockOperation(stockType: 'in' | 'out') {
@@ -295,12 +342,30 @@ async function validateStockOperation(stockType: 'in' | 'out') {
   } catch (error) { resultMessage.value = axios.isAxiosError(error) ? error.response?.data?.message ?? '二维码校验失败' : '二维码校验失败'; resultSuccess.value = false }
 }
 
-function logout() { localStorage.removeItem('bike_access_token'); loggedIn.value = false; passwordChangeVisible.value = false }
+function clearSession() {
+  if(authContext.value?.username) sessionStorage.removeItem(`bike_pi_dispatch:${authContext.value.username}`)
+  dispatchMode.value = 'order'
+  localStorage.removeItem('bike_access_token'); loggedIn.value = false; passwordChangeVisible.value = false
+  authContext.value = null; password.value = ''; scannedVehicleQrs.value = []; traceData.value = null
+  ++orderRequestVersion; ++customerRequestVersion
+  customerId.value = null; orderId.value = null; selectedOrder.value = null; customers.value = []; orders.value = []
+  orderTotal.value = 0; orderOptionsLoading.value = false; orderOptionsError.value = ''
+  resultMessage.value = ''; resultSuccess.value = false; vehicleQrCode.value = ''; traceKey.value = ''
+  reworkFrameSn.value = ''; reworkNewPartSn.value = ''; reworkReason.value = ''
+  warehouseId.value = null; locationId.value = null; warehouses.value = []; locations.value = []
+}
+async function logout() {
+  try {
+    if (localStorage.getItem('bike_access_token')) await axios.post('/api/auth/logout', {}, { headers: tokenHeaders.value })
+    clearSession()
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 401) clearSession()
+    else showFailToast('退出未完成，请检查网络后重试')
+  }
+}
 
 function handleAuthExpired() {
-  loggedIn.value = false
-  authContext.value = null
-  passwordChangeVisible.value = false
+  clearSession()
 }
 
 function focusField(field: { value: ScanFieldRef | null } | ScanFieldRef | null) {
@@ -324,13 +389,16 @@ watch(mode, (nextMode) => {
 })
 
 watch(customerId, () => {
-  if (orderId.value !== null && !orderOptions.value.some(order => order.value === orderId.value)) orderId.value = null
+  orderId.value = null; selectedOrder.value = null; orders.value = []; orderTotal.value = 0
+  orderKeyword.value = ''; appliedOrderKeyword.value = ''; orderPage.value = 1
   scannedVehicleQrs.value = []
   vehicleQrCode.value = ''
+  void loadStockOutOrders(1)
 })
 
 watch(orderId, (nextOrderId, previousOrderId) => {
   if (nextOrderId !== previousOrderId) {
+    selectedOrder.value = orders.value.find(order => order.id === nextOrderId) ?? (selectedOrder.value?.id === nextOrderId ? selectedOrder.value : null)
     scannedVehicleQrs.value = []
     vehicleQrCode.value = ''
   }
@@ -400,17 +468,28 @@ if (loggedIn.value) {
       </section>
       <section v-else-if="mode === 'stockIn'" class="form-section">
         <van-dropdown-menu :overlay="false">
-          <van-dropdown-item v-model="warehouseId" :options="warehouseOptions" title="选择仓库" />
-          <van-dropdown-item v-model="locationId" :options="locationOptions" title="选择库位" />
+          <van-dropdown-item v-model="warehouseId" :options="warehouseOptions" :title="warehouseId === null ? '选择仓库' : undefined" />
+          <van-dropdown-item v-model="locationId" :options="locationOptions" :title="locationId === null ? '选择库位' : undefined" />
         </van-dropdown-menu>
         <van-field ref="vehicleQrField" v-model="vehicleQrCode" label="总二维码" placeholder="扫描整车总二维码" clearable autofocus @keyup.enter="validateStockOperation('in')" />
         <van-button block type="primary" :loading="busy" @click="submitStockIn">确认入库</van-button>
       </section>
       <section v-else-if="mode === 'stockOut'" class="form-section">
+        <van-tabs v-model:active="dispatchMode"><van-tab name="order" title="按订单出库" /><van-tab name="pi" title="PI 多车型整批出库" /></van-tabs>
+        <PiDispatchPanel v-if="authContext && !passwordChangeVisible" v-show="dispatchMode === 'pi'" :key="authContext.username" :username="authContext.username" />
+        <template v-if="dispatchMode === 'order'">
+        <van-field v-model="orderKeyword" label="查找订单" placeholder="输入订单号或车型" maxlength="100" clearable :disabled="customerId === null" @keyup.enter="searchStockOutOrders">
+          <template #button><van-button size="small" type="primary" :loading="orderOptionsLoading" :disabled="customerId === null" @click="searchStockOutOrders">查询</van-button></template>
+        </van-field>
         <van-dropdown-menu :overlay="false">
-          <van-dropdown-item v-model="customerId" :options="customerOptions" title="选择客户" />
-          <van-dropdown-item v-model="orderId" :options="orderOptions" title="选择订单" />
+          <van-dropdown-item v-model="customerId" :options="customerOptions" :title="customerId === null ? '选择客户' : undefined" />
+          <van-dropdown-item v-model="orderId" :options="orderOptions" :title="orderId === null ? '选择订单' : undefined" :disabled="orderOptionsLoading || customerId === null" />
         </van-dropdown-menu>
+        <van-cell title="待出库订单" :value="`共 ${orderTotal} 条 · 第 ${orderPage}/${orderPageCount} 页`">
+          <template #label><van-button size="mini" :disabled="orderOptionsLoading || orderPage <= 1" @click="loadStockOutOrders(orderPage - 1)">上一页</van-button> <van-button size="mini" :disabled="orderOptionsLoading || orderPage >= orderPageCount" @click="loadStockOutOrders(orderPage + 1)">下一页</van-button></template>
+        </van-cell>
+        <van-notice-bar v-if="orderOptionsError" :text="orderOptionsError" wrapable color="#c62828" background="#fff0f0" />
+        <van-cell v-else-if="!orderOptionsLoading && !orders.length && customerId !== null" title="当前客户没有匹配的待出库订单" label="可修改搜索条件后查询；只有已确认或部分出库且仍有待发数量的订单可选。" />
         <div class="stock-summary">
           <van-cell title="订单数量" :value="`${orderTotalQty} 台`" />
           <van-cell title="已出库数量" :value="`${orderShippedQty} 台`" />
@@ -420,6 +499,7 @@ if (loggedIn.value) {
         <van-cell title="已扫描数量" :value="`${scannedVehicleQrs.length} 台`" />
         <van-tag v-for="qr in scannedVehicleQrs" :key="qr" type="success" size="large" closeable @close="scannedVehicleQrs = scannedVehicleQrs.filter(item => item !== qr)">{{ qr }}</van-tag>
         <van-button block type="primary" :loading="busy" @click="submitStockOut">确认批量出库</van-button>
+        </template>
       </section>
       <section v-else-if="mode === 'rework'" class="form-section">
         <van-field ref="reworkFrameField" v-model="reworkFrameSn" label="车架 SN" placeholder="扫描车架 SN" clearable autofocus @keyup.enter="focusField(reworkPartField)" />
@@ -432,6 +512,7 @@ if (loggedIn.value) {
         <van-dropdown-menu :overlay="false"><van-dropdown-item v-model="traceType" :options="[{ text: '整车聚合码', value: 'qr' },{ text: '车架 SN', value: 'frame' }, { text: '零部件 SN', value: 'part' }]" title="追溯类型" /></van-dropdown-menu>
         <van-field ref="traceField" v-model="traceKey" label="追溯编码" placeholder="扫描所选类型的编码" clearable autofocus @keyup.enter="queryTrace" />
         <van-button block type="primary" :loading="busy" @click="queryTrace">查询完整链路</van-button>
+        <TraceDetails v-if="traceData" :data="traceData" @select-frame="traceRelatedFrame" />
       </section>
       <van-notice-bar v-if="resultMessage" :text="resultMessage" wrapable :color="resultSuccess ? '#16a36a' : '#ee0a24'" :background="resultSuccess ? '#edf9f1' : '#fff1f0'" />
     </section>

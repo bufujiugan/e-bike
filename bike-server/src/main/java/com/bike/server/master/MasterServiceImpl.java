@@ -18,7 +18,11 @@ public class MasterServiceImpl implements MasterService {
 
     @Override public java.util.List<MasterItem> list(String type, String keyword) {
         validateType(type);
-        CurrentOperator.requireAnyPermission("MASTER_READ", "INVENTORY_READ", "ORDER_READ", "AGENT_INVENTORY_READ", "STOCK_IN_OPERATE", "STOCK_OUT_OPERATE");
+        if (Set.of("models", "warehouses").contains(type) && CurrentOperator.hasPermission("PRODUCTION_MANAGE")) {
+            CurrentOperator.requireInternalWebAccess();
+        } else {
+            CurrentOperator.requireAnyPermission("MASTER_READ", "INVENTORY_READ", "ORDER_READ", "AGENT_INVENTORY_READ", "STOCK_IN_OPERATE", "STOCK_OUT_OPERATE");
+        }
         if (CurrentOperator.hasRole("PDA_OPERATOR")) {
             CurrentOperator.requireWorkstation(type.equals("customers") ? "STOCK_OUT" : "STOCK_IN");
         } else {
@@ -81,7 +85,7 @@ public class MasterServiceImpl implements MasterService {
 
     @Override
     public java.util.List<LocationItem> listLocations(long warehouseId) {
-        CurrentOperator.requireAnyPermission("MASTER_READ", "INVENTORY_READ", "STOCK_IN_OPERATE");
+        CurrentOperator.requireAnyPermission("MASTER_READ", "INVENTORY_READ", "STOCK_IN_OPERATE", "PRODUCTION_MANAGE");
         if (CurrentOperator.hasRole("PDA_OPERATOR")) CurrentOperator.requireWorkstation("STOCK_IN");
         else CurrentOperator.requireWebAccess();
         if (CurrentOperator.hasRole("WEB_AGENT")) throw new BusinessException("FORBIDDEN", "代理商账号无权访问仓库库位");

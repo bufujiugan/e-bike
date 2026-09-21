@@ -6,7 +6,10 @@ import java.util.List;
 
 @Mapper
 public interface InventoryLockMapper {
-    int lockModelForUpdate(@Param("modelId") long modelId);
+    InventoryLockView selectByNo(@Param("lockNo") String lockNo);
+    Integer lockModelForUpdate(@Param("modelId") long modelId);
+    int countAuthorizedModel(@Param("agentId") long agentId,@Param("modelId") long modelId);
+    Long lockAgentAccess(@Param("agentId") long agentId);
     long selectPhysicalForUpdate(@Param("modelId") long modelId);
     long selectActiveLockedForUpdate(@Param("modelId") long modelId);
     int insert(@Param("lockNo") String lockNo,@Param("request") InventoryLockCreateRequest request,@Param("expireTime") java.time.LocalDateTime expireTime,@Param("createdBy") Long createdBy);
@@ -19,5 +22,7 @@ public interface InventoryLockMapper {
     int convert(@Param("id") long id,@Param("qty") int qty);
     int expireLocks();
     List<InventoryLockView> selectExpiredForAudit();
+    List<LegacyConversionAuditView> selectLegacyConversions(@Param("offset") long offset, @Param("limit") long limit);
+    long countLegacyConversions();
     int insertOperationLog(@Param("businessId") String businessId, @Param("action") String action, @Param("operatorId") Long operatorId, @Param("operatorName") String operatorName, @Param("remark") String remark, @Param("clientIp") String clientIp);
 }

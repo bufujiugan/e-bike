@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.*;
 public class StockController {
     private final StockService stockService;
     public StockController(StockService stockService) { this.stockService = stockService; }
+    @GetMapping("/api/stock-in/by-no/{stockNo}") public ApiResponse<StockRecordView> getIn(@PathVariable String stockNo) { return ApiResponse.success("查询成功", stockService.getByNo("IN", stockNo)); }
+    @GetMapping("/api/stock-out/by-no/{stockNo}") public ApiResponse<StockRecordView> getOut(@PathVariable String stockNo) { return ApiResponse.success("查询成功", stockService.getByNo("OUT", stockNo)); }
     @PostMapping("/api/stock-in/validate") public ApiResponse<StockValidationResult> validateIn(@Valid @RequestBody StockValidationRequest request) { return ApiResponse.success("校验完成", stockService.validateStockIn(request)); }
     @PostMapping("/api/stock-in") public ApiResponse<StockRecordView> stockIn(@Valid @RequestBody StockInRequest request) { return ApiResponse.success("入库成功", stockService.stockIn(request)); }
     @PostMapping("/api/stock-in/{id}/cancel") public ApiResponse<StockRecordView> cancelIn(@PathVariable long id, @RequestParam @NotBlank String reason) { return ApiResponse.success("撤销入库成功", stockService.cancelStockIn(id, reason)); }

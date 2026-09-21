@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.auth.TokenRevocationMapper">
+  <select id="countRevoked" resultType="int">SELECT COUNT(*) FROM bike_revoked_token WHERE token_id=#{tokenId}</select>
+  <insert id="revoke">INSERT IGNORE INTO bike_revoked_token(token_id,expires_at) VALUES(#{tokenId},#{expiresAt})</insert>
+  <delete id="deleteExpired">DELETE FROM bike_revoked_token WHERE expires_at &lt; NOW(3)</delete>
+</mapper>

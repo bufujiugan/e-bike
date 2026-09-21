@@ -41,7 +41,11 @@ public class PurchaseIntentServiceImpl implements PurchaseIntentService {
         Long requestedAgentId = request.agentId();
         long agentId = CurrentOperator.hasRole("WEB_AGENT") ? requireAgent() : requestedAgentId == null ? 0L : requestedAgentId;
         if (agentId <= 0) throw new BusinessException("AGENT_REQUIRED", "代理商不能为空");
-        if (agentId <= 0 || request.productModelId() == null || mapper.countAuthorizedModel(agentId, request.productModelId()) == 0) {
+        // 与管理员替换授权共用代理商行锁，持有到意向及审计一并提交。
+        if (mapper.lockAgentAccess(agentId) == null) {
+            throw new BusinessException("AGENT_NOT_FOUND", "代理商不存在或已停用");
+        }
+        if (request.productModelId() == null || mapper.countAuthorizedModel(agentId, request.productModelId()) == 0) {
             throw new BusinessException("MODEL_NOT_AUTHORIZED", "当前代理商未授权该车型或授权已失效");
         }
         if (request.expireTime() != null && !request.expireTime().isAfter(java.time.LocalDateTime.now())) {
@@ -50,7 +54,7 @@ public class PurchaseIntentServiceImpl implements PurchaseIntentService {
         if (mapper.insert(request, agentId, CurrentOperator.id()) != 1) {
             throw new BusinessException("PURCHASE_INTENT_CREATE_FAILED", "采购意向创建失败");
         }
-        long intentId = mapper.selectLatestId(agentId);
+        long intentId = mapper.selectInsertedId();
         if (operationLogMapper != null) {
             operationLogMapper.insert("PURCHASE_INTENT", String.valueOf(intentId), "提交采购意向",
                     CurrentOperator.id(), CurrentOperator.username(), null,

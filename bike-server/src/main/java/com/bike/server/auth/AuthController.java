@@ -27,8 +27,8 @@ public class AuthController {
     }
 
     @GetMapping("/me")
-    public ApiResponse<LoginResponse> me(Authentication authentication) {
-        return ApiResponse.success("查询成功", authService.me(authentication.getName()));
+    public ApiResponse<LoginResponse> me(Authentication authentication, HttpServletRequest request) {
+        return ApiResponse.success("查询成功", authService.me(authentication.getName(), request.getHeader("Authorization").substring(7)));
     }
 
     @GetMapping("/context")
@@ -37,7 +37,8 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ApiResponse<Void> logout() {
+    public ApiResponse<Void> logout(HttpServletRequest request) {
+        authService.logout(request.getHeader("Authorization").substring(7));
         return ApiResponse.success("退出成功", null);
     }
 

@@ -48,6 +48,11 @@ public final class CurrentOperator {
         if (!hasRole(role)) throw new BusinessException("PERMISSION_DENIED", "当前账号无权执行该操作");
     }
 
+    public static void requireInternalWebAccess() {
+        requireWebAccess();
+        if (hasRole("WEB_AGENT")) throw new BusinessException("FORBIDDEN", "代理商账号不能访问内部业务资料");
+    }
+
     public static void requireAnyRole(String... roles) {
         requireAuthenticated(SecurityContextHolder.getContext().getAuthentication());
         for (String role : roles) if (hasRole(role)) return;
@@ -70,6 +75,7 @@ public final class CurrentOperator {
     public static void requireWorkstation(String workstationType) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         requireAuthenticated(authentication);
+        if (hasRole("WEB_AGENT")) throw new BusinessException("FORBIDDEN", "代理商不能执行内部工位操作");
         if (hasRole("SUPER_ADMIN")) return;
         String authority = "WORKSTATION_" + workstationType.toUpperCase(java.util.Locale.ROOT);
         if (authentication.getAuthorities().stream().noneMatch(a -> a.getAuthority().equals(authority))) {

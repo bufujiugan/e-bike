@@ -24,6 +24,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ExcelTransferServiceTest {
+    static final jakarta.validation.ValidatorFactory validationFactory = jakarta.validation.Validation.buildDefaultValidatorFactory();
+    static final jakarta.validation.Validator validator = validationFactory.getValidator();
+    @org.junit.jupiter.api.AfterAll static void closeValidator() { validationFactory.close(); }
 
     @org.junit.jupiter.api.BeforeEach
     void setAuthenticatedAdmin() {
@@ -56,7 +59,7 @@ class ExcelTransferServiceTest {
             second.createCell(1).setCellValue("MOTOR");
         });
 
-        ImportResult result = new ExcelTransferService(partService, masterService, orderService, moduleService, auditMapper)
+        ImportResult result = new ExcelTransferService(partService, masterService, orderService, moduleService, auditMapper, validator)
                 .importParts(file);
 
         assertThat(result.totalRows()).isEqualTo(2);
@@ -72,7 +75,7 @@ class ExcelTransferServiceTest {
         PartService partService = Mockito.mock(PartService.class);
         MockMultipartFile file = new MockMultipartFile("file", "parts.txt", "text/plain", "not excel".getBytes());
 
-        assertThatThrownBy(() -> new ExcelTransferService(partService, Mockito.mock(MasterService.class), Mockito.mock(OrderService.class), Mockito.mock(ModuleService.class), Mockito.mock(TransferAuditMapper.class)).importParts(file))
+        assertThatThrownBy(() -> new ExcelTransferService(partService, Mockito.mock(MasterService.class), Mockito.mock(OrderService.class), Mockito.mock(ModuleService.class), Mockito.mock(TransferAuditMapper.class), validator).importParts(file))
                 .isInstanceOf(BusinessException.class)
                 .extracting(BusinessException.class::cast)
                 .extracting(BusinessException::getCode)
@@ -87,7 +90,7 @@ class ExcelTransferServiceTest {
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "not-an-xlsx".getBytes());
 
         assertThatThrownBy(() -> new ExcelTransferService(partService, Mockito.mock(MasterService.class),
-                Mockito.mock(OrderService.class), Mockito.mock(ModuleService.class), Mockito.mock(TransferAuditMapper.class))
+                Mockito.mock(OrderService.class), Mockito.mock(ModuleService.class), Mockito.mock(TransferAuditMapper.class), validator)
                 .importParts(file))
                 .isInstanceOf(BusinessException.class)
                 .extracting(BusinessException.class::cast)
@@ -103,7 +106,7 @@ class ExcelTransferServiceTest {
         Mockito.when(moduleService.list("vehicles", null, 1, 100)).thenReturn(page);
         TransferAuditMapper auditMapper = Mockito.mock(TransferAuditMapper.class);
 
-        byte[] content = new ExcelTransferService(Mockito.mock(PartService.class), Mockito.mock(MasterService.class), Mockito.mock(OrderService.class), moduleService, auditMapper).export("vehicles");
+        byte[] content = new ExcelTransferService(Mockito.mock(PartService.class), Mockito.mock(MasterService.class), Mockito.mock(OrderService.class), moduleService, auditMapper, validator).export("vehicles");
 
         assertThat(content).isNotEmpty();
         try (Workbook workbook = new XSSFWorkbook(new java.io.ByteArrayInputStream(content))) {
@@ -113,6 +116,32 @@ class ExcelTransferServiceTest {
             throw new AssertionError("导出内容不是有效 xlsx", exception);
         }
         Mockito.verify(auditMapper).insert("DATA_EXPORT", "vehicles", null, "test-admin", null, null, "{\"module\":\"vehicles\"}");
+    }
+
+    @Test void zeroQuantityImportIsRejectedBeforeOrderWrite() throws Exception {
+        OrderService orders = Mockito.mock(OrderService.class);
+        var file = workbookFile("orders.xlsx", workbook -> {
+            var row = workbook.getSheetAt(0).createRow(1);
+            row.createCell(0).setCellValue("1"); row.createCell(2).setCellValue("1"); row.createCell(3).setCellValue("0");
+        });
+        var result = new ExcelTransferService(Mockito.mock(PartService.class), Mockito.mock(MasterService.class), orders,
+                Mockito.mock(ModuleService.class), Mockito.mock(TransferAuditMapper.class), validator).importOrders(file);
+        assertThat(result.successRows()).isZero();
+        assertThat(result.failures().getFirst().reason()).contains("订单数量必须大于 0");
+        Mockito.verifyNoInteractions(orders);
+    }
+
+    @Test void invalidQualityStatusIsRejectedBeforePartWrite() throws Exception {
+        PartService parts = Mockito.mock(PartService.class);
+        var file = workbookFile("parts.xlsx", workbook -> {
+            var row = workbook.getSheetAt(0).createRow(1);
+            row.createCell(0).setCellValue("SN-1"); row.createCell(1).setCellValue("MOTOR"); row.createCell(4).setCellValue("UNKNOWN");
+        });
+        var result = new ExcelTransferService(parts, Mockito.mock(MasterService.class), Mockito.mock(OrderService.class),
+                Mockito.mock(ModuleService.class), Mockito.mock(TransferAuditMapper.class), validator).importParts(file);
+        assertThat(result.successRows()).isZero();
+        assertThat(result.failures().getFirst().reason()).contains("质检状态");
+        Mockito.verifyNoInteractions(parts);
     }
 
     private static MockMultipartFile workbookFile(String name, WorkbookWriter writer) throws Exception {

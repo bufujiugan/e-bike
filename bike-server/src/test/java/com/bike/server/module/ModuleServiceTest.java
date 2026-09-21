@@ -16,6 +16,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
 
 class ModuleServiceTest {
 
@@ -34,14 +35,15 @@ class ModuleServiceTest {
                 .extracting(BusinessException.class::cast)
                 .extracting(BusinessException::getCode)
                 .isEqualTo("PERMISSION_DENIED");
-        verify(mapper, never()).selectRows("vehicles", null);
+        verify(mapper, never()).selectRows("vehicles", null, false);
     }
 
     @Test
     void agentsModuleReturnsMasterDataForMasterReadOperator() {
         SecurityContextHolder.getContext().setAuthentication(authentication("WEB_OPERATOR", "PERM_MASTER_READ"));
         ModuleMapper mapper = mock(ModuleMapper.class);
-        when(mapper.selectRows("agents", null)).thenReturn(List.of(
+        when(mapper.countRows(eq("agents"), isNull(), anyList(), isNull(), eq(false))).thenReturn(1L);
+        when(mapper.selectRowsPage(eq("agents"), isNull(), anyList(), isNull(), eq("更新时间"), eq(0L), eq(20L), eq(false))).thenReturn(List.of(
                 Map.of("代理商编号", "AGT-001", "代理商名称", "Global E-Bike", "联系人", "Bob", "联系电话", "139", "状态", "启用", "更新时间", "2026-09-06")
         ));
 
@@ -56,7 +58,8 @@ class ModuleServiceTest {
     void locationsModuleCanBeReadByMasterOperatorButRemainsReadOnlyInWeb() {
         SecurityContextHolder.getContext().setAuthentication(authentication("WEB_OPERATOR", "PERM_MASTER_READ"));
         ModuleMapper mapper = mock(ModuleMapper.class);
-        when(mapper.selectRows("locations", null)).thenReturn(List.of(
+        when(mapper.countRows(eq("locations"), isNull(), anyList(), isNull(), eq(false))).thenReturn(1L);
+        when(mapper.selectRowsPage(eq("locations"), isNull(), anyList(), isNull(), eq("更新时间"), eq(0L), eq(20L), eq(false))).thenReturn(List.of(
                 Map.of("仓库", "成品仓", "仓库编码", "FG-01", "库位", "A区一号位", "库位编码", "A-01-01", "状态", "启用", "更新时间", "2026-09-06")
         ));
 
@@ -70,18 +73,21 @@ class ModuleServiceTest {
     void stockInAndStockOutModulesKeepTheirRecordTypesSeparate() {
         SecurityContextHolder.getContext().setAuthentication(authentication("WEB_OPERATOR", "PERM_STOCK_READ"));
         ModuleMapper mapper = mock(ModuleMapper.class);
-        when(mapper.selectRows("stock-in", null)).thenReturn(List.of(
+        when(mapper.countRows(eq("stock-in"), isNull(), anyList(), isNull(), eq(false))).thenReturn(1L);
+        when(mapper.selectRowsPage(eq("stock-in"), isNull(), anyList(), isNull(), eq("操作时间"), eq(0L), eq(20L), eq(false))).thenReturn(List.of(
                 Map.of("业务单号", "IN-1", "类型", "整车入库", "整车数量", "1 台", "客户 / 仓库", "成品仓", "操作人", "admin", "操作时间", "2026-09-06", "状态", "已完成")
         ));
-        when(mapper.selectRows("stock-out", null)).thenReturn(List.of(
+        when(mapper.countRows(eq("stock-out"), isNull(), anyList(), isNull(), eq(false))).thenReturn(1L);
+        when(mapper.selectRowsPage(eq("stock-out"), isNull(), anyList(), isNull(), eq("操作时间"), eq(0L), eq(20L), eq(false))).thenReturn(List.of(
                 Map.of("业务单号", "OUT-1", "类型", "整车出库", "整车数量", "1 台", "客户 / 仓库", "客户 A", "操作人", "admin", "操作时间", "2026-09-06", "状态", "已完成")
         ));
 
         ModuleService service = new ModuleServiceImpl(mapper);
         assertThat(service.list("stock-in", null, 1, 20).rows().get(0).get(1)).isEqualTo("整车入库");
         assertThat(service.list("stock-out", null, 1, 20).rows().get(0).get(1)).isEqualTo("整车出库");
-        verify(mapper).selectRows("stock-in", null);
-        verify(mapper).selectRows("stock-out", null);
+        verify(mapper).selectRowsPage(eq("stock-in"), isNull(), anyList(), isNull(), eq("操作时间"), eq(0L), eq(20L), eq(false));
+        verify(mapper).selectRowsPage(eq("stock-out"), isNull(), anyList(), isNull(), eq("操作时间"), eq(0L), eq(20L), eq(false));
+        verify(mapper, never()).selectRows(anyString(), any(), anyBoolean());
     }
 
     private static UsernamePasswordAuthenticationToken authentication(String role, String... permissions) {

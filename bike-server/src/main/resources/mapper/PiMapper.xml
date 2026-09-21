@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.pi.PiMapper">
+    <select id="selectCustomerOptions" resultType="map">
+        SELECT id,customer_code code,customer_name name FROM bike_customer WHERE status='ENABLED'
+        <if test="keyword != null">AND (customer_code LIKE CONCAT('%',#{keyword},'%') OR customer_name LIKE CONCAT('%',#{keyword},'%'))</if>
+        ORDER BY customer_code,id LIMIT 200
+    </select>
+    <select id="selectAgentOptions" resultType="map">
+        SELECT id,agent_code code,agent_name name FROM bike_agent WHERE status='ENABLED'
+        <if test="keyword != null">AND (agent_code LIKE CONCAT('%',#{keyword},'%') OR agent_name LIKE CONCAT('%',#{keyword},'%'))</if>
+        ORDER BY agent_code,id LIMIT 200
+    </select>
+    <select id="selectSkuOptions" resultType="map">
+        SELECT s.id,s.model_id modelId,s.sku_code skuCode,s.product_name productName,s.specification,s.enabled
+        FROM bike_production_sku s JOIN bike_product_model m ON m.id=s.model_id
+        WHERE s.enabled=1 AND m.enabled=1
+        <if test="keyword != null">AND (s.sku_code LIKE CONCAT('%',#{keyword},'%') OR s.product_name LIKE CONCAT('%',#{keyword},'%'))</if>
+        ORDER BY s.sku_code,s.id LIMIT 200
+    </select>
+    <select id="selectOrderOptions" resultType="map">
+        SELECT o.id,o.order_no orderNo,o.customer_id customerId,o.agent_id agentId,o.status,
+               i.product_model_id modelId,i.ordered_qty quantity
+        FROM bike_sales_order o JOIN bike_sales_order_item i ON i.order_id=o.id
+        WHERE o.status IN ('DRAFT','PENDING','CONFIRMED') AND i.shipped_qty=0
+        AND NOT EXISTS(SELECT 1 FROM bike_pi p WHERE p.source_order_id=o.id)
+        <if test="keyword != null">AND o.order_no LIKE CONCAT('%',#{keyword},'%')</if>
+        ORDER BY o.id DESC LIMIT 200
+    </select>
+    <sql id="base">
+        SELECT p.id,p.pi_no,p.revision,p.series_id,p.previous_revision_id,p.customer_id,p.customer_code,p.customer_name,
+               p.agent_id,a.agent_name,p.source_order_id,p.trade_type,p.currency_code,p.status,
+               p.payment_status,p.release_status,p.planned_ship_date,p.subtotal,p.discount_amount,
+               <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationStatus"/> reservation_status,
+               p.tax_amount,p.freight_amount,p.total_amount,p.deposit_required_amount,p.shipment_required_amount,
+               COALESCE((SELECT SUM(x.amount) FROM bike_pi_payment x JOIN bike_pi px ON px.id=x.pi_id
+                         WHERE (px.series_id=p.series_id OR (px.series_id IS NULL AND p.series_id IS NULL AND px.id=p.id)) AND x.status='CONFIRMED'),0) paid_amount,
+               p.document_snapshot document_json,p.remark,p.released_at,p.created_at,p.updated_at
+        FROM bike_pi p LEFT JOIN bike_agent a ON a.id=p.agent_id
+        LEFT JOIN bike_sales_order o ON o.id=p.source_order_id
+        LEFT JOIN bike_order_reservation r ON r.order_id=o.id
+    </sql>
+    <sql id="where">
+        <where>
+            <if test="keyword != null and keyword != ''">
+                AND (p.pi_no LIKE CONCAT('%',#{keyword},'%') OR p.customer_name LIKE CONCAT('%',#{keyword},'%'))
+            </if>
+            <if test="status != null and status != ''">AND p.status=#{status}</if>
+            <if test="agentId != null">AND p.agent_id=#{agentId} AND p.status IN ('CONFIRMED','RELEASED')</if>
+        </where>
+    </sql>
+    <select id="selectPage" resultType="com.bike.server.pi.PiView">
+        <include refid="base"/><include refid="where"/>
+        ORDER BY p.updated_at DESC,p.id DESC LIMIT #{offset},#{limit}
+    </select>
+    <select id="count" resultType="long">SELECT COUNT(*) FROM bike_pi p <include refid="where"/></select>
+    <select id="selectById" resultType="com.bike.server.pi.PiView"><include refid="base"/> WHERE p.id=#{id}</select>
+    <select id="selectForUpdate" resultType="com.bike.server.pi.PiView"><include refid="base"/> WHERE p.id=#{id} FOR UPDATE</select>
+    <select id="selectRevisions" resultType="com.bike.server.pi.PiView"><include refid="base"/> WHERE p.series_id=#{seriesId} ORDER BY p.revision</select>
+    <select id="selectForSourceOrderForUpdate" resultType="com.bike.server.pi.PiView">
+        <include refid="base"/> WHERE p.source_order_id=#{orderId} FOR UPDATE
+    </select>
+    <select id="lockPi" resultType="long">SELECT id FROM bike_pi WHERE id=#{id} FOR UPDATE</select>
+    <insert id="insertPi">
+        INSERT INTO bike_pi(pi_no,revision,customer_id,customer_code,customer_name,agent_id,source_order_id,
+            trade_type,currency_code,status,payment_status,release_status,planned_ship_date,subtotal,
+            discount_amount,tax_amount,freight_amount,total_amount,deposit_required_amount,
+            shipment_required_amount,document_snapshot,remark,created_by)
+        SELECT #{piNo},1,c.id,c.customer_code,c.customer_name,#{agentId},#{request.sourceOrderId},
+            #{tradeType},#{currencyCode},'DRAFT','UNPAID','BLOCKED',#{request.plannedShipDate},#{subtotal},
+            #{discountAmount},#{taxAmount},#{freightAmount},#{totalAmount},#{depositRequiredAmount},
+            #{shipmentRequiredAmount},#{documentJson},#{request.remark},#{createdBy}
+        FROM bike_customer c WHERE c.id=#{request.customerId} AND c.status='ENABLED'
+    </insert>
+    <insert id="insertItems">
+        INSERT INTO bike_pi_item(pi_id,sku_id,product_model_id,sku_code,product_name,specification,model_name,
+            ordered_qty,unit_price,discount_amount,tax_amount,line_total) VALUES
+        <foreach collection="items" item="item" separator=",">
+            (#{piId},#{item.skuId},#{item.productModelId},#{item.skuCode},#{item.productName},
+             #{item.specification},#{item.modelName},#{item.quantity},#{item.unitPrice},
+             #{item.discountAmount},#{item.taxAmount},#{item.lineTotal})
+        </foreach>
+    </insert>
+    <delete id="deleteItems">DELETE FROM bike_pi_item WHERE pi_id=#{piId}</delete>
+    <update id="updatePi">
+        UPDATE bike_pi p JOIN bike_customer c ON c.id=#{request.customerId} AND c.status='ENABLED'
+        SET p.customer_id=c.id,p.customer_code=c.customer_code,p.customer_name=c.customer_name,
+            p.agent_id=#{agentId},p.trade_type=#{tradeType},p.currency_code=#{currencyCode},
+            p.planned_ship_date=#{request.plannedShipDate},p.subtotal=#{subtotal},p.discount_amount=#{discountAmount},
+            p.tax_amount=#{taxAmount},p.freight_amount=#{freightAmount},p.total_amount=#{totalAmount},
+            p.deposit_required_amount=#{depositRequiredAmount},p.shipment_required_amount=#{shipmentRequiredAmount},
+            p.document_snapshot=#{documentJson},p.remark=#{request.remark}
+        WHERE p.id=#{id} AND p.status='DRAFT'
+    </update>
+    <select id="countPayments" resultType="int">SELECT COUNT(*) FROM bike_pi_payment WHERE pi_id=#{id} FOR UPDATE</select>
+    <select id="countShipments" resultType="int">
+        SELECT COUNT(*) FROM bike_stock_out_record WHERE order_id=#{orderId} FOR UPDATE
+    </select>
+    <select id="countEnabledCustomer" resultType="int">SELECT COUNT(*) FROM bike_customer WHERE id=#{id} AND status='ENABLED'</select>
+    <select id="countEnabledAgent" resultType="int">SELECT COUNT(*) FROM bike_agent WHERE id=#{id} AND status='ENABLED'</select>
+    <select id="selectEnabledSku" resultType="com.bike.server.pi.PiSkuSnapshot">
+        SELECT s.id,s.model_id product_model_id,s.sku_code,s.product_name,s.specification,m.model_name
+        FROM bike_production_sku s JOIN bike_product_model m ON m.id=s.model_id
+        WHERE s.id=#{id} AND s.enabled=1 AND m.enabled=1
+    </select>
+    <select id="lockOrder" resultType="long">SELECT id FROM bike_sales_order WHERE id=#{id} FOR UPDATE</select>
+    <select id="countForOrder" resultType="int">SELECT COUNT(*) FROM bike_pi WHERE source_order_id=#{id} FOR UPDATE</select>
+    <select id="countOrder" resultType="int">
+        SELECT COUNT(*) FROM bike_sales_order WHERE id=#{id} AND customer_id=#{customerId}
+        AND agent_id &lt;=&gt; #{agentId} AND status NOT IN ('CANCELLED','CLOSED')
+        FOR UPDATE
+    </select>
+    <select id="selectOrderLines" resultType="com.bike.server.pi.PiOrderLine">
+        SELECT product_model_id,ordered_qty quantity,shipped_qty shipped_quantity
+        FROM bike_sales_order_item WHERE order_id=#{orderId} ORDER BY id FOR UPDATE
+    </select>
+    <update id="updateStatus">
+        UPDATE bike_pi SET status=#{status},
+            confirmed_by=CASE WHEN #{status}='CONFIRMED' THEN #{operatorId} ELSE confirmed_by END
+        <if test="status == 'CANCELLED'">,release_status='BLOCKED'</if>
+        <if test="released">,release_status='RELEASED',released_by=#{operatorId},released_at=CURRENT_TIMESTAMP(3)</if>
+        WHERE id=#{id} AND status=#{from}
+        <if test="released">
+            AND shipment_required_amount IS NOT NULL
+            AND (SELECT q.paid FROM (SELECT COALESCE(SUM(pay.amount),0) paid FROM bike_pi_payment pay JOIN bike_pi p0 ON p0.id=pay.pi_id
+                 JOIN bike_pi p1 ON (p1.series_id=p0.series_id OR (p1.series_id IS NULL AND p0.series_id IS NULL AND p1.id=p0.id))
+                 WHERE p1.id=#{id} AND pay.status='CONFIRMED') q) &gt;= shipment_required_amount
+        </if>
+    </update>
+    <insert id="insertPayment">
+        INSERT INTO bike_pi_payment(pi_id,request_id,amount,currency_code,voucher_object_key,status,received_at,confirmed_by,remark)
+        VALUES(#{piId},#{request.requestId},#{request.amount},#{request.currencyCode},#{request.voucherObjectKey},
+            'CONFIRMED',COALESCE(#{request.receivedAt},CURRENT_TIMESTAMP(3)),#{operatorId},#{request.remark})
+    </insert>
+    <sql id="paymentColumns">pay.id,pay.pi_id,pay.request_id,pay.amount,pay.currency_code,pay.voucher_object_key,pay.status,pay.received_at,pay.confirmed_by,pay.remark</sql>
+    <select id="selectPaymentByRequest" resultType="com.bike.server.pi.PiPaymentView">
+        SELECT <include refid="paymentColumns"/> FROM bike_pi_payment pay JOIN bike_pi p0 ON p0.id=pay.pi_id
+        JOIN bike_pi p1 ON (p1.series_id=p0.series_id OR (p1.series_id IS NULL AND p0.series_id IS NULL AND p1.id=p0.id))
+        WHERE p1.id=#{piId} AND pay.request_id=#{requestId}
+    </select>
+    <select id="paymentTotal" resultType="java.math.BigDecimal">
+        SELECT COALESCE(SUM(pay.amount),0) FROM bike_pi_payment pay JOIN bike_pi p0 ON p0.id=pay.pi_id
+        JOIN bike_pi p1 ON (p1.series_id=p0.series_id OR (p1.series_id IS NULL AND p0.series_id IS NULL AND p1.id=p0.id))
+        WHERE p1.id=#{piId} AND pay.status='CONFIRMED' FOR UPDATE
+    </select>
+    <update id="updatePaymentStatus">UPDATE bike_pi SET payment_status=#{status} WHERE id=#{id}</update>
+    <insert id="insertLogistics">
+        INSERT INTO bike_pi_logistics(pi_id,batch_no,carrier,tracking_no,status,shipped_at,remark,created_by)
+        VALUES(#{piId},#{request.batchNo},#{request.carrier},#{request.trackingNo},#{request.status},
+            CASE WHEN #{request.status}='SHIPPED' THEN CURRENT_TIMESTAMP(3) ELSE NULL END,#{request.remark},#{operatorId})
+    </insert>
+    <select id="selectItems" resultType="com.bike.server.pi.PiItemView">
+        SELECT id,sku_id,product_model_id,sku_code,product_name,specification,model_name,
+               ordered_qty quantity,unit_price,discount_amount,tax_amount,line_total
+        FROM bike_pi_item WHERE pi_id=#{piId} ORDER BY id
+    </select>
+    <select id="selectPayments" resultType="com.bike.server.pi.PiPaymentView">
+        SELECT <include refid="paymentColumns"/> FROM bike_pi_payment pay WHERE pay.pi_id=#{piId} ORDER BY pay.received_at,pay.id
+    </select>
+    <select id="selectLogistics" resultType="com.bike.server.pi.PiLogisticsView">
+        SELECT id,pi_id,batch_no,carrier,tracking_no,status,shipped_at,remark,created_by,created_at
+        FROM bike_pi_logistics WHERE pi_id=#{piId} ORDER BY created_at,id
+    </select>
+    <select id="selectInsertedId" resultType="long">SELECT LAST_INSERT_ID()</select>
+    <insert id="cloneRevision">
+        INSERT INTO bike_pi(series_id,previous_revision_id,pi_no,revision,customer_id,customer_code,customer_name,agent_id,
+            trade_type,currency_code,status,payment_status,release_status,planned_ship_date,subtotal,discount_amount,tax_amount,
+            freight_amount,total_amount,deposit_required_amount,shipment_required_amount,document_snapshot,source_order_id,remark,created_by)
+        SELECT #{seriesId},#{piId},pi_no,#{revision},customer_id,customer_code,customer_name,agent_id,trade_type,currency_code,
+            'DRAFT','UNPAID','BLOCKED',planned_ship_date,subtotal,discount_amount,tax_amount,freight_amount,total_amount,
+            deposit_required_amount,shipment_required_amount,document_snapshot,NULL,remark,#{operatorId} FROM bike_pi WHERE id=#{piId}
+    </insert>
+    <insert id="cloneItems">
+        INSERT INTO bike_pi_item(pi_id,sku_id,product_model_id,sku_code,product_name,specification,model_name,ordered_qty,unit_price,discount_amount,tax_amount,line_total)
+        SELECT #{targetPiId},sku_id,product_model_id,sku_code,product_name,specification,model_name,ordered_qty,unit_price,discount_amount,tax_amount,line_total
+        FROM bike_pi_item WHERE pi_id=#{sourcePiId}
+    </insert>
+</mapper>

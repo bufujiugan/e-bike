@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.stock.SkuInventoryMapper">
+  <select id="lockSkuModel" resultType="long">SELECT s.model_id FROM bike_production_sku s JOIN bike_product_model m ON m.id=s.model_id WHERE s.id=#{skuId} AND s.enabled=1 AND m.enabled=1 FOR UPDATE</select>
+  <select id="vehicleSku" resultType="long">SELECT sku_id FROM bike_production_vehicle WHERE vehicle_id=#{vehicleId}</select>
+  <select id="snapshot" resultType="com.bike.server.stock.SkuInventorySnapshot">
+    SELECT (SELECT COUNT(*) FROM bike_vehicle v JOIN bike_production_vehicle pv ON pv.vehicle_id=v.id
+      WHERE pv.sku_id=#{skuId} AND v.status=2 AND NOT <include refid="com.bike.server.stock.InventoryPolicyMapper.quarantined"/>) physical_qty,
+      COALESCE(SUM(c.qty),0) committed_qty,
+      COALESCE(SUM(CASE WHEN c.order_id=#{orderId} AND c.kind='ORDER' THEN c.qty ELSE 0 END),0) owned_qty
+    FROM (<include refid="com.bike.server.stock.InventoryPolicyMapper.skuCommitments"/>) c WHERE c.sku_id=#{skuId}
+  </select>
+  <sql id="skuWhere"><where>
+    <if test="modelId != null">AND s.model_id=#{modelId}</if>
+    <if test="agentId != null">AND EXISTS(SELECT 1 FROM bike_agent_model_access access
+      JOIN bike_agent a ON a.id=access.agent_id AND a.status='ENABLED'
+      WHERE access.agent_id=#{agentId} AND access.model_id=s.model_id AND access.enabled=1 AND m.enabled=1)</if>
+  </where></sql>
+  <select id="count" resultType="long">SELECT COUNT(*) FROM bike_production_sku s JOIN bike_product_model m ON m.id=s.model_id <include refid="skuWhere"/></select>
+  <select id="list" resultType="com.bike.server.stock.SkuInventoryRow">
+    WITH sc AS (<include refid="com.bike.server.stock.InventoryPolicyMapper.skuCommitments"/>),
+    sku_commit AS (SELECT sku_id,model_id,SUM(qty) qty,
+      SUM(CASE WHEN kind='TEMPORARY' THEN qty ELSE 0 END) temporary_qty,
+      SUM(CASE WHEN kind='ORDER' THEN qty ELSE 0 END) order_qty FROM sc GROUP BY sku_id,model_id),
+    sku_physical AS (SELECT pv.sku_id,COUNT(*) qty,SUM(<include refid="com.bike.server.stock.InventoryPolicyMapper.quarantined"/>) quarantined
+      FROM bike_vehicle v JOIN bike_production_vehicle pv ON pv.vehicle_id=v.id WHERE v.status=2 GROUP BY pv.sku_id),
+    model_physical AS (SELECT v.model_id,COUNT(*) qty FROM bike_vehicle v WHERE v.status=2 AND NOT <include refid="com.bike.server.stock.InventoryPolicyMapper.quarantined"/> GROUP BY v.model_id),
+    model_commit AS (SELECT model_id,SUM(qty) qty FROM (<include refid="com.bike.server.stock.InventoryPolicyMapper.commitments"/>) c GROUP BY model_id),
+    model_sku_commit AS (SELECT model_id,SUM(qty) qty FROM sc GROUP BY model_id)
+    SELECT s.id sku_id,s.model_id,s.sku_code,s.product_name,s.specification,m.model_name,
+      COALESCE(p.qty,0) physical_qty,COALESCE(p.quarantined,0) quarantined_qty,
+      COALESCE(c.temporary_qty,0) temporary_locked_qty,COALESCE(c.order_qty,0) order_reserved_qty,
+      GREATEST(0,COALESCE(p.qty,0)-COALESCE(p.quarantined,0)-COALESCE(c.qty,0)) available_qty,
+      GREATEST(0,COALESCE(c.qty,0)-COALESCE(p.qty,0)+COALESCE(p.quarantined,0)) shortage_qty,
+      COALESCE(mc.qty,0)-COALESCE(ms.qty,0) legacy_model_committed_qty,
+      GREATEST(0,COALESCE(mp.qty,0)-COALESCE(mc.qty,0)) model_available_qty,
+      GREATEST(0,LEAST(COALESCE(p.qty,0)-COALESCE(p.quarantined,0)-COALESCE(c.qty,0),COALESCE(mp.qty,0)-COALESCE(mc.qty,0))) max_new_lock_qty
+    FROM bike_production_sku s JOIN bike_product_model m ON m.id=s.model_id
+    LEFT JOIN sku_physical p ON p.sku_id=s.id LEFT JOIN sku_commit c ON c.sku_id=s.id
+    LEFT JOIN model_physical mp ON mp.model_id=s.model_id LEFT JOIN model_commit mc ON mc.model_id=s.model_id
+    LEFT JOIN model_sku_commit ms ON ms.model_id=s.model_id <include refid="skuWhere"/>
+    ORDER BY s.model_id,s.id LIMIT #{offset},#{limit}
+  </select>
+  <select id="reservationItems" resultType="com.bike.server.stock.SkuReservationItem">SELECT sku_id,ordered_qty,shipped_qty,closed_qty FROM bike_order_reservation_item WHERE order_id=#{orderId} ORDER BY sku_id</select>
+  <update id="markSkuScope">UPDATE bike_order_reservation SET scope_type='SKU' WHERE order_id=#{orderId}</update>
+  <insert id="insertReservationItem">INSERT INTO bike_order_reservation_item(order_id,sku_id,ordered_qty) SELECT r.order_id,s.id,#{quantity} FROM bike_order_reservation r JOIN bike_production_sku s ON s.model_id=r.model_id WHERE r.order_id=#{orderId} AND s.id=#{skuId} AND r.scope_type='SKU'</insert>
+  <update id="increaseShipped">UPDATE bike_order_reservation_item SET shipped_qty=shipped_qty+1 WHERE order_id=#{orderId} AND sku_id=#{skuId} AND shipped_qty+closed_qty&lt;ordered_qty</update>
+  <update id="decreaseShipped">UPDATE bike_order_reservation_item SET shipped_qty=shipped_qty-1 WHERE order_id=#{orderId} AND sku_id=#{skuId} AND shipped_qty&gt;0 AND closed_qty=0</update>
+  <update id="closeRemainder">UPDATE bike_order_reservation_item SET closed_qty=ordered_qty-shipped_qty WHERE order_id=#{orderId}</update>
+</mapper>

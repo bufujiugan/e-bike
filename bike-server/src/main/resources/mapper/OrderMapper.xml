@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.bike.server.order.OrderMapper">
-    <sql id="orderSelect">SELECT o.id,o.order_no,o.customer_id,c.customer_name,o.agent_id,a.agent_name,i.product_model_id model_id,m.model_name,i.ordered_qty order_qty,i.shipped_qty,o.status,o.planned_ship_date,o.created_at,o.updated_at FROM bike_sales_order o JOIN bike_customer c ON c.id=o.customer_id LEFT JOIN bike_agent a ON a.id=o.agent_id JOIN bike_sales_order_item i ON i.order_id=o.id JOIN bike_product_model m ON m.id=i.product_model_id</sql>
+    <sql id="orderSelect">SELECT <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationStatus"/> reservation_status,r.hold_mode reservation_hold_mode,r.payment_held_at reservation_held_at,r.expires_at reservation_expires_at,il.lock_no source_lock_no,r.reserved_qty,o.id,o.order_no,o.customer_id,c.customer_name,o.agent_id,a.agent_name,i.product_model_id model_id,m.model_name,i.ordered_qty order_qty,i.shipped_qty,o.status,o.planned_ship_date,o.remark,o.created_at,o.updated_at FROM bike_sales_order o JOIN bike_customer c ON c.id=o.customer_id LEFT JOIN bike_agent a ON a.id=o.agent_id JOIN bike_sales_order_item i ON i.order_id=o.id JOIN bike_product_model m ON m.id=i.product_model_id LEFT JOIN bike_order_reservation r ON r.order_id=o.id LEFT JOIN bike_inventory_lock il ON il.id=r.source_lock_id</sql>
     <sql id="orderWhere"><where><if test="keyword != null and keyword != ''">AND (o.order_no LIKE CONCAT('%',#{keyword},'%') OR c.customer_name LIKE CONCAT('%',#{keyword},'%'))</if><if test="status != null and status != ''">AND o.status=#{status}</if><if test="agentId != null">AND o.agent_id=#{agentId}</if></where></sql>
     <select id="selectPage" resultType="com.bike.server.order.SalesOrderView"><include refid="orderSelect"/><include refid="orderWhere"/> ORDER BY o.updated_at DESC LIMIT #{offset},#{limit}</select>
     <select id="count" resultType="long">SELECT COUNT(*) FROM bike_sales_order o JOIN bike_customer c ON c.id=o.customer_id <include refid="orderWhere"/></select>
@@ -19,12 +19,13 @@
     <select id="countEnabledCustomer" resultType="int">SELECT COUNT(*) FROM bike_customer WHERE id=#{customerId} AND status='ENABLED'</select>
     <select id="countEnabledModel" resultType="int">SELECT COUNT(*) FROM bike_product_model WHERE id=#{modelId} AND enabled=1</select>
     <select id="countEnabledAgent" resultType="int">SELECT COUNT(*) FROM bike_agent WHERE id=#{agentId} AND status='ENABLED'</select>
-    <insert id="insertOrder">INSERT INTO bike_sales_order(order_no,customer_id,agent_id,planned_ship_date,status,created_by) VALUES(#{orderNo},#{request.customerId},#{request.agentId},#{request.plannedShipDate},'DRAFT',#{createdBy})</insert>
+    <insert id="insertOrder">INSERT INTO bike_sales_order(order_no,customer_id,agent_id,planned_ship_date,status,created_by,remark) VALUES(#{orderNo},#{request.customerId},#{request.agentId},#{request.plannedShipDate},'DRAFT',#{createdBy},#{request.remark})</insert>
     <insert id="insertItem">INSERT INTO bike_sales_order_item(order_id,product_model_id,ordered_qty,shipped_qty) SELECT id,#{request.modelId},#{request.orderQty},0 FROM bike_sales_order WHERE order_no=#{orderNo}</insert>
-    <update id="updateOrder">UPDATE bike_sales_order SET customer_id=#{request.customerId},agent_id=#{request.agentId},planned_ship_date=#{request.plannedShipDate} WHERE id=#{id} AND status IN ('DRAFT','PENDING')</update>
+    <update id="updateOrder">UPDATE bike_sales_order SET customer_id=#{request.customerId},agent_id=#{request.agentId},planned_ship_date=#{request.plannedShipDate},remark=#{request.remark} WHERE id=#{id} AND status IN ('DRAFT','PENDING')</update>
     <update id="updateItem">UPDATE bike_sales_order_item SET product_model_id=#{request.modelId},ordered_qty=#{request.orderQty} WHERE order_id=#{orderId} AND shipped_qty &lt;= #{request.orderQty}</update>
     <update id="updateStatus">UPDATE bike_sales_order SET status=#{status} WHERE id=#{id}</update>
     <update id="increaseShipped">UPDATE bike_sales_order_item SET shipped_qty=shipped_qty+#{qty} WHERE order_id=#{orderId} AND shipped_qty+#{qty} &lt;= ordered_qty</update>
     <update id="decreaseShipped">UPDATE bike_sales_order_item SET shipped_qty=GREATEST(0,shipped_qty-#{qty}) WHERE order_id=#{orderId}</update>
     <insert id="insertOperationLog">INSERT INTO bike_operation_log(business_type,business_id,action,operator_id,operator_name,before_data,after_data,client_ip,remark) VALUES(#{businessType},#{businessId},#{action},#{operatorId},#{operatorName},JSON_OBJECT('status',#{beforeStatus}),JSON_OBJECT('status',#{afterStatus}),#{clientIp},#{remark})</insert>
 </mapper>
+

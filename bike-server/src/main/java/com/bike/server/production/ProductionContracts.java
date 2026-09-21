@@ -28,8 +28,8 @@ public final class ProductionContracts {
       @Size(max = 64) String batchNo) {}
 
   public record ScanRequest(
-      @NotBlank @Size(max = 255) String code,
-      @Pattern(regexp = "FRAME|MOTOR|BATTERY|DISPLAY") String expectedType) {}
+      @NotBlank(message = "扫码编码不能为空") @Size(max = 255, message = "扫码编码不能超过255个字符") String code,
+      @Pattern(regexp = "FRAME|MOTOR|BATTERY|DISPLAY", message = "编码类型必须为车架、电机、电池或仪表") String expectedType) {}
 
   public record ReasonRequest(@NotBlank @Size(max = 500) String reason) {}
 

@@ -24,6 +24,8 @@ public class AuthServiceImpl implements AuthService {
     private final ConcurrentHashMap<String, LoginAttempt> failedAttempts = new ConcurrentHashMap<>();
     private static final int MAX_FAILURES = 5;
     private static final long LOCK_SECONDS = 15 * 60;
+    @Autowired(required = false)
+    private TokenRevocationMapper revocations;
 
     @Autowired
     public AuthServiceImpl(
@@ -58,8 +60,8 @@ public class AuthServiceImpl implements AuthService {
         UserAuthRecord databaseUser = userMapper == null ? null : userMapper.selectAuthByUsername(request.username());
         boolean databaseValid = databaseUser != null && databaseUser.enabled()
                 && passwordEncoder.matches(request.password(), databaseUser.passwordHash());
-        // 仅在数据库中不存在该账号时使用配置兜底；账号一旦落库，密码以数据库为准，避免改密后旧配置仍可登录。
-        boolean configValid = databaseUser == null && adminPasswordHash != null && adminUsername.equals(request.username())
+        // 配置账号只供无数据库的兼容测试使用；正式运行必须由数据库确认账号。
+        boolean configValid = userMapper == null && adminPasswordHash != null && adminUsername.equals(request.username())
                 && passwordEncoder.matches(request.password(), adminPasswordHash);
         if (!databaseValid && !configValid) {
             if (loginLogMapper != null) loginLogMapper.insert(request.username(), false, normalizeClientIp(clientIp), "用户名或密码错误");
@@ -72,28 +74,45 @@ public class AuthServiceImpl implements AuthService {
         failedAttempts.remove(request.username());
         if (databaseValid) userMapper.updateLastLogin(databaseUser.username());
         if (loginLogMapper != null) loginLogMapper.insert(request.username(), true, normalizeClientIp(clientIp), null);
-        JwtTokenService.Token token = jwtTokenService.issue(request.username());
+        JwtTokenService.Token token = jwtTokenService.issue(request.username(), databaseValid ? databaseUser.authVersion() : 0);
         return new LoginResponse(token.value(), "Bearer", token.expiresInSeconds(), request.username(),
                 databaseValid && databaseUser.mustChangePassword());
     }
 
     @Override
-    public LoginResponse me(String username) {
-        JwtTokenService.Token token = jwtTokenService.issue(username);
+    public LoginResponse me(String username, String token) {
+        var identity = jwtTokenService.parse(token);
         UserAuthRecord user = userMapper == null ? null : userMapper.selectAuthByUsername(username);
-        return new LoginResponse(token.value(), "Bearer", token.expiresInSeconds(), username,
+        if (!username.equals(identity.username()) || user == null || !user.enabled()
+                || user.authVersion() != identity.authVersion()
+                || (revocations != null && revocations.countRevoked(identity.id()) > 0))
+            throw new BusinessException("UNAUTHORIZED", "登录凭证已失效");
+        // 查询当前身份不续发凭证，避免退出前派生出仍有效的其他凭证。
+        return new LoginResponse(token, "Bearer", Math.max(0, java.time.Duration.between(Instant.now(), identity.expiresAt()).toSeconds()), username,
                 user != null && user.mustChangePassword());
+    }
+
+    @Override
+    public void logout(String token) {
+        var identity = jwtTokenService.parse(token);
+        if (revocations == null) throw new IllegalStateException("登录凭证撤销存储不可用");
+        revocations.revoke(identity.id(), identity.expiresAt());
     }
 
     @Override
     public AuthContextResponse context(String username) {
         UserAuthRecord user = userMapper == null ? null : userMapper.selectAuthByUsername(username);
-        if (user == null) {
+        if (userMapper == null) {
             return new AuthContextResponse(username, "WEB_ADMIN", null,
                     java.util.List.of("SUPER_ADMIN"), java.util.List.of("*"), java.util.List.of("*"), false);
         }
+        if (user == null || !user.enabled()) throw new BusinessException("UNAUTHORIZED", "账号不存在或已停用");
+        var roles = new java.util.ArrayList<>(userMapper.selectRoleCodes(username));
+        if (roles.isEmpty()) throw new BusinessException("PERMISSION_DENIED", "账号没有启用的角色");
+        if ("AGENT".equals(user.userType()) && !roles.contains("WEB_AGENT")) roles.add("WEB_AGENT");
+        if ("PDA_OPERATOR".equals(user.userType()) && !roles.contains("PDA_OPERATOR")) roles.add("PDA_OPERATOR");
         return new AuthContextResponse(username, user.userType(), user.agentId(),
-                userMapper.selectRoleCodes(username), userMapper.selectPermissionCodes(username),
+                roles, userMapper.selectPermissionCodes(username),
                 userMapper.selectWorkstationTypes(username), user.mustChangePassword());
     }
 

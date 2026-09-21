@@ -24,6 +24,28 @@ class OrderServiceTest {
     }
 
     @Test
+    void agentCannotInferPaidHoldFromOriginalDeadlineInEitherActiveMode() {
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                "agent", "N/A", java.util.List.of(new SimpleGrantedAuthority("ROLE_WEB_AGENT"),
+                new SimpleGrantedAuthority("PERM_ORDER_READ"))));
+        for (String mode : java.util.List.of("TIMED", "PAID")) {
+            OrderMapper mapper = Mockito.mock(OrderMapper.class);
+            SalesOrderView order = order(7L, "SO-7", "CONFIRMED", 0, 2);
+            order.setReservationHoldMode(mode);
+            order.setReservationStatus("PAID".equals(mode) ? "PAID_HELD" : "TIMED_ACTIVE");
+            order.setReservationExpiresAt(java.time.LocalDateTime.of(2020, 1, 1, 0, 0));
+            order.setReservationHeldAt(java.time.LocalDateTime.of(2019, 12, 31, 0, 0));
+            assertThat(order.getReservationExpiresAt()).isNotNull();
+            Mockito.when(mapper.selectById(7L)).thenReturn(order);
+            SalesOrderView response = new OrderServiceImpl(mapper).get(7L);
+            assertThat(response.getReservationStatus()).isEqualTo("ACTIVE");
+            assertThat(response.getReservationExpiresAt()).isNull();
+            assertThat(response.getReservationHoldMode()).isNull();
+            assertThat(response.getReservationHeldAt()).isNull();
+        }
+    }
+
+    @Test
     void cancelPersistsNormalizedReasonInAuditLog() {
         OrderMapper mapper = Mockito.mock(OrderMapper.class);
         SalesOrderView order = order(7L, "SO-7", "DRAFT", 0, 2);

@@ -12,6 +12,7 @@ public final class ProductionAccess {
         "ASSEMBLY_OPERATE",
         "REWORK_OPERATE",
         "VEHICLE_READ",
+        "PRODUCTION_MANAGE",
         "STOCK_IN_OPERATE",
         "STOCK_OUT_OPERATE");
     if (CurrentOperator.hasRole("WEB_AGENT"))
@@ -51,6 +52,7 @@ public final class ProductionAccess {
   }
 
   public static void manage() {
-    CurrentOperator.requireRole("SUPER_ADMIN");
+    CurrentOperator.requireInternalWebAccess();
+    CurrentOperator.requirePermission("PRODUCTION_MANAGE");
   }
 }

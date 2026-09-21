@@ -7,6 +7,10 @@ public class VehicleView {
     private String frameSn;
     private Long modelId;
     private String modelName;
+    private Long skuId;
+    private String skuCode;
+    private String productName;
+    private String batchNo;
     private Integer status;
     private String statusName;
     private String vehicleQrCode;
@@ -38,6 +42,14 @@ public class VehicleView {
     public Long getModelId() { return modelId; }
     public void setModelId(Long modelId) { this.modelId = modelId; }
     public String getModelName() { return modelName; }
+    public Long getSkuId() { return skuId; }
+    public void setSkuId(Long value) { skuId = value; }
+    public String getSkuCode() { return skuCode; }
+    public void setSkuCode(String value) { skuCode = value; }
+    public String getProductName() { return productName; }
+    public void setProductName(String value) { productName = value; }
+    public String getBatchNo() { return batchNo; }
+    public void setBatchNo(String value) { batchNo = value; }
     public void setModelName(String modelName) { this.modelName = modelName; }
     public Integer getStatus() { return status; }
     public void setStatus(Integer status) { this.status = status; }

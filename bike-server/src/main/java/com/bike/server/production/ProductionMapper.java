@@ -13,6 +13,7 @@ public interface ProductionMapper {
 
   List<Map<String, Object>> selectProductionInventory(
       @Param("skuId") Long skuId, @Param("warehouseId") Long warehouseId);
+  List<Map<String, Object>> selectProductionInventoryFiltered(@Param("skuId") Long skuId, @Param("warehouseId") Long warehouseId, @Param("locationId") Long locationId);
 
   List<Map<String, Object>> selectSkus();
 
@@ -37,6 +38,10 @@ public interface ProductionMapper {
       @Param("keyword") String keyword, @Param("offset") long offset);
 
   int countTasks(String keyword);
+  List<Map<String,Object>> selectTasksFiltered(@Param("keyword") String keyword, @Param("offset") long offset,
+      @Param("skuId") Long skuId, @Param("status") String status, @Param("fromDate") java.time.LocalDate fromDate, @Param("toDate") java.time.LocalDate toDate);
+  int countTasksFiltered(@Param("keyword") String keyword, @Param("skuId") Long skuId, @Param("status") String status,
+      @Param("fromDate") java.time.LocalDate fromDate, @Param("toDate") java.time.LocalDate toDate);
 
   List<Map<String, Object>> selectScans(String taskId);
 
@@ -69,7 +74,8 @@ public interface ProductionMapper {
 
   int countOpenIssues(String code);
 
-  List<Map<String, Object>> selectQuarantinedParts();
+  List<Map<String, Object>> selectQuarantinedParts(@Param("keyword") String keyword, @Param("offset") long offset);
+  int countQuarantinedParts(@Param("keyword") String keyword);
 
   int updatePartReleased(String code);
 
@@ -123,6 +129,7 @@ public interface ProductionMapper {
       @Param("operator") String operator);
 
   Map<String, Object> selectPrint(String id);
+  List<Map<String, Object>> selectVehiclePrints(@Param("vehicleId") long vehicleId);
 
   List<Map<String, Object>> selectPrints(@Param("offset") long offset);
 

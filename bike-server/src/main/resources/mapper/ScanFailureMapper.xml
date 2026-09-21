@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.production.ScanFailureMapper">
+  <insert id="insert">INSERT INTO bike_production_scan_failure(task_id,scanned_code,expected_type,operator_name,error_code,reason)
+    VALUES(#{taskId},#{code},#{type},#{operator},#{errorCode},#{reason})</insert>
+  <sql id="filter"><where><if test="keyword != null and keyword != ''">
+    task_id LIKE CONCAT('%',#{keyword},'%') OR scanned_code LIKE CONCAT('%',#{keyword},'%')
+    OR operator_name LIKE CONCAT('%',#{keyword},'%') OR error_code LIKE CONCAT('%',#{keyword},'%')
+  </if></where></sql>
+  <select id="select" resultType="map">SELECT id,task_id taskId,scanned_code code,expected_type codeType,
+    operator_name operatorName,error_code errorCode,reason,created_at createdAt FROM bike_production_scan_failure
+    <include refid="filter"/> ORDER BY id DESC LIMIT 50 OFFSET #{offset}</select>
+  <select id="count" resultType="long">SELECT COUNT(*) FROM bike_production_scan_failure <include refid="filter"/></select>
+</mapper>

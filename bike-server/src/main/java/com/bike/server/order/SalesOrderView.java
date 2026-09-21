@@ -6,6 +6,21 @@ import java.util.List;
 
 public class SalesOrderView {
     private Long id;
+    private String reservationStatus;
+    private String reservationHoldMode;
+    private LocalDateTime reservationHeldAt;
+    public String getReservationStatus() { return reservationStatus; }
+    public void setReservationStatus(String value) { reservationStatus = value; }
+    public String getReservationHoldMode() { return reservationHoldMode; }
+    public void setReservationHoldMode(String value) { reservationHoldMode = value; }
+    public LocalDateTime getReservationHeldAt() { return reservationHeldAt; }
+    public void setReservationHeldAt(LocalDateTime value) { reservationHeldAt = value; }
+    private String sourceLockNo;
+    private LocalDateTime reservationExpiresAt;
+    private Integer reservedQty;
+    public String getSourceLockNo(){return sourceLockNo;} public void setSourceLockNo(String v){sourceLockNo=v;}
+    public LocalDateTime getReservationExpiresAt(){return reservationExpiresAt;} public void setReservationExpiresAt(LocalDateTime v){reservationExpiresAt=v;}
+    public Integer getReservedQty(){return reservedQty;} public void setReservedQty(Integer v){reservedQty=v;}
     private String orderNo;
     private Long customerId;
     private String customerName;

@@ -4,8 +4,9 @@
     <sql id="base">SELECT i.id,i.agent_id,a.agent_name,i.product_model_id,m.model_name,i.intent_qty,i.status,i.expire_time,i.remark,i.created_at FROM bike_agent_purchase_intent i JOIN bike_agent a ON a.id=i.agent_id JOIN bike_product_model m ON m.id=i.product_model_id</sql>
     <select id="selectPage" resultType="com.bike.server.agent.PurchaseIntentView"><include refid="base"/><where><if test="agentId != null">i.agent_id=#{agentId}</if></where> ORDER BY i.created_at DESC LIMIT #{offset},#{limit}</select>
     <select id="count" resultType="long">SELECT COUNT(*) FROM bike_agent_purchase_intent i <where><if test="agentId != null">i.agent_id=#{agentId}</if></where></select>
-    <select id="countAuthorizedModel" resultType="int">SELECT COUNT(*) FROM bike_inventory_lock l JOIN bike_agent a ON a.id=l.agent_id JOIN bike_product_model m ON m.id=l.product_model_id WHERE l.agent_id=#{agentId} AND l.product_model_id=#{modelId} AND a.status='ENABLED' AND m.enabled=1 AND l.status IN ('LOCKED','PARTIAL_CONVERTED') AND l.expire_time &gt; NOW(3) AND l.lock_qty &gt; l.released_qty + l.converted_qty</select>
+    <select id="countAuthorizedModel" resultType="int">SELECT <include refid="com.bike.server.agent.AgentModelAccessMapper.authorized"/></select>
+    <select id="lockAgentAccess" resultType="long">SELECT id FROM bike_agent WHERE id=#{agentId} AND status='ENABLED' FOR UPDATE</select>
     <insert id="insert">INSERT INTO bike_agent_purchase_intent(agent_id,product_model_id,intent_qty,expire_time,remark,created_by,status) VALUES(#{agentId},#{request.productModelId},#{request.intentQty},#{request.expireTime},#{request.remark},#{createdBy},'OPEN')</insert>
-    <select id="selectLatestId" resultType="long">SELECT id FROM bike_agent_purchase_intent WHERE agent_id=#{agentId} ORDER BY id DESC LIMIT 1</select>
+    <select id="selectInsertedId" resultType="long">SELECT LAST_INSERT_ID()</select>
     <select id="selectById" resultType="com.bike.server.agent.PurchaseIntentView"><include refid="base"/> WHERE i.id=#{id}</select>
 </mapper>

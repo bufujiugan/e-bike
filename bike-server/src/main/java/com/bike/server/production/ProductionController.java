@@ -15,16 +15,39 @@ public class ProductionController {
   private final ProductionLabelService labels;
   private final ProductionAttachmentService attachments;
   private final ProductionExcelService excel;
+  private final ScanFailureService scanFailures;
 
   public ProductionController(
       ProductionService service,
       ProductionLabelService labels,
       ProductionAttachmentService attachments,
-      ProductionExcelService excel) {
+      ProductionExcelService excel, ScanFailureService scanFailures) {
     this.service = service;
     this.labels = labels;
     this.attachments = attachments;
     this.excel = excel;
+    this.scanFailures = scanFailures;
+  }
+
+  @GetMapping("/scan-failures")
+  public ApiResponse<?> scanFailures(@RequestParam(required = false) String keyword,
+      @RequestParam(defaultValue = "1") long page) {
+    return ApiResponse.success("查询成功", scanFailures.list(keyword, page));
+  }
+
+  @ExceptionHandler(org.springframework.web.bind.MethodArgumentNotValidException.class)
+  public ResponseEntity<ApiResponse<Void>> invalidRequest(
+      org.springframework.web.bind.MethodArgumentNotValidException error,
+      jakarta.servlet.http.HttpServletRequest httpRequest) {
+    var fieldError = error.getBindingResult().getFieldError();
+    String reason = fieldError == null ? "请求参数校验失败" : fieldError.getDefaultMessage();
+    if (error.getBindingResult().getTarget() instanceof ScanRequest scan) {
+      var match = java.util.regex.Pattern.compile("^/api/production/tasks/([^/]+)/scan$")
+          .matcher(httpRequest.getRequestURI());
+      if (match.matches()) scanFailures.record(match.group(1), scan,
+          new com.bike.server.common.BusinessException("INVALID_PARAMETER", reason));
+    }
+    return ResponseEntity.badRequest().body(ApiResponse.failure("INVALID_PARAMETER", reason));
   }
 
   @GetMapping("/skus/import-template")
@@ -50,8 +73,8 @@ public class ProductionController {
   @GetMapping("/inventory")
   public ApiResponse<?> inventory(
       @RequestParam(required = false) Long skuId,
-      @RequestParam(required = false) Long warehouseId) {
-    return ApiResponse.success("查询成功", service.inventory(skuId, warehouseId));
+      @RequestParam(required = false) Long warehouseId, @RequestParam(required = false) Long locationId) {
+    return ApiResponse.success("查询成功", service.inventory(skuId, warehouseId, locationId));
   }
 
   @PostMapping("/skus")
@@ -90,8 +113,10 @@ public class ProductionController {
 
   @GetMapping("/tasks")
   public ApiResponse<?> tasks(
-      @RequestParam(required = false) String keyword, @RequestParam(defaultValue = "1") long page) {
-    return ApiResponse.success("查询成功", service.listTasks(keyword, page));
+      @RequestParam(required = false) String keyword, @RequestParam(defaultValue = "1") long page,
+      @RequestParam(required = false) Long skuId, @RequestParam(required = false) String status,
+      @RequestParam(required = false) java.time.LocalDate fromDate, @RequestParam(required = false) java.time.LocalDate toDate) {
+    return ApiResponse.success("查询成功", service.listTasks(keyword, page, skuId, status, fromDate, toDate));
   }
 
   @PostMapping("/tasks")
@@ -127,8 +152,9 @@ public class ProductionController {
   }
 
   @GetMapping("/quarantined-parts")
-  public ApiResponse<?> quarantinedParts() {
-    return ApiResponse.success("查询成功", service.listQuarantinedParts());
+  public ApiResponse<?> quarantinedParts(@RequestParam(required = false) String keyword,
+      @RequestParam(defaultValue = "1") long page) {
+    return ApiResponse.success("查询成功", service.listQuarantinedParts(keyword, page));
   }
 
   @PostMapping("/quarantined-parts/{code}/release")
@@ -172,6 +198,11 @@ public class ProductionController {
   @GetMapping("/prints/{id}")
   public ApiResponse<?> print(@PathVariable String id) {
     return ApiResponse.success("查询成功", service.getPrint(id));
+  }
+
+  @GetMapping("/tasks/{id}/prints")
+  public ApiResponse<?> taskPrints(@PathVariable String id) {
+    return ApiResponse.success("查询成功", service.taskPrints(id));
   }
 
   @GetMapping(value = "/prints/{id}/label", produces = "text/html;charset=UTF-8")

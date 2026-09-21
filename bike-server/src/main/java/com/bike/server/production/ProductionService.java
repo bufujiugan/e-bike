@@ -10,6 +10,7 @@ public interface ProductionService {
   List<Map<String, Object>> listSkus();
 
   List<Map<String, Object>> inventory(Long skuId, Long warehouseId);
+  List<Map<String, Object>> inventory(Long skuId, Long warehouseId, Long locationId);
 
   void saveSku(Long id, SkuRequest request);
 
@@ -22,6 +23,7 @@ public interface ProductionService {
   Map<String, Object> getTask(String id);
 
   PageResponse<Map<String, Object>> listTasks(String keyword, long page);
+  PageResponse<Map<String, Object>> listTasks(String keyword, long page, Long skuId, String status, java.time.LocalDate fromDate, java.time.LocalDate toDate);
 
   Map<String, Object> scan(String id, ScanRequest request);
 
@@ -35,13 +37,14 @@ public interface ProductionService {
 
   void resolveIssue(String id, String reason);
 
-  List<Map<String, Object>> listQuarantinedParts();
+  PageResponse<Map<String, Object>> listQuarantinedParts(String keyword, long page);
 
   void releasePart(String code, String reason);
 
   PageResponse<Map<String, Object>> listPrints(long page);
 
   Map<String, Object> getPrint(String id);
+  List<Map<String, Object>> taskPrints(String taskId);
 
   Map<String, Object> claimPrint(String id, String terminal);
 

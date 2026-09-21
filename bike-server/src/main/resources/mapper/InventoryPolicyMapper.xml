@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.stock.InventoryPolicyMapper">
+  <!-- 调用方固定使用占用别名r、订单别名o；时间由数据库判定。 -->
+  <sql id="reservationActive">
+    o.status IN ('DRAFT','PENDING','CONFIRMED','PARTIAL_SHIPPED','SHIPPED')
+    AND (r.hold_mode='PAID' OR (r.hold_mode='TIMED' AND r.expires_at&gt;NOW(3)))
+  </sql>
+  <sql id="reservationStatus">
+    CASE WHEN r.order_id IS NULL THEN 'NONE'
+      WHEN r.hold_mode='RELEASED' OR o.status IN ('CANCELLED','CLOSED') THEN 'RELEASED'
+      WHEN o.status='SHIPPED' THEN 'FULFILLED'
+      WHEN r.hold_mode='PAID' THEN 'PAID_HELD'
+      WHEN r.hold_mode='TIMED' AND r.expires_at&gt;NOW(3) THEN 'TIMED_ACTIVE'
+      ELSE 'EXPIRED_REQUIRES_REACQUIRE' END
+  </sql>
+  <sql id="commitments">
+    SELECT product_model_id model_id,lock_qty-released_qty-converted_qty qty,'TEMPORARY' kind FROM bike_inventory_lock
+    WHERE status IN ('LOCKED','PARTIAL_CONVERTED') AND expire_time&gt;NOW(3) AND lock_qty&gt;released_qty+converted_qty
+    UNION ALL
+    SELECT r.model_id,GREATEST(r.reserved_qty-i.shipped_qty,0) qty,'ORDER' kind FROM bike_order_reservation r
+    JOIN bike_sales_order o ON o.id=r.order_id
+    JOIN bike_sales_order_item i ON i.order_id=o.id AND i.product_model_id=r.model_id
+    WHERE <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/>
+  </sql>
+  <!-- SKU明细只用于精度约束；车型commitments已包含其占用头，绝不能再累加此片段。 -->
+  <sql id="skuCommitments">
+    SELECT sku_id,product_model_id model_id,lock_qty-released_qty-converted_qty qty,'TEMPORARY' kind,0 order_id
+    FROM bike_inventory_lock WHERE scope_type='SKU' AND status IN ('LOCKED','PARTIAL_CONVERTED')
+      AND expire_time&gt;NOW(3) AND lock_qty&gt;released_qty+converted_qty
+    UNION ALL
+    SELECT si.sku_id,r.model_id,si.ordered_qty-si.shipped_qty-si.closed_qty qty,'ORDER' kind,r.order_id
+    FROM bike_order_reservation_item si JOIN bike_order_reservation r ON r.order_id=si.order_id
+    JOIN bike_sales_order o ON o.id=r.order_id
+    WHERE r.scope_type='SKU' AND <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/>
+  </sql>
+  <!-- 同车型内按库位分摊，仅用于展示；最后一行承载库存缺口，避免截断承诺。 -->
+  <sql id="inventoryCtes">
+    WITH sku_commitment_totals AS (
+      SELECT model_id,sku_id,SUM(qty) qty FROM (<include refid="com.bike.server.stock.InventoryPolicyMapper.skuCommitments"/>) c GROUP BY model_id,sku_id
+    ), sku_capacity AS (
+      SELECT pv.sku_id,COUNT(*) qty FROM bike_vehicle v JOIN bike_production_vehicle pv ON pv.vehicle_id=v.id
+      WHERE v.status=2 AND NOT <include refid="com.bike.server.stock.InventoryPolicyMapper.quarantined"/> GROUP BY pv.sku_id
+    ), sku_model_status AS (
+      SELECT c.model_id,SUM(c.qty) sku_committed_qty,SUM(GREATEST(c.qty-COALESCE(p.qty,0),0)) sku_shortage_qty
+      FROM sku_commitment_totals c LEFT JOIN sku_capacity p ON p.sku_id=c.sku_id GROUP BY c.model_id
+    ), commitment_totals AS (
+      SELECT model_id,SUM(CASE WHEN kind='TEMPORARY' THEN qty ELSE 0 END) temporary_qty,
+        SUM(CASE WHEN kind='ORDER' THEN qty ELSE 0 END) order_qty
+      FROM (<include refid="com.bike.server.stock.InventoryPolicyMapper.commitments"/>) c GROUP BY model_id
+    ), physical_rows AS (
+      SELECT v.model_id,w.id warehouse_id,w.warehouse_name,l.id location_id,l.location_name,
+        COUNT(*) physical_qty,SUM(<include refid="com.bike.server.stock.InventoryPolicyMapper.quarantined"/>) quarantined_qty,
+        MIN(v.stock_in_time) stock_in_date
+      FROM bike_vehicle v LEFT JOIN bike_warehouse w ON w.id=v.current_warehouse_id
+      LEFT JOIN bike_warehouse_location l ON l.id=v.current_location_id WHERE v.status=2
+      GROUP BY v.model_id,w.id,w.warehouse_name,l.id,l.location_name
+    ), all_rows AS (
+      SELECT * FROM physical_rows
+      UNION ALL
+      SELECT c.model_id,NULL,NULL,NULL,NULL,0,0,NULL FROM commitment_totals c
+      WHERE c.temporary_qty+c.order_qty&gt;0 AND NOT EXISTS(SELECT 1 FROM physical_rows p WHERE p.model_id=c.model_id)
+    ), ordered_rows AS (
+      SELECT p.*,COALESCE(m.model_name,'-') model_name,COALESCE(c.temporary_qty,0) model_temporary_qty,
+        COALESCE(c.order_qty,0) model_order_qty,
+        COALESCE(sms.sku_shortage_qty,0) sku_shortage_qty,
+        COALESCE(c.temporary_qty,0)+COALESCE(c.order_qty,0)-COALESCE(sms.sku_committed_qty,0) legacy_model_committed_qty,
+        GREATEST(0,SUM(p.physical_qty-p.quarantined_qty) OVER(PARTITION BY p.model_id)-COALESCE(c.temporary_qty,0)-COALESCE(c.order_qty,0)) model_new_commitment_qty,
+        ROW_NUMBER() OVER(PARTITION BY p.model_id ORDER BY COALESCE(p.warehouse_id,0),COALESCE(p.location_id,0)) row_no,
+        COUNT(*) OVER(PARTITION BY p.model_id) row_count,
+        COALESCE(SUM(p.physical_qty-p.quarantined_qty) OVER(PARTITION BY p.model_id ORDER BY COALESCE(p.warehouse_id,0),COALESCE(p.location_id,0) ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) prior_capacity
+      FROM all_rows p LEFT JOIN bike_product_model m ON m.id=p.model_id
+      LEFT JOIN commitment_totals c ON c.model_id=p.model_id
+      LEFT JOIN sku_model_status sms ON sms.model_id=p.model_id
+    ), commitment_rows AS (
+      SELECT o.*,
+        GREATEST(0,LEAST(model_temporary_qty,CASE WHEN row_no=row_count THEN model_temporary_qty+model_order_qty ELSE prior_capacity+physical_qty-quarantined_qty END)-prior_capacity) temporary_locked_qty,
+        GREATEST(0,LEAST(model_temporary_qty+model_order_qty,CASE WHEN row_no=row_count THEN model_temporary_qty+model_order_qty ELSE prior_capacity+physical_qty-quarantined_qty END)-GREATEST(prior_capacity,model_temporary_qty)) order_reserved_qty
+      FROM ordered_rows o
+    ), inventory_projection AS (
+      SELECT c.*,temporary_locked_qty+order_reserved_qty locked_qty,
+        GREATEST(0,physical_qty-quarantined_qty-temporary_locked_qty-order_reserved_qty) available_qty,
+        GREATEST(0,temporary_locked_qty+order_reserved_qty-physical_qty+quarantined_qty) shortage_qty,
+        COALESCE(DATEDIFF(CURRENT_DATE(),stock_in_date),0) age_days FROM commitment_rows c
+    ), inventory_model_metrics AS (
+      SELECT model_id,MAX(sku_shortage_qty) sku_shortage_qty,MAX(legacy_model_committed_qty) legacy_model_committed_qty,
+        MAX(model_new_commitment_qty) model_new_commitment_qty FROM inventory_projection GROUP BY model_id
+    )
+  </sql>
+  <sql id="inventorySummary">
+    <include refid="com.bike.server.stock.InventoryPolicyMapper.inventoryCtes"/>
+    SELECT COALESCE(SUM(physical_qty),0) physicalQty,COALESCE(SUM(quarantined_qty),0) quarantinedQty,
+      COALESCE(SUM(locked_qty),0) lockedQty,COALESCE(SUM(temporary_locked_qty),0) temporaryLockedQty,
+      COALESCE(SUM(order_reserved_qty),0) orderReservedQty,COALESCE(SUM(available_qty),0) availableQty,
+      COALESCE(SUM(shortage_qty),0) shortageQty,
+      (SELECT COALESCE(SUM(sku_shortage_qty),0) FROM inventory_model_metrics) skuShortageQty,
+      (SELECT COALESCE(SUM(legacy_model_committed_qty),0) FROM inventory_model_metrics) legacyModelCommittedQty,
+      (SELECT COALESCE(SUM(model_new_commitment_qty),0) FROM inventory_model_metrics) modelNewCommitmentQty
+      FROM inventory_projection
+  </sql>
+  <!-- 调用方车辆别名统一为 v，所有库存口径复用相同隔离判断。 -->
+  <sql id="quarantined">EXISTS(SELECT 1 FROM bike_production_issue issue WHERE issue.status='OPEN' AND (
+    issue.code COLLATE utf8mb4_unicode_ci=v.frame_sn COLLATE utf8mb4_unicode_ci OR EXISTS(
+      SELECT 1 FROM bike_vehicle_part_binding binding WHERE binding.vehicle_id=v.id AND binding.is_current=1
+      AND binding.part_sn COLLATE utf8mb4_unicode_ci=issue.code COLLATE utf8mb4_unicode_ci)))</sql>
+</mapper>

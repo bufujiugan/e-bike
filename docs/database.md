@@ -1,6 +1,6 @@
 # 数据库设计说明
 
-数据库名称为 `bike`，业务表统一使用 `bike_` 前缀。应用通过 Flyway 执行 `bike-server/src/main/resources/db/migration` 下的版本脚本，当前测试库已执行到 V15。
+数据库名称为 `bike`，业务表统一使用 `bike_` 前缀。应用通过 Flyway 执行迁移，生产部署使用 `classpath:db/migration-prod`，开发样例使用 `classpath:db/migration`。截至批次15，独立验收库已验证 V24；后续开发中的迁移以实施台账记录的实际验证结果为准。
 
 ## 第一版范围
 
@@ -33,3 +33,26 @@
 `bike_part.part_sn`、`bike_vehicle.frame_sn`、`bike_vehicle.vehicle_qr_token` 使用唯一约束。绑定表通过生成列和唯一索引保证同一零部件只能有一条当前绑定、同一车辆同一部件类型只能有一条当前绑定；解绑历史使用 `is_current = 0` 保留。
 
 库存锁定的扣减和释放必须在 Service 事务中配合原子更新或锁机制实现。V1-V3 只创建结构，V4 仅用于当前开发环境样例数据验证。
+
+## V20–V22 增量
+
+V20增加bike_order_reservation：订单与来源锁定、幂等请求标识、车型、转换数量、到期时间。订单主键唯一，来源锁+请求标识唯一。
+V21增加 `bike_sales_order.remark` 及 `bike_order_reservation.expiry_audited_at`。旧订单备注为空；续占用重置到期审计标记。
+
+V22 注册可配置权限 `PRODUCTION_MANAGE`，用于 SKU、标签模板、生产图片、生产异常解除及旧件复检等生产管理写操作。迁移只注册权限，不自动授予既有普通岗位；管理员须按现场岗位矩阵分配。
+两套迁移分别在根db目录与后端resources镜像。V16仍是Java迁移；勿修改已运行历史迁移。
+
+## V23–V24 已验证增量
+
+V23 新增售后案例、留言、附件元数据和补发记录表，并注册独立的读取、申报、审核、技术、留言和发货权限。案例状态变更及内部操作保留在 `bike_operation_log`。附件元数据表的存在不代表 V23 已提供上传和下载闭环。
+
+V24 新增 `bike_pi`、`bike_pi_item`、`bike_pi_payment`、`bike_pi_logistics`。PI 保存客户及单据快照，商品保存真实 SKU 与商品快照，金额使用 DECIMAL(18,2)；来源订单唯一关联、收款 requestId 在单据内唯一。财务确认与发货放行权限只注册，不自动授予普通岗位。
+
+空生产库迁移到 V24，以及 V16 升级到 V24 并保留旧数据，均已在独立 MySQL 库验证。后续只添加新迁移，不改已应用脚本；开发与生产两套 SQL 及根目录镜像保持一致。
+
+## V25 收款保留订单占用
+
+新增 `bike_order_reservation.hold_mode`，默认 `TIMED`，检查约束只允许 `TIMED`、`PAID`、`RELEASED`；新增 `payment_hold_pi_id` 外键、`payment_held_at`、`payment_held_by`、`payment_held_amount` 记录转保留依据，`released_at` 记录主动释放时间。保留原 `expires_at`，新增方式/截止/审计时间联合索引。旧记录不按历史付款回填 `PAID`。
+
+有效占用的统一 SQL 条件为有效订单状态且 `hold_mode='PAID'`，或 `hold_mode='TIMED' AND expires_at>NOW(3)`；数量仍为 `GREATEST(reserved_qty-shipped_qty,0)`。到期任务仅扫描 `TIMED`。收款转保留使用获得互斥锁后的独立条件更新，再次以数据库当前时刻检查期限；到期后登记到账不会恢复库存。锁顺序为库存互斥锁、订单/占用、PI、收款记录，相关业务写入和审计同事务。
+

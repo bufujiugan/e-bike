@@ -31,62 +31,93 @@ public class ExcelTransferService {
     private final OrderService orderService;
     private final ModuleService moduleService;
     private final TransferAuditMapper auditMapper;
+    private final jakarta.validation.Validator validator;
 
     public ExcelTransferService(PartService partService, MasterService masterService, OrderService orderService,
-                                ModuleService moduleService, TransferAuditMapper auditMapper) {
+                                ModuleService moduleService, TransferAuditMapper auditMapper, jakarta.validation.Validator validator) {
         this.partService = partService;
         this.masterService = masterService;
         this.orderService = orderService;
         this.moduleService = moduleService;
         this.auditMapper = auditMapper;
+        this.validator = validator;
     }
 
-    public ImportResult importParts(MultipartFile file) { CurrentOperator.requirePermission("DATA_IMPORT"); return importWorkbook(file, (values, row) -> partService.create(new PartCreateRequest(required(values, 0), required(values, 1), longOrNull(values, 2), text(values, 3), blankToNull(text(values, 4)), blankToNull(text(values, 5)) ))); }
+    public ImportResult importParts(MultipartFile file) { CurrentOperator.requirePermission("DATA_IMPORT"); CurrentOperator.requirePermission("PART_WRITE"); return importWorkbook(file, (values, row) -> partService.create(validated(new PartCreateRequest(required(values, 0), required(values, 1), longOrNull(values, 2), text(values, 3), blankToNull(text(values, 4)), blankToNull(text(values, 5)) )))); }
+
+    public byte[] partsTemplate() {
+        CurrentOperator.requirePermission("DATA_IMPORT");
+        CurrentOperator.requirePermission("PART_WRITE");
+        try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            Sheet sheet = workbook.createSheet("零部件导入");
+            String[] headers = {"零部件SN（必填）", "类型（MOTOR/BATTERY/DISPLAY）", "供应商ID（可空）", "批次（可空）", "质检状态（PASSED/FAILED）", "备注（可空）"};
+            Row row = sheet.createRow(0);
+            CellStyle textStyle = workbook.createCellStyle();
+            textStyle.setDataFormat(workbook.createDataFormat().getFormat("@"));
+            for (int i=0;i<headers.length;i++) { row.createCell(i).setCellValue(headers[i]); sheet.setColumnWidth(i, 28*256); sheet.setDefaultColumnStyle(i, textStyle); }
+            workbook.write(output);
+            return output.toByteArray();
+        } catch (IOException error) { throw new BusinessException("EXPORT_FAILED", "模板生成失败"); }
+    }
 
     public ImportResult importMaster(String type, MultipartFile file) {
         CurrentOperator.requirePermission("DATA_IMPORT");
+        CurrentOperator.requireRole("SUPER_ADMIN");
         if (!List.of("customers", "agents").contains(type)) throw new BusinessException("IMPORT_TYPE_UNSUPPORTED", "仅支持客户和代理商导入");
-        return importWorkbook(file, (values, row) -> masterService.create(type, new MasterCreateRequest(required(values, 0), required(values, 1), blankToNull(text(values, 2)), blankToNull(text(values, 3)))));
+        return importWorkbook(file, (values, row) -> masterService.create(type, validated(new MasterCreateRequest(required(values, 0), required(values, 1), blankToNull(text(values, 2)), blankToNull(text(values, 3))))));
     }
 
     public ImportResult importOrders(MultipartFile file) {
         CurrentOperator.requirePermission("DATA_IMPORT");
-        return importWorkbook(file, (values, row) -> orderService.create(new SalesOrderCreateRequest(
-                requiredLong(values, 0), longOrNull(values, 1), requiredLong(values, 2), requiredInt(values, 3), dateOrNull(values, 4), blankToNull(text(values, 5)))));
+        CurrentOperator.requirePermission("ORDER_WRITE");
+        return importWorkbook(file, (values, row) -> orderService.create(validated(new SalesOrderCreateRequest(
+                requiredLong(values, 0), longOrNull(values, 1), requiredLong(values, 2), requiredInt(values, 3), dateOrNull(values, 4), blankToNull(text(values, 5))))));
     }
 
-    public byte[] export(String module) {
+    private <T> T validated(T request) {
+        var errors = validator.validate(request);
+        if (!errors.isEmpty()) throw new BusinessException("IMPORT_VALUE_INVALID", errors.stream()
+                .map(jakarta.validation.ConstraintViolation::getMessage).sorted().collect(java.util.stream.Collectors.joining("；")));
+        return request;
+    }
+
+    public byte[] export(String module) { return export(module, null); }
+
+    @org.springframework.transaction.annotation.Transactional(isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
+    public byte[] export(String module, String keyword) {
         CurrentOperator.requirePermission("DATA_EXPORT");
-        ModulePageResponse page = loadAllModuleRows(module);
-        try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+        ModulePageResponse page = moduleService.list(module, keyword, 1, 100);
+        if (page.total() > 1_048_575) throw new BusinessException("EXPORT_LIMIT", "结果超出单个Excel工作表容量，请缩小查询范围");
+        try (var workbook = new org.apache.poi.xssf.streaming.SXSSFWorkbook(100); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            workbook.setCompressTempFiles(true);
             Sheet sheet = workbook.createSheet(module);
             Row header = sheet.createRow(0);
-            for (int i = 0; i < page.columns().size(); i++) header.createCell(i).setCellValue(page.columns().get(i));
-            for (int r = 0; r < page.rows().size(); r++) {
-                Row row = sheet.createRow(r + 1);
-                List<String> values = page.rows().get(r);
-                for (int c = 0; c < values.size(); c++) row.createCell(c).setCellValue(values.get(c));
+            int[] widths = new int[page.columns().size()];
+            for (int i = 0; i < page.columns().size(); i++) {
+                header.createCell(i).setCellValue(page.columns().get(i));
+                widths[i] = Math.min(80, Math.max(16, page.columns().get(i).length() * 2 + 2));
             }
-            for (int i = 0; i < page.columns().size(); i++) sheet.autoSizeColumn(i);
+            long expected = page.total(), pageNumber = 1;
+            int written = 0;
+            while (true) {
+                for (List<String> values : page.rows()) {
+                    Row row = sheet.createRow(++written);
+                    for (int c = 0; c < values.size(); c++) {
+                        row.createCell(c).setCellValue(values.get(c));
+                        widths[c] = Math.min(80, Math.max(widths[c], values.get(c).length() * 2 + 2));
+                    }
+                }
+                if (written >= expected) break;
+                page = moduleService.list(module, keyword, ++pageNumber, 100);
+                if (page.rows().isEmpty()) throw new BusinessException("EXPORT_INCOMPLETE", "导出数据不完整，请重新查询后重试");
+            }
+            for (int i = 0; i < widths.length; i++) sheet.setColumnWidth(i, widths[i] * 256);
             workbook.write(output);
             auditMapper.insert("DATA_EXPORT", module, CurrentOperator.id(), CurrentOperator.username(), CurrentOperator.clientIp(), null, "{\"module\":\"" + module + "\"}");
             return output.toByteArray();
         } catch (IOException exception) {
             throw new BusinessException("EXPORT_FAILED", "Excel 导出失败");
         }
-    }
-
-    private ModulePageResponse loadAllModuleRows(String module) {
-        ModulePageResponse first = moduleService.list(module, null, 1, 100);
-        if (first.total() <= first.rows().size()) return first;
-        List<List<String>> rows = new ArrayList<>(first.rows());
-        long page = 2;
-        while (rows.size() < first.total()) {
-            ModulePageResponse next = moduleService.list(module, null, page++, 100);
-            if (next.rows().isEmpty()) break;
-            rows.addAll(next.rows());
-        }
-        return new ModulePageResponse(first.subtitle(), first.stats(), first.columns(), rows, first.action(), 1, rows.size(), rows.size());
     }
 
     private ImportResult importWorkbook(MultipartFile file, RowImporter importer) {

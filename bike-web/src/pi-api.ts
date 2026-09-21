@@ -1,0 +1,94 @@
+import api from './api'
+
+export type Money = string | number
+export type ReservationStatus = 'NONE' | 'TIMED_ACTIVE' | 'PAID_HELD' | 'EXPIRED_REQUIRES_REACQUIRE' | 'RELEASED' | 'FULFILLED' | 'ACTIVE' | 'MIXED'
+const reservationLabels: Record<ReservationStatus, string> = {
+  NONE: '无来源库存占用', TIMED_ACTIVE: '限时占用中', PAID_HELD: '收款达标保留', MIXED: '各履约订单状态不同',
+  EXPIRED_REQUIRES_REACQUIRE: '已到期，需重新占用', RELEASED: '已释放', FULFILLED: '已履约', ACTIVE: '有效占用',
+}
+export function reservationLabel(status: ReservationStatus | null | undefined, isAgent = false): string {
+  if (isAgent && (status === 'TIMED_ACTIVE' || status === 'PAID_HELD')) return reservationLabels.ACTIVE
+  return status ? reservationLabels[status] ?? '状态待核对' : '状态待获取'
+}
+export type PiDocument = {
+  sellerName: string; sellerAddress: string; sellerContact: string
+  buyerAddress: string; buyerContact: string; bankName: string; bankAccount: string; beneficiary: string
+  paymentTerms: string; deliveryTerms: string; templateCode: string; templateVersion: string
+}
+export type PiItem = {
+  id: number; skuId: number; productModelId: number; skuCode: string; productName: string
+  specification: string; modelName: string; quantity: number; unitPrice: Money
+  discountAmount: Money; taxAmount: Money; lineTotal: Money
+}
+export type PiPayment = {
+  id: number; amount: Money; currencyCode: string; status: string; receivedAt: string
+  voucherObjectKey?: string | null; remark?: string | null
+}
+export type PiReceiptAttachment = {
+  id: string; paymentId: number; fileName: string; contentType: string; fileSize: number
+  sha256: string; createdBy?: number | null; createdAt: string
+}
+export type PiLogistics = {
+  id: number; batchNo: string; carrier?: string | null; trackingNo?: string | null
+  status: string; shippedAt?: string | null; remark?: string | null
+  stockOutBatchId?: number | null; linkType: string; revision: number; shippedQtySnapshot?: number | null; revokeReason?: string | null
+}
+export type PiView = {
+  seriesId?: number; fulfillment?: PiFulfillment[]; dispatchBatches?: PiDispatchBatch[]
+  id: number; piNo: string; revision: number; customerId: number; customerCode?: string; customerName: string
+  agentId?: number | null; agentName?: string | null; sourceOrderId?: number | null
+  reservationStatus?: ReservationStatus | null
+  tradeType: string; currencyCode: string; status: string; paymentStatus?: string | null; releaseStatus?: string | null
+  plannedShipDate?: string | null; subtotal: Money; discountAmount: Money; taxAmount: Money; freightAmount: Money
+  totalAmount: Money; depositRequiredAmount?: Money | null; shipmentRequiredAmount?: Money | null; paidAmount?: Money | null
+  remark?: string | null; createdAt: string; updatedAt: string; releasedAt?: string | null
+  document?: PiDocument | null; items: PiItem[]; payments: PiPayment[]; logistics: PiLogistics[]
+}
+export type PiFulfillment = { orderId: number; orderNo: string; status: string; skuId?: number | null; skuCode?: string | null; orderedQty: number; shippedQty: number; closedQty: number; remainingQty: number; reservationStatus: ReservationStatus }
+export type PiDispatchBatch = { id: number; batchNo: string; sourceType: string; executionPiId?: number | null; status: string; originalQty: number; activeQty: number; createdAt: string }
+export type PiLockOption = { id: number; lockNo: string; skuId: number; skuCode: string; productName: string; modelId: number; remainingQty: number; expireTime: string }
+export type PiMasterOption = { id: number; code: string; name: string }
+export type PiSkuOption = { id: number; modelId?: number; productModelId?: number; skuCode: string; productName: string; specification?: string; enabled?: boolean }
+export type PiOrderOption = { id: number; orderNo: string; customerId: number; agentId?: number | null; status: string }
+export type PiOptions = { customers: PiMasterOption[]; agents: PiMasterOption[]; skus: PiSkuOption[]; orders: PiOrderOption[] }
+export type PiCreate = {
+  customerId: number; agentId?: number | null; sourceOrderId?: number | null; tradeType: string; currencyCode: string
+  plannedShipDate?: string | null; discountAmount: string; taxAmount: string; freightAmount: string
+  depositRequiredAmount: string; shipmentRequiredAmount: string; remark?: string; document: PiDocument
+  items: { skuId: number; quantity: number; unitPrice: string; discountAmount: string; taxAmount: string }[]
+}
+export type PiPaymentCreate = { requestId: string; amount: string; currencyCode: string; receivedAt?: string | null; remark?: string }
+export type PiLogisticsCreate = { batchNo: string; carrier?: string; trackingNo?: string; status: string; remark?: string; stockOutBatchId?: number | null; requestId: string; expectedRevision?: number }
+
+export const piApi = {
+  async list(params: { keyword?: string; status?: string; page: number; pageSize: number }) {
+    return (await api.get<{ data: { records: PiView[]; total: number } }>('/api/pis', { params })).data.data
+  },
+  async get(id: number) { return (await api.get<{ data: PiView }>(`/api/pis/${id}`)).data.data },
+  async batch(id: number, batchId: number) { return (await api.get<{ data: { vehicles: { stockOutId: number; stockOutNo: string; frameSn: string; skuCode: string; orderNo: string; status: string; cancelReason?: string }[] } }>(`/api/pis/${id}/dispatch-batches/${batchId}`)).data.data },
+  async options(keyword?: string) { return (await api.get<{ data: PiOptions }>('/api/pis/options', { params: { keyword: keyword || undefined } })).data.data },
+  async create(body: PiCreate) { return (await api.post<{ data: PiView }>('/api/pis', body)).data.data },
+  async convert(body: { requestId: string; sources: { lockId: number; quantity: number }[]; pi: PiCreate }) { return (await api.post<{ data: PiView }>('/api/pis/from-locks', body)).data.data },
+  async lockOptions(params: { customerId: number; agentId?: number; keyword?: string; page: number }) { return (await api.get<{ data: { records: PiLockOption[]; total: number } }>('/api/pis/lock-options', { params })).data.data },
+  async update(id: number, body: PiCreate) { return (await api.put<{ data: PiView }>(`/api/pis/${id}`, body)).data.data },
+  async cancel(id: number, reason: string) { return (await api.post<{ data: PiView }>(`/api/pis/${id}/cancel`, { reason })).data.data },
+  async confirm(id: number) { return (await api.post<{ data: PiView }>(`/api/pis/${id}/confirm`, {})).data.data },
+  async payment(id: number, body: PiPaymentCreate) { return (await api.post<{ data: PiView }>(`/api/pis/${id}/payments`, body)).data.data },
+  async receiptAttachments(piId: number, paymentId: number) {
+    return (await api.get<{ data: PiReceiptAttachment[] }>(`/api/pis/${piId}/payments/${paymentId}/attachments`)).data.data
+  },
+  async uploadReceipt(piId: number, paymentId: number, requestId: string, file: File) {
+    const form = new FormData(); form.append('file', file); form.append('requestId', requestId)
+    return (await api.post<{ data: PiReceiptAttachment }>(`/api/pis/${piId}/payments/${paymentId}/attachments`, form)).data.data
+  },
+  async downloadReceipt(piId: number, paymentId: number, attachmentId: string) {
+    return (await api.get<Blob>(`/api/pis/${piId}/payments/${paymentId}/attachments/${attachmentId}/download`, { responseType: 'blob' })).data
+  },
+  async release(id: number, reason: string) { return (await api.post<{ data: PiView }>(`/api/pis/${id}/release`, { reason })).data.data },
+  async renewReservation(orderId: number, body: { hours: number; reason: string }) { await api.post(`/api/orders/${orderId}/reservation/renew`, body) },
+  async logistics(id: number, body: PiLogisticsCreate) { return (await api.post<{ data: PiView }>(`/api/pis/${id}/logistics`, body)).data.data },
+  async updateLogistics(id: number, logisticsId: number, body: PiLogisticsCreate) { return (await api.put<{ data: PiView }>(`/api/pis/${id}/logistics/${logisticsId}`, body)).data.data },
+  async withdrawLogistics(id: number, logisticsId: number, body: { requestId: string; expectedRevision: number; reason: string }) { return (await api.post<{ data: PiView }>(`/api/pis/${id}/logistics/${logisticsId}/withdraw`, body)).data.data },
+  async logisticsHistory(id: number, logisticsId: number) { return (await api.get<{ data: { revision: number; action: string; snapshot: string; createdAt: string }[] }>(`/api/pis/${id}/logistics/${logisticsId}/history`)).data.data },
+  async download(id: number, format: 'xlsx' | 'pdf') { return (await api.get<Blob>(`/api/pis/${id}/export.${format}`, { responseType: 'blob' })).data },
+}

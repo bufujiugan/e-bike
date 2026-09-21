@@ -19,15 +19,22 @@ public class DashboardServiceImpl implements DashboardService {
     public DashboardSummary getSummary() {
         com.bike.server.common.CurrentOperator.requirePermission("DASHBOARD_READ");
         Map<String, Object> counts = dashboardMapper.selectSummaryCounts();
+        Map<String,Object> inventory = dashboardMapper.selectInventorySummary();
         List<DashboardSummary.Metric> metrics = List.of(
-                new DashboardSummary.Metric("今日组装", value(counts, "todayAssembled"), "台", "+0%", "blue"),
-                new DashboardSummary.Metric("当前物理库存", value(counts, "physicalInventory"), "台", "+0%", "green"),
-                new DashboardSummary.Metric("今日入库", value(counts, "todayStockIn"), "台", "+0%", "orange"),
-                new DashboardSummary.Metric("今日出库", value(counts, "todayStockOut"), "台", "+0%", "purple"));
+                new DashboardSummary.Metric("今日组装", value(counts, "todayAssembled"), "台", "", "blue"),
+                new DashboardSummary.Metric("当前物理库存", value(inventory, "physicalQty"), "台", "", "green"),
+                new DashboardSummary.Metric("今日入库", value(counts, "todayStockIn"), "台", "", "orange"),
+                new DashboardSummary.Metric("今日出库", value(counts, "todayStockOut"), "台", "", "purple"));
         metrics = new java.util.ArrayList<>(metrics);
-        metrics.add(new DashboardSummary.Metric("当前锁定库存", value(counts, "lockedInventory"), "台", "+0%", "orange"));
-        metrics.add(new DashboardSummary.Metric("当前可用库存", Math.max(0, value(counts, "physicalInventory") - value(counts, "lockedInventory")), "台", "+0%", "green"));
+        metrics.add(new DashboardSummary.Metric("当前锁定库存", value(inventory, "lockedQty"), "台", "", "orange"));
+        metrics.add(new DashboardSummary.Metric("车型可新增承诺上限", value(inventory,"modelNewCommitmentQty"), "台", "", "green"));
 
+        metrics.add(new DashboardSummary.Metric("临时锁定",value(inventory,"temporaryLockedQty"),"台","","orange"));
+        metrics.add(new DashboardSummary.Metric("订单占用",value(inventory,"orderReservedQty"),"台","","purple"));
+        metrics.add(new DashboardSummary.Metric("隔离库存",value(inventory,"quarantinedQty"),"台","","orange"));
+        metrics.add(new DashboardSummary.Metric("库存缺口",value(inventory,"shortageQty"),"台","","red"));
+        metrics.add(new DashboardSummary.Metric("SKU结构缺口",value(inventory,"skuShortageQty"),"台","", "red"));
+        metrics.add(new DashboardSummary.Metric("历史车型未分配承诺",value(inventory,"legacyModelCommittedQty"),"台","", "orange"));
         Map<String, DashboardSummary.StatusRow> statusByLabel = new java.util.LinkedHashMap<>();
         dashboardMapper.selectVehicleStatusCounts().forEach(row -> {
             String label = String.valueOf(row.get("label"));
@@ -44,7 +51,7 @@ public class DashboardServiceImpl implements DashboardService {
         statusByLabel.forEach((label, status) -> {
             if (statuses.stream().noneMatch(item -> item.label().equals(label))) statuses.add(status);
         });
-        List<DashboardSummary.RecentOperation> operations = dashboardMapper.selectRecentOperations().stream()
+        List<DashboardSummary.RecentOperation> operations = dashboardMapper.selectRecentOperations(com.bike.server.common.FinancialAuditAccess.allowed()).stream()
                 .map(row -> new DashboardSummary.RecentOperation(
                         String.valueOf(row.get("time")), String.valueOf(row.get("action")),
                         String.valueOf(row.get("target")), String.valueOf(row.get("operator")),

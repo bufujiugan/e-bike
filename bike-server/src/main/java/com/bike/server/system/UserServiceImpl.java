@@ -137,8 +137,8 @@ public class UserServiceImpl implements UserService {
         if (!"AGENT".equals(userType) && agentId != null) {
             throw new BusinessException("USER_BINDING_INVALID", "只有代理商账号可以绑定代理商");
         }
-        if (!"PDA_OPERATOR".equals(userType) && workstationId != null) {
-            throw new BusinessException("USER_BINDING_INVALID", "只有 PDA 操作员可以绑定工位");
+        if ("AGENT".equals(userType) && workstationId != null) {
+            throw new BusinessException("USER_BINDING_INVALID", "代理商账号不能绑定内部工位");
         }
     }
 

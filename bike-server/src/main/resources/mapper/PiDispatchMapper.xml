@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.pi.PiDispatchMapper">
+  <insert id="insert">INSERT INTO bike_stock_out_batch(batch_no,series_id,execution_pi_id,customer_id,request_id,payload_hash,source_type,operator_id)
+    SELECT #{batchNo},p.series_id,p.id,p.customer_id,#{requestId},#{hash},#{type},#{operatorId}
+    FROM bike_pi p JOIN bike_pi_series s ON s.id=p.series_id AND s.current_pi_id=p.id WHERE p.id=#{piId}</insert>
+  <select id="prior" resultType="com.bike.server.pi.PiDispatchMapper$Prior">SELECT b.id,b.payload_hash FROM bike_stock_out_batch b
+    JOIN bike_pi p ON p.series_id=b.series_id WHERE p.id=#{piId} AND b.operator_id=#{operatorId} AND b.request_id=#{requestId}</select>
+  <select id="idByNo" resultType="long">SELECT id FROM bike_stock_out_batch WHERE batch_no=#{batchNo}</select>
+  <insert id="attach">INSERT INTO bike_stock_out_batch_item(stock_out_id,batch_id,sku_id)
+    SELECT so.id,b.id,pv.sku_id FROM bike_stock_out_record so JOIN bike_pi_order_link l ON l.order_id=so.order_id
+    JOIN bike_stock_out_batch b ON b.id=#{batchId} AND b.series_id=l.series_id AND b.customer_id=so.customer_id
+    LEFT JOIN bike_production_vehicle pv ON pv.vehicle_id=so.vehicle_id WHERE so.stock_out_no=#{stockNo} AND so.status='COMPLETED'</insert>
+  <select id="matches" resultType="boolean">SELECT COUNT(*)=1 FROM bike_stock_out_batch b JOIN bike_pi p ON p.id=#{piId}
+    WHERE b.id=#{batchId} AND b.series_id=p.series_id AND b.execution_pi_id=p.id AND b.customer_id=p.customer_id</select>
+  <sql id="batchView">
+    SELECT b.id,b.batch_no,b.series_id,b.execution_pi_id,b.customer_id,b.source_type,
+      CASE WHEN COALESCE(SUM(so.status='COMPLETED'),0)=0 THEN 'CANCELLED'
+        WHEN SUM(so.status='COMPLETED')=COUNT(*) THEN 'COMPLETED' ELSE 'PARTIALLY_CANCELLED' END status,
+      COUNT(i.stock_out_id) original_qty,COALESCE(SUM(so.status='COMPLETED'),0) active_qty,b.created_at
+    FROM bike_stock_out_batch b LEFT JOIN bike_stock_out_batch_item i ON i.batch_id=b.id
+    LEFT JOIN bike_stock_out_record so ON so.id=i.stock_out_id
+  </sql>
+  <select id="get" resultType="com.bike.server.pi.PiDispatchBatch"><include refid="batchView"/> WHERE b.id=#{id} GROUP BY b.id</select>
+  <select id="batches" resultType="com.bike.server.pi.PiDispatchBatch"><include refid="batchView"/>
+    WHERE b.series_id=(SELECT series_id FROM bike_pi WHERE id=#{piId}) GROUP BY b.id ORDER BY b.id DESC</select>
+  <select id="vehicles" resultType="map">SELECT so.id stockOutId,so.stock_out_no stockOutNo,so.order_id orderId,o.order_no orderNo,
+    so.vehicle_id vehicleId,v.frame_sn frameSn,i.sku_id skuId,s.sku_code skuCode,so.status,so.cancel_reason cancelReason
+    FROM bike_stock_out_batch_item i JOIN bike_stock_out_record so ON so.id=i.stock_out_id
+    JOIN bike_sales_order o ON o.id=so.order_id JOIN bike_vehicle v ON v.id=so.vehicle_id
+    LEFT JOIN bike_production_sku s ON s.id=i.sku_id WHERE i.batch_id=#{batchId} ORDER BY so.id</select>
+  <sql id="optionsWhere">p.status='RELEASED' AND p.release_status='RELEASED'
+    AND EXISTS(SELECT 1 FROM bike_pi_order_link l JOIN bike_sales_order o ON o.id=l.order_id WHERE l.series_id=p.series_id AND o.status IN ('CONFIRMED','PARTIAL_SHIPPED'))
+    <if test="keyword != null">AND (p.pi_no LIKE CONCAT('%',#{keyword},'%') OR p.customer_name LIKE CONCAT('%',#{keyword},'%'))</if>
+  </sql>
+  <select id="options" resultType="map">SELECT p.id,p.pi_no piNo,p.customer_id customerId,p.customer_name customerName,p.planned_ship_date plannedShipDate
+    FROM bike_pi_series s JOIN bike_pi p ON p.id=s.current_pi_id WHERE <include refid="optionsWhere"/> ORDER BY p.id DESC LIMIT #{offset},20</select>
+  <select id="countOptions" resultType="long">SELECT COUNT(*) FROM bike_pi_series s JOIN bike_pi p ON p.id=s.current_pi_id WHERE <include refid="optionsWhere"/></select>
+  <select id="warehouseHeader" resultType="map">SELECT p.id,p.pi_no piNo,p.customer_id customerId,p.customer_name customerName,p.status,
+    p.planned_ship_date plannedShipDate FROM bike_pi_series s JOIN bike_pi p ON p.id=s.current_pi_id WHERE p.id=#{piId}</select>
+  <select id="trace" resultType="com.bike.server.pi.PiDispatchMapper$Trace">
+    SELECT s.pi_no,p.revision execution_revision,b.batch_no,b.source_type
+    FROM bike_stock_out_record so JOIN bike_stock_out_batch_item i ON i.stock_out_id=so.id
+    JOIN bike_stock_out_batch b ON b.id=i.batch_id JOIN bike_pi_series s ON s.id=b.series_id
+    LEFT JOIN bike_pi p ON p.id=b.execution_pi_id WHERE so.stock_out_no=#{stockNo}
+  </select>
+</mapper>

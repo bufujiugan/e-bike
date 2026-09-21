@@ -19,6 +19,28 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 class UserServiceTest {
+    @Test void webWarehouseOperatorCanBindEnabledWorkstation() {
+        UserMapper mapper = Mockito.mock(UserMapper.class);
+        UserView user = new UserView(); user.setId(8L); user.setUserType("WEB_OPERATOR");
+        when(mapper.selectById(8L)).thenReturn(user);
+        when(mapper.countEnabledWorkstation(9L)).thenReturn(1);
+        when(mapper.updateProfile(eq(8L), any())).thenReturn(1);
+        new UserServiceImpl(mapper, new BCryptPasswordEncoder())
+                .update(8L,new UserUpdateRequest("仓管", "WEB_OPERATOR", null,9L));
+        verify(mapper).updateProfile(eq(8L),eq(new UserUpdateRequest("仓管","WEB_OPERATOR",null,9L)));
+    }
+
+    @Test void agentCannotBindInternalWorkstation() {
+        UserMapper mapper = Mockito.mock(UserMapper.class);
+        UserView user = new UserView(); user.setId(8L); user.setUserType("AGENT");
+        when(mapper.selectById(8L)).thenReturn(user);
+        when(mapper.countEnabledAgent(4L)).thenReturn(1);
+        when(mapper.countEnabledWorkstation(9L)).thenReturn(1);
+        assertThatThrownBy(() -> new UserServiceImpl(mapper, new BCryptPasswordEncoder())
+                .update(8L,new UserUpdateRequest("代理商", "AGENT",4L,9L)))
+                .hasMessageContaining("不能绑定内部工位");
+        verify(mapper,never()).updateProfile(eq(8L),any());
+    }
     @BeforeEach
     void setAuthenticatedAdmin() {
         SecurityContextHolder.getContext().setAuthentication(

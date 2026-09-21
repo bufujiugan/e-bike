@@ -15,10 +15,24 @@ const storageKey = computed(() => `bike_production_task:${props.username}`)
 const labels: Record<string,string> = { FRAME:'车架', MOTOR:'电机', BATTERY:'电池', DISPLAY:'仪表' }
 const options = computed(()=>skus.value.filter(s=>s.enabled).map(s=>({text:`${s.skuCode} · ${s.productName}`,value:s.id})))
 const completed = computed(()=>task.value?.status==='COMPLETED')
+type PrintJob = { id: string; status: string; claimedBy?: string; reason?: string; message?: string }
+const printJobs = ref<PrintJob[]>([]), printId = ref(''), labelReady = ref(false), reprintReason = ref('')
+const selectedPrint = computed(() => printJobs.value.find(job => job.id === printId.value))
+const printStates: Record<string,string> = { PENDING:'待打印', PROCESSING:'已领取，等待回报', SUBMITTED:'已提交打印队列', FAILED:'打印失败', UNKNOWN:'结果待核对' }
+const canReportPrint = computed(() => selectedPrint.value?.status === 'PROCESSING' && selectedPrint.value.claimedBy === props.username)
 function error(e: unknown) { failed.value=true;message.value=api.isAxiosError(e)?e.response?.data?.message??'请求失败，请重试':String(e) }
 async function run(action:()=>Promise<void>) { if(busy.value)return;busy.value=true;failed.value=false;try{await action()}catch(e){error(e)}finally{busy.value=false;await nextTick();scanInput.value?.focus()} }
-async function preview() { if(!task.value)return;labelHtml.value=(await api.get(`/api/production/prints/FIRST-${task.value.id}/label`,{responseType:'text'})).data }
-function accept(value: Task) { task.value=value;taskId.value=value.id;localStorage.setItem(storageKey.value,value.id) }
+async function loadLabel() {
+  labelReady.value = false; labelHtml.value = ''
+  if (printId.value) labelHtml.value = (await api.get(`/api/production/prints/${encodeURIComponent(printId.value)}/label`, { responseType:'text' })).data
+}
+async function preview() {
+  if (!task.value) return
+  printJobs.value = (await api.get(`/api/production/tasks/${task.value.id}/prints`)).data.data
+  if (!printJobs.value.some(job => job.id === printId.value)) printId.value = (printJobs.value.find(job => job.status === 'PENDING') ?? printJobs.value[0])?.id ?? ''
+  await loadLabel()
+}
+function accept(value: Task) { if(task.value?.id !== value.id){printId.value='';printJobs.value=[];labelHtml.value='';labelReady.value=false} task.value=value;taskId.value=value.id;localStorage.setItem(storageKey.value,value.id) }
 async function start() { await run(async()=>{
  if(!skuId.value){message.value='请选择生产商品';failed.value=true;return}
  const draftKey=storageKey.value+':draft'
@@ -31,8 +45,22 @@ async function start() { await run(async()=>{
 async function resume() { await run(async()=>{accept((await api.get(`/api/production/tasks/${encodeURIComponent(taskId.value.trim())}`)).data.data);message.value='作业进度已恢复';labelHtml.value='';if(completed.value)await preview()}) }
 async function scan() { if(!task.value||!scanCode.value.trim())return;await run(async()=>{accept((await api.post(`/api/production/tasks/${task.value!.id}/scan`,{code:scanCode.value.trim(),expectedType:expectedType.value||null})).data.data);scanCode.value='';expectedType.value='';message.value=completed.value?'四码绑定完成，聚合码和打印任务已生成':'扫码成功';if(completed.value)await preview()}) }
 async function cancel() { if(!task.value||!reason.value.trim()) {message.value='请填写取消原因';failed.value=true;return}try{await showConfirmDialog({title:'取消当前作业',message:'已扫描记录将保留，部件占用会释放。'})}catch(action){if(action!=='cancel')error(action);return}await run(async()=>{await api.post(`/api/production/tasks/${task.value!.id}/cancel`,{reason:reason.value});task.value=undefined;taskId.value='';localStorage.removeItem(storageKey.value);message.value='任务已取消';reason.value=''}) }
-async function printBrowser() { await run(async()=>{if(!task.value)return;await api.post(`/api/production/prints/FIRST-${task.value.id}/claim`,{terminal:'browser-manual'});labelFrame.value?.contentWindow?.print();message.value='已打开打印对话框，请核对实物并回报结果'}) }
-async function printResult(status:string) { await run(async()=>{await api.post(`/api/production/prints/FIRST-${task.value!.id}/result`,{status,message:status==='SUBMITTED'?'操作员确认已提交浏览器打印':'操作员报告打印失败'});message.value='打印结果已记录'}) }
+async function printBrowser() { await run(async()=>{
+  if (!selectedPrint.value || !labelReady.value || !labelFrame.value?.contentWindow) throw new Error('请选择任务并等待标签加载完成')
+  const job = (await api.post(`/api/production/prints/${printId.value}/claim`,{terminal:'browser-manual'})).data.data
+  printJobs.value = printJobs.value.map(item => item.id === job.id ? job : item)
+  labelFrame.value.contentWindow.print(); message.value='已打开打印对话框，请核对实物并回报结果'
+}) }
+async function printResult(status:string) { await run(async()=>{
+  if (!canReportPrint.value) throw new Error('只能回报当前账号领取且尚未超时的任务')
+  await api.post(`/api/production/prints/${printId.value}/result`,{status,message:status==='SUBMITTED'?'操作员确认已提交浏览器打印':status==='UNKNOWN'?'实物结果无法确认，等待核对':'操作员确认未成功打印'})
+  await preview(); message.value='打印结果已记录'
+}) }
+async function reprint() { await run(async()=>{
+  if (!selectedPrint.value || !reprintReason.value.trim()) throw new Error('请核对实物并填写补打原因')
+  const job = (await api.post(`/api/production/prints/${printId.value}/reprint`,{reason:reprintReason.value.trim()})).data.data
+  printId.value=job.id; await preview(); reprintReason.value=''; message.value='补打任务已创建并选中，可以人工打印或等待自动终端领取'
+}) }
 async function reportIssue(){await run(async()=>{const result=(await api.post('/api/production/issues',{code:issueCode.value,reason:issueReason.value})).data.data;issueId.value=result.id;message.value='异常已登记，相关车辆/部件已隔离';if(imageFile.value)await uploadImage()})}
 async function uploadImage(){if(!issueId.value||!imageFile.value)return;const form=new FormData();form.append('file',imageFile.value);await api.post(`/api/production/issues/${issueId.value}/images`,form);message.value='异常和图片均已保存';imageFile.value=undefined}
 function pickImage(event:Event){imageFile.value=(event.target as HTMLInputElement).files?.[0]}
@@ -67,10 +95,18 @@ onMounted(async()=>{try{skus.value=(await api.get('/api/production/skus')).data.
       <div v-if="completed" class="completed-card">
         <strong>聚合码已生成</strong><p class="task-number">{{ task.qrCode }}</p>
         <p>自动打印终端连接后会领取任务；也可使用下方人工打印。</p>
-        <iframe v-if="labelHtml" ref="labelFrame" :srcdoc="labelHtml" title="整车外箱标签" class="label-frame" sandbox="allow-same-origin allow-modals" />
-        <van-button type="primary" :disabled="busy" @click="printBrowser">人工打印标签</van-button>
-        <van-button size="small" :disabled="busy" @click="printResult('SUBMITTED')">确认已提交打印</van-button>
-        <van-button size="small" :disabled="busy" @click="printResult('FAILED')">报告打印失败</van-button>
+        <label>打印任务<select v-model="printId" :disabled="busy" @change="run(loadLabel)"><option v-for="job in printJobs" :key="job.id" :value="job.id">{{ printStates[job.status] ?? job.status }} · {{ job.reason || job.id }}</option></select></label>
+        <p v-if="selectedPrint">{{ printStates[selectedPrint.status] }} · {{ selectedPrint.message || '等待处理' }}</p>
+        <van-button size="small" :disabled="busy" @click="run(preview)">刷新打印状态</van-button>
+        <iframe v-if="labelHtml" ref="labelFrame" :srcdoc="labelHtml" title="整车外箱标签" class="label-frame" sandbox="allow-same-origin allow-modals" @load="labelReady = true" />
+        <van-button type="primary" :disabled="busy || !labelReady || selectedPrint?.status !== 'PENDING'" @click="printBrowser">人工打印所选任务</van-button>
+        <van-button size="small" :disabled="busy || !canReportPrint" @click="printResult('SUBMITTED')">确认已提交打印</van-button>
+        <van-button size="small" :disabled="busy || !canReportPrint" @click="printResult('FAILED')">确认打印失败</van-button>
+        <van-button size="small" :disabled="busy || !canReportPrint" @click="printResult('UNKNOWN')">结果无法确认</van-button>
+        <template v-if="selectedPrint && ['SUBMITTED','FAILED','UNKNOWN'].includes(selectedPrint.status)">
+          <van-field v-model="reprintReason" label="补打原因" placeholder="核对实物后填写，避免重复出纸" maxlength="500" />
+          <van-button size="small" :disabled="busy || !reprintReason.trim()" @click="reprint">创建补打任务</van-button>
+        </template>
       </div>
     </div>
     <van-collapse v-model="issuePanel" accordion>

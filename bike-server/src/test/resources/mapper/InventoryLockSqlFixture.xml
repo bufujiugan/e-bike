@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="lockFixture">
+  <update id="createModels">CREATE TEMPORARY TABLE bike_product_model (id BIGINT PRIMARY KEY,enabled INT NOT NULL)</update>
+  <insert id="seedModels">INSERT INTO bike_product_model VALUES(1,1),(27,1),(28,0)</insert>
+  <update id="create">CREATE TEMPORARY TABLE bike_inventory_lock (
+    id BIGINT PRIMARY KEY, lock_qty INT NOT NULL, released_qty INT NOT NULL,
+    converted_qty INT NOT NULL, status VARCHAR(32) NOT NULL, expire_time DATETIME NOT NULL
+  )</update>
+  <insert id="seed">INSERT INTO bike_inventory_lock VALUES (1,10,0,0,'LOCKED',DATE_ADD(NOW(),INTERVAL 1 DAY))</insert>
+  <select id="read" resultType="map">SELECT status,lock_qty-released_qty-converted_qty remaining FROM bike_inventory_lock WHERE id=1</select>
+</mapper>

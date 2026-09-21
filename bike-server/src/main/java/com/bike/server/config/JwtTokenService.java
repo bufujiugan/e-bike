@@ -29,10 +29,16 @@ public class JwtTokenService {
     }
 
     public Token issue(String username) {
+        return issue(username, 0);
+    }
+
+    public Token issue(String username, long authVersion) {
         Instant now = Instant.now();
         Instant expiresAt = now.plus(tokenTtl);
         String value = Jwts.builder()
                 .subject(username)
+                .id(java.util.UUID.randomUUID().toString())
+                .claim("av", authVersion)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(expiresAt))
                 // 显式固定算法，避免 JJWT 根据非标准长度密钥自动推断为 HS384，
@@ -43,9 +49,17 @@ public class JwtTokenService {
     }
 
     public String parseUsername(String token) {
-        Claims claims = Jwts.parser().verifyWith(signingKey).build().parseSignedClaims(token).getPayload();
-        return claims.getSubject();
+        return parse(token).username();
     }
+
+    public Identity parse(String token) {
+        Claims claims = Jwts.parser().verifyWith(signingKey).build().parseSignedClaims(token).getPayload();
+        Number version = claims.get("av", Number.class);
+        if (claims.getId() == null || version == null) throw new IllegalArgumentException("登录凭证已升级，请重新登录");
+        return new Identity(claims.getSubject(), claims.getId(), version.longValue(), claims.getExpiration().toInstant());
+    }
+
+    public record Identity(String username, String id, long authVersion, Instant expiresAt) {}
 
     public record Token(String value, long expiresInSeconds) {
     }

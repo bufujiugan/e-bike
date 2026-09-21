@@ -15,6 +15,29 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class InventoryLockServiceTest {
 
+    @Test
+    void lookupByNumberDoesNotDependOnPagination() {
+        InventoryLockMapper mapper = Mockito.mock(InventoryLockMapper.class);
+        InventoryLockView record = lock(101L, 1L, "LOCKED", 10, 0, 0);
+        Mockito.when(mapper.selectByNo("LK101")).thenReturn(record);
+        assertThat(new InventoryLockServiceImpl(mapper).getByNo(" LK101 ")).isSameAs(record);
+        Mockito.verify(mapper).selectByNo("LK101");
+        Mockito.verify(mapper, Mockito.never()).selectPage(Mockito.any(), Mockito.anyLong(), Mockito.anyLong());
+    }
+
+    @Test
+    void lookupByNumberRejectsAnotherAgentsRecord() {
+        var authentication = new UsernamePasswordAuthenticationToken("dealer", "N/A", java.util.List.of(
+                new SimpleGrantedAuthority("ROLE_WEB_AGENT"), new SimpleGrantedAuthority("PERM_AGENT_LOCK_WRITE")));
+        authentication.setDetails(new UserAuthRecord(2L, "dealer", "hash", "AGENT", 2L, null, true));
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        InventoryLockMapper mapper = Mockito.mock(InventoryLockMapper.class);
+        Mockito.when(mapper.selectByNo("LK101")).thenReturn(lock(101L, 1L, "LOCKED", 10, 0, 0));
+        assertThatThrownBy(() -> new InventoryLockServiceImpl(mapper).getByNo("LK101"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo("FORBIDDEN");
+    }
+
     @org.junit.jupiter.api.BeforeEach
     void setAuthenticatedAdmin() {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
@@ -110,6 +133,8 @@ class InventoryLockServiceTest {
         Mockito.when(mapper.insertDetail(Mockito.anyString(), Mockito.eq(1L), Mockito.eq(1))).thenReturn(1);
         Mockito.when(mapper.selectIdByNo(Mockito.anyString())).thenReturn(8L);
         Mockito.when(mapper.selectById(8L)).thenReturn(lock(8L, 101L, "LOCKED", 1, 0, 0));
+        Mockito.when(mapper.countAuthorizedModel(101L, 1L)).thenReturn(1);
+        Mockito.when(mapper.lockAgentAccess(101L)).thenReturn(101L);
 
         InventoryLockView result = new InventoryLockServiceImpl(mapper)
                 .create(new InventoryLockCreateRequest(null, 1L, 1, null, "agent lock"));
@@ -208,6 +233,38 @@ class InventoryLockServiceTest {
                 .extracting(BusinessException::getCode)
                 .isEqualTo("FORBIDDEN");
         Mockito.verify(mapper, Mockito.never()).release(Mockito.anyLong(), Mockito.anyString());
+    }
+
+    @Test
+    void legacyConversionAuditIsReadOnlyAndPaginatedForInternalOrderReaders() {
+        InventoryLockMapper mapper = Mockito.mock(InventoryLockMapper.class);
+        var row = new LegacyConversionAuditView(8L, "OLD-8", 1L, "代理商", 1L, "车型", 5, 0, 2,
+                "CONVERTED", LocalDateTime.now().plusHours(1), LocalDateTime.now(), "旧版本");
+        Mockito.when(mapper.selectLegacyConversions(20L, 20L)).thenReturn(java.util.List.of(row));
+        Mockito.when(mapper.countLegacyConversions()).thenReturn(21L);
+
+        var result = new InventoryLockServiceImpl(mapper).legacyConversions(2, 20);
+
+        assertThat(result.records()).containsExactly(row);
+        assertThat(result.page()).isEqualTo(2);
+        assertThat(result.total()).isEqualTo(21);
+        Mockito.verify(mapper).selectLegacyConversions(20L, 20L);
+        Mockito.verify(mapper).countLegacyConversions();
+        Mockito.verifyNoMoreInteractions(mapper);
+    }
+
+    @Test
+    void agentCannotReadLegacyConversionAudit() {
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                "agent", "N/A", java.util.List.of(new SimpleGrantedAuthority("ROLE_WEB_AGENT"),
+                new SimpleGrantedAuthority("PERM_ORDER_READ"))));
+        InventoryLockMapper mapper = Mockito.mock(InventoryLockMapper.class);
+        assertThatThrownBy(() -> new InventoryLockServiceImpl(mapper).legacyConversions(1, 20))
+                .isInstanceOf(BusinessException.class)
+                .extracting(BusinessException.class::cast)
+                .extracting(BusinessException::getCode)
+                .isEqualTo("FORBIDDEN");
+        Mockito.verifyNoInteractions(mapper);
     }
 
     private static InventoryLockView lock(long id, long agentId, String status, int qty, int released, int converted) {

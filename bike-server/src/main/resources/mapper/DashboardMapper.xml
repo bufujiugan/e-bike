@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.bike.server.dashboard.DashboardMapper">
+    <select id="selectInventorySummary" resultType="map"><include refid="com.bike.server.stock.InventoryPolicyMapper.inventorySummary"/></select>
     <select id="selectSummaryCounts" resultType="map">
         SELECT
             (SELECT COUNT(*) FROM bike_vehicle WHERE assemble_time &gt;= CURRENT_DATE()) AS todayAssembled,
             (SELECT COUNT(*) FROM bike_vehicle WHERE status = 2) AS physicalInventory,
+            (SELECT COUNT(*) FROM bike_vehicle v WHERE status=2 AND <include refid="com.bike.server.stock.InventoryPolicyMapper.quarantined"/>) AS quarantinedInventory,
             (SELECT COUNT(*) FROM bike_stock_in_record WHERE operation_time &gt;= CURRENT_DATE() AND status = 'COMPLETED') AS todayStockIn,
             (SELECT COUNT(*) FROM bike_stock_out_record WHERE operation_time &gt;= CURRENT_DATE() AND status = 'COMPLETED') AS todayStockOut
-            ,(SELECT COALESCE(SUM(lock_qty - released_qty - converted_qty), 0) FROM bike_inventory_lock WHERE status IN ('LOCKED','PARTIAL_CONVERTED') AND expire_time &gt; NOW() AND lock_qty &gt; released_qty + converted_qty) AS lockedInventory
+            ,(SELECT COALESCE(SUM(qty),0) FROM (<include refid="com.bike.server.stock.InventoryPolicyMapper.commitments"/>) c) AS lockedInventory
     </select>
     <select id="selectVehicleStatusCounts" resultType="map">
         SELECT CASE status WHEN 0 THEN '待组装' WHEN 1 THEN '组装完成' WHEN 2 THEN '已入库' WHEN 3 THEN '已出库'
@@ -21,8 +23,9 @@
         SELECT DATE_FORMAT(operation_time, '%H:%i:%s') AS time, action,
                COALESCE(frame_sn, business_id, '-') AS target,
                COALESCE(operator_name, '-') AS operator,
-               '已完成' AS status
-        FROM bike_operation_log ORDER BY operation_time DESC LIMIT 10
+               '已记录' AS status
+        FROM bike_operation_log WHERE 1=1
+        <include refid="com.bike.server.common.AuditPolicyMapper.financialVisibility"/> ORDER BY operation_time DESC LIMIT 10
     </select>
     <select id="selectTrend" resultType="map">
         SELECT event_date AS date,

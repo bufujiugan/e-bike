@@ -45,18 +45,18 @@ public class ModuleServiceImpl implements ModuleService {
         requireModulePermission(module);
         requireModuleAccess(module);
         ModuleDefinition definition = DEFINITIONS.get(module);
-        List<Map<String, Object>> sourceRows = moduleMapper.selectRows(normalize(module), CurrentOperator.hasRole("WEB_AGENT") ? CurrentOperator.agentId() : null);
         String normalizedKeyword = keyword == null || keyword.isBlank() ? null : keyword.trim().toLowerCase(java.util.Locale.ROOT);
-        List<List<String>> allRows = sourceRows.stream()
-                .map(row -> definition.columns().stream().map(column -> display(row.get(column))).toList())
-                .filter(row -> normalizedKeyword == null || row.stream().anyMatch(cell -> cell.toLowerCase(java.util.Locale.ROOT).contains(normalizedKeyword)))
-                .toList();
-        long normalizedPage = Math.max(1, page);
+        long normalizedPage = Math.min(10_000_000, Math.max(1, page));
         long normalizedSize = Math.min(100, Math.max(1, pageSize));
-        int from = (int) Math.min(allRows.size(), (normalizedPage - 1) * normalizedSize);
-        int to = Math.min(allRows.size(), from + (int) normalizedSize);
-        List<List<String>> rows = allRows.subList(from, to);
-        return new ModulePageResponse(definition.subtitle(), definition.stats(allRows), definition.columns(), rows, definition.action(), normalizedPage, normalizedSize, allRows.size());
+        Long agentId = CurrentOperator.hasRole("WEB_AGENT") ? CurrentOperator.agentId() : null;
+        String sortColumn = List.of("更新时间", "操作时间", "时间", "组装时间", "开始时间", "创建时间", "入库日期", "查询时间")
+                .stream().filter(definition.columns()::contains).findFirst().orElse(definition.columns().getFirst());
+        boolean financialAudit = com.bike.server.common.FinancialAuditAccess.allowed();
+        long total = moduleMapper.countRows(normalize(module), agentId, definition.columns(), normalizedKeyword, financialAudit);
+        List<List<String>> rows = moduleMapper.selectRowsPage(normalize(module), agentId, definition.columns(), normalizedKeyword,
+                        sortColumn, (normalizedPage - 1) * normalizedSize, normalizedSize, financialAudit).stream()
+                .map(row -> definition.columns().stream().map(column -> display(row.get(column))).toList()).toList();
+        return new ModulePageResponse(definition.subtitle(), definition.stats(total), definition.columns(), rows, definition.action(), normalizedPage, normalizedSize, total);
     }
 
     private static void requireModuleAccess(String module) {
@@ -116,13 +116,13 @@ public class ModuleServiceImpl implements ModuleService {
 
     private static Map<String, ModuleDefinition> definitions() {
         Map<String, ModuleDefinition> definitions = new LinkedHashMap<>();
-        definitions.put("assembly", definition("四码绑定、工位进度与异常扫码记录", List.of("车架 SN", "当前工位", "完成进度", "操作员", "开始时间", "状态"), "新建组装任务"));
-        definitions.put("vehicles", definition("按车架、部件、状态和订单查询整车档案", List.of("整车编号", "车架 SN", "电机 SN", "电池 SN", "仪表 SN", "整车状态", "车型", "组装时间", "入库时间", "出库时间", "客户", "订单", "仓库", "库位"), "导出整车档案"));
-        definitions.put("inventory", definition("车型、仓库、库位和锁定库存实时汇总", List.of("车型", "仓库", "库位", "物理库存", "锁定库存", "可用库存", "库龄", "入库日期"), "锁定库存"));
+        definitions.put("assembly", definition("生产任务实际扫码进度与最近扫码工位", List.of("车架 SN", "当前工位", "完成进度", "操作员", "开始时间", "状态", "任务号"), "新建组装任务"));
+        definitions.put("vehicles", definition("按车架、部件、SKU、批次、状态和订单查询整车档案", List.of("整车编号", "车架 SN", "电机 SN", "电池 SN", "仪表 SN", "整车状态", "车型", "组装时间", "入库时间", "出库时间", "客户", "订单", "仓库", "库位", "SKU", "生产批次"), "导出整车档案"));
+        definitions.put("inventory", definition("库位数量为车型展示分摊；车型SKU缺口独立显示，末三列为全车型数值不可跨库位累计。具体SKU申请上限请进入SKU库存锁定", List.of("车型", "仓库", "库位", "物理库存", "锁定库存", "分摊可新增上限", "库龄", "入库日期", "隔离库存", "临时锁定", "订单占用", "库存缺口", "车型SKU缺口（不累计）", "历史车型承诺（不累计）", "车型可新增上限（不累计）"), "锁定库存"));
         definitions.put("stock", definition("整车入库、出库及撤销记录", List.of("业务单号", "类型", "整车数量", "客户 / 仓库", "操作人", "操作时间", "状态"), "新建出入库单"));
         definitions.put("stock-in", definition("整车入库记录及撤销状态", List.of("业务单号", "类型", "整车数量", "客户 / 仓库", "操作人", "操作时间", "状态"), "办理入库"));
         definitions.put("stock-out", definition("整车出库记录及撤销状态", List.of("业务单号", "类型", "整车数量", "客户 / 仓库", "操作人", "操作时间", "状态"), "办理出库"));
-        definitions.put("orders", definition("客户订单、出库进度与车辆明细", List.of("订单号", "客户", "车型", "订单数量", "已出库", "计划发货", "状态"), "新建销售订单"));
+        definitions.put("orders", definition("客户订单、出库进度与车辆明细", List.of("订单号", "客户", "车型", "订单数量", "已出库", "计划发货", "状态", "来源锁定", "占用截止", "占用状态", "备注"), "新建销售订单"));
         definitions.put("agents", definition("代理商基础资料与联系信息", List.of("代理商编号", "代理商名称", "联系人", "联系电话", "状态", "更新时间"), "新增代理商"));
         definitions.put("trace", definition("通过车架 SN、部件 SN 或总二维码查看完整链路", List.of("查询对象", "整车 / 车架", "当前状态", "最近操作", "订单号", "客户", "查询时间"), "开始追溯查询"));
         definitions.put("parts", definition("零部件来料、质检和绑定状态", List.of("零部件 SN", "类型", "供应商", "批次", "绑定状态", "当前车架", "状态"), "新增零部件"));
@@ -140,7 +140,7 @@ public class ModuleServiceImpl implements ModuleService {
         definitions.put("rework", definition("返工原因、换件记录和操作历史", List.of("返工单号", "车架 SN", "返工原因", "状态", "操作人", "操作时间"), "创建返工记录"));
         definitions.put("operation-logs", definitions.get("logs"));
         definitions.put("config", definition("扫码、锁库和系统运行参数", List.of("配置键", "配置值", "说明", "更新时间"), "刷新配置"));
-        definitions.put("agent-dashboard", definition("代理商授权车型、锁定库存和订单概览", List.of("代理商", "授权车型", "锁定库存", "有效期", "关联订单", "负责人", "状态"), "刷新概览"));
+        definitions.put("agent-dashboard", definition("代理商锁定历史与来源订单；到期和释放记录保留，当前授权车型请查看代理商库存", List.of("代理商", "车型", "有效临时锁定", "有效期", "关联订单数", "创建人", "状态", "锁定单号"), "刷新概览"));
         definitions.put("agent-inventory", definitions.get("inventory"));
         definitions.put("agent-locks", definitions.get("inventory-locks"));
         definitions.put("purchase-intents", definition("代理商采购意向与后续订单线索", List.of("代理商", "授权车型", "意向数量", "有效期", "状态"), "新增采购意向"));
@@ -152,11 +152,10 @@ public class ModuleServiceImpl implements ModuleService {
     }
 
     private record ModuleDefinition(String subtitle, List<String> columns, String action) {
-        List<ModulePageResponse.Stat> stats(List<?> rows) {
-            long count = rows.size();
+        List<ModulePageResponse.Stat> stats(long count) {
             String value = String.valueOf(count);
             return List.of(new ModulePageResponse.Stat("查询结果", value, "blue"),
-                    new ModulePageResponse.Stat("数据范围", LocalDate.now().toString(), "green"));
+                    new ModulePageResponse.Stat("查询日期", LocalDate.now().toString(), "green"));
         }
     }
 }

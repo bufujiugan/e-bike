@@ -14,7 +14,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 @RequestMapping("/api/assembly")
 public class AssemblyController {
     private final AssemblyService assemblyService;
-    public AssemblyController(AssemblyService assemblyService) { this.assemblyService = assemblyService; }
+    private final com.bike.server.production.LegacyAssemblyService legacyAssemblyService;
+    public AssemblyController(AssemblyService assemblyService, com.bike.server.production.LegacyAssemblyService legacyAssemblyService) { this.assemblyService = assemblyService; this.legacyAssemblyService=legacyAssemblyService; }
 
     @PostMapping("/validate-frame")
     public ApiResponse<AssemblyValidationResult> validateFrame(@Valid @RequestBody FrameScanRequest request) {
@@ -26,7 +27,7 @@ public class AssemblyController {
     }
     @PostMapping("/submit")
     public ApiResponse<VehicleView> submit(@Valid @RequestBody AssemblySubmitRequest request) {
-        return ApiResponse.success("组装完成", assemblyService.submit(request));
+        return ApiResponse.success("组装完成", legacyAssemblyService.submit(request));
     }
 
     @GetMapping("/{frameSn}")

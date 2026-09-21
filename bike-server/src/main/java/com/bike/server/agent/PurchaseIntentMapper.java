@@ -9,8 +9,9 @@ import java.util.List;
 public interface PurchaseIntentMapper {
     List<PurchaseIntentView> selectPage(@Param("agentId") Long agentId, @Param("offset") long offset, @Param("limit") long limit);
     long count(@Param("agentId") Long agentId);
+    Long lockAgentAccess(@Param("agentId") long agentId);
     int countAuthorizedModel(@Param("agentId") long agentId, @Param("modelId") long modelId);
     int insert(@Param("request") PurchaseIntentCreateRequest request, @Param("agentId") long agentId, @Param("createdBy") Long createdBy);
-    long selectLatestId(@Param("agentId") long agentId);
+    long selectInsertedId();
     PurchaseIntentView selectById(@Param("id") long id);
 }

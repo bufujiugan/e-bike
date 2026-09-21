@@ -23,7 +23,7 @@ public class VehicleServiceImpl implements VehicleService {
     @Override
     public PageResponse<VehicleView> list(String keyword, Integer status, Long modelId, Long customerId, String orderNo,
                                           LocalDate fromDate, LocalDate toDate, long page, long pageSize) {
-        com.bike.server.common.CurrentOperator.requireAnyPermission("VEHICLE_READ", "INVENTORY_READ", "TRACE_READ");
+        com.bike.server.common.CurrentOperator.requireInternalWebAccess(); com.bike.server.common.CurrentOperator.requireAnyPermission("VEHICLE_READ", "INVENTORY_READ", "TRACE_READ");
         if (fromDate != null && toDate != null && fromDate.isAfter(toDate)) {
             throw new BusinessException("INVALID_PARAMETER", "开始日期不能晚于结束日期");
         }
@@ -36,9 +36,9 @@ public class VehicleServiceImpl implements VehicleService {
                 vehicleMapper.count(normalizedKeyword, status, modelId, customerId, normalizedOrderNo, fromDate, toDate));
     }
 
-    @Override public VehicleView getById(long id) { com.bike.server.common.CurrentOperator.requireAnyPermission("VEHICLE_READ", "INVENTORY_READ", "TRACE_READ"); return require(vehicleMapper.selectById(id)); }
-    @Override public VehicleView getByFrame(String frameSn) { com.bike.server.common.CurrentOperator.requireAnyPermission("VEHICLE_READ", "INVENTORY_READ", "TRACE_READ"); return require(vehicleMapper.selectByFrame(snRuleService.normalizeFrameSn(frameSn))); }
-    @Override public VehicleView getByQr(String qrCode) { com.bike.server.common.CurrentOperator.requireAnyPermission("VEHICLE_READ", "INVENTORY_READ", "TRACE_READ"); return require(vehicleMapper.selectByQr(normalizeQr(qrCode))); }
+    @Override public VehicleView getById(long id) { com.bike.server.common.CurrentOperator.requireInternalWebAccess(); com.bike.server.common.CurrentOperator.requireAnyPermission("VEHICLE_READ", "INVENTORY_READ", "TRACE_READ"); return require(vehicleMapper.selectById(id)); }
+    @Override public VehicleView getByFrame(String frameSn) { com.bike.server.common.CurrentOperator.requireInternalWebAccess(); com.bike.server.common.CurrentOperator.requireAnyPermission("VEHICLE_READ", "INVENTORY_READ", "TRACE_READ"); return require(vehicleMapper.selectByFrame(snRuleService.normalizeFrameSn(frameSn))); }
+    @Override public VehicleView getByQr(String qrCode) { com.bike.server.common.CurrentOperator.requireInternalWebAccess(); com.bike.server.common.CurrentOperator.requireAnyPermission("VEHICLE_READ", "INVENTORY_READ", "TRACE_READ"); return require(vehicleMapper.selectByQr(normalizeQr(qrCode))); }
 
     @Override
     @Transactional

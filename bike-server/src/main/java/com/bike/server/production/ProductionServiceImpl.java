@@ -24,6 +24,7 @@ public class ProductionServiceImpl implements ProductionService {
   private final VehicleMapper vehicles;
   private final SnRuleService snRules;
   private final ObjectMapper json;
+  private final ScanFailureService scanFailures;
 
   public ProductionServiceImpl(
       ProductionMapper mapper,
@@ -31,13 +32,14 @@ public class ProductionServiceImpl implements ProductionService {
       AssemblyService assembly,
       VehicleMapper vehicles,
       SnRuleService snRules,
-      ObjectMapper json) {
+      ObjectMapper json, ScanFailureService scanFailures) {
     this.mapper = mapper;
     this.guard = guard;
     this.assembly = assembly;
     this.vehicles = vehicles;
     this.snRules = snRules;
     this.json = json;
+    this.scanFailures = scanFailures;
   }
 
   @Override
@@ -50,6 +52,10 @@ public class ProductionServiceImpl implements ProductionService {
   public List<Map<String, Object>> inventory(Long skuId, Long warehouseId) {
     ProductionAccess.read();
     return mapper.selectProductionInventory(skuId, warehouseId);
+  }
+  @Override public List<Map<String,Object>> inventory(Long skuId, Long warehouseId, Long locationId) {
+    ProductionAccess.read();
+    return mapper.selectProductionInventoryFiltered(skuId,warehouseId,locationId);
   }
 
   @Override
@@ -141,10 +147,29 @@ public class ProductionServiceImpl implements ProductionService {
     return new PageResponse<>(
         mapper.selectTasks(clean(keyword), (p - 1) * 50), p, 50, mapper.countTasks(clean(keyword)));
   }
+  @Override public PageResponse<Map<String,Object>> listTasks(String keyword, long page, Long skuId, String status,
+      java.time.LocalDate fromDate, java.time.LocalDate toDate) {
+    ProductionAccess.read();
+    String state=clean(status);
+    if(state!=null && !Set.of("OPEN","COMPLETED","CANCELLED").contains(state)) fail("INVALID_PARAMETER","任务状态无效");
+    if(fromDate!=null && toDate!=null && fromDate.isAfter(toDate)) fail("INVALID_PARAMETER","开始日期不能晚于结束日期");
+    long p=Math.min(10_000_000,Math.max(1,page));
+    return new PageResponse<>(mapper.selectTasksFiltered(clean(keyword),(p-1)*50,skuId,state,fromDate,toDate),p,50,
+        mapper.countTasksFiltered(clean(keyword),skuId,state,fromDate,toDate));
+  }
 
   @Override
   @Transactional
   public Map<String, Object> scan(String id, ScanRequest request) {
+    try {
+      return scanLocked(id, request);
+    } catch (BusinessException error) {
+      scanFailures.record(id, request, error);
+      throw error;
+    }
+  }
+
+  private Map<String, Object> scanLocked(String id, ScanRequest request) {
     ProductionAccess.operate();
     guard.lock();
     var task = required(mapper.selectTask(id), "生产任务不存在");
@@ -312,9 +337,11 @@ public class ProductionServiceImpl implements ProductionService {
   }
 
   @Override
-  public List<Map<String, Object>> listQuarantinedParts() {
+  public PageResponse<Map<String, Object>> listQuarantinedParts(String keyword, long page) {
     ProductionAccess.read();
-    return mapper.selectQuarantinedParts();
+    long p = Math.max(1, page);
+    return new PageResponse<>(mapper.selectQuarantinedParts(clean(keyword), (p - 1) * 50),
+        p, 50, mapper.countQuarantinedParts(clean(keyword)));
   }
 
   @Override
@@ -340,6 +367,14 @@ public class ProductionServiceImpl implements ProductionService {
   public Map<String, Object> getPrint(String id) {
     ProductionAccess.read();
     return required(mapper.selectPrint(id), "打印任务不存在");
+  }
+
+  @Override
+  public List<Map<String, Object>> taskPrints(String taskId) {
+    ProductionAccess.read();
+    var task = required(mapper.selectTask(taskId), "生产任务不存在");
+    if (task.get("vehicleId") == null) return List.of();
+    return mapper.selectVehiclePrints(number(task, "vehicleId"));
   }
 
   @Override

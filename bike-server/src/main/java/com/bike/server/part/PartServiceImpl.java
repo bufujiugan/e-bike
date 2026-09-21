@@ -27,7 +27,7 @@ public class PartServiceImpl implements PartService {
 
     @Override
     public PageResponse<PartView> list(String keyword, String partType, String status, Long supplierId, long page, long pageSize) {
-        com.bike.server.common.CurrentOperator.requireAnyPermission("PART_READ", "INVENTORY_READ");
+        com.bike.server.common.CurrentOperator.requireInternalWebAccess(); com.bike.server.common.CurrentOperator.requireAnyPermission("PART_READ", "INVENTORY_READ");
         long normalizedPage = Math.max(1, page);
         long normalizedSize = Math.min(100, Math.max(1, pageSize));
         long offset = (normalizedPage - 1) * normalizedSize;
@@ -38,7 +38,7 @@ public class PartServiceImpl implements PartService {
 
     @Override
     public PartView getById(long id) {
-        com.bike.server.common.CurrentOperator.requireAnyPermission("PART_READ", "INVENTORY_READ", "TRACE_READ");
+        com.bike.server.common.CurrentOperator.requireInternalWebAccess(); com.bike.server.common.CurrentOperator.requireAnyPermission("PART_READ", "INVENTORY_READ", "TRACE_READ");
         PartView part = partMapper.selectById(id);
         if (part == null) throw new BusinessException("PART_NOT_FOUND", "零部件不存在");
         return part;
@@ -46,7 +46,7 @@ public class PartServiceImpl implements PartService {
 
     @Override
     public PartView getBySn(String partSn) {
-        com.bike.server.common.CurrentOperator.requireAnyPermission("PART_READ", "INVENTORY_READ", "TRACE_READ");
+        com.bike.server.common.CurrentOperator.requireInternalWebAccess(); com.bike.server.common.CurrentOperator.requireAnyPermission("PART_READ", "INVENTORY_READ", "TRACE_READ");
         PartView part = partMapper.selectBySn(snRuleService.normalizePartSn(partSn, null));
         if (part == null) throw new BusinessException("PART_NOT_FOUND", "零部件不存在");
         return part;
@@ -55,7 +55,7 @@ public class PartServiceImpl implements PartService {
     @Override
     @Transactional
     public PartView create(PartCreateRequest request) {
-        com.bike.server.common.CurrentOperator.requirePermission("PART_WRITE");
+        com.bike.server.common.CurrentOperator.requireInternalWebAccess(); com.bike.server.common.CurrentOperator.requirePermission("PART_WRITE");
         String partType = request.partType().trim().toUpperCase(Locale.ROOT);
         String partSn = snRuleService.normalizePartSn(request.partSn(), partType);
         validateSupplier(request.supplierId());
@@ -73,7 +73,7 @@ public class PartServiceImpl implements PartService {
     @Override
     @Transactional
     public PartView update(long id, PartUpdateRequest request) {
-        com.bike.server.common.CurrentOperator.requirePermission("PART_WRITE");
+        com.bike.server.common.CurrentOperator.requireInternalWebAccess(); com.bike.server.common.CurrentOperator.requirePermission("PART_WRITE");
         if(productionGuard!=null)productionGuard.lock();
         PartView before = getById(id);
         validateSupplier(request.supplierId());
