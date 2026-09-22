@@ -81,7 +81,8 @@ try {
   await req(`${casePath(id)}/review`, { action: 'START' }, { token: reviewer.token });
   await req(`${casePath(id)}/review`, { action: 'APPROVE' }, { token: reviewer.token, code: 'AFTER_SALES_SOLUTION_REQUIRED' });
   await req(`${casePath(id)}/review`, { action: 'APPROVE' }, { token: technician.token, code: 'PERMISSION_DENIED' });
-  await req(`${casePath(id)}/solution`, { technicalJudgment: '已复核故障描述', solution: '更换电机后测试', internalNote: '仅供内部：责任分析记录' }, { token: technician.token });
+  const solutionBody = { technicalJudgment: '已复核故障描述', solution: '更换电机后测试', internalNote: '仅供内部：责任分析记录', faultCause: '轴承故障', customerActions: '安装后测试', repairNotes: '记录诊断结果', warrantyStatus: 'IN_WARRANTY', currency: 'CNY', parts: [{ partCode: 'MOTOR-TEST', partName: '替换电机', quantity: 1, unitCharge: '0.00', returnRequired: true }] };
+  const firstPlan = (await req(`${casePath(id)}/solution`, solutionBody, { token: technician.token })).solutionVersion;
   await req(`${casePath(id)}/solution`, { solution: '外部技术越权' }, { token: externalA.token, code: 'FORBIDDEN' });
   assert.equal((await req(casePath(id), undefined, { token: technician.token })).status, 'UNDER_REVIEW');
   pass('只读账号不能留言；草稿不能直接批准；审核前不能保存方案；审批需要维修方案，技术账号不能审批');
@@ -91,21 +92,54 @@ try {
   assert.equal(publicMessage.body, '客户补充：仍然没有动力'); assert.notEqual(privateMessage.id, publicMessage.id);
   await req(`${casePath(id)}/messages`, { body: '不合法范围', visibility: 'SECRET' }, { token: technician.token, code: 'INVALID_PARAMETER' });
   await req(`${casePath(id)}/messages`, { body: '越权内部留言', visibility: 'INTERNAL' }, { token: externalA.token, code: 'PERMISSION_DENIED' });
-  for (const token of [externalA.token, reader.token, warehouse.token]) {
+  for (const token of [externalA.token, reader.token]) {
     const current = await req(casePath(id), undefined, { token }); assert.equal(current.internalNote, null);
     assert(current.messages.every(message => message.visibility === 'CUSTOMER'));
     assert(current.history.every(event => event.action !== 'INTERNAL_MESSAGE_ADDED'));
     assert(!JSON.stringify(current).includes('仅供内部'));
   }
+  await req(casePath(id), undefined, { token: warehouse.token, code: 'FORBIDDEN' });
   const internal = await req(casePath(id), undefined, { token: technician.token });
   assert.equal(internal.internalNote, '仅供内部：责任分析记录'); assert(internal.messages.some(message => message.id === privateMessage.id));
   const ownList = await req(`/api/after-sales/cases?keyword=${encodeURIComponent(own.caseNo)}`, undefined, { token: externalA.token }); assert.equal(ownList.records[0].internalNote, null);
   pass('客户/只读/仓库详情和列表不泄露内部备注；内部留言及对应历史不可见；自定义技术角色可读取内部信息');
 
-  await req(`${casePath(id)}/review`, { action: 'APPROVE' }, { token: reviewer.token });
+  await req(`${casePath(id)}/review`, { action: 'APPROVE', solutionVersionId: firstPlan.id }, { token: reviewer.token, code: 'INVALID_STATUS_TRANSITION' });
+  await req(`${casePath(id)}/solution/confirm`, { versionId: firstPlan.id }, { token: reviewer.token, code: 'PERMISSION_DENIED' });
+  await req(`${casePath(id)}/solution/confirm`, { versionId: firstPlan.id }, { token: externalA.token, code: 'FORBIDDEN' });
+  await req(`${casePath(id)}/solution/confirm`, { versionId: firstPlan.id }, { token: technician.token });
+  await req(`${casePath(id)}/review`, { action: 'APPROVE', solutionVersionId: firstPlan.id }, { token: reviewer.token });
   await req(`${casePath(id)}/solution`, { solution: '审批后擅改' }, { token: technician.token, code: 'INVALID_STATUS_TRANSITION' });
+  await req(`${casePath(id)}/review`, { action: 'REVISE', reason: '补充维修说明后重新确认', solutionVersionId: firstPlan.id }, { token: reviewer.token });
+  const revisedPlan = (await req(`${casePath(id)}/solution`, { ...solutionBody, previousVersionId: firstPlan.id, repairNotes: '补充诊断步骤后重新审批' }, { token: technician.token })).solutionVersion;
+  await req(`${casePath(id)}/solution`, { ...solutionBody, previousVersionId: firstPlan.id }, { token: technician.token, code: 'AFTER_SALES_SOLUTION_CONFLICT' });
+  await req(`${casePath(id)}/solution/confirm`, { versionId: revisedPlan.id }, { token: technician.token });
+  await req(`${casePath(id)}/review`, { action: 'APPROVE', solutionVersionId: firstPlan.id }, { token: reviewer.token, code: 'AFTER_SALES_SOLUTION_CONFLICT' });
+  await req(`${casePath(id)}/review`, { action: 'APPROVE', solutionVersionId: revisedPlan.id }, { token: reviewer.token });
+  const versions = await req(`${casePath(id)}/solution/versions`, undefined, { token: externalA.token });
+  assert.deepEqual(versions.map(v => v.revision), [2, 1]); assert(versions.every(v => v.document.internalNote === null && v.approvedAt && v.confirmedAt));
+  await req(`${casePath(id)}/solution/versions`, undefined, { token: externalB.token, code: 'FORBIDDEN' });
+  pass('技术确认和负责人审批绑定版本；旧版不覆盖，修订重新审核，过期保存/审批拒绝，历史方案按公司隔离且隐藏内部备注');
+  const warehouseView = await req(casePath(id), undefined, { token: warehouse.token });
+  for (const field of ['frameSn','description','contactEmail','technicalJudgment','solution','internalNote','warrantyStatus']) assert.equal(warehouseView[field], null);
+  assert.equal(warehouseView.solutionVersion.parts[0].unitCharge, null);
+  assert.equal(warehouseView.solutionVersion.document.chargeReason, null); assert.deepEqual(warehouseView.messages, []);
+  for (const resource of ['messages','attachments','solution/versions']) await req(casePath(id) + '/' + resource, undefined, { token: warehouse.token, code: 'PERMISSION_DENIED' });
+  const warehouseSearch = await req('/api/after-sales/cases?keyword=' + encodeURIComponent(own.frameSn), undefined, { token: warehouse.token });
+  assert(!warehouseSearch.records.some(row => row.id === id));
+  pass('仓库详情隐藏故障、费用和沟通，历史版本/附件拒绝访问，车架号关键词不能旁路检索');
   await req(`${casePath(id)}/process`, {}, { token: technician.token });
-  const planned = await req(`${casePath(id)}/shipments`, { partName: '替换电机', quantity: 1, oldPartReturnRequired: true }, { token: warehouse.token });
+  const shipmentBody = { partName: '替换电机', quantity: 1, oldPartReturnRequired: true, solutionItemId: revisedPlan.parts[0].id };
+  await req(`${casePath(id)}/shipments`, { ...shipmentBody, solutionItemId: firstPlan.parts[0].id }, { token: warehouse.token, code: 'AFTER_SALES_APPROVED_PART_REQUIRED' });
+  await req(`${casePath(id)}/shipments`, { ...shipmentBody, oldPartReturnRequired: false }, { token: warehouse.token, code: 'INVALID_PARAMETER' });
+  const concurrent = await Promise.all([1,2].map(async () => {
+    const response = await fetch(base + `${casePath(id)}/shipments`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${warehouse.token}` }, body: JSON.stringify(shipmentBody) });
+    const result = await response.json(); assert.equal(response.ok, result.code === 'SUCCESS'); return result;
+  }));
+  assert.deepEqual(concurrent.map(r => r.code).sort(), ['AFTER_SALES_APPROVED_QUANTITY_EXCEEDED', 'SUCCESS']);
+  const planned = concurrent.find(r => r.code === 'SUCCESS').data;
+  assert.equal(planned.solutionItemId, revisedPlan.parts[0].id);
+  pass('仓库只能选择本版批准配件，不能变更退回要求；并发补发只成功一次，累计数量不超批准数量');
   assert.equal(planned.status, 'PLANNED'); assert.equal(planned.shippedAt, null);
   await req(`${casePath(id)}/resolve`, {}, { token: technician.token, code: 'INVALID_STATUS_TRANSITION' });
   await req(`${casePath(id)}/shipments/${planned.id}/dispatch`, { carrier: 'DHL', trackingNo: prefix + '-TRACK' }, { token: reader.token, code: 'PERMISSION_DENIED' });

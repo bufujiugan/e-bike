@@ -15,10 +15,10 @@ public class AfterSalesCompanyService {
     private final AfterSalesMapper mapper;
     public AfterSalesCompanyService(AfterSalesMapper mapper) { this.mapper = mapper; }
     public List<AfterSalesCompanyView> list() {
-        requireRead(); return mapper.selectCompanies(isAgent() ? requiredAgent() : null, salesScope());
+        requireCompanyContent(); return mapper.selectCompanies(isAgent() ? requiredAgent() : null, salesScope());
     }
     public AfterSalesCompanyView get(long agentId) {
-        requireRead(); requireAgentScope(mapper,agentId);
+        requireCompanyContent(); requireAgentScope(mapper,agentId);
         var row=mapper.selectCompany(agentId); if(row==null) throw new BusinessException("AGENT_NOT_FOUND","公司不存在或已停用"); return row;
     }
     @Transactional public AfterSalesCompanyView save(long agentId,AfterSalesContact contact) {
@@ -49,6 +49,7 @@ public class AfterSalesCompanyService {
         companyAudit(agentId,"COMPANY_SALES_ASSIGNED",before,after); return after;
     }
     @Transactional public AfterSalesCaseView assign(long caseId,Long assigneeId) {
+        requireCaseContent();
         requireInternal("AFTER_SALES_ASSIGN");
         var before=mapper.selectForUpdate(caseId); requireCaseScope(mapper,before);
         if(Set.of("CLOSED","REJECTED").contains(before.getStatus())) throw new BusinessException("INVALID_STATUS_TRANSITION","终态案例不能重新派单");

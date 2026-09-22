@@ -17,12 +17,13 @@ class AfterSalesReturnMysqlTest {
     private static long approvedCase(AfterSalesMysqlTest.Fixture f) {
         long id=f.submittedCase();
         f.admin(()->f.service.review(id,new AfterSalesReviewRequest("START",null)));
-        f.admin(()->f.service.saveSolution(id,new AfterSalesSolutionRequest("diagnosis","replace motor",null)));
-        f.admin(()->f.service.review(id,new AfterSalesReviewRequest("APPROVE",null)));
+        var plan=f.admin(()->f.service.saveSolution(id,AfterSalesPlanMysqlTest.plan(null,"motor",2,true))).getSolutionVersion();
+        f.admin(()->f.service.confirmSolution(id,plan.id()));
+        f.admin(()->f.service.review(id,new AfterSalesReviewRequest("APPROVE",null,plan.id())));
         return id;
     }
     private static AfterSalesShipmentView replacement(AfterSalesMysqlTest.Fixture f,long id) {
-        return f.admin(()->f.service.addShipment(id,new AfterSalesShipmentRequest("motor",1,"DHL","OUTGOING-TEST",true)));
+        return f.admin(()->f.service.addShipment(id,new AfterSalesShipmentRequest("motor",1,"DHL","OUTGOING-TEST",true,f.service.get(id).getSolutionVersion().parts().getFirst().id())));
     }
 
     @Test void completeReturnKeepsIndependentPartsAndBlocksPrematureCaseArchive() throws Exception {

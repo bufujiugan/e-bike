@@ -13,6 +13,9 @@ public interface AfterSalesService {
     AfterSalesCaseView submit(long id);
     AfterSalesCaseView review(long id, AfterSalesReviewRequest request);
     AfterSalesCaseView saveSolution(long id, AfterSalesSolutionRequest request);
+    AfterSalesCaseView confirmSolution(long id,long versionId);
+    java.util.List<AfterSalesPlanView> solutionVersions(long id);
+    AfterSalesCaseView reconcileShipment(long id,long shipmentId,long itemId,String reason);
     AfterSalesCaseView startProcessing(long id);
     AfterSalesMessageView addMessage(long id, AfterSalesMessageRequest request);
     java.util.List<AfterSalesMessageView> messages(long id);

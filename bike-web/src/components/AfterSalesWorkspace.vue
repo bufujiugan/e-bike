@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { afterSales, afterSalesError, caseStatuses, warrantyNames, type AfterSalesCase, type CaseDraft, type CaseStatus, type CaseShipment, type CaseOptions, type CaseAttachment, type CaseMessage, type CaseFilters, type CaseDashboard, type CaseQueue } from '../after-sales-api'
+import { afterSales, afterSalesError, caseStatuses, warrantyNames, type AfterSalesCase, type CaseDraft, type CaseStatus, type CaseShipment, type CaseOptions, type CaseAttachment, type CaseMessage, type CaseFilters, type CaseDashboard, type CaseQueue, type ShipmentDraft } from '../after-sales-api'
 import { afterSalesCompanies, blankContact, type CompanyContact, type StaffOption } from '../after-sales-company-api'
 import AfterSalesCompanyWorkspace from './AfterSalesCompanyWorkspace.vue'
 import AfterSalesContactFields from './AfterSalesContactFields.vue'
 import AfterSalesReturns from './AfterSalesReturns.vue'
+import AfterSalesSolution from './AfterSalesSolution.vue'
 
 type Context = { username: string; userType: string; agentId: number | null; roles: string[]; permissions: string[] }
 const props = defineProps<{ authContext: Context | null }>()
@@ -17,9 +18,11 @@ const canWrite = computed(() => permission('AFTER_SALES_WRITE'))
 const canReview = computed(() => !isAgent.value && permission('AFTER_SALES_REVIEW'))
 const canTech = computed(() => !isAgent.value && permission('AFTER_SALES_TECH'))
 const canShip = computed(() => !isAgent.value && permission('AFTER_SALES_LOGISTICS'))
+const warehouseOnly = computed(() => canShip.value && !canWrite.value && !canReview.value && !canTech.value && !props.authContext?.roles.includes('SUPER_ADMIN'))
+const canCompany = computed(() => !warehouseOnly.value || permission('AFTER_SALES_COMPANY_MANAGE'))
 const canInternal = computed(() => canReview.value || canTech.value)
-const canMessage = computed(() => canWrite.value || canReview.value || canTech.value || canShip.value)
-const canAssign = computed(() => !isAgent.value && permission('AFTER_SALES_ASSIGN'))
+const canMessage = computed(() => !warehouseOnly.value && (canWrite.value || canReview.value || canTech.value || canShip.value))
+const canAssign = computed(() => !isAgent.value && !warehouseOnly.value && permission('AFTER_SALES_ASSIGN'))
 const companyVisible = ref(false), assignmentVisible = ref(false), assignmentOptions = ref<StaffOption[]>([]), assignee = ref<number | null>(null)
 const keyword = ref(''), status = ref(''), page = ref(1), total = ref(0)
 function blankFilters(): CaseFilters { return { companyName: '', contactName: '', frameSn: '', modelName: '', faultType: '', countryCode: '', assigneeName: '', createdFrom: null, createdTo: null, queue: '' } }
@@ -37,9 +40,11 @@ const tab = ref('case'), draftVisible = ref(false), draftId = ref<number | null>
 function blankDraft(): CaseDraft { return { customerId: null, agentId: null, vehicleId: null, frameSn: '', productModelId: null, motorSn: '', batterySn: '', displaySn: '', purchaseDate: null, failureTime: null, faultType: '', faultPart: '', errorCode: '', description: '', attemptedRepair: '', warrantyStatus: 'PENDING', contact: null, endCustomerPurchaseDate: null } }
 const draft = reactive<CaseDraft>(blankDraft())
 const options = ref<CaseOptions>({ customers: [], agents: [], models: [] })
-const solution = reactive({ technicalJudgment: '', solution: '', internalNote: '' })
 const message = reactive<{ body: string; visibility: 'CUSTOMER' | 'INTERNAL' }>({ body: '', visibility: 'CUSTOMER' })
-const shipment = reactive({ partName: '', quantity: 1, carrier: '', trackingNo: '', oldPartReturnRequired: false })
+const shipment = reactive<ShipmentDraft>({ partName: '', quantity: 1, carrier: '', trackingNo: '', oldPartReturnRequired: false, solutionItemId: null })
+const approvedParts = computed(() => detail.value?.solutionVersion?.status === 'APPROVED' ? detail.value.solutionVersion.parts : [])
+const selectedPart = computed(() => approvedParts.value.find(p => p.id === shipment.solutionItemId))
+const reconcileVisible = ref(false), reconcileShipmentId = ref(0), reconcileItemId = ref<number | null>(null), reconcileReason = ref('')
 const dispatchVisible = ref(false), dispatchId = ref(0), dispatchForm = reactive({ carrier: '', trackingNo: '' })
 const attachments = ref<CaseAttachment[]>([]), attachmentFiles = ref<File[]>([]), replyFiles = ref<File[]>([])
 const attachmentVisibility = ref<'CUSTOMER' | 'INTERNAL'>('CUSTOMER'), attachmentCategory = ref('OTHER')
@@ -53,7 +58,7 @@ const attachmentAllowed = computed(() => canMessage.value && Boolean(detail.valu
 const shippingAllowed = computed(() => canShip.value && ['APPROVED', 'IN_PROGRESS', 'WAITING_PARTS', 'SHIPPED'].includes(detail.value?.status || ''))
 const steps = ['待提交', '已提交', '审核中', '已审批', '处理中', '已发货', '完成']
 const stepIndex = computed(() => ({ DRAFT: 0, SUBMITTED: 1, UNDER_REVIEW: 2, NEEDS_INFO: 2, APPROVED: 3, IN_PROGRESS: 4, WAITING_PARTS: 4, SHIPPED: 5, RESOLVED: 6, CLOSED: 7, REJECTED: 2 }[detail.value?.status || 'DRAFT']))
-const historyNames: Record<string, string> = { RETURN_REQUEST: '提供旧件退回地址', RETURN_SEND: '客户寄回旧件', RETURN_RECEIVE: '仓库收到旧件', RETURN_INSPECT: '旧件检测', RETURN_SCRAP: '旧件报废', RETURN_COMPLETE: '完成旧件处理', RETURN_WAIVE: '豁免旧件退回', CASE_ASSIGNED: '分配售后负责人', CASE_CREATED: '创建案例草稿', CASE_UPDATED: '更新案例资料', CASE_SUBMITTED: '提交案例', REVIEW_START: '开始审核', REVIEW_APPROVE: '审批通过', REVIEW_REJECT: '拒绝案例', REVIEW_REQUEST_INFO: '要求补充资料', SOLUTION_SAVED: '保存维修方案', PROCESSING_STARTED: '开始处理', MESSAGE_ADDED: '客户可见留言', INTERNAL_MESSAGE_ADDED: '内部留言', ATTACHMENTS_ADDED: '上传案例附件', INTERNAL_ATTACHMENTS_ADDED: '上传内部附件', SHIPMENT_PLANNED: '登记待发货配件', SHIPMENT_DISPATCHED: '登记配件发货', CASE_RESOLVED: '标记已解决', CASE_CLOSED: '归档案例' }
+const historyNames: Record<string, string> = { SOLUTION_CONFIRMED: '技术确认方案', REVIEW_REVISE: '重新审核维修方案', SHIPMENT_APPROVAL_RECONCILED: '核对历史补发审批', RETURN_REQUEST: '提供旧件退回地址', RETURN_SEND: '客户寄回旧件', RETURN_RECEIVE: '仓库收到旧件', RETURN_INSPECT: '旧件检测', RETURN_SCRAP: '旧件报废', RETURN_COMPLETE: '完成旧件处理', RETURN_WAIVE: '豁免旧件退回', CASE_ASSIGNED: '分配售后负责人', CASE_CREATED: '创建案例草稿', CASE_UPDATED: '更新案例资料', CASE_SUBMITTED: '提交案例', REVIEW_START: '开始审核', REVIEW_APPROVE: '审批通过', REVIEW_REJECT: '拒绝案例', REVIEW_REQUEST_INFO: '要求补充资料', SOLUTION_SAVED: '保存维修方案', PROCESSING_STARTED: '开始处理', MESSAGE_ADDED: '客户可见留言', INTERNAL_MESSAGE_ADDED: '内部留言', ATTACHMENTS_ADDED: '上传案例附件', INTERNAL_ATTACHMENTS_ADDED: '上传内部附件', SHIPMENT_PLANNED: '登记待发货配件', SHIPMENT_DISPATCHED: '登记配件发货', CASE_RESOLVED: '标记已解决', CASE_CLOSED: '归档案例' }
 const time = (value: string | null | undefined) => value ? value.replace('T', ' ').slice(0, 19) : '—'
 const value = (text: unknown) => text === null || text === undefined || text === '' ? '—' : String(text)
 function tone(s: CaseStatus) { return ['CLOSED', 'RESOLVED', 'APPROVED'].includes(s) ? 'success' : ['REJECTED'].includes(s) ? 'danger' : ['NEEDS_INFO', 'WAITING_PARTS'].includes(s) ? 'warning' : 'info' }
@@ -76,13 +81,17 @@ function chooseQueue(queue: CaseQueue) { filters.queue = queue; status.value = '
 function resetFilters() { Object.assign(filters, blankFilters()); keyword.value = ''; status.value = ''; filter() }
 async function open(id: number) {
   const version = ++detailVersion
-  detailVisible.value = true; detailLoading.value = true; detail.value = null; tab.value = 'case'
+  detailVisible.value = true; detailLoading.value = true; detail.value = null; tab.value = warehouseOnly.value ? 'shipments' : 'case'
   attachmentFiles.value = []; replyFiles.value = []; pendingMessage.value = null; attachments.value = []
-  try { const [current, files] = await Promise.all([afterSales.get(id), afterSales.attachments(id)]); if (version === detailVersion) { setDetail(current); attachments.value = files } }
+  try { const [current, files] = await Promise.all([afterSales.get(id), warehouseOnly.value ? Promise.resolve([]) : afterSales.attachments(id)]); if (version === detailVersion) { setDetail(current); attachments.value = files } }
   catch (e) { ElMessage.error(afterSalesError(e)); if (version === detailVersion) detailVisible.value = false }
   finally { if (version === detailVersion) detailLoading.value = false }
 }
-function setDetail(current: AfterSalesCase) { detail.value = current; Object.assign(solution, { technicalJudgment: current.technicalJudgment || '', solution: current.solution || '', internalNote: current.internalNote || '' }) }
+function setDetail(current: AfterSalesCase) { detail.value = current; if (!current.solutionVersion?.parts.some(p => p.id === shipment.solutionItemId)) Object.assign(shipment, { partName: '', quantity: 1, oldPartReturnRequired: false, solutionItemId: null }) }
+async function solutionChanged(current: AfterSalesCase) { setDetail(current); await load() }
+function selectApprovedPart() { const part = selectedPart.value; shipment.partName = part?.partName || ''; shipment.oldPartReturnRequired = part?.returnRequired || false; shipment.quantity = 1 }
+function openReconcile(row: CaseShipment) { reconcileShipmentId.value = row.id; reconcileItemId.value = null; reconcileReason.value = ''; reconcileVisible.value = true }
+async function reconcile() { if (!reconcileItemId.value || !reconcileReason.value.trim()) { ElMessage.warning('请选择核对后的配件并填写依据'); return }; await perform(async () => { await afterSales.reconcileShipment(detail.value!.id, reconcileShipmentId.value, reconcileItemId.value!, reconcileReason.value.trim()); reconcileVisible.value = false }, '历史补发已关联，等待技术确认和审批') }
 async function returnsChanged() { if (!detail.value) return; try { setDetail(await afterSales.get(detail.value.id)); await load() } catch (e) { ElMessage.error(afterSalesError(e)) } }
 async function loadOptions() { try { options.value = await afterSales.options(); return true } catch (e) { ElMessage.error(afterSalesError(e)); return false } }
 async function newDraft() { if (!await loadOptions()) return; contactVersion++; contactLoading.value=false; draftId.value = null; attachmentFiles.value = []; replyFiles.value = []; pendingMessage.value = null; Object.assign(draft, blankDraft()); draft.contact=blankContact(); draftVisible.value = true; if(isAgent.value && props.authContext?.agentId) await fillCompanyContact(props.authContext.agentId) }
@@ -118,7 +127,7 @@ async function saveDraft() {
 async function perform(action: () => Promise<unknown>, success: string) {
   if (!detail.value || saving.value) return
   const id = detail.value.id; saving.value = true
-  try { await action(); const [current, files] = await Promise.all([afterSales.get(id), afterSales.attachments(id)]); setDetail(current); attachments.value = files; await load(); ElMessage.success(success) }
+  try { await action(); const [current, files] = await Promise.all([afterSales.get(id), warehouseOnly.value ? Promise.resolve([]) : afterSales.attachments(id)]); setDetail(current); attachments.value = files; await load(); ElMessage.success(success) }
   catch (e) { ElMessage.error(afterSalesError(e)); if (pendingMessage.value) { try { setDetail(await afterSales.get(id)); attachments.value = await afterSales.attachments(id) } catch { /* Keep the upload retry state when refresh also fails. */ } } } finally { saving.value = false }
 }
 async function submitCase() {
@@ -126,15 +135,15 @@ async function submitCase() {
   if (!detail.value.frameSn?.trim() || !detail.value.faultType?.trim()) { ElMessage.warning('提交前请补充车架号和故障类型'); editDraft(); return }
   try { await ElMessageBox.confirm('提交后进入售后审核流程，资料暂时不可编辑。', '提交售后案例', { type: 'info' }); await perform(() => afterSales.submit(detail.value!.id), '案例已提交') } catch (e) { if (e !== 'cancel' && e !== 'close') ElMessage.error(afterSalesError(e)) }
 }
-async function review(action: 'START' | 'APPROVE' | 'REJECT' | 'REQUEST_INFO') {
+async function review(action: 'START' | 'APPROVE' | 'REJECT' | 'REQUEST_INFO' | 'REVISE') {
   if (!detail.value) return
   let reason = ''
   try {
-    if (action === 'REJECT' || action === 'REQUEST_INFO') {
-      const result = await ElMessageBox.prompt('请填写原因，客户将看到这段说明。', action === 'REJECT' ? '拒绝案例' : '要求补充资料', { inputType: 'textarea', inputValidator: input => !!input?.trim() && input.trim().length <= 1000 || '原因须为 1–1000 字' })
+    if (action === 'REJECT' || action === 'REQUEST_INFO' || action === 'REVISE') {
+      const result = await ElMessageBox.prompt('请填写原因，客户将看到这段说明。', action === 'REJECT' ? '拒绝案例' : action === 'REVISE' ? '重新审核方案' : '要求补充资料', { inputType: 'textarea', inputValidator: input => !!input?.trim() && input.trim().length <= 1000 || '原因须为 1–1000 字' })
       reason = result.value.trim()
     } else if (action === 'APPROVE') await ElMessageBox.confirm('确认当前维修方案后，将进入已审批状态。', '审批通过', { type: 'warning' })
-    await perform(() => afterSales.review(detail.value!.id, action, reason), '审核状态已更新')
+    await perform(() => afterSales.review(detail.value!.id, action, reason, detail.value!.solutionVersion?.id), '审核状态已更新')
   } catch (e) { if (e !== 'cancel' && e !== 'close') ElMessage.error(afterSalesError(e)) }
 }
 async function sendMessage() {
@@ -175,10 +184,9 @@ async function downloadAttachment(item: CaseAttachment) {
   catch (e) { ElMessage.error(afterSalesError(e)) }
 }
 const fileSize = (bytes: number) => bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.ceil(bytes / 1024))} KB`
-async function saveSolution() { if (!solution.solution.trim()) { ElMessage.warning('请填写维修方案'); return }; await perform(() => afterSales.solution(detail.value!.id, { ...solution }), '维修方案已保存，等待审批') }
 async function addShipment() {
-  if (!shipment.partName.trim() || shipment.quantity < 1 || (shipment.trackingNo.trim() && !shipment.carrier.trim())) { ElMessage.warning('请填写配件和数量；实际发货还须填写承运商'); return }
-  await perform(async () => { await afterSales.shipment(detail.value!.id, { ...shipment }); Object.assign(shipment, { partName: '', quantity: 1, carrier: '', trackingNo: '', oldPartReturnRequired: false }) }, '补发记录已保存')
+  if (!shipment.solutionItemId || !shipment.partName.trim() || shipment.quantity < 1 || (shipment.trackingNo.trim() && !shipment.carrier.trim())) { ElMessage.warning('请填写配件和数量；实际发货还须填写承运商'); return }
+  await perform(async () => { await afterSales.shipment(detail.value!.id, { ...shipment }); Object.assign(shipment, { partName: '', quantity: 1, carrier: '', trackingNo: '', oldPartReturnRequired: false, solutionItemId: null }) }, '补发记录已保存')
 }
 function openDispatch(item: CaseShipment) { dispatchId.value = item.id; Object.assign(dispatchForm, { carrier: item.carrier || '', trackingNo: '' }); dispatchVisible.value = true }
 async function dispatch() {
@@ -203,22 +211,22 @@ watch(() => props.authContext?.username, () => { listVersion++; detailVersion++;
   <section class="after-sales" aria-label="售后案例工作台">
     <el-alert v-if="!canRead" title="当前账号没有售后案例访问权限" type="warning" :closable="false" />
     <template v-else>
-      <div class="section-heading"><div><h2>售后案例</h2><p>{{ isAgent ? '申报故障、补充资料，查看维修及配件发货进度。' : '审核故障、确认维修方案，跟进配件发货与问题解决。' }}</p></div><div><el-button @click="companyVisible=true">公司联系资料</el-button><el-button v-if="canWrite" type="primary" @click="newDraft">新建案例</el-button></div></div>
+      <div class="section-heading"><div><h2>售后案例</h2><p>{{ isAgent ? '申报故障、补充资料，查看维修及配件发货进度。' : '审核故障、确认维修方案，跟进配件发货与问题解决。' }}</p></div><div><el-button v-if="canCompany" @click="companyVisible=true">公司联系资料</el-button><el-button v-if="canWrite" type="primary" @click="newDraft">新建案例</el-button></div></div>
       <div class="dashboard" aria-label="售后概况" :aria-busy="loading">
         <button v-for="card in dashboardCards" :key="card.key" type="button" class="dashboard-card" :class="{ selected: filters.queue === card.queue && !status }" :aria-pressed="filters.queue === card.queue && !status" :disabled="loading || !dashboard" @click="chooseQueue(card.queue)">
           <span>{{ card.label }}</span><strong>{{ dashboard ? dashboard[card.key] : '—' }}</strong>
         </button>
       </div>
       <p class="dashboard-help">统计限当前账号可见的公司，并随搜索条件更新；点击数字查看对应案例。待发货按实际待发配件统计；本月归档按服务器当月归档时间统计。</p>
-      <form class="filters" @submit.prevent="filter"><el-input v-model="keyword" aria-label="案例搜索" placeholder="案例编号、车架号、问题、公司或联系人" clearable /><el-select v-model="status" aria-label="案例状态" placeholder="全部状态" clearable @change="filters.queue = ''"><el-option v-for="(label, key) in caseStatuses" :key="key" :label="label" :value="key" /></el-select><el-button native-type="submit" :loading="loading">查询</el-button><el-button :aria-expanded="advanced" @click="advanced = !advanced">高级筛选</el-button><el-button @click="resetFilters">重置</el-button><el-button @click="load">刷新</el-button></form>
+      <form class="filters" @submit.prevent="filter"><el-input v-model="keyword" aria-label="案例搜索" :placeholder="warehouseOnly ? '案例编号、公司或联系人' : '案例编号、车架号、问题、公司或联系人'" clearable /><el-select v-model="status" aria-label="案例状态" placeholder="全部状态" clearable @change="filters.queue = ''"><el-option v-for="(label, key) in caseStatuses" :key="key" :label="label" :value="key" /></el-select><el-button native-type="submit" :loading="loading">查询</el-button><el-button :aria-expanded="advanced" @click="advanced = !advanced">高级筛选</el-button><el-button @click="resetFilters">重置</el-button><el-button @click="load">刷新</el-button></form>
       <el-form v-if="advanced" class="advanced-filters form-grid" label-position="top" @submit.prevent="filter">
         <el-form-item label="客户 / 公司名称"><el-input v-model="filters.companyName" maxlength="255" clearable /></el-form-item>
         <el-form-item label="联系人"><el-input v-model="filters.contactName" maxlength="100" clearable /></el-form-item>
-        <el-form-item label="车架号"><el-input v-model="filters.frameSn" maxlength="128" clearable /></el-form-item>
-        <el-form-item label="产品型号"><el-input v-model="filters.modelName" maxlength="100" clearable /></el-form-item>
-        <el-form-item label="故障类型"><el-select v-model="filters.faultType" filterable allow-create clearable placeholder="全部故障类型"><el-option v-for="fault in faults" :key="fault" :value="fault" :label="fault" /></el-select></el-form-item>
+        <el-form-item v-if="!warehouseOnly" label="车架号"><el-input v-model="filters.frameSn" maxlength="128" clearable /></el-form-item>
+        <el-form-item v-if="!warehouseOnly" label="产品型号"><el-input v-model="filters.modelName" maxlength="100" clearable /></el-form-item>
+        <el-form-item v-if="!warehouseOnly" label="故障类型"><el-select v-model="filters.faultType" filterable allow-create clearable placeholder="全部故障类型"><el-option v-for="fault in faults" :key="fault" :value="fault" :label="fault" /></el-select></el-form-item>
         <el-form-item label="国家代码"><el-input v-model="filters.countryCode" maxlength="2" placeholder="例如 GB、FR、CN" clearable /></el-form-item>
-        <el-form-item label="售后负责人"><el-input v-model="filters.assigneeName" maxlength="100" clearable /></el-form-item>
+        <el-form-item v-if="!warehouseOnly" label="售后负责人"><el-input v-model="filters.assigneeName" maxlength="100" clearable /></el-form-item>
         <el-form-item label="创建起始日期"><el-date-picker v-model="filters.createdFrom" type="date" value-format="YYYY-MM-DD" placeholder="不限" /></el-form-item>
         <el-form-item label="创建结束日期（含当日）"><el-date-picker v-model="filters.createdTo" type="date" value-format="YYYY-MM-DD" placeholder="不限" /></el-form-item>
         <el-form-item><el-button type="primary" native-type="submit" :loading="loading">应用筛选</el-button></el-form-item>
@@ -227,10 +235,10 @@ watch(() => props.authContext?.username, () => { listVersion++; detailVersion++;
       <el-table :data="rows" v-loading="loading" stripe empty-text="暂无符合条件的售后案例" @row-dblclick="(row: AfterSalesCase) => open(row.id)">
         <el-table-column prop="caseNo" label="案例编号" min-width="225"><template #default="scope"><el-button link type="primary" @click="open(scope.row.id)">{{ scope.row.caseNo }}</el-button></template></el-table-column>
         <el-table-column label="客户 / 代理商" min-width="150"><template #default="scope">{{ scope.row.customerName || scope.row.agentName || '—' }}</template></el-table-column>
-        <el-table-column prop="frameSn" label="车架号" min-width="140" /><el-table-column prop="modelName" label="车型" min-width="115" /><el-table-column prop="faultType" label="故障类型" min-width="100" />
+        <el-table-column v-if="!warehouseOnly" prop="frameSn" label="车架号" min-width="140" /><el-table-column v-if="!warehouseOnly" prop="modelName" label="车型" min-width="115" /><el-table-column v-if="!warehouseOnly" prop="faultType" label="故障类型" min-width="100" />
         <el-table-column label="状态" min-width="130"><template #default="scope"><el-tag :type="tone(scope.row.status)">{{ caseStatuses[scope.row.status as CaseStatus] }}</el-tag></template></el-table-column>
-        <el-table-column label="保修状态" min-width="110"><template #default="scope">{{ warrantyNames[scope.row.warrantyStatus] || scope.row.warrantyStatus }}</template></el-table-column>
-        <el-table-column prop="assigneeName" label="售后负责人" min-width="140"/>
+        <el-table-column v-if="!warehouseOnly" label="保修状态" min-width="110"><template #default="scope">{{ warrantyNames[scope.row.warrantyStatus] || scope.row.warrantyStatus }}</template></el-table-column>
+        <el-table-column v-if="!warehouseOnly" prop="assigneeName" label="售后负责人" min-width="140"/>
         <el-table-column prop="contactName" label="联系人" min-width="120"/>
         <el-table-column prop="countryCode" label="国家" width="80"/>
         <el-table-column label="创建时间" min-width="170"><template #default="scope">{{ time(scope.row.createdAt) }}</template></el-table-column>
@@ -249,22 +257,23 @@ watch(() => props.authContext?.username, () => { listVersion++; detailVersion++;
             <el-button v-if="canAssign && !['CLOSED','REJECTED'].includes(detail.status)" :disabled="saving" @click="openAssignment">分配负责人</el-button>
             <el-button v-if="editable" :disabled="saving" @click="editDraft">编辑资料</el-button><el-button v-if="editable" type="primary" :loading="saving" @click="submitCase">提交案例</el-button>
             <el-button v-if="canReview && detail.status === 'SUBMITTED'" type="primary" :loading="saving" @click="review('START')">开始审核</el-button>
-            <el-button v-if="canReview && detail.status === 'UNDER_REVIEW'" type="success" :loading="saving" :disabled="!detail.solution" @click="review('APPROVE')">审批通过</el-button>
+            <el-button v-if="canReview && detail.status === 'UNDER_REVIEW'" type="success" :loading="saving" :disabled="detail.solutionVersion?.status !== 'CONFIRMED'" @click="review('APPROVE')">审批通过</el-button>
             <el-button v-if="(canReview || canTech) && ['SUBMITTED', 'UNDER_REVIEW'].includes(detail.status)" :disabled="saving" @click="review('REQUEST_INFO')">要求补充资料</el-button>
             <el-button v-if="canReview && ['SUBMITTED', 'UNDER_REVIEW'].includes(detail.status)" type="danger" plain :disabled="saving" @click="review('REJECT')">拒绝</el-button>
+            <el-button v-if="canReview && ['APPROVED','IN_PROGRESS','WAITING_PARTS','SHIPPED','RESOLVED'].includes(detail.status)" :disabled="saving" @click="review('REVISE')">重新审核方案</el-button>
             <el-button v-if="(canReview || canTech) && detail.status === 'APPROVED'" type="primary" :loading="saving" @click="perform(() => afterSales.process(detail!.id), '已开始处理')">开始处理</el-button>
             <el-button v-if="canTech && ['IN_PROGRESS', 'SHIPPED'].includes(detail.status)" type="success" :disabled="saving || detail.shipments.some(s => s.status === 'PLANNED')" @click="finish(false)">标记已解决</el-button>
             <el-button v-if="canWrite && detail.status === 'RESOLVED'" type="success" :disabled="saving" @click="finish(true)">确认并归档</el-button>
           </div>
           <el-tabs v-model="tab">
-            <el-tab-pane label="联系资料" name="contact"><p class="file-help">这里保存本案例的联系资料。公司资料更新不会改变历史案例中的联系人和地址。{{detail.snapshotSource==='MIGRATED_CURRENT'?'此旧案例的基础联系信息来自升级时可确定的主数据。':''}}</p><dl class="facts"><div><dt>公司</dt><dd>{{value(detail.companyName)}}</dd></div><div><dt>售后负责人</dt><dd>{{value(detail.assigneeName)}}</dd></div><div><dt>联系人</dt><dd>{{value(detail.contactName)}}</dd></div><div><dt>电话</dt><dd>{{value(detail.contactPhone)}}</dd></div><div><dt>Email</dt><dd>{{value(detail.contactEmail)}}</dd></div><div><dt>国家 / 省州 / 城市</dt><dd>{{value(detail.countryCode)}} / {{value(detail.region)}} / {{value(detail.city)}}</dd></div><div><dt>详细地址</dt><dd>{{value(detail.addressLine)}}</dd></div><div><dt>邮编</dt><dd>{{value(detail.postalCode)}}</dd></div><div><dt>最终客户购买日期</dt><dd>{{value(detail.endCustomerPurchaseDate)}}</dd></div></dl></el-tab-pane>
-            <el-tab-pane label="工单信息" name="case"><dl class="facts"><div><dt>客户</dt><dd>{{ value(detail.customerName) }}</dd></div><div><dt>代理商</dt><dd>{{ value(detail.agentName) }}</dd></div><div><dt>车型</dt><dd>{{ value(detail.modelName) }}</dd></div><div><dt>车架号</dt><dd>{{ value(detail.frameSn) }}</dd></div><div><dt>电机序列号</dt><dd>{{ value(detail.motorSn) }}</dd></div><div><dt>电池序列号</dt><dd>{{ value(detail.batterySn) }}</dd></div><div><dt>仪表序列号</dt><dd>{{ value(detail.displaySn) }}</dd></div><div><dt>购买日期</dt><dd>{{ value(detail.purchaseDate) }}</dd></div><div><dt>故障发生时间</dt><dd>{{ time(detail.failureTime) }}</dd></div><div><dt>故障类型 / 部件</dt><dd>{{ value(detail.faultType) }} / {{ value(detail.faultPart) }}</dd></div><div><dt>故障代码</dt><dd>{{ value(detail.errorCode) }}</dd></div><div><dt>保修状态</dt><dd>{{ warrantyNames[detail.warrantyStatus] || '待确认' }}</dd></div><div class="wide"><dt>问题描述</dt><dd>{{ detail.description }}</dd></div><div class="wide"><dt>已尝试维修方法</dt><dd>{{ value(detail.attemptedRepair) }}</dd></div></dl></el-tab-pane>
-            <el-tab-pane label="维修方案" name="solution"><el-form v-if="canTech && detail.status === 'UNDER_REVIEW'" label-position="top"><el-form-item label="技术判断"><el-input v-model="solution.technicalJudgment" type="textarea" :rows="3" maxlength="4000" show-word-limit /></el-form-item><el-form-item label="维修方案" required><el-input v-model="solution.solution" type="textarea" :rows="5" maxlength="4000" show-word-limit /></el-form-item><el-form-item label="内部备注（客户不可见）"><el-input v-model="solution.internalNote" type="textarea" :rows="3" maxlength="4000" show-word-limit /></el-form-item><el-button type="primary" :loading="saving" @click="saveSolution">保存维修方案</el-button></el-form><dl v-else class="facts"><div class="wide"><dt>技术判断</dt><dd>{{ value(detail.technicalJudgment) }}</dd></div><div class="wide"><dt>维修方案</dt><dd>{{ value(detail.solution) }}</dd></div><div v-if="canInternal" class="wide"><dt>内部备注（客户不可见）</dt><dd>{{ value(detail.internalNote) }}</dd></div></dl></el-tab-pane>
-            <el-tab-pane label="配件与发货" name="shipments"><el-table :data="detail.shipments" empty-text="暂无补发记录"><el-table-column prop="partName" label="补发配件" min-width="140" /><el-table-column prop="quantity" label="数量" width="70" /><el-table-column label="状态" width="100"><template #default="scope">{{ scope.row.status === 'SHIPPED' ? '已发货' : '待发货' }}</template></el-table-column><el-table-column prop="carrier" label="承运商" min-width="100" /><el-table-column prop="trackingNo" label="运单号" min-width="150" /><el-table-column label="发货时间" min-width="170"><template #default="scope">{{ time(scope.row.shippedAt) }}</template></el-table-column><el-table-column label="旧件退回" width="100"><template #default="scope">{{ scope.row.oldPartReturnRequired ? '需退回' : '无需退回' }}</template></el-table-column><el-table-column v-if="shippingAllowed" label="操作" width="110"><template #default="scope"><el-button v-if="scope.row.status === 'PLANNED'" link type="primary" :disabled="saving" @click="openDispatch(scope.row)">登记发货</el-button></template></el-table-column></el-table>
-              <el-form v-if="shippingAllowed" class="sub-form" label-position="top"><h3>登记补发配件</h3><div class="form-grid"><el-form-item label="配件名称" required><el-input v-model="shipment.partName" maxlength="255" /></el-form-item><el-form-item label="数量" required><el-input-number v-model="shipment.quantity" :min="1" :max="1000000" /></el-form-item><el-form-item label="承运商"><el-input v-model="shipment.carrier" maxlength="128" /></el-form-item><el-form-item label="运单号（已发货时填写）"><el-input v-model="shipment.trackingNo" maxlength="128" /></el-form-item></div><el-checkbox v-model="shipment.oldPartReturnRequired">需要退回旧件</el-checkbox><div class="actions"><el-button type="primary" :loading="saving" @click="addShipment">保存补发记录</el-button></div></el-form>
+            <el-tab-pane label="联系资料" name="contact"><p class="file-help">这里保存本案例的联系资料。公司资料更新不会改变历史案例中的联系人和地址。{{detail.snapshotSource==='MIGRATED_CURRENT'?'此旧案例的基础联系信息来自升级时可确定的主数据。':''}}</p><dl class="facts"><div><dt>公司</dt><dd>{{value(detail.companyName)}}</dd></div><div v-if="!warehouseOnly"><dt>售后负责人</dt><dd>{{value(detail.assigneeName)}}</dd></div><div><dt>联系人</dt><dd>{{value(detail.contactName)}}</dd></div><div><dt>电话</dt><dd>{{value(detail.contactPhone)}}</dd></div><div v-if="!warehouseOnly"><dt>Email</dt><dd>{{value(detail.contactEmail)}}</dd></div><div><dt>国家 / 省州 / 城市</dt><dd>{{value(detail.countryCode)}} / {{value(detail.region)}} / {{value(detail.city)}}</dd></div><div><dt>详细地址</dt><dd>{{value(detail.addressLine)}}</dd></div><div><dt>邮编</dt><dd>{{value(detail.postalCode)}}</dd></div><div v-if="!warehouseOnly"><dt>最终客户购买日期</dt><dd>{{value(detail.endCustomerPurchaseDate)}}</dd></div></dl></el-tab-pane>
+            <el-tab-pane v-if="!warehouseOnly" label="工单信息" name="case"><dl class="facts"><div><dt>客户</dt><dd>{{ value(detail.customerName) }}</dd></div><div><dt>代理商</dt><dd>{{ value(detail.agentName) }}</dd></div><div><dt>车型</dt><dd>{{ value(detail.modelName) }}</dd></div><div><dt>车架号</dt><dd>{{ value(detail.frameSn) }}</dd></div><div><dt>电机序列号</dt><dd>{{ value(detail.motorSn) }}</dd></div><div><dt>电池序列号</dt><dd>{{ value(detail.batterySn) }}</dd></div><div><dt>仪表序列号</dt><dd>{{ value(detail.displaySn) }}</dd></div><div><dt>购买日期</dt><dd>{{ value(detail.purchaseDate) }}</dd></div><div><dt>故障发生时间</dt><dd>{{ time(detail.failureTime) }}</dd></div><div><dt>故障类型 / 部件</dt><dd>{{ value(detail.faultType) }} / {{ value(detail.faultPart) }}</dd></div><div><dt>故障代码</dt><dd>{{ value(detail.errorCode) }}</dd></div><div><dt>保修状态</dt><dd>{{ warrantyNames[detail.warrantyStatus] || '待确认' }}</dd></div><div class="wide"><dt>问题描述</dt><dd>{{ detail.description }}</dd></div><div class="wide"><dt>已尝试维修方法</dt><dd>{{ value(detail.attemptedRepair) }}</dd></div></dl></el-tab-pane>
+            <el-tab-pane v-if="!warehouseOnly" label="维修方案" name="solution"><AfterSalesSolution :record="detail" :can-tech="canTech" :can-internal="canInternal" @changed="solutionChanged" /></el-tab-pane>
+            <el-tab-pane label="配件与发货" name="shipments"><el-table :data="detail.shipments" empty-text="暂无补发记录"><el-table-column prop="partName" label="补发配件" min-width="140" /><el-table-column prop="quantity" label="数量" width="70" /><el-table-column label="状态" width="100"><template #default="scope">{{ scope.row.status === 'SHIPPED' ? '已发货' : '待发货' }}</template></el-table-column><el-table-column prop="carrier" label="承运商" min-width="100" /><el-table-column prop="trackingNo" label="运单号" min-width="150" /><el-table-column label="发货时间" min-width="170"><template #default="scope">{{ time(scope.row.shippedAt) }}</template></el-table-column><el-table-column label="旧件退回" width="100"><template #default="scope">{{ scope.row.oldPartReturnRequired ? '需退回' : '无需退回' }}</template></el-table-column><el-table-column label="审批关联" min-width="110"><template #default="scope">{{ scope.row.approvalSource === 'LEGACY_UNLINKED' ? '历史待核对' : scope.row.approvalSource === 'LEGACY_REVIEWED' ? '历史已核对' : '已审批配件' }}</template></el-table-column><el-table-column v-if="canReview && detail.status === 'UNDER_REVIEW' && detail.solutionVersion?.status === 'DRAFT'" label="历史核对" width="110"><template #default="scope"><el-button v-if="scope.row.approvalSource === 'LEGACY_UNLINKED'" link type="primary" @click="openReconcile(scope.row)">关联审批条目</el-button></template></el-table-column><el-table-column v-if="shippingAllowed" label="操作" width="110"><template #default="scope"><el-button v-if="scope.row.status === 'PLANNED'" link type="primary" :disabled="saving" @click="openDispatch(scope.row)">登记发货</el-button></template></el-table-column></el-table>
+              <el-form v-if="shippingAllowed" class="sub-form" label-position="top"><h3>登记补发配件</h3><div class="form-grid"><el-form-item label="已批准配件" required><el-select v-model="shipment.solutionItemId" placeholder="选择当前审批中的配件" @change="selectApprovedPart"><el-option v-for="part in approvedParts" :key="part.id" :value="part.id" :label="`${part.partCode} · ${part.partName}（剩余 ${part.quantity - part.allocatedQty}）`" :disabled="part.quantity <= part.allocatedQty" /></el-select></el-form-item><el-form-item label="数量" required><el-input-number v-model="shipment.quantity" :min="1" :max="Math.max(1, (selectedPart?.quantity || 0) - (selectedPart?.allocatedQty || 0))" :precision="0" /></el-form-item><el-form-item label="承运商"><el-input v-model="shipment.carrier" maxlength="128" /></el-form-item><el-form-item label="运单号（已发货时填写）"><el-input v-model="shipment.trackingNo" maxlength="128" /></el-form-item></div><el-checkbox v-model="shipment.oldPartReturnRequired" disabled>按审批要求退回旧件</el-checkbox><div class="actions"><el-button type="primary" :loading="saving" @click="addShipment">保存补发记录</el-button></div></el-form>
             </el-tab-pane>
             <el-tab-pane label="旧件处理" name="returns" lazy><AfterSalesReturns :key="detail.id" :case-id="detail.id" :status="detail.status" :is-agent="isAgent" :can-write="canWrite" :can-ship="canShip" :can-tech="canTech" :can-review="canReview" @changed="returnsChanged" /></el-tab-pane>
-            <el-tab-pane :label="`附件（${attachments.length}）`" name="attachments">
+            <el-tab-pane v-if="!warehouseOnly" :label="`附件（${attachments.length}）`" name="attachments">
               <p class="file-help">支持 JPG、PNG、PDF、MP4（H.264）、UTF-8 文本及 JSON 诊断文件。视频最大50MB，其余最大10MB；每批最多5个、合计150MB。</p>
               <el-table :data="attachments" empty-text="暂无附件">
                 <el-table-column label="文件" min-width="190"><template #default="scope"><el-button link type="primary" @click="downloadAttachment(scope.row)">{{ scope.row.fileName }}</el-button></template></el-table-column>
@@ -282,7 +291,7 @@ watch(() => props.authContext?.username, () => { listVersion++; detailVersion++;
                 <el-button type="primary" :disabled="!attachmentFiles.length" :loading="saving" @click="uploadAttachments">上传附件</el-button>
               </el-form>
             </el-tab-pane>
-            <el-tab-pane label="沟通记录" name="messages">
+            <el-tab-pane v-if="!warehouseOnly" label="沟通记录" name="messages">
               <el-empty v-if="!detail.messages.length" description="暂无留言" :image-size="65" />
               <article v-for="item in detail.messages" :key="item.id" class="message">
                 <header><span>{{ item.visibility === 'INTERNAL' ? '内部留言' : '客户可见留言' }}</span><small>{{ time(item.createdAt) }} · 用户 {{ item.authorId || '—' }}</small></header><p>{{ item.body }}</p>
@@ -314,8 +323,9 @@ watch(() => props.authContext?.username, () => { listVersion++; detailVersion++;
       </div><el-form-item label="问题描述" required><el-input v-model="draft.description" type="textarea" :rows="4" maxlength="5000" show-word-limit /></el-form-item><el-form-item label="已尝试维修方法"><el-input v-model="draft.attemptedRepair" type="textarea" :rows="3" maxlength="2000" show-word-limit /></el-form-item></el-form>
       <template #footer><el-button :disabled="saving" @click="draftVisible = false">取消</el-button><el-button type="primary" :loading="saving||contactLoading" :disabled="contactLoading" @click="saveDraft">保存草稿</el-button></template>
     </el-dialog>
-    <el-dialog v-model="companyVisible" title="售后公司资料" width="min(1050px,96vw)" destroy-on-close><AfterSalesCompanyWorkspace :auth-context="authContext"/></el-dialog>
+    <el-dialog v-model="companyVisible" title="售后公司资料" width="min(1050px,96vw)" destroy-on-close><AfterSalesCompanyWorkspace v-if="canCompany" :auth-context="authContext"/></el-dialog>
     <el-dialog v-if="canAssign" v-model="assignmentVisible" title="分配售后负责人" width="min(480px,95vw)" :close-on-click-modal="false"><el-select v-model="assignee" filterable clearable placeholder="选择售后负责人（清空表示待分配）" style="width:100%"><el-option v-for="item in assignmentOptions" :key="item.id" :value="item.id" :label="item.name"/></el-select><template #footer><el-button :disabled="saving" @click="assignmentVisible=false">取消</el-button><el-button type="primary" :loading="saving" @click="saveAssignment">保存负责人</el-button></template></el-dialog>
+    <el-dialog v-model="reconcileVisible" title="核对历史补发" width="min(560px,95vw)" :close-on-click-modal="false"><el-alert title="请依据原始记录确认配件，不会自动推测历史批准内容。数量和退回要求须与草稿条目一致，随后仍需技术确认和负责人审批。" type="warning" :closable="false"/><el-form label-position="top"><el-form-item label="当前草稿配件" required><el-select v-model="reconcileItemId"><el-option v-for="part in detail?.solutionVersion?.parts || []" :key="part.id" :value="part.id" :label="`${part.partCode} · ${part.partName}`" /></el-select></el-form-item><el-form-item label="核对依据" required><el-input v-model="reconcileReason" type="textarea" maxlength="1000"/></el-form-item></el-form><template #footer><el-button @click="reconcileVisible=false">取消</el-button><el-button type="primary" :loading="saving" @click="reconcile">确认关联</el-button></template></el-dialog>
     <el-dialog v-model="dispatchVisible" title="登记配件发货" width="min(480px, 95vw)" :close-on-click-modal="false"><el-form label-position="top"><el-form-item label="承运商" required><el-input v-model="dispatchForm.carrier" maxlength="128" /></el-form-item><el-form-item label="运单号" required><el-input v-model="dispatchForm.trackingNo" maxlength="128" /></el-form-item></el-form><template #footer><el-button @click="dispatchVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="dispatch">确认发货</el-button></template></el-dialog>
   </section>
 </template>

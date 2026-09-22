@@ -10,7 +10,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 /** 仅针对两个新建的专用空库，禁止清库或重复覆盖已有业务数据。 */
 @EnabledIfEnvironmentVariable(named="BIKE_MIGRATION_CLEAN_URL",matches=".+")
 class MigrationMysqlTest {
-  private static final int LATEST_VERSION = 34;
+  private static final int LATEST_VERSION = 35;
   Flyway flyway(String url,String target) {
     assertThat(url).contains("/bike_migration_");
     var config=Flyway.configure().dataSource(url,System.getenv("BIKE_MYSQL_TEST_USER"),System.getenv("BIKE_MYSQL_TEST_PASSWORD"))
@@ -86,11 +86,16 @@ class MigrationMysqlTest {
   private void insertLegacyAfterSales(Statement sql)throws Exception {
     sql.executeUpdate("UPDATE bike_agent SET contact_name='迁移联系人',contact_phone='migration-phone' WHERE id=9001");
     sql.executeUpdate("INSERT INTO bike_after_sales_case(id,case_no,agent_id,description,assignee_id) VALUES(9001,'MIGRATE-CASE',9001,'历史案例快照验证',1)");
+    sql.executeUpdate("UPDATE bike_after_sales_case SET technical_judgment='旧技术判断',solution='旧维修方案',internal_note='历史内部备注' WHERE id=9001");
     sql.executeUpdate("INSERT INTO bike_after_sales_shipment(id,case_id,part_name,quantity,old_part_return_required,old_part_return_received_at) VALUES(9001,9001,'待退回电机',1,1,NULL),(9002,9001,'已收到电池',2,1,'2025-03-01 12:00:00'),(9003,9001,'无需退回仪表',1,0,NULL)");
     sql.executeUpdate("INSERT INTO bike_sys_role(role_code,role_name,enabled) VALUES('MIGRATE_READ_ONLY','迁移只读角色',1),('MIGRATE_TECH','迁移技术角色',1)");
     sql.executeUpdate("INSERT INTO bike_sys_role_permission(role_id,permission_id) SELECT r.id,p.id FROM bike_sys_role r JOIN bike_sys_permission p ON (r.role_code='MIGRATE_READ_ONLY' AND p.permission_code='AFTER_SALES_READ') OR (r.role_code='MIGRATE_TECH' AND p.permission_code='AFTER_SALES_TECH')");
   }
   private void verifyLegacyAfterSales(Statement sql)throws Exception {
+    try(var result=sql.executeQuery("SELECT status,JSON_UNQUOTE(JSON_EXTRACT(document_json,'$.solution')),JSON_UNQUOTE(JSON_EXTRACT(document_json,'$.internalNote')),JSON_LENGTH(JSON_EXTRACT(document_json,'$.parts')),confirmed_at,approved_at,created_by FROM bike_after_sales_solution_version WHERE case_id=9001")) {
+      assertThat(result.next()).isTrue();assertThat(result.getString(1)).isEqualTo("LEGACY");assertThat(result.getString(2)).isEqualTo("旧维修方案");assertThat(result.getString(3)).isEqualTo("历史内部备注");assertThat(result.getInt(4)).isZero();for(int i=5;i<=7;i++)assertThat(result.getObject(i)).isNull();assertThat(result.next()).isFalse();
+    }
+    try(var result=sql.executeQuery("SELECT COUNT(*) FROM bike_after_sales_shipment WHERE case_id=9001 AND approval_source='LEGACY_UNLINKED' AND solution_item_id IS NULL")){result.next();assertThat(result.getInt(1)).isEqualTo(3);}
     try(var result=sql.executeQuery("SELECT shipment_id,status,received_at,warehouse_name,tracking_no,updated_by FROM bike_after_sales_return ORDER BY shipment_id")) {
       assertThat(result.next()).isTrue();assertThat(result.getLong(1)).isEqualTo(9001);assertThat(result.getString(2)).isEqualTo("REQUIRED");assertThat(result.getObject(3)).isNull();
       for(int n=4;n<=6;n++)assertThat(result.getObject(n)).isNull();

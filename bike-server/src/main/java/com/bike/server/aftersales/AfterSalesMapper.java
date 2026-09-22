@@ -6,9 +6,21 @@ import java.util.List;
 
 @Mapper
 public interface AfterSalesMapper {
-    List<AfterSalesCaseView> selectFilteredPage(@Param("filter") AfterSalesCaseFilter filter, @Param("agentId") Long agentId, @Param("salesUserId") Long salesUserId, @Param("monthStart") java.time.LocalDate monthStart, @Param("offset") long offset, @Param("limit") long limit);
-    long countFiltered(@Param("filter") AfterSalesCaseFilter filter, @Param("agentId") Long agentId, @Param("salesUserId") Long salesUserId, @Param("monthStart") java.time.LocalDate monthStart);
-    AfterSalesDashboardView selectDashboard(@Param("filter") AfterSalesCaseFilter filter, @Param("agentId") Long agentId, @Param("salesUserId") Long salesUserId, @Param("monthStart") java.time.LocalDate monthStart);
+    AfterSalesPlanRecord selectLatestPlan(@Param("caseId") long caseId);
+    List<AfterSalesPlanRecord> selectPlanVersions(@Param("caseId") long caseId);
+    int insertPlan(@Param("caseId") long caseId,@Param("revision") int revision,@Param("document") String document,@Param("operatorId") Long operatorId);
+    int insertPlanItem(@Param("versionId") long versionId,@Param("part") AfterSalesSolutionRequest.Part part);
+    int transitionPlan(@Param("id") long id,@Param("from") String from,@Param("to") String to,@Param("operatorId") Long operatorId);
+    int applyPlanWarranty(@Param("caseId") long caseId,@Param("warranty") String warranty);
+    List<AfterSalesPlanItem> selectPlanItems(@Param("versionId") long versionId);
+    AfterSalesPlanItem selectPlanItem(@Param("id") long id);
+    long countUnrepresentedAllocations(@Param("caseId") long caseId,@Param("versionId") long versionId);
+    long countUnlinkedLegacyShipments(@Param("caseId") long caseId);
+    int reconcileShipment(@Param("caseId") long caseId,@Param("shipmentId") long shipmentId,@Param("itemId") long itemId);
+    List<AfterSalesCaseView> selectFilteredPage(@Param("filter") AfterSalesCaseFilter filter, @Param("agentId") Long agentId, @Param("salesUserId") Long salesUserId, @Param("monthStart") java.time.LocalDate monthStart, @Param("offset") long offset, @Param("limit") long limit, @Param("warehouseOnly") boolean warehouseOnly);
+    long countFiltered(@Param("filter") AfterSalesCaseFilter filter, @Param("agentId") Long agentId, @Param("salesUserId") Long salesUserId, @Param("monthStart") java.time.LocalDate monthStart, @Param("warehouseOnly") boolean warehouseOnly);
+    AfterSalesDashboardView selectDashboard(@Param("filter") AfterSalesCaseFilter filter, @Param("agentId") Long agentId, @Param("salesUserId") Long salesUserId, @Param("monthStart") java.time.LocalDate monthStart, @Param("warehouseOnly") boolean warehouseOnly);
+    int countWarehouseCase(@Param("id") long id);
     AfterSalesCaseView selectById(@Param("id") long id);
     AfterSalesCaseView selectForUpdate(@Param("id") long id);
     AfterSalesVehicleReference selectVehicleReference(@Param("id") long id);
@@ -31,6 +43,7 @@ public interface AfterSalesMapper {
     AfterSalesShipmentView selectShipmentById(@Param("id") long id);
     int dispatchShipment(@Param("caseId") long caseId, @Param("id") long id, @Param("request") AfterSalesDispatchRequest request);
     long countPendingShipments(@Param("caseId") long caseId);
+    long countCaseShipments(@Param("caseId") long caseId);
     int insertRequiredReturn(@Param("shipmentId") long shipmentId);
     List<AfterSalesReturnView> selectReturns(@Param("caseId") long caseId);
     AfterSalesReturnView selectReturn(@Param("shipmentId") long shipmentId);

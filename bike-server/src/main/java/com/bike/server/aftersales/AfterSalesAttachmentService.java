@@ -29,11 +29,11 @@ public class AfterSalesAttachmentService {
         this.mapper = mapper; this.files = files; this.validator = validator;
     }
     public List<AfterSalesAttachmentView> list(long caseId) {
-        requireRead(); requireCaseScope(mapper, mapper.selectById(caseId));
+        requireCaseContent(); requireCaseScope(mapper, mapper.selectById(caseId));
         return mapper.selectAttachments(caseId, canReadInternal());
     }
     public Download download(long caseId, long attachmentId) {
-        requireRead(); requireCaseScope(mapper, mapper.selectById(caseId));
+        requireCaseContent(); requireCaseScope(mapper, mapper.selectById(caseId));
         var attachment = mapper.selectStoredAttachment(attachmentId);
         if (attachment == null || !Objects.equals(attachment.caseId(), caseId)) throw missing();
         if (!"CUSTOMER".equals(attachment.visibility()) && !canReadInternal()) throw new BusinessException("FORBIDDEN", "无权访问内部附件");

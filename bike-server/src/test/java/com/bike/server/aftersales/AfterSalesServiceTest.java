@@ -37,7 +37,7 @@ class AfterSalesServiceTest {
         verify(mapper).selectMessages(1, false);
         verify(mapper, never()).selectMessages(1, true);
         row.setInternalNote("list must also be redacted");
-        when(mapper.selectFilteredPage(any(), eq(8L), isNull(), any(), eq(0L), eq(20L))).thenReturn(List.of(row));
+        when(mapper.selectFilteredPage(any(), eq(8L), isNull(), any(), eq(0L), eq(20L), eq(false))).thenReturn(List.of(row));
         assertThat(service.list(null, null, 1, 20).records().getFirst().getInternalNote()).isNull();
     }
 
@@ -122,10 +122,14 @@ class AfterSalesServiceTest {
         var after = caseRow("UNDER_REVIEW"); after.setSolution("replace controller");
         when(mapper.selectForUpdate(1)).thenReturn(before);
         when(mapper.saveSolution(eq(1L), any(), eq(7L))).thenReturn(1);
+        var saved=new AfterSalesPlanRecord(50,1,1,"DRAFT","{\"technicalJudgment\":\"tested\",\"solution\":\"replace controller\",\"internalNote\":\"private\",\"currency\":\"CNY\",\"parts\":[]}",7L,LocalDateTime.now(),null,null,null,null);
+        when(mapper.selectLatestPlan(1)).thenReturn(null,null,saved,saved);
+        when(mapper.insertPlan(eq(1L),eq(1),anyString(),eq(7L))).thenReturn(1);
+        when(mapper.selectInsertedId()).thenReturn(50L);
         when(mapper.selectById(1)).thenReturn(after);
         assertThat(service.saveSolution(1, new AfterSalesSolutionRequest("tested", "replace controller", "private")).getStatus()).isEqualTo("UNDER_REVIEW");
         verify(mapper, never()).updateStatus(anyLong(), anyString(), anyString(), any(), any());
-        verify(mapper).insertAudit(eq(1L), eq("SOLUTION_SAVED"), eq(7L), eq("test-user"), contains("UNDER_REVIEW"), contains("replace controller"), any());
+        verify(mapper).insertAudit(eq(1L), eq("SOLUTION_SAVED"), eq(7L), eq("test-user"), isNull(), contains("replace controller"), any());
     }
 
     @Test void noTechnicalPlanCanBeEditedAfterApprovalWithoutReturningToReview() {

@@ -20,6 +20,11 @@ public class AfterSalesController {
     @PostMapping("/{id}/submit") public ApiResponse<AfterSalesCaseView> submit(@PathVariable long id){return ApiResponse.success("案例已提交",service.submit(id));}
     @PostMapping("/{id}/review") public ApiResponse<AfterSalesCaseView> review(@PathVariable long id,@Valid @RequestBody AfterSalesReviewRequest request){return ApiResponse.success("审核完成",service.review(id,request));}
     @PostMapping("/{id}/solution") public ApiResponse<AfterSalesCaseView> solution(@PathVariable long id,@Valid @RequestBody AfterSalesSolutionRequest request){return ApiResponse.success("技术方案已保存",service.saveSolution(id,request));}
+    public record VersionRequest(@jakarta.validation.constraints.Min(1) long versionId) {}
+    public record ReconcileRequest(@jakarta.validation.constraints.Min(1) long itemId,@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max=1000) String reason) {}
+    @PostMapping("/{id}/solution/confirm") public ApiResponse<AfterSalesCaseView> confirmSolution(@PathVariable long id,@Valid @RequestBody VersionRequest request){return ApiResponse.success("技术方案已确认",service.confirmSolution(id,request.versionId()));}
+    @GetMapping("/{id}/solution/versions") public ApiResponse<List<AfterSalesPlanView>> solutionVersions(@PathVariable long id){return ApiResponse.success("查询成功",service.solutionVersions(id));}
+    @PostMapping("/{id}/shipments/{shipmentId}/approval-link") public ApiResponse<AfterSalesCaseView> reconcileShipment(@PathVariable long id,@PathVariable long shipmentId,@Valid @RequestBody ReconcileRequest request){return ApiResponse.success("历史补发已核对关联",service.reconcileShipment(id,shipmentId,request.itemId(),request.reason()));}
     @PostMapping("/{id}/process") public ApiResponse<AfterSalesCaseView> process(@PathVariable long id){return ApiResponse.success("案例已开始处理",service.startProcessing(id));}
     @GetMapping("/{id}/messages") public ApiResponse<List<AfterSalesMessageView>> messages(@PathVariable long id){return ApiResponse.success("查询成功",service.messages(id));}
     @PostMapping("/{id}/messages") public ApiResponse<AfterSalesMessageView> message(@PathVariable long id,@Valid @RequestBody AfterSalesMessageRequest request){return ApiResponse.success("留言已发送",service.addMessage(id,request));}

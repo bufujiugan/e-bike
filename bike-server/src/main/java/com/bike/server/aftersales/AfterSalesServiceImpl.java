@@ -38,22 +38,25 @@ public class AfterSalesServiceImpl implements AfterSalesService {
     public PageResponse<AfterSalesCaseView> list(AfterSalesCaseFilter request, long page, long pageSize) {
         requireRead();
         var filter = request.normalized();
+        checkWarehouseFilters(filter);
         long p = Math.max(1, Math.min(page, Integer.MAX_VALUE)), size = Math.min(100, Math.max(1, pageSize));
         Long scope = isAgent() ? requiredAgent() : null;
         Long sales = salesScope();
         var month = java.time.LocalDate.now().withDayOfMonth(1);
-        var rows = mapper.selectFilteredPage(filter, scope, sales, month, (p - 1) * size, size);
+        var rows = mapper.selectFilteredPage(filter, scope, sales, month, (p - 1) * size, size,warehouseOnly());
         rows.forEach(this::redact);
-        return new PageResponse<>(rows, p, size, mapper.countFiltered(filter, scope, sales, month));
+        return new PageResponse<>(rows, p, size, mapper.countFiltered(filter, scope, sales, month,warehouseOnly()));
     }
 
     @Override public AfterSalesDashboardView dashboard(AfterSalesCaseFilter request) {
         requireRead();
-        return mapper.selectDashboard(request.normalized().withoutStatusAndQueue(), isAgent() ? requiredAgent() : null,
-            salesScope(), java.time.LocalDate.now().withDayOfMonth(1));
+        var filter=request.normalized().withoutStatusAndQueue();checkWarehouseFilters(filter);
+        return mapper.selectDashboard(filter, isAgent() ? requiredAgent() : null,
+            salesScope(), java.time.LocalDate.now().withDayOfMonth(1),warehouseOnly());
     }
 
-    @Override public AfterSalesCaseView get(long id) {
+    @Override @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
+    public AfterSalesCaseView get(long id) {
         requireRead();
         return enrich(requireCase(id, false));
     }
@@ -108,14 +111,24 @@ public class AfterSalesServiceImpl implements AfterSalesService {
                 requireState(before, "UNDER_REVIEW");
                 if (normalize(before.getSolution()) == null)
                     throw new BusinessException("AFTER_SALES_SOLUTION_REQUIRED", "审批前须保存技术维修方案");
+                new AfterSalesPlans(mapper).approve(id,request.solutionVersionId());
                 target = "APPROVED";
+            }
+            case "REVISE" -> {
+                requireState(before,"APPROVED","IN_PROGRESS","WAITING_PARTS","SHIPPED","RESOLVED");
+                if(reason==null)throw invalid("重新审核必须说明原因");
+                var latest=mapper.selectLatestPlan(id);
+                if(!Objects.equals(request.solutionVersionId(),latest==null?null:latest.id()))throw new BusinessException("AFTER_SALES_SOLUTION_CONFLICT","方案已变化，请刷新后重试");
+                target="UNDER_REVIEW";
             }
             case "REJECT", "REQUEST_INFO" -> {
                 if (reason == null) throw invalid("拒绝或补充资料必须填写原因");
                 requireState(before, "SUBMITTED", "UNDER_REVIEW");
+                if(action.equals("REJECT") && mapper.countCaseShipments(id)>0)throw new BusinessException("INVALID_STATUS_TRANSITION","已有补发记录的案例不能拒绝终止，请修订方案后重新审批");
                 target = action.equals("REJECT") ? "REJECTED" : "NEEDS_INFO";
+                new AfterSalesPlans(mapper).invalidate(id);
             }
-            default -> throw invalid("审核动作必须是 START、APPROVE、REJECT 或 REQUEST_INFO");
+            default -> throw invalid("审核动作必须是 START、APPROVE、REJECT、REQUEST_INFO 或 REVISE");
         }
         changeStatus(before, target, reason);
         return auditedCase(id, "REVIEW_" + action, before);
@@ -125,10 +138,29 @@ public class AfterSalesServiceImpl implements AfterSalesService {
         requireInternal("AFTER_SALES_TECH");
         var before = requireCase(id, true);
         requireState(before, "UNDER_REVIEW");
-        var normalized = new AfterSalesSolutionRequest(optional(request.technicalJudgment(), 4000, "技术判断长度不能超过4000"),
-            required(request.solution(), 4000, "维修方案不能为空"), optional(request.internalNote(), 4000, "内部备注长度不能超过4000"));
-        changed(mapper.saveSolution(id, normalized, CurrentOperator.id()));
-        return auditedCase(id, "SOLUTION_SAVED", before);
+        var previous=mapper.selectLatestPlan(id);
+        var saved=new AfterSalesPlans(mapper).save(before,request);
+        audit(id,"SOLUTION_SAVED",previous,saved);
+        return enrich(requireCase(id,false));
+    }
+
+    @Override @Transactional public AfterSalesCaseView confirmSolution(long id,long versionId) {
+        requireInternal("AFTER_SALES_TECH");var c=requireCase(id,true);requireState(c,"UNDER_REVIEW");
+        var previous=mapper.selectLatestPlan(id);var confirmed=new AfterSalesPlans(mapper).confirm(id,versionId);
+        audit(id,"SOLUTION_CONFIRMED",previous,confirmed);
+        return enrich(requireCase(id,false));
+    }
+
+    @Override public List<AfterSalesPlanView> solutionVersions(long id) {
+        requireCaseContent();requireCase(id,false);return new AfterSalesPlans(mapper).versions(id,canReadInternal());
+    }
+
+    @Override @Transactional public AfterSalesCaseView reconcileShipment(long id,long shipmentId,long itemId,String reason) {
+        requireInternal("AFTER_SALES_REVIEW");var c=requireCase(id,true);requireState(c,"UNDER_REVIEW");
+        String explanation=required(reason,1000,"请说明历史补发核对依据");var previous=mapper.selectShipmentById(shipmentId);
+        new AfterSalesPlans(mapper).reconcile(id,shipmentId,itemId);
+        audit(id,"SHIPMENT_APPROVAL_RECONCILED",previous,Map.of("shipment",mapper.selectShipmentById(shipmentId),"reason",explanation));
+        return enrich(requireCase(id,false));
     }
 
     @Override @Transactional public AfterSalesCaseView startProcessing(long id) {
@@ -158,7 +190,7 @@ public class AfterSalesServiceImpl implements AfterSalesService {
     }
 
     @Override public List<AfterSalesMessageView> messages(long id) {
-        requireRead(); requireCase(id, false);
+        requireCaseContent(); requireCase(id, false);
         return mapper.selectMessages(id, canReadInternal());
     }
 
@@ -171,7 +203,8 @@ public class AfterSalesServiceImpl implements AfterSalesService {
         String carrier = optional(request.carrier(), 128, "承运商长度不能超过128");
         String tracking = optional(request.trackingNo(), 128, "运单号长度不能超过128");
         if (tracking != null && carrier == null) throw invalid("登记实际发货时必须填写承运商");
-        var normalized = new AfterSalesShipmentRequest(part, request.quantity(), carrier, tracking, request.oldPartReturnRequired());
+        var item=new AfterSalesPlans(mapper).allocate(id,request);
+        var normalized = new AfterSalesShipmentRequest(part, request.quantity(), carrier, tracking, request.oldPartReturnRequired(),item.id());
         changed(mapper.insertShipment(id, normalized, CurrentOperator.id()));
         var own = mapper.selectShipmentById(insertedId());
         if (own == null || !Objects.equals(own.getCaseId(), id)) throw new BusinessException("AFTER_SALES_UPDATE_FAILED", "补发记录回读失败");
@@ -189,6 +222,7 @@ public class AfterSalesServiceImpl implements AfterSalesService {
         if (shipment == null || !Objects.equals(shipment.getCaseId(), id))
             throw new BusinessException("AFTER_SALES_SHIPMENT_NOT_FOUND", "补发记录不存在");
         if (!"PLANNED".equals(shipment.getStatus())) throw new BusinessException("INVALID_STATUS_TRANSITION", "只有待发货记录可以登记发货");
+        new AfterSalesPlans(mapper).requireDispatchApproval(id,shipment);
         var normalized = new AfterSalesDispatchRequest(required(request.carrier(), 128, "承运商不能为空"),
             required(request.trackingNo(), 128, "运单号不能为空"));
         changed(mapper.dispatchShipment(id, shipmentId, normalized));
@@ -205,14 +239,14 @@ public class AfterSalesServiceImpl implements AfterSalesService {
 
     @Override public List<AfterSalesHistoryView> history(long id) {
         requireRead(); requireCase(id, false);
-        return mapper.selectHistory(id, canReadInternal());
+        return visibleHistory(id);
     }
 
     @Override @Transactional public AfterSalesCaseView resolve(long id) {
         requireInternal("AFTER_SALES_TECH");
         var before = requireCase(id, true);
         requireState(before, "IN_PROGRESS", "SHIPPED");
-        if (mapper.countPendingShipments(id) != 0)
+        if (mapper.countPendingShipments(id) != 0 || new AfterSalesPlans(mapper).hasUnallocatedParts(id))
             throw new BusinessException("AFTER_SALES_SHIPMENT_PENDING", "尚有待发货配件，不能标记已解决");
         changeStatus(before, "RESOLVED", null);
         return auditedCase(id, "CASE_RESOLVED", before);
@@ -283,13 +317,29 @@ public class AfterSalesServiceImpl implements AfterSalesService {
     }
     private AfterSalesCaseView enrich(AfterSalesCaseView c) {
         boolean internal = canReadInternal();
-        c.setMessages(mapper.selectMessages(c.getId(), internal));
+        c.setMessages(warehouseOnly()?List.of():mapper.selectMessages(c.getId(), internal));
         c.setShipments(mapper.selectShipments(c.getId()));
-        c.setHistory(mapper.selectHistory(c.getId(), internal));
+        c.setHistory(visibleHistory(c.getId()));
+        c.setSolutionVersion(new AfterSalesPlans(mapper).latestView(c.getId(),internal));
         redact(c);
         return c;
     }
-    private void redact(AfterSalesCaseView c) { if (!canReadInternal()) c.setInternalNote(null); }
+    private void redact(AfterSalesCaseView c) {
+        if (!canReadInternal()) c.setInternalNote(null);
+        if(warehouseOnly()) {
+            c.setVehicleId(null);c.setFrameSn(null);c.setProductModelId(null);c.setModelName(null);c.setMotorSn(null);c.setBatterySn(null);c.setDisplaySn(null);
+            c.setPurchaseDate(null);c.setEndCustomerPurchaseDate(null);c.setFailureTime(null);c.setFaultType(null);c.setFaultPart(null);c.setErrorCode(null);c.setDescription(null);c.setAttemptedRepair(null);
+            c.setWarrantyStatus(null);c.setTechnicalJudgment(null);c.setSolution(null);c.setRejectionReason(null);c.setContactEmail(null);c.setAssigneeId(null);c.setAssigneeName(null);
+            c.setCreatedBy(null);c.setUpdatedBy(null);c.setMessages(List.of());
+        }
+    }
+    private List<AfterSalesHistoryView> visibleHistory(long id) {
+        var history=mapper.selectHistory(id,canReadInternal());
+        return warehouseOnly()?history.stream().filter(h->h.action().startsWith("SHIPMENT_")||h.action().startsWith("RETURN_")).toList():history;
+    }
+    private static void checkWarehouseFilters(AfterSalesCaseFilter filter) {
+        if(warehouseOnly() && (filter.frameSn()!=null||filter.modelName()!=null||filter.faultType()!=null||filter.assigneeName()!=null))throw new BusinessException("PERMISSION_DENIED","仓库岗位不能按车辆、故障或售后负责人检索案例");
+    }
     private AfterSalesCaseView auditedCase(long id, String action, AfterSalesCaseView before) {
         var after = requireCase(id, false);
         audit(id, action, before, after);

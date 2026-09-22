@@ -155,3 +155,11 @@ PI 列表、详情、确认和收款响应增加 `reservationStatus`。订单查
 `GET /api/orders/stock-out-options?customerId=&keyword=&page=1&pageSize=20` 供普通 Web 仓管和 PDA 出库岗位选择订单；必须具备 `STOCK_OUT_OPERATE` 及 `STOCK_OUT` 工位，代理商即便误配相同权限仍被拒绝。按客户和可发状态在数据库筛选，再执行搜索、分页与总数查询。返回仅包含订单号、客户 ID、车型、状态和已发/约定数量的最小数据，不包含 PI 财务信息。
 
 H5 使用该接口，可搜索、翻页，翻页保留已选订单；切换客户会清除旧订单及扫描队列。避免旧页面仅加载前100个所有状态订单，导致可发订单被新草稿挤出选项的问题。最终扫码与出库仍执行完整事务校验。
+
+## 售后方案版本与仓库边界（V35）
+
+`POST /api/after-sales/cases/{id}/solution` 保存新版本：previousVersionId须为当前版本，初次为空；填写technicalJudgment、solution、faultCause、customerActions、repairNotes、warrantyStatus、currency、chargeReason及parts（partCode/partName/quantity/unitCharge/returnRequired）。收费精确两位小数且须说明责任。
+
+`POST .../solution/confirm {versionId}` 由技术确认；审批请求须含solutionVersionId。`GET .../solution/versions` 按公司范围返回历史，内部备注按权限隐藏。REVISE审核动作附原因和当前版本，将案例返回审核；补发必须选择当前批准solutionItemId，案例内同编号累计不超量。`POST .../shipments/{shipmentId}/approval-link {itemId,reason}` 仅审核人员可把旧补发关联当前草稿条目，再次确认审批。
+
+纯仓库只可读取最新批准且有配件或已有补发的案例；列表/count/看板/详情共用条件，仍受公司范围限制。响应隐藏车辆故障、技术方案、费用、Email、留言与非物流历史，附件/版本历史/留言独立接口拒绝，敏感字段筛选拒绝、关键词不匹配车辆故障。派单要求读取和派单权限且不能由纯仓库调用。

@@ -41,7 +41,7 @@ class AfterSalesMysqlTest {
             assertThat(f.agent(() -> f.service.submit(id)).getStatus()).isEqualTo("SUBMITTED");
             assertCode("INVALID_STATUS_TRANSITION", () -> f.admin(() -> f.service.review(id, new AfterSalesReviewRequest("APPROVE", null))));
             f.admin(() -> f.service.review(id, new AfterSalesReviewRequest("START", null)));
-            f.admin(() -> f.service.saveSolution(id, new AfterSalesSolutionRequest("motor test", "replace motor", "confidential liability")));
+            var plan=f.admin(() -> f.service.saveSolution(id, AfterSalesPlanMysqlTest.plan(null,"replacement motor",2,true))).getSolutionVersion();
             f.admin(() -> f.service.addMessage(id, new AfterSalesMessageRequest("internal diagnostic discussion", "INTERNAL")));
             f.agent(() -> f.service.addMessage(id, new AfterSalesMessageRequest("please help", "CUSTOMER")));
             var external = f.agent(() -> f.service.get(id));
@@ -49,10 +49,11 @@ class AfterSalesMysqlTest {
             assertThat(external.getMessages()).extracting(AfterSalesMessageView::body).containsExactly("please help");
             assertThat(external.getHistory()).extracting(AfterSalesHistoryView::action).doesNotContain("INTERNAL_MESSAGE_ADDED");
             assertThat(f.admin(() -> f.service.get(id)).getInternalNote()).isEqualTo("confidential liability");
-            f.admin(() -> f.service.review(id, new AfterSalesReviewRequest("APPROVE", null)));
+            f.admin(()->f.service.confirmSolution(id,plan.id()));
+            f.admin(() -> f.service.review(id, new AfterSalesReviewRequest("APPROVE", null,plan.id())));
             assertCode("INVALID_STATUS_TRANSITION", () -> f.admin(() -> f.service.saveSolution(id, new AfterSalesSolutionRequest(null, "changed after approval", null))));
             f.admin(() -> f.service.startProcessing(id));
-            var shipment = f.admin(() -> f.service.addShipment(id, new AfterSalesShipmentRequest("replacement motor", 2, null, null, true)));
+            var shipment = f.admin(() -> f.service.addShipment(id, new AfterSalesShipmentRequest("replacement motor", 2, null, null, true,plan.parts().getFirst().id())));
             assertThat(shipment.getStatus()).isEqualTo("PLANNED");
             assertThat(shipment.getShippedAt()).isNull();
             assertThat(f.agent(() -> f.service.get(id)).getStatus()).isEqualTo("WAITING_PARTS");
@@ -69,7 +70,7 @@ class AfterSalesMysqlTest {
             assertThat(closed.getClosedAt()).isNotNull();
             assertCode("INVALID_STATUS_TRANSITION", () -> f.admin(() -> f.service.review(id, new AfterSalesReviewRequest("START", null))));
             assertCode("INVALID_STATUS_TRANSITION", () -> f.agent(() -> f.service.addMessage(id, new AfterSalesMessageRequest("too late", "CUSTOMER"))));
-            assertThat(f.admin(() -> f.service.history(id))).hasSize(13);
+            assertThat(f.admin(() -> f.service.history(id))).hasSize(14);
             assertCode("FORBIDDEN", () -> f.as("AGENT", 99L, () -> f.service.get(id), "ROLE_WEB_AGENT", "PERM_AFTER_SALES_READ"));
             assertThat(f.as("AGENT", 99L, () -> f.service.list(null, null, 1, 20), "ROLE_WEB_AGENT", "PERM_AFTER_SALES_READ").total()).isZero();
         }
@@ -236,6 +237,12 @@ class AfterSalesMysqlTest {
                     var matcher = Pattern.compile("(?s)CREATE TABLE ([a-z0-9_]+).*?;").matcher(ddl);
                     while (matcher.find()) { sql(matcher.group()); tables.add(matcher.group(1)); }
                 }
+                try (var input = Resources.getResourceAsStream("db/migration/V35__after_sales_versioned_solutions.sql")) {
+                    String ddl=new String(input.readAllBytes(),StandardCharsets.UTF_8).replace("bike_",prefix);
+                    try(var connection=source.getConnection()) {org.springframework.jdbc.datasource.init.ScriptUtils.executeSqlScript(connection,new org.springframework.core.io.ByteArrayResource(ddl.getBytes(StandardCharsets.UTF_8)));}
+                    var matcher=Pattern.compile("CREATE TABLE ([a-z0-9_]+)").matcher(ddl);
+                    while(matcher.find())tables.add(matcher.group(1));
+                }
                 sql("INSERT INTO " + prefix + "customer VALUES(44,'Customer A','ENABLED','Customer contact','4400'),(45,'Customer B','ENABLED',NULL,NULL)");
                 sql("INSERT INTO " + prefix + "agent VALUES(8,'Agent A','ENABLED','Agent contact','8000'),(99,'Agent B','ENABLED','Other contact','9900')");
                 sql("INSERT INTO " + prefix + "sys_user VALUES(7,'sales','Sales','WEB_OPERATOR',NULL,1),(70,'tech','Technician','WEB_OPERATOR',NULL,1),(71,'local-tech','Local technician','WEB_OPERATOR',NULL,1),(72,'disabled-tech','Disabled technician','WEB_OPERATOR',NULL,0),(73,'agent-a','Company employee','AGENT',8,1),(74,'pda','PDA','PDA_OPERATOR',NULL,1),(75,'agent-a2','Second employee','AGENT',8,1)");
@@ -270,6 +277,8 @@ class AfterSalesMysqlTest {
             try (var connection = source.getConnection(); var sql = connection.createStatement(); var rs = sql.executeQuery("SELECT COUNT(*) FROM " + prefix + suffix)) { rs.next(); return rs.getLong(1); }
         }
         @Override public void close() throws Exception {
+            // Shipment references plan items, while return rows reference shipment. Break this cycle only in the disposable fixture.
+            if(tables.contains(prefix+"after_sales_solution_item"))sql("ALTER TABLE "+prefix+"after_sales_shipment DROP FOREIGN KEY fk_"+prefix+"after_sales_shipment_solution");
             var reverse = new ArrayList<>(tables); Collections.reverse(reverse);
             for (String table : reverse) { assertThat(table).startsWith(prefix).matches("[a-z0-9_]+"); sql("DROP TABLE " + table); }
         }

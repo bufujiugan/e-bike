@@ -11,7 +11,7 @@ export type CaseDraft = {
   contact: CompanyContact | null; endCustomerPurchaseDate: string | null;
 }
 export type CaseMessage = { id: number; caseId: number; authorId: number | null; visibility: 'CUSTOMER' | 'INTERNAL'; body: string; createdAt: string }
-export type CaseShipment = { id: number; caseId: number; partName: string; quantity: number; carrier: string | null; trackingNo: string | null; status: 'PLANNED' | 'SHIPPED'; shippedAt: string | null; oldPartReturnRequired: boolean; oldPartReturnReceivedAt: string | null; createdAt: string }
+export type CaseShipment = { id: number; caseId: number; partName: string; quantity: number; carrier: string | null; trackingNo: string | null; status: 'PLANNED' | 'SHIPPED'; shippedAt: string | null; oldPartReturnRequired: boolean; oldPartReturnReceivedAt: string | null; createdAt: string; solutionItemId: number | null; approvalSource: 'VERSIONED' | 'LEGACY_UNLINKED' | 'LEGACY_REVIEWED' }
 export type CaseHistory = { id: number; action: string; operatorName: string; operationTime: string }
 export type CaseAttachment = { id: number; caseId: number; messageId: number | null; fileName: string; contentType: string; fileSize: number; sha256: string; visibility: 'CUSTOMER' | 'INTERNAL'; category: string; uploadedBy: number | null; createdAt: string }
 export type AfterSalesCase = CaseDraft & {
@@ -21,9 +21,13 @@ export type AfterSalesCase = CaseDraft & {
   messages: CaseMessage[]; shipments: CaseShipment[]; history: CaseHistory[];
   companyName: string | null; contactName: string | null; contactPhone: string | null; contactEmail: string | null; countryCode: string | null;
   region: string | null; city: string | null; addressLine: string | null; postalCode: string | null; snapshotSource: string | null; assigneeName: string | null;
+  solutionVersion: SolutionVersion | null;
 }
-export type SolutionDraft = { technicalJudgment: string; solution: string; internalNote: string }
-export type ShipmentDraft = { partName: string; quantity: number; carrier: string; trackingNo: string; oldPartReturnRequired: boolean }
+export type SolutionPart = { partCode: string; partName: string; quantity: number; unitCharge: string | number; returnRequired: boolean }
+export type SolutionItem = Omit<SolutionPart, 'unitCharge'> & { unitCharge: string | number | null; id: number; versionId: number; allocatedQty: number }
+export type SolutionDraft = { technicalJudgment: string; solution: string; internalNote: string; previousVersionId: number | null; faultCause: string; customerActions: string; repairNotes: string; warrantyStatus: string; currency: string; chargeReason: string; parts: SolutionPart[] }
+export type SolutionVersion = { id: number; revision: number; status: 'DRAFT' | 'CONFIRMED' | 'APPROVED' | 'SUPERSEDED' | 'LEGACY'; document: SolutionDraft; parts: SolutionItem[]; createdAt: string; confirmedAt: string | null; approvedAt: string | null }
+export type ShipmentDraft = { partName: string; quantity: number; carrier: string; trackingNo: string; oldPartReturnRequired: boolean; solutionItemId: number | null }
 export type CaseOption = { id: number; name: string }
 export type CaseOptions = { customers: CaseOption[]; agents: CaseOption[]; models: CaseOption[] }
 export type CaseQueue = '' | 'PENDING' | 'REVIEW' | 'WAITING_CUSTOMER' | 'PROCESSING' | 'WAITING_SHIPMENT' | 'SHIPPED' | 'COMPLETED' | 'COMPLETED_MONTH'
@@ -69,8 +73,11 @@ export const afterSales = {
   create: async (draft: CaseDraft) => data(await api.post<Envelope<AfterSalesCase>>(endpoint, draft)),
   update: async (id: number, draft: CaseDraft) => data(await api.put<Envelope<AfterSalesCase>>(`${endpoint}/${id}`, draft)),
   submit: async (id: number) => data(await api.post<Envelope<AfterSalesCase>>(`${endpoint}/${id}/submit`)),
-  review: async (id: number, action: 'START' | 'APPROVE' | 'REJECT' | 'REQUEST_INFO', reason = '') => data(await api.post<Envelope<AfterSalesCase>>(`${endpoint}/${id}/review`, { action, reason })),
+  review: async (id: number, action: 'START' | 'APPROVE' | 'REJECT' | 'REQUEST_INFO' | 'REVISE', reason = '', solutionVersionId?: number) => data(await api.post<Envelope<AfterSalesCase>>(`${endpoint}/${id}/review`, { action, reason, solutionVersionId })),
   solution: async (id: number, draft: SolutionDraft) => data(await api.post<Envelope<AfterSalesCase>>(`${endpoint}/${id}/solution`, draft)),
+  confirmSolution: async (id: number, versionId: number) => data(await api.post<Envelope<AfterSalesCase>>(`${endpoint}/${id}/solution/confirm`, { versionId })),
+  solutionVersions: async (id: number) => data(await api.get<Envelope<SolutionVersion[]>>(`${endpoint}/${id}/solution/versions`)),
+  reconcileShipment: async (id: number, shipmentId: number, itemId: number, reason: string) => data(await api.post<Envelope<AfterSalesCase>>(`${endpoint}/${id}/shipments/${shipmentId}/approval-link`, { itemId, reason })),
   process: async (id: number) => data(await api.post<Envelope<AfterSalesCase>>(`${endpoint}/${id}/process`)),
   message: async (id: number, body: string, visibility: 'CUSTOMER' | 'INTERNAL') => data(await api.post<Envelope<CaseMessage>>(`${endpoint}/${id}/messages`, { body, visibility })),
   shipment: async (id: number, draft: ShipmentDraft) => data(await api.post<Envelope<CaseShipment>>(`${endpoint}/${id}/shipments`, draft)),

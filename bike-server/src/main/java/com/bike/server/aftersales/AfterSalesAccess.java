@@ -21,9 +21,16 @@ final class AfterSalesAccess {
         if (isPda()) throw new BusinessException("PERMISSION_DENIED", "PDA 账号不能访问售后管理");
     }
     static void requireRead() { requireWeb(); CurrentOperator.requirePermission("AFTER_SALES_READ"); }
+    static boolean warehouseOnly() {
+        return !isAgent() && !isPda() && !CurrentOperator.hasRole("SUPER_ADMIN") && CurrentOperator.hasPermission("AFTER_SALES_LOGISTICS")
+            && !CurrentOperator.hasPermission("AFTER_SALES_WRITE") && !CurrentOperator.hasPermission("AFTER_SALES_REVIEW") && !CurrentOperator.hasPermission("AFTER_SALES_TECH");
+    }
+    static void requireCaseContent() { requireRead(); if(warehouseOnly())throw new BusinessException("PERMISSION_DENIED","仓库岗位仅可访问配件、物流、收货资料和旧件处理"); }
+    static void requireCompanyContent() {requireRead();if(warehouseOnly()&&!CurrentOperator.hasPermission("AFTER_SALES_COMPANY_MANAGE"))throw new BusinessException("PERMISSION_DENIED","仓库岗位请使用具体补发案例的收货资料");}
     static void requireWrite() { requireWeb(); CurrentOperator.requirePermission("AFTER_SALES_WRITE"); }
     static void requireCommunicationWrite() {
         requireWeb();
+        if(warehouseOnly())throw new BusinessException("PERMISSION_DENIED","仓库岗位没有案例沟通和附件权限");
         if (isAgent()) CurrentOperator.requirePermission("AFTER_SALES_WRITE");
         else CurrentOperator.requireAnyPermission("AFTER_SALES_WRITE", "AFTER_SALES_REVIEW", "AFTER_SALES_TECH", "AFTER_SALES_LOGISTICS");
     }
@@ -51,6 +58,7 @@ final class AfterSalesAccess {
     static void requireCaseScope(AfterSalesMapper mapper, AfterSalesCaseView c) {
         if (c == null) throw new BusinessException("AFTER_SALES_NOT_FOUND", "售后案例不存在");
         requireAgentScope(mapper, c.getAgentId());
+        if(warehouseOnly() && mapper.countWarehouseCase(c.getId())!=1)throw new BusinessException("FORBIDDEN","当前案例没有可供仓库处理的配件信息");
     }
     private static boolean userType(String type) {
         var auth = SecurityContextHolder.getContext().getAuthentication();

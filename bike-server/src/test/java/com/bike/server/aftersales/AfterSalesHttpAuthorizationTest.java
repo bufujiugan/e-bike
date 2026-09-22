@@ -28,17 +28,17 @@ class AfterSalesHttpAuthorizationTest {
     @MockitoBean TokenRevocationMapper revocations;
 
     @Test void advancedQueryBindsDatesAndDashboardUsesTheSameNormalizedCriteria() throws Exception {
-        when(mapper.selectFilteredPage(any(), isNull(), isNull(), any(), anyLong(), anyLong())).thenReturn(List.of());
-        when(mapper.selectDashboard(any(), isNull(), isNull(), any())).thenReturn(new AfterSalesDashboardView(0,0,0,0,0,0,0,0,0));
+        when(mapper.selectFilteredPage(any(), isNull(), isNull(), any(), anyLong(), anyLong(), eq(false))).thenReturn(List.of());
+        when(mapper.selectDashboard(any(), isNull(), isNull(), any(), eq(false))).thenReturn(new AfterSalesDashboardView(0,0,0,0,0,0,0,0,0));
         mvc.perform(get("/api/after-sales/cases").with(user("admin").roles("SUPER_ADMIN"))
             .param("companyName"," Bikes ").param("countryCode","gb").param("createdTo","2026-09-20").param("queue","WAITING_SHIPMENT"))
             .andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value(0));
         verify(mapper).selectFilteredPage(argThat(f -> "Bikes".equals(f.companyName()) && "GB".equals(f.countryCode())
-            && java.time.LocalDate.of(2026,9,21).equals(f.createdBefore()) && "WAITING_SHIPMENT".equals(f.queue())), isNull(), isNull(), any(), eq(0L), eq(20L));
+            && java.time.LocalDate.of(2026,9,21).equals(f.createdBefore()) && "WAITING_SHIPMENT".equals(f.queue())), isNull(), isNull(), any(), eq(0L), eq(20L), eq(false));
         mvc.perform(get("/api/after-sales/cases/dashboard").with(user("admin").roles("SUPER_ADMIN"))
             .param("status","CLOSED").param("queue","COMPLETED_MONTH").param("countryCode","gb"))
             .andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value(0));
-        verify(mapper).selectDashboard(argThat(f -> f.status()==null && f.queue()==null && "GB".equals(f.countryCode())),isNull(),isNull(),any());
+        verify(mapper).selectDashboard(argThat(f -> f.status()==null && f.queue()==null && "GB".equals(f.countryCode())),isNull(),isNull(),any(),eq(false));
     }
 
     @Test void dashboardRejectsPdaMissingReadPermissionAndMalformedDates() throws Exception {

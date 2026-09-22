@@ -132,7 +132,7 @@ try {
   assert.equal((await req(`${casePath(id)}/assignee`, { assigneeId: localTech.id }, { method: 'PUT', token: dispatcher.token })).assigneeId, localTech.id);
   await req(`${casePath(id)}/submit`, {}, { token: own.token });
   await req(`${casePath(id)}/review`, { action: 'START' });
-  await req(`${casePath(id)}/solution`, { solution: '检查后更换电机', internalNote: 'Internal company assignment test' });
+  await req(`${casePath(id)}/solution`, { solution: '检查后更换电机', internalNote: 'Internal company assignment test', currency: 'CNY', parts: [] });
   const assigned = await req(`${casePath(id)}/assignee`, { assigneeId: tech.id }, { method: 'PUT', token: dispatcher.token });
   assert.equal(assigned.assigneeId, tech.id); assert(assigned.assigneeName.includes('Technician')); assert.equal(assigned.internalNote, null);
   assert.equal((await req(`${casePath(id)}/assignee`, { assigneeId: tech.id }, { method: 'PUT', token: dispatcher.token })).internalNote, null);

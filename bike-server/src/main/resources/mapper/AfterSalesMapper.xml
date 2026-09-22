@@ -1,6 +1,25 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.bike.server.aftersales.AfterSalesMapper">
+  <sql id="planSelect">SELECT id,case_id,revision,status,CAST(document_json AS CHAR) document_json,created_by,created_at,confirmed_by,confirmed_at,approved_by,approved_at FROM bike_after_sales_solution_version</sql>
+  <select id="selectLatestPlan" resultType="com.bike.server.aftersales.AfterSalesPlanRecord"><include refid="planSelect"/> WHERE case_id=#{caseId} ORDER BY revision DESC LIMIT 1</select>
+  <select id="selectPlanVersions" resultType="com.bike.server.aftersales.AfterSalesPlanRecord"><include refid="planSelect"/> WHERE case_id=#{caseId} ORDER BY revision DESC</select>
+  <insert id="insertPlan">INSERT INTO bike_after_sales_solution_version(case_id,revision,document_json,created_by) VALUES(#{caseId},#{revision},#{document},#{operatorId})</insert>
+  <insert id="insertPlanItem">INSERT INTO bike_after_sales_solution_item(version_id,part_code,part_name,quantity,unit_charge,return_required) VALUES(#{versionId},#{part.partCode},#{part.partName},#{part.quantity},#{part.unitCharge},#{part.returnRequired})</insert>
+  <update id="transitionPlan">UPDATE bike_after_sales_solution_version SET status=#{to}
+    <if test="to == 'CONFIRMED'">,confirmed_by=#{operatorId},confirmed_at=CURRENT_TIMESTAMP(3)</if>
+    <if test="to == 'APPROVED'">,approved_by=#{operatorId},approved_at=CURRENT_TIMESTAMP(3)</if>
+    WHERE id=#{id} AND status=#{from}
+  </update>
+  <update id="applyPlanWarranty">UPDATE bike_after_sales_case SET warranty_status=#{warranty} WHERE id=#{caseId}</update>
+  <sql id="planItemSelect">SELECT i.id,i.version_id,i.part_code,i.part_name,i.quantity,i.unit_charge,i.return_required,
+    (SELECT COALESCE(SUM(s.quantity),0) FROM bike_after_sales_shipment s JOIN bike_after_sales_solution_item old ON old.id=s.solution_item_id JOIN bike_after_sales_solution_version ov ON ov.id=old.version_id WHERE ov.case_id=v.case_id AND old.part_code=i.part_code) allocated_qty
+    FROM bike_after_sales_solution_item i JOIN bike_after_sales_solution_version v ON v.id=i.version_id</sql>
+  <select id="selectPlanItems" resultType="com.bike.server.aftersales.AfterSalesPlanItem"><include refid="planItemSelect"/> WHERE i.version_id=#{versionId} ORDER BY i.id</select>
+  <select id="selectPlanItem" resultType="com.bike.server.aftersales.AfterSalesPlanItem"><include refid="planItemSelect"/> WHERE i.id=#{id}</select>
+  <select id="countUnrepresentedAllocations" resultType="long">SELECT COUNT(*) FROM bike_after_sales_shipment s JOIN bike_after_sales_solution_item old ON old.id=s.solution_item_id WHERE s.case_id=#{caseId} AND NOT EXISTS(SELECT 1 FROM bike_after_sales_solution_item current_item WHERE current_item.version_id=#{versionId} AND current_item.part_code=old.part_code)</select>
+  <select id="countUnlinkedLegacyShipments" resultType="long">SELECT COUNT(*) FROM bike_after_sales_shipment WHERE case_id=#{caseId} AND approval_source='LEGACY_UNLINKED'</select>
+  <update id="reconcileShipment">UPDATE bike_after_sales_shipment SET solution_item_id=#{itemId},approval_source='LEGACY_REVIEWED' WHERE id=#{shipmentId} AND case_id=#{caseId} AND approval_source='LEGACY_UNLINKED' AND solution_item_id IS NULL</update>
   <sql id="base">SELECT c.id,c.case_no,c.customer_id,cu.customer_name,c.agent_id,a.agent_name,c.vehicle_id,c.frame_sn,c.product_model_id,m.model_name,c.motor_sn,c.battery_sn,c.display_sn,c.purchase_date,c.failure_time,c.fault_type,c.fault_part,c.error_code,c.description,c.attempted_repair,c.warranty_status,c.status,c.assignee_id,c.technical_judgment,c.solution,c.internal_note,c.rejection_reason,c.created_by,c.updated_by,c.submitted_at,c.closed_at,c.created_at,c.updated_at,cc.company_name,cc.contact_name,cc.contact_phone,cc.contact_email,cc.country_code,cc.region,cc.city,cc.address_line,cc.postal_code,cc.end_customer_purchase_date,cc.snapshot_source,cc.assignee_name FROM bike_after_sales_case c LEFT JOIN bike_after_sales_case_contact cc ON cc.case_id=c.id LEFT JOIN bike_customer cu ON cu.id=c.customer_id LEFT JOIN bike_agent a ON a.id=c.agent_id LEFT JOIN bike_product_model m ON m.id=c.product_model_id</sql>
   <sql id="queryJoins">FROM bike_after_sales_case c
     LEFT JOIN bike_after_sales_case_contact cc ON cc.case_id=c.id
@@ -15,6 +34,11 @@
   <sql id="shippedQueue">c.status='SHIPPED'</sql>
   <sql id="completedQueue">c.status='CLOSED'</sql>
   <sql id="completedMonthQueue">c.status='CLOSED' AND c.closed_at &gt;= #{monthStart} AND c.closed_at &lt; DATE_ADD(#{monthStart}, INTERVAL 1 MONTH)</sql>
+  <sql id="warehouseCaseScope">(EXISTS(SELECT 1 FROM bike_after_sales_shipment ws WHERE ws.case_id=c.id)
+    OR EXISTS(SELECT 1 FROM bike_after_sales_solution_version wv WHERE wv.case_id=c.id AND wv.status='APPROVED'
+      AND NOT EXISTS(SELECT 1 FROM bike_after_sales_solution_version newer WHERE newer.case_id=c.id AND newer.revision&gt;wv.revision)
+      AND EXISTS(SELECT 1 FROM bike_after_sales_solution_item wi WHERE wi.version_id=wv.id)))</sql>
+  <select id="countWarehouseCase" resultType="int">SELECT COUNT(*) FROM bike_after_sales_case c WHERE c.id=#{id} AND <include refid="warehouseCaseScope"/></select>
   <sql id="filteredWhere">
     <bind name="keywordPattern" value="filter.keywordLike()"/>
     <bind name="companyPattern" value="filter.companyNameLike()"/>
@@ -24,9 +48,10 @@
     <bind name="assigneePattern" value="filter.assigneeNameLike()"/>
     <bind name="createdBefore" value="filter.createdBefore()"/>
     <where>
+      <if test="warehouseOnly">AND <include refid="warehouseCaseScope"/></if>
       <if test="agentId != null">AND c.agent_id=#{agentId}</if>
       <if test="salesUserId != null">AND EXISTS(SELECT 1 FROM bike_after_sales_sales_agent scope WHERE scope.agent_id=c.agent_id AND scope.sales_user_id=#{salesUserId} AND scope.enabled=1)</if>
-      <if test="filter.keyword != null">AND (c.case_no LIKE #{keywordPattern} ESCAPE '!' OR c.frame_sn LIKE #{keywordPattern} ESCAPE '!' OR c.description LIKE #{keywordPattern} ESCAPE '!' OR cu.customer_name LIKE #{keywordPattern} ESCAPE '!' OR a.agent_name LIKE #{keywordPattern} ESCAPE '!' OR cc.company_name LIKE #{keywordPattern} ESCAPE '!' OR cc.contact_name LIKE #{keywordPattern} ESCAPE '!')</if>
+      <if test="filter.keyword != null">AND (c.case_no LIKE #{keywordPattern} ESCAPE '!' <if test="!warehouseOnly">OR c.frame_sn LIKE #{keywordPattern} ESCAPE '!' OR c.description LIKE #{keywordPattern} ESCAPE '!'</if> OR cu.customer_name LIKE #{keywordPattern} ESCAPE '!' OR a.agent_name LIKE #{keywordPattern} ESCAPE '!' OR cc.company_name LIKE #{keywordPattern} ESCAPE '!' OR cc.contact_name LIKE #{keywordPattern} ESCAPE '!')</if>
       <if test="filter.companyName != null">AND (cc.company_name LIKE #{companyPattern} ESCAPE '!' OR cu.customer_name LIKE #{companyPattern} ESCAPE '!' OR a.agent_name LIKE #{companyPattern} ESCAPE '!')</if>
       <if test="filter.contactName != null">AND cc.contact_name LIKE #{contactPattern} ESCAPE '!'</if>
       <if test="filter.frameSn != null">AND c.frame_sn LIKE #{framePattern} ESCAPE '!'</if>
@@ -99,10 +124,11 @@
   <insert id="insertMessage">INSERT INTO bike_after_sales_message(case_id,author_id,visibility,body) VALUES(#{caseId},#{authorId},#{visibility},#{body})</insert>
   <select id="selectMessages" resultType="com.bike.server.aftersales.AfterSalesMessageView">SELECT id,case_id,author_id,visibility,body,created_at FROM bike_after_sales_message WHERE case_id=#{caseId}<if test="!includeInternal"> AND visibility='CUSTOMER'</if> ORDER BY created_at ASC,id ASC</select>
   <select id="selectMessageById" resultType="com.bike.server.aftersales.AfterSalesMessageView">SELECT id,case_id,author_id,visibility,body,created_at FROM bike_after_sales_message WHERE id=#{id}</select>
-  <insert id="insertShipment">INSERT INTO bike_after_sales_shipment(case_id,part_name,quantity,carrier,tracking_no,status,shipped_at,old_part_return_required,created_by) VALUES(#{caseId},#{request.partName},#{request.quantity},#{request.carrier},#{request.trackingNo},CASE WHEN #{request.trackingNo} IS NULL THEN 'PLANNED' ELSE 'SHIPPED' END,CASE WHEN #{request.trackingNo} IS NULL THEN NULL ELSE CURRENT_TIMESTAMP(3) END,#{request.oldPartReturnRequired},#{createdBy})</insert>
-  <select id="selectShipments" resultType="com.bike.server.aftersales.AfterSalesShipmentView">SELECT id,case_id,part_name,quantity,carrier,tracking_no,status,shipped_at,old_part_return_required,old_part_return_received_at,created_by,created_at,updated_at FROM bike_after_sales_shipment WHERE case_id=#{caseId} ORDER BY created_at ASC,id ASC</select>
-  <select id="selectShipmentById" resultType="com.bike.server.aftersales.AfterSalesShipmentView">SELECT id,case_id,part_name,quantity,carrier,tracking_no,status,shipped_at,old_part_return_required,old_part_return_received_at,created_by,created_at,updated_at FROM bike_after_sales_shipment WHERE id=#{id}</select>
+  <insert id="insertShipment">INSERT INTO bike_after_sales_shipment(case_id,part_name,quantity,carrier,tracking_no,status,shipped_at,old_part_return_required,created_by,solution_item_id) VALUES(#{caseId},#{request.partName},#{request.quantity},#{request.carrier},#{request.trackingNo},CASE WHEN #{request.trackingNo} IS NULL THEN 'PLANNED' ELSE 'SHIPPED' END,CASE WHEN #{request.trackingNo} IS NULL THEN NULL ELSE CURRENT_TIMESTAMP(3) END,#{request.oldPartReturnRequired},#{createdBy},#{request.solutionItemId})</insert>
+  <select id="selectShipments" resultType="com.bike.server.aftersales.AfterSalesShipmentView">SELECT id,case_id,part_name,quantity,carrier,tracking_no,status,shipped_at,old_part_return_required,old_part_return_received_at,created_by,created_at,updated_at,solution_item_id,approval_source FROM bike_after_sales_shipment WHERE case_id=#{caseId} ORDER BY created_at ASC,id ASC</select>
+  <select id="selectShipmentById" resultType="com.bike.server.aftersales.AfterSalesShipmentView">SELECT id,case_id,part_name,quantity,carrier,tracking_no,status,shipped_at,old_part_return_required,old_part_return_received_at,created_by,created_at,updated_at,solution_item_id,approval_source FROM bike_after_sales_shipment WHERE id=#{id}</select>
   <select id="countPendingShipments" resultType="long">SELECT COUNT(*) FROM bike_after_sales_shipment WHERE case_id=#{caseId} AND status='PLANNED'</select>
+  <select id="countCaseShipments" resultType="long">SELECT COUNT(*) FROM bike_after_sales_shipment WHERE case_id=#{caseId}</select>
   <insert id="insertRequiredReturn">INSERT INTO bike_after_sales_return(shipment_id,case_id) SELECT id,case_id FROM bike_after_sales_shipment WHERE id=#{shipmentId} AND old_part_return_required=1</insert>
   <sql id="returnSelect">SELECT r.shipment_id,r.case_id,s.part_name,s.quantity,r.status,r.revision,r.warehouse_name,r.recipient,r.phone,r.address_line,r.postal_code,r.carrier,r.tracking_no,r.sent_at,r.received_at,r.inspected_at,r.inspection_result,r.disposition_note,r.completed_at,r.updated_at FROM bike_after_sales_return r JOIN bike_after_sales_shipment s ON s.id=r.shipment_id AND s.case_id=r.case_id</sql>
   <select id="selectReturns" resultType="com.bike.server.aftersales.AfterSalesReturnView"><include refid="returnSelect"/> WHERE r.case_id=#{caseId} ORDER BY r.shipment_id</select>

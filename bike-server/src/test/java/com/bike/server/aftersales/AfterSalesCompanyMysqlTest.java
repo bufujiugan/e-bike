@@ -97,7 +97,8 @@ class AfterSalesCompanyMysqlTest {
             assertThat(f.agent(()->f.service.get(id)).getAssigneeName()).hasSize(167);
             f.sql("UPDATE "+f.prefix+"after_sales_case SET internal_note='private' WHERE id="+id);
             // Same-assignee early return must be redacted too.
-            assertThat(f.as("WEB_OPERATOR",null,()->companies.assign(id,70L),"PERM_AFTER_SALES_ASSIGN","PERM_AFTER_SALES_SCOPE_ALL").getInternalNote()).isNull();
+            assertCode("PERMISSION_DENIED",()->f.as("WEB_OPERATOR",null,()->companies.assign(id,70L),"PERM_AFTER_SALES_ASSIGN","PERM_AFTER_SALES_SCOPE_ALL"));
+            assertThat(f.as("WEB_OPERATOR",null,()->companies.assign(id,70L),"PERM_AFTER_SALES_READ","PERM_AFTER_SALES_ASSIGN","PERM_AFTER_SALES_SCOPE_ALL").getInternalNote()).isNull();
             assertThat(f.admin(()->companies.assign(id,null)).getAssigneeName()).isNull();
             assertThat(f.admin(()->f.service.history(id))).extracting(AfterSalesHistoryView::action).contains("CASE_ASSIGNED");
             f.sql("UPDATE "+f.prefix+"after_sales_case SET status='CLOSED' WHERE id="+id);

@@ -5,6 +5,9 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public class AfterSalesCaseView {
+    private AfterSalesPlanView solutionVersion;
+    public AfterSalesPlanView getSolutionVersion(){return solutionVersion;}
+    public void setSolutionVersion(AfterSalesPlanView value){solutionVersion=value;}
     private Long id; private String caseNo; private Long customerId; private String customerName; private Long agentId; private String agentName;
     private Long vehicleId; private String frameSn; private Long productModelId; private String modelName; private String motorSn; private String batterySn; private String displaySn;
     private LocalDate purchaseDate; private LocalDateTime failureTime; private String faultType; private String faultPart; private String errorCode; private String description; private String attemptedRepair;
