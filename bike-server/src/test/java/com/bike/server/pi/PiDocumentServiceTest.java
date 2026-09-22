@@ -31,6 +31,7 @@ class PiDocumentServiceTest {
             if (output != null) {
                 Path folder = Path.of(output); Files.createDirectories(folder);
                 Files.write(folder.resolve("pi-chinese-50-lines.pdf"), bytes);
+                Files.write(folder.resolve("pi-chinese-50-lines.xlsx"),service.excel(pi));
                 PDFRenderer renderer = new PDFRenderer(pdf);
                 for (int i = 0; i < pdf.getNumberOfPages(); i++) {
                     ImageIO.write(renderer.renderImageWithDPI(i, 110), "PNG", folder.resolve("pi-page-" + (i + 1) + ".png").toFile());
@@ -52,6 +53,22 @@ class PiDocumentServiceTest {
             }));
             assertThat(content).contains("9999999999999999.99", "=HYPERLINK", "收款银行", "12345.67", "SKU-001");
             assertThat(sheet.getRepeatingRows()).isNotNull();
+        }
+    }
+
+    @Test void excelUsesNumericAmountsTextCodesAndExplicitPrecisionFallback()throws Exception {
+        PiView pi=sample(1);pi.getItems().getFirst().setSkuCode("0000123");
+        try(var book=new XSSFWorkbook(new ByteArrayInputStream(service.excel(pi)))) {
+            var sheet=book.getSheetAt(0);org.apache.poi.ss.usermodel.Row product=null,total=null;
+            for(var row:sheet)if(row.getCell(0)!=null){if("0000123".equals(row.getCell(0).toString()))product=row;if(row.getCell(0).toString().startsWith("应付总额"))total=row;}
+            assertThat(product).isNotNull();assertThat(product.getCell(0).getCellType()).isEqualTo(org.apache.poi.ss.usermodel.CellType.STRING);
+            assertThat(product.getCell(3).getCellType()).isEqualTo(org.apache.poi.ss.usermodel.CellType.NUMERIC);assertThat(product.getCell(3).getNumericCellValue()).isEqualTo(125.00);
+            assertThat(total).isNotNull();assertThat(total.getCell(6).getCellType()).isEqualTo(org.apache.poi.ss.usermodel.CellType.NUMERIC);assertThat(total.getCell(6).getNumericCellValue()).isEqualTo(12345.67);
+        }
+        pi.getItems().getFirst().setUnitPrice(new BigDecimal("90071992547409.93"));
+        try(var book=new XSSFWorkbook(new ByteArrayInputStream(service.excel(pi)))) {
+            var row=java.util.stream.StreamSupport.stream(book.getSheetAt(0).spliterator(),false).filter(r->r.getCell(0)!=null&&"0000123".equals(r.getCell(0).toString())).findFirst().orElseThrow();
+            assertThat(row.getCell(3).getStringCellValue()).isEqualTo("90071992547409.93");assertThat(row.getCell(3).getCellComment()).isNotNull();
         }
     }
 

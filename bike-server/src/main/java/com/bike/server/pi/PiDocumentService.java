@@ -41,6 +41,8 @@ public class PiDocumentService {
             Font bold = book.createFont(); bold.setFontName("Noto Sans SC"); bold.setBold(true); bold.setFontHeightInPoints((short) 11);
             heading.setFont(bold); heading.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
             heading.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            CellStyle amount = book.createCellStyle(); amount.cloneStyleFrom(body);
+            amount.setDataFormat(book.createDataFormat().getFormat("#,##0.00"));
             int row = 0;
             for (String text : header(pi)) row = merged(sheet, row, text, row == 0 ? heading : body);
             row++;
@@ -54,14 +56,18 @@ public class PiDocumentService {
                 r.setHeightInPoints(Math.max(32, Math.min(400, 15 * (2 + product.length() / 20))));
                 cell(r, 0, item.getSkuCode(), body); cell(r, 1, product, body);
                 Cell qty = r.createCell(2); qty.setCellValue(item.getQuantity()); qty.setCellStyle(body);
-                // Excel numbers have only 15 significant digits. Store currency as exact decimal text.
-                cell(r, 3, money(item.getUnitPrice()), body); cell(r, 4, money(item.getDiscountAmount()), body);
-                cell(r, 5, money(item.getTaxAmount()), body); cell(r, 6, money(item.getLineTotal()), body);
+                amount(r, 3, item.getUnitPrice(), amount); amount(r, 4, item.getDiscountAmount(), amount);
+                amount(r, 5, item.getTaxAmount(), amount); amount(r, 6, item.getLineTotal(), amount);
             }
             row++;
-            for (String text : totals(pi)) row = merged(sheet, row, text, heading);
+            String[] labels={"商品小计 / Subtotal", "折扣合计 / Discount", "税额合计 / Tax", "运费 / Freight", "应付总额 / Total ("+text(pi.getCurrencyCode())+")"};
+            BigDecimal[] values={pi.getSubtotal(),pi.getDiscountAmount(),pi.getTaxAmount(),pi.getFreightAmount(),pi.getTotalAmount()};
+            for(int i=0;i<labels.length;i++) {
+                Row r=sheet.createRow(row++);r.setHeightInPoints(26);cell(r,0,labels[i],heading);
+                sheet.addMergedRegion(new CellRangeAddress(r.getRowNum(),r.getRowNum(),0,5));amount(r,6,values[i],amount);
+            }
             for (String text : terms(pi)) row = merged(sheet, row, text, body);
-            merged(sheet, row, "金额按单据币种显示，保留精确十进制文本；总额含整单折扣、税额及运费。", body);
+            merged(sheet, row, "金额按单据币种显示；超出Excel可靠精度的金额保留精确文本，单元格批注说明。总额含折扣、税额及运费。", body);
             sheet.createFreezePane(2, tableHead + 1);
             sheet.setRepeatingRows(new CellRangeAddress(tableHead, tableHead, -1, -1));
             sheet.setFitToPage(true);
@@ -116,7 +122,7 @@ public class PiDocumentService {
 
     private static List<String> header(PiView p) {
         List<String> lines = new ArrayList<>();
-        lines.add("PROFORMA INVOICE / 形式发票");
+        lines.add("EXPORT".equals(p.getTradeType())?"EXPORT PROFORMA INVOICE / 外销形式发票":"内销形式发票 / DOMESTIC PROFORMA INVOICE");
         lines.add("PI: " + p.getPiNo() + "    Revision: " + p.getRevision() + "    " + documentState(p));
         lines.add("贸易类型: " + text(p.getTradeType()) + "    币种: " + text(p.getCurrencyCode())
                 + "    计划发货: " + Objects.toString(p.getPlannedShipDate(), "未指定"));
@@ -137,8 +143,6 @@ public class PiDocumentService {
                 "折扣合计 / Discount: " + money(p.getDiscountAmount()) + "    税额合计 / Tax: " + money(p.getTaxAmount()),
                 "运费 / Freight: " + money(p.getFreightAmount()),
                 "应付总额 / Total (" + text(p.getCurrencyCode()) + "): " + money(p.getTotalAmount())));
-        if (p.getDepositRequiredAmount() != null) values.add("定金门槛 / Deposit required: " + money(p.getDepositRequiredAmount()));
-        if (p.getShipmentRequiredAmount() != null) values.add("发货门槛 / Shipment required: " + money(p.getShipmentRequiredAmount()));
         return values;
     }
 
@@ -169,6 +173,21 @@ public class PiDocumentService {
     private static String money(BigDecimal value) { return value == null ? "未指定" : value.toPlainString(); }
     private static void cell(Row row, int col, String text, CellStyle style) {
         Cell c = row.createCell(col); c.setCellValue(text(text)); c.setCellStyle(style);
+    }
+    private static void amount(Row row,int col,BigDecimal value,CellStyle style) {
+        Cell cell=row.createCell(col);cell.setCellStyle(style);
+        // Conservative 15 digits INCLUDING the two currency decimals, also verifying a decimal round trip.
+        if(value!=null && value.setScale(2).precision()<=15
+                && BigDecimal.valueOf(value.doubleValue()).setScale(2,java.math.RoundingMode.HALF_UP).compareTo(value)==0) {
+            cell.setCellValue(value.doubleValue());return;
+        }
+        cell.setCellValue(money(value));
+        if(value!=null) {
+            var helper=row.getSheet().getWorkbook().getCreationHelper();var anchor=helper.createClientAnchor();
+            anchor.setCol1(col);anchor.setCol2(Math.min(col+3,10));anchor.setRow1(row.getRowNum());anchor.setRow2(row.getRowNum()+3);
+            var comment=row.getSheet().createDrawingPatriarch().createCellComment(anchor);
+            comment.setAuthor("PI");comment.setString(helper.createRichTextString("超过Excel可靠的15位精度，保留精确十进制文本，避免金额失真。"));cell.setCellComment(comment);
+        }
     }
     private static int merged(Sheet sheet, int row, String text, CellStyle style) {
         // Split long terms into separate rows to avoid Excel's 409-point row height limit.

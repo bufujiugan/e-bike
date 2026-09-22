@@ -15,6 +15,14 @@ public class PiController {
     @org.springframework.beans.factory.annotation.Autowired private PiDispatchMapper dispatch;
     @org.springframework.beans.factory.annotation.Autowired private PiLogisticsService logisticsService;
     @org.springframework.beans.factory.annotation.Autowired private PiRevisionService revisions;
+    @org.springframework.beans.factory.annotation.Autowired private PiExportArchive archives;
+
+    @GetMapping("/{id}/export-task") public ApiResponse<PiExportJob> exportTask(@PathVariable long id) {
+        service.get(id);return ApiResponse.success("查询成功",archives.status(id));
+    }
+    @PostMapping("/{id}/export-task/retry") public ApiResponse<PiExportJob> retryExport(@PathVariable long id,@Valid @RequestBody PiExportArchive.Retry request) {
+        service.get(id);return ApiResponse.success("导出已排队",archives.retry(id,request));
+    }
 
     public PiController(PiService service) { this.service = service; }
 

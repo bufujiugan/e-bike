@@ -1,5 +1,6 @@
+import { createPiDocument } from './pi-document-fixture.mjs';
 import assert from 'node:assert/strict';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID, createHash } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 
 if (process.env.BIKE_ACCEPTANCE_WRITE !== 'isolated') throw new Error('仅允许专用验收库');
@@ -54,14 +55,14 @@ try {
     skus.push((await req('/api/production/skus')).find(s => s.skuCode === prefix + color));
   }
   const [red, blue] = skus; assert(red && blue);
-  const sales = await account('SALES', ['PI_READ', 'PI_WRITE', 'AGENT_LOCK_WRITE', 'ORDER_READ', 'ORDER_WRITE', 'INVENTORY_READ']);
+  const sales = await account('SALES', ['PI_READ', 'PI_WRITE', 'PI_EXPORT', 'AGENT_LOCK_WRITE', 'ORDER_READ', 'ORDER_WRITE', 'INVENTORY_READ']);
   for (const type of ['STOCK_IN', 'STOCK_OUT']) stations.push(await req('/api/workstations', { workstationCode: prefix + type, workstationName: 'SKU验收' + type, workstationType: type }));
   const warehouseOperator = await account('WAREHOUSE', ['STOCK_OUT_OPERATE', 'ORDER_READ', 'INVENTORY_READ', 'TRACE_READ'], null, stations[1].id);
   const inboundOperator = await account('INBOUND', ['STOCK_IN_OPERATE', 'INVENTORY_READ'], null, stations[0].id);
   const reader = await account('READER', ['PI_READ', 'INVENTORY_READ']);
   const finance = await account('FINANCE', ['PI_READ', 'PI_PAYMENT_CONFIRM', 'PI_RELEASE']);
   const logisticsOperator = await account('LOGISTICS', ['PI_READ', 'PI_LOGISTICS_WRITE']);
-  const external = await account('AGENT', ['PI_READ', 'PI_WRITE', 'AGENT_INVENTORY_READ', 'AGENT_LOCK_WRITE', 'ORDER_WRITE', 'ORDER_READ'], agent.id);
+  const external = await account('AGENT', ['PI_READ', 'PI_WRITE', 'PI_EXPORT', 'PI_TEMPLATE_MANAGE', 'AGENT_INVENTORY_READ', 'AGENT_LOCK_WRITE', 'ORDER_WRITE', 'ORDER_READ'], agent.id);
   const vehicles = [];
   for (const sku of skus) for (let i = 0; i < 2; i++) {
     const taskId = randomUUID(), tag = `${prefix}${sku.id}V${i}`;
@@ -80,9 +81,17 @@ try {
   assert.equal((await req(`/api/pis/lock-options?customerId=${otherCustomer.id}&agentId=${agent.id}`, undefined, { token: sales })).total, 0);
   const body = { requestId: randomUUID(), sources: sourceLocks.map(l => ({ lockId: l.id, quantity: 1 })), pi: {
     customerId: customer.id, agentId: agent.id, tradeType: 'DOMESTIC', currencyCode: 'CNY', depositRequiredAmount: '50.00', shipmentRequiredAmount: '200.00',
-    document: { sellerName: '隔离测试卖方', paymentTerms: '50元保留/200元发货', deliveryTerms: '测试仓库交付', templateCode: 'ACCEPTANCE', templateVersion: '1' },
+    document: await createPiDocument(req, prefix, { sellerName: '隔离测试卖方', paymentTerms: '50元保留/200元发货', deliveryTerms: '测试仓库交付', templateCode: 'ACCEPTANCE', templateVersion: '1' }),
     items: skus.map(s => ({ skuId: s.id, quantity: 1, unitPrice: '100.00' })),
   } };
+  const publishRequest = { ...body.pi.document, tradeType: 'DOMESTIC', layoutCode: 'DOMESTIC_V1', reason: '模板权限验证' };
+  await req('/api/pi-templates', publishRequest, { token: sales, code: 'PERMISSION_DENIED' });
+  await req('/api/pi-templates', publishRequest, { token: external, code: 'FORBIDDEN' });
+  await req('/api/pi-templates', undefined, { token: external, code: 'FORBIDDEN' });
+  await req('/api/pi-templates', publishRequest, { code: 'PI_TEMPLATE_EXISTS' });
+  await req('/api/pis/from-locks', { ...body, pi: { ...body.pi, document: { ...body.pi.document, bankAccount: 'TAMPERED' } } }, { token: sales, code: 'PI_TEMPLATE_SNAPSHOT_MISMATCH' });
+  await req('/api/pis/from-locks', { ...body, pi: { ...body.pi, document: { ...body.pi.document, templateVersion: 'UNPUBLISHED' } } }, { token: sales, code: 'PI_TEMPLATE_NOT_PUBLISHED' });
+  pass('模板发布独立权限及外部误授权拒绝，已发布版本不可覆盖，银行改写和未发布模板不能创建PI');
   await req('/api/pis/from-locks', body, { token: reader, code: 'PERMISSION_DENIED' });
   await req('/api/pis/from-locks', body, { token: external, code: 'FORBIDDEN' });
   await req(`/api/pis/lock-options?customerId=${customer.id}`, undefined, { token: external, code: 'FORBIDDEN' });
@@ -100,6 +109,29 @@ try {
   await req(`/api/pis/${pi.id}`, undefined, { token: external, code: 'FORBIDDEN' });
   const confirmed = await req(`/api/pis/${pi.id}/confirm`, {}, { token: sales });
   assert(confirmed.fulfillment.every(line => line.status === 'CONFIRMED'));
+  await req(`/api/pis/${pi.id}/export-task`, undefined, { token: reader, code: 'PERMISSION_DENIED' });
+  await req(`/api/pis/${pi.id}/export-task/retry`, { revision: 0, reason: '外部越权' }, { token: external, code: 'FORBIDDEN' });
+  let exportTask;
+  for (let n = 0; n < 30; n++) {
+    exportTask = await req(`/api/pis/${pi.id}/export-task`, undefined, { token: sales });
+    assert(exportTask); assert.notEqual(exportTask.status, 'FAILED');
+    if (exportTask.status === 'READY') break;
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  assert.equal(exportTask.status, 'READY'); assert.equal(exportTask.sourceType, 'CONFIRMATION');
+  for (const key of ['snapshotJson', 'claimToken', 'pdfKey', 'xlsxKey', 'leaseUntil']) assert(!(key in exportTask));
+  const exported = {};
+  for (const format of ['pdf', 'xlsx']) {
+    const download = async token => {
+      const response = await fetch(`${base}/api/pis/${pi.id}/export.${format}`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30000) });
+      assert.equal(response.status, 200); return Buffer.from(await response.arrayBuffer());
+    };
+    const first = await download(sales), second = await download(external);
+    assert(first.equals(second)); assert.equal(createHash('sha256').update(first).digest('hex'), exportTask[`${format}Sha256`]);
+    exported[format] = exportTask[`${format}Sha256`];
+  }
+  evidence.fixtures.exportHashes = exported;
+  pass('确认自动生成两种格式，任务不暴露内部存储，普通销售与客户下载逐字节一致且匹配归档SHA256');
   for (const source of sourceLocks) {
     const linked = await req(`/api/inventory-locks/${source.id}/orders`, undefined, { token: sales });
     assert.equal(linked.total, 1); assert.equal(linked.records[0].reservationExpiresAt, source.expireTime);
@@ -118,6 +150,10 @@ try {
   await req(`/api/pis/${pi.id}/payments`, { requestId: randomUUID(), amount: '150.00', currencyCode: 'CNY' }, { token: finance });
   await req('/api/stock-out', redShipment, { token: warehouseOperator, code: 'PI_SHIPMENT_NOT_RELEASED' });
   await req(`/api/pis/${pi.id}/release`, { reason: '财务核实200元，准许发货' }, { token: finance });
+  for (const format of ['pdf', 'xlsx']) {
+    const response = await fetch(`${base}/api/pis/${pi.id}/export.${format}`, { headers: { Authorization: `Bearer ${external}` }, signal: AbortSignal.timeout(30000) });
+    assert.equal(response.status, 200); assert.equal(createHash('sha256').update(Buffer.from(await response.arrayBuffer())).digest('hex'), exported[format]);
+  }
   pass('定金逐分门槛同时保留两车型，代理所有子单隐藏付款方式，足额收款仍须授权放行');
 
   let redOut;

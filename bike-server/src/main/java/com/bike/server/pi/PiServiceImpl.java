@@ -34,6 +34,8 @@ public class PiServiceImpl implements PiService {
     @org.springframework.beans.factory.annotation.Autowired private PiLogisticsMapper logisticsMapper;
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.order.OrderMapper fulfillmentOrders;
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.order.OrderInventoryGuard orderInventoryGuard;
+    @org.springframework.beans.factory.annotation.Autowired private PiTemplateService templates;
+    @org.springframework.beans.factory.annotation.Autowired private PiExportArchive archives;
 
     public PiServiceImpl(PiMapper mapper, PiDocumentService documents, OperationLogMapper logs,
             ObjectMapper json, Validator validator, OrderReservationCoordinator reservations) {
@@ -131,6 +133,8 @@ public class PiServiceImpl implements PiService {
             fail("TRADE_TYPE_INVALID", "贸易类型必须为 DOMESTIC 或 EXPORT");
         }
         String currency = currency(request.currencyCode());
+        if(templates!=null && request.document()!=null && normalize(request.document().templateCode())!=null)
+            templates.requirePublished(request.document(),trade);
         List<PiCalculatedItem> items = new ArrayList<>();
         Set<Long> seen = new HashSet<>();
         BigDecimal subtotal = ZERO, lineDiscount = ZERO, lineTax = ZERO;
@@ -222,6 +226,7 @@ public class PiServiceImpl implements PiService {
             mapper.updatePaymentStatus(id, paymentStatus(seriesPaid, pi));
         }
         audit(id, "确认 PI", Map.of("status", "DRAFT"), Map.of("status", "CONFIRMED"), null);
+        if(archives!=null)archives.enqueue(require(id),"CONFIRMATION");
         if (pi.getDepositRequiredAmount().signum() == 0) reservations.retainAfterPayment(pi, mapper.paymentTotal(id));
         return enrich(require(id));
     }
@@ -318,13 +323,15 @@ public class PiServiceImpl implements PiService {
     @Override
     public byte[] excel(long id) {
         CurrentOperator.requirePermission("PI_EXPORT");
-        return documents.excel(get(id));
+        var pi=get(id);
+        return archives==null||"DRAFT".equals(pi.getStatus())?documents.excel(pi):archives.download(id,"xlsx");
     }
 
     @Override
     public byte[] pdf(long id) {
         CurrentOperator.requirePermission("PI_EXPORT");
-        return documents.pdf(get(id));
+        var pi=get(id);
+        return archives==null||"DRAFT".equals(pi.getStatus())?documents.pdf(pi):archives.download(id,"pdf");
     }
 
     private void checkSourceOrder(PiCreateRequest request, List<PiCalculatedItem> items, boolean editing) {
@@ -406,6 +413,7 @@ public class PiServiceImpl implements PiService {
                 || normalize(snapshot.templateCode()) == null || normalize(snapshot.templateVersion()) == null) {
             fail("PI_DOCUMENT_INCOMPLETE", "确认 PI 前须填写卖方、付款与交付条款以及模板编号和版本");
         }
+        if(templates!=null)templates.requirePublished(snapshot,pi.getTradeType());
     }
 
     private PiView require(long id) {

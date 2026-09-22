@@ -181,3 +181,13 @@ H5 使用该接口，可搜索、翻页，翻页保留已选订单；切换客�
 `GET /api/after-sales/cases/{id}/notifications?page=1&pageSize=20` 仅具READ和REVIEW的内部账号且在公司范围内可读；返回状态、当前/原收件地址、尝试次数、revision、固定错误代码和发送开关，不暴露正文、claim token或存储信息。`POST .../notifications/{notificationId}/retry {revision,recipient?,reason}` 只重排FAILED/BLOCKED/RETRY，拒绝过期请求、正在发送或成功记录；客户地址可有理由更正，原地址保留，内部邮箱只能服务器配置。
 
 状态PENDING/SENDING/RETRY/SENT/FAILED/BLOCKED，SENT仅表示SMTP接受。任务默认关闭，每30秒扫描最多10条；条件领取五分钟租约，SMTP连接/读写10秒超时，最多5次自动尝试，按60/120/240/480秒退避。租约失效的任务可恢复，最后一次发送结果不确定标记DELIVERY_RESULT_UNKNOWN供人工核对。来源事件唯一和稳定Message-ID不能保证SMTP与数据库之间恰好一次，确认结果丢失时可能重复，人工重试前须核对。
+# PI模板发布与归档任务（V38/V39）
+
+- `GET /api/pi-templates?tradeType=DOMESTIC&page=1&pageSize=20`：内部PI_WRITE或PI_TEMPLATE_MANAGE可读，最多100条/页。
+- `POST /api/pi-templates`：仅内部PI_TEMPLATE_MANAGE；字段templateCode、templateVersion、tradeType、layoutCode、sellerName、sellerAddress、sellerContact、bankName、bankAccount、beneficiary、reason。版式仅DOMESTIC_V1/EXPORT_V1，必须匹配tradeType；版本唯一、只追加、发布与审计同事务。没有上传或执行自定义模板代码的接口。
+- PI草稿选定模板后，保存和确认都校验已发布版本、贸易类型和全部卖方/银行字段，拒绝请求改写；历史草稿必须重新选用受控模板，旧已确认快照保持原样。
+- `GET /api/pis/{id}/export-task`：PI_READ+PI_EXPORT及原公司范围。无任务返回null；否则返回状态、来源、revision、尝试次数、文件哈希和大小，不返回快照、对象键或领取token。
+- `POST /api/pis/{id}/export-task/retry`：内部、同上权限；请求`{revision,reason}`。FAILED重试需当前revision；历史已发布且无任务时revision=0。正在处理/已成功/过期请求拒绝，审计失败整体回滚。代理客户不能重新排队。
+- 原`export.pdf`/`export.xlsx`：草稿即时预览；已发布单据只下载READY归档。未就绪返回PI_EXPORT_NOT_READY；下载核对哈希，失败不重新生成替换原文件。付款、放行、物流变化不改变已存文件，导出不写订单或库存。
+- PDF/Excel统一使用对外商务快照，不含内部到账、付款门槛、库存保留或放行信息。Excel普通金额为数值，SKU/银行账号保持文本；超过15位可靠精度时金额为精确文本并附说明批注。
+- 归档对象及数据库须共同备份。工作进程异常租约10分钟后可领取；文件保存失败为FAILED，授权人员可重排。未关联对象因崩溃或存储/数据库同时不可用可能需要运维按日志对账清理，不删除有数据库引用的文件。

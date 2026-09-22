@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.pi.PiExportMapper">
+    <insert id="enqueue">INSERT INTO bike_pi_export(pi_id,source_type,snapshot_json) VALUES(#{piId},#{sourceType},#{snapshot})</insert>
+    <select id="get" resultType="com.bike.server.pi.PiExportJob">SELECT pi_id,source_type,snapshot_json,status,revision,attempts,claim_token,lease_until,pdf_key,pdf_sha256,pdf_size,xlsx_key,xlsx_sha256,xlsx_size,error_code,created_at,updated_at FROM bike_pi_export WHERE pi_id=#{piId}</select>
+    <select id="next" resultType="long">SELECT pi_id FROM bike_pi_export WHERE status='PENDING' OR (status='PROCESSING' AND lease_until &lt; NOW(3)) ORDER BY pi_id LIMIT 1 FOR UPDATE SKIP LOCKED</select>
+    <update id="claim">UPDATE bike_pi_export SET status='PROCESSING',claim_token=#{token},lease_until=DATE_ADD(NOW(3),INTERVAL 10 MINUTE),attempts=attempts+1,revision=revision+1,error_code=NULL WHERE pi_id=#{piId} AND (status='PENDING' OR (status='PROCESSING' AND lease_until &lt; NOW(3)))</update>
+    <update id="saveFile">
+        UPDATE bike_pi_export SET
+        <choose><when test="format == 'pdf'">pdf_key=#{key},pdf_sha256=#{hash},pdf_size=#{size}</when><otherwise>xlsx_key=#{key},xlsx_sha256=#{hash},xlsx_size=#{size}</otherwise></choose>
+        ,updated_at=NOW(3) WHERE pi_id=#{piId} AND status='PROCESSING' AND claim_token=#{token}
+        <choose><when test="format == 'pdf'">AND pdf_key IS NULL</when><otherwise>AND xlsx_key IS NULL</otherwise></choose>
+    </update>
+    <update id="ready">UPDATE bike_pi_export SET status='READY',claim_token=NULL,lease_until=NULL,error_code=NULL,revision=revision+1 WHERE pi_id=#{piId} AND claim_token=#{token} AND status='PROCESSING' AND pdf_key IS NOT NULL AND xlsx_key IS NOT NULL</update>
+    <update id="fail">UPDATE bike_pi_export SET status='FAILED',claim_token=NULL,lease_until=NULL,error_code=#{code},revision=revision+1 WHERE pi_id=#{piId} AND claim_token=#{token} AND status='PROCESSING'</update>
+    <update id="retry">UPDATE bike_pi_export SET status='PENDING',claim_token=NULL,lease_until=NULL,error_code=NULL,revision=revision+1 WHERE pi_id=#{piId} AND revision=#{revision} AND status='FAILED'</update>
+</mapper>

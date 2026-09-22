@@ -74,3 +74,11 @@ V24 新增 `bike_pi`、`bike_pi_item`、`bike_pi_payment`、`bike_pi_logistics`�
 ## V37 售后Email事务队列
 
 新增来源事件/受众唯一的通知队列、原始及当前收件地址、公开模板快照、稳定Message-ID、状态/次数/revision、领取租约及固定失败代码。迁移不回填历史事件，不伪造已发送记录。四镜像SHA256为 `070F790E31E6FB29CE720A9F59E15333C62FF9A24CF7440BACAED2FF4AF814B3`，已通过新库与升级检查，禁止修改。
+
+## V38 PI受控模板发布
+
+`bike_pi_template`保存不可修改的模板编号/版本、内外销固定版式、卖方及银行资料、发布人/时间和原因。`PI_TEMPLATE_MANAGE`独立于业务编辑权限，仅默认分配超级管理员，不导入假银行资料或猜测历史模板。四镜像SHA256为 `641CDB598EC7A01BB8D21CF1E4A44896417E411BC49D16C4B7673622AFE1C13E`，已在隔离API执行，禁止修改。
+
+## V39 PI导出归档任务
+
+`bike_pi_export`按PI修订ID唯一，保存对外商务快照、PENDING/PROCESSING/READY/FAILED、revision、领取租约、尝试次数和两文件存储键/字节数/SHA256。文件二进制使用现有本地/COS存储。确认事务创建队列，文件生成在独立工作线程；只有两文件都保存后标记READY。失败重试保留成功文件；历史已发布单据需要显式建立LEGACY_SNAPSHOT任务，不回填原发布时间或伪造历史文件。四镜像SHA256为 `4180A74764974AF41419223613E5D0956669F14798985C7B2F575FAC397E52AB`，已在隔离API执行，禁止修改。

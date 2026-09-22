@@ -10,7 +10,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 /** 仅针对两个新建的专用空库，禁止清库或重复覆盖已有业务数据。 */
 @EnabledIfEnvironmentVariable(named="BIKE_MIGRATION_CLEAN_URL",matches=".+")
 class MigrationMysqlTest {
-  private static final int LATEST_VERSION = 37;
+  private static final int LATEST_VERSION = 39;
   Flyway flyway(String url,String target) {
     assertThat(url).contains("/bike_migration_");
     var config=Flyway.configure().dataSource(url,System.getenv("BIKE_MYSQL_TEST_USER"),System.getenv("BIKE_MYSQL_TEST_PASSWORD"))
@@ -123,6 +123,10 @@ class MigrationMysqlTest {
     try(var result=sql.executeQuery("SELECT COUNT(*) FROM bike_sys_role_permission rp JOIN bike_sys_permission p ON p.id=rp.permission_id WHERE p.permission_code='PRODUCTION_MANAGE'")){result.next();assertThat(result.getInt(1)).isZero();}
   }
   private void verifyAfterSalesAndPiSchema(Statement sql)throws Exception {
+    for(String table: new String[]{"bike_pi_template","bike_pi_export"}) {
+      try(var result=sql.executeQuery("SELECT COUNT(*) FROM "+table)){result.next();assertThat(result.getInt(1)).as("不伪造历史模板发布或导出："+table).isZero();}
+    }
+    try(var result=sql.executeQuery("SELECT COUNT(*) FROM bike_sys_role_permission rp JOIN bike_sys_role r ON r.id=rp.role_id JOIN bike_sys_permission p ON p.id=rp.permission_id WHERE p.permission_code='PI_TEMPLATE_MANAGE' AND r.role_code!='SUPER_ADMIN'")){result.next();assertThat(result.getInt(1)).isZero();}
     try(var result=sql.executeQuery("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='bike_after_sales_return' AND column_comment!=''")){result.next();assertThat(result.getInt(1)).isEqualTo(20);}
     for(String table:new String[]{"bike_pi_logistics_history","bike_pi_logistics_request","bike_stock_out_batch","bike_stock_out_batch_item","bike_pi_series","bike_pi_order_link","bike_pi_conversion_request","bike_pi_payment_attachment","bike_order_reservation_item","bike_sku_lock_request","bike_after_sales_company_profile","bike_after_sales_sales_agent","bike_after_sales_case_contact"}) {
       try(var result=sql.executeQuery("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='"+table+"'")){result.next();assertThat(result.getInt(1)).as(table).isEqualTo(1);}

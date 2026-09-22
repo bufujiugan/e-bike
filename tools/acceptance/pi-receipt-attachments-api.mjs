@@ -1,3 +1,4 @@
+import { createPiDocument } from './pi-document-fixture.mjs';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID, createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -118,7 +119,7 @@ try {
   await request('/api/production/skus', { modelId: model.id, skuCode: prefix + 'SKU', productName: '隔离收款凭证测试商品', specification: '不产生真实交易', templateId: template.id, enabled: true });
   const sku = (await request('/api/production/skus')).find(row => row.skuCode === prefix + 'SKU'); assert(sku);
   const payload = { customerId: customer.id, agentId: agent.id, tradeType: 'DOMESTIC', currencyCode: 'CNY', depositRequiredAmount: '30.00', shipmentRequiredAmount: '100.00', remark: '专用凭证验收，非真实交易，不生成出库',
-    document: { sellerName: '隔离验收卖方', paymentTerms: '仅测试：30元定金、100元放行；不得实际付款', deliveryTerms: '仅测试，不交付', templateCode: 'RECEIPT-ACCEPTANCE', templateVersion: '1' }, items: [{ skuId: sku.id, quantity: 1, unitPrice: '100.00' }] };
+    document: await createPiDocument(request, prefix, { sellerName: '隔离验收卖方', paymentTerms: '仅测试：30元定金、100元放行；不得实际付款', deliveryTerms: '仅测试，不交付', templateCode: 'RECEIPT-ACCEPTANCE', templateVersion: '1' }), items: [{ skuId: sku.id, quantity: 1, unitPrice: '100.00' }] };
   const pis = [];
   for (let index = 0; index < 2; index++) {
     const pi = await request('/api/pis', payload); await request(`/api/pis/${pi.id}/confirm`, {});

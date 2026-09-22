@@ -1,0 +1,20 @@
+CREATE TABLE bike_pi_export (
+    pi_id BIGINT PRIMARY KEY,
+    source_type VARCHAR(32) NOT NULL COMMENT 'CONFIRMATION/LEGACY_SNAPSHOT',
+    snapshot_json JSON NOT NULL COMMENT 'Public commercial document only; no payment or release internals',
+    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    revision BIGINT NOT NULL DEFAULT 1,
+    attempts INT NOT NULL DEFAULT 0,
+    claim_token VARCHAR(36) NULL,
+    lease_until DATETIME(3) NULL,
+    pdf_key VARCHAR(512) NULL,
+    pdf_sha256 CHAR(64) NULL,
+    pdf_size BIGINT NULL,
+    xlsx_key VARCHAR(512) NULL,
+    xlsx_sha256 CHAR(64) NULL,
+    xlsx_size BIGINT NULL,
+    error_code VARCHAR(64) NULL,
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    INDEX idx_pi_export_work(status,lease_until,pi_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

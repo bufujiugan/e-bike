@@ -1,3 +1,4 @@
+import { createPiDocument } from './pi-document-fixture.mjs';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
@@ -136,7 +137,7 @@ try {
     const lock = await req('/api/inventory-locks', { agentId: agent.id, productModelId: model.id, lockQty: 2, expireTime: expires, remark: prefix + suffix });
     const order = await req(`/api/inventory-locks/${lock.id}/orders`, { customerId: customer.id, quantity: 2, requestId: randomUUID() });
     await req(`/api/orders/${order.id}/confirm`, {});
-    const pi = await req('/api/pis', { customerId: customer.id, agentId: agent.id, sourceOrderId: order.id, tradeType: 'DOMESTIC', currencyCode: 'CNY', depositRequiredAmount: '50.00', shipmentRequiredAmount: '200.00', document: { sellerName: '占用测试卖方', paymentTerms: '定金50元保留库存，发货前200元', deliveryTerms: '测试仓库交付', templateCode: 'GENERIC-ACCEPTANCE', templateVersion: '1' }, items: [{ skuId: sku.id, quantity: 2, unitPrice: '100.00' }] });
+    const pi = await req('/api/pis', { customerId: customer.id, agentId: agent.id, sourceOrderId: order.id, tradeType: 'DOMESTIC', currencyCode: 'CNY', depositRequiredAmount: '50.00', shipmentRequiredAmount: '200.00', document: await createPiDocument(req, prefix + suffix, { sellerName: '占用测试卖方', paymentTerms: '定金50元保留库存，发货前200元', deliveryTerms: '测试仓库交付', templateCode: 'GENERIC-ACCEPTANCE', templateVersion: '1' }), items: [{ skuId: sku.id, quantity: 2, unitPrice: '100.00' }] });
     await req(`/api/pis/${pi.id}/confirm`, {});
     return { lock, order, pi };
   };

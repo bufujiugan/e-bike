@@ -381,3 +381,13 @@ V37在售后业务审计同事务写入通知队列，保存公开模板与原�
 `batch26-fixed-full-verify.log`当前后端全量358项通过，0失败/错误/跳过，包含全新b26fixed空库/升级库和文件真实API；`batch26-fixed-api-r2.json/.log`13组、`batch26-fixed-companies-r2.json/.log`7组、`batch26-fixed-attachments-r2.json/.log`4组并行通过且cleanupFailures为空。`batch26-fixed-web-build.log`类型检查与构建通过，主包1696.70KB告警保留。API18182运行acceptance-batch26-fixed-runtime.jar；V37四镜像冻结哈希见database.md。
 
 本批为实施回归，普通岗位页面、正式SMTP与现场交付仍待验证；PI受控模板和固定导出文件继续实施。全项目最终两轮仍为0轮，未推送GitHub。
+
+## 批次27：PI受控模板、银行资料与固定导出归档（2026-09-23）
+
+V38增加仅追加的模板发布记录、独立PI_TEMPLATE_MANAGE权限和审计；卖方/银行从发布版本带入，保存和确认均拒绝任意银行改写、未发布版本或贸易类型不匹配。V39确认事务保存对外商务快照并排队，独立工作线程领取后生成PDF/Excel；两者成功才READY，失败重试保留已成功文件，下载逐字节与SHA256校验，付款/放行不改文件。代理客户可下载同一对外文件，但不可访问模板管理或重排任务。历史文件不回填，授权建立时明确LEGACY_SNAPSHOT。Excel正常金额改为数值；超15位安全精度时精确文本和批注，编码文本保持。
+
+`batch27-publishing-tests-r3.log`29项定向检查通过；首次编译资源接口缺AutoCloseable和第二次测试建表截断SQL注释已修复。`batch27-full-verify.log`全量365项通过，0失败/错误/跳过，含独立b27full空库和升级库；V38/V39四镜像冻结。`batch27-publishing-logistics-http.json/.log`9组、`batch27-pi-shipment-http.json/.log`6组、`batch27-pi-receipts-http.json/.log`6组通过且清理无失败，覆盖普通销售、仓管、财务及客户的完整履约、模板权限、银行防改、文件一致性和归档隐私。首次8组HTTP未启用actual物流分支，后续9组明确启用并通过，不混算覆盖。
+
+`batch27-web-build.log`类型检查与构建通过，主包1697.10KB告警。`batch27-document-preview.log`3项文件检查通过；实际生成50行中文PDF五页和Excel，逐页/整表渲染后检查表头、中文、页码、长条款及金额布局无裁切或重叠。预览证据在batch27-document-preview目录；此为系统版面检查，不代表客户正式两套样单签认。隔离API18182运行acceptance-batch27-runtime.jar。
+
+PI尚须补齐开单/有效期、收货/运输、单位/商品图片及确认附件并核对原文；页面与现场验证待完成。全项目最终两轮仍为0轮，未推送GitHub。

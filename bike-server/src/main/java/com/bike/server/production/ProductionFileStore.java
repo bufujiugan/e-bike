@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 
 /** 存储键携带后端前缀，切换存储后仍能读取此前保存的本地文件。 */
 @Component
-public class ProductionFileStore {
+public class ProductionFileStore implements AutoCloseable {
   private final Path root;
   private final COSClient cos;
   private final String bucket;

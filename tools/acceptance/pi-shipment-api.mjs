@@ -1,3 +1,4 @@
+import { createPiDocument } from './pi-document-fixture.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
@@ -50,7 +51,7 @@ try {
     await req('/api/stock-in', { vehicleQrCode: vehicle.qrCode, warehouseId: warehouse.id, locationId: location.id }); vehicles.push(vehicle);
   }
   const order = await req('/api/orders', { customerId: customer.id, agentId: agent.id, modelId: model.id, orderQty: 2 });
-  const document = { sellerName: '测试卖方', sellerAddress: '测试地址', buyerAddress: '测试买方地址', paymentTerms: '定金50元，发货前200元', deliveryTerms: '测试仓库交付', templateCode: 'GENERIC-ACCEPTANCE', templateVersion: '1' };
+  const document = await createPiDocument(req, prefix, { sellerName: '测试卖方', sellerAddress: '测试地址', buyerAddress: '测试买方地址', paymentTerms: '定金50元，发货前200元', deliveryTerms: '测试仓库交付', templateCode: 'GENERIC-ACCEPTANCE', templateVersion: '1' });
   const piRequest = { customerId: customer.id, agentId: agent.id, sourceOrderId: order.id, tradeType: 'DOMESTIC', currencyCode: 'CNY', depositRequiredAmount: '50.00', shipmentRequiredAmount: '200.00', document, items: skus.slice(0, 2).map(s => ({ skuId: s.id, quantity: 1, unitPrice: '100.00' })) };
   const pi = await req('/api/pis', { ...piRequest, document: null });
   assert.equal(pi.items.length, 2); assert.equal(pi.totalAmount, '200.00');

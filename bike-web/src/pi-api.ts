@@ -15,6 +15,11 @@ export type PiDocument = {
   buyerAddress: string; buyerContact: string; bankName: string; bankAccount: string; beneficiary: string
   paymentTerms: string; deliveryTerms: string; templateCode: string; templateVersion: string
 }
+export type PiTemplate = Pick<PiDocument, 'templateCode' | 'templateVersion' | 'sellerName' | 'sellerAddress' | 'sellerContact' | 'bankName' | 'bankAccount' | 'beneficiary'> & {
+  id: number; tradeType: string; layoutCode: string; publishReason: string; publishedAt: string
+}
+export type PiTemplatePublish = Omit<PiTemplate, 'id' | 'publishedAt' | 'publishReason'> & { reason: string }
+export type PiExportJob = { piId: number; sourceType: string; status: string; revision: number; attempts: number; pdfSha256?: string; pdfSize?: number; xlsxSha256?: string; xlsxSize?: number; errorCode?: string; createdAt: string; updatedAt: string }
 export type PiItem = {
   id: number; skuId: number; productModelId: number; skuCode: string; productName: string
   specification: string; modelName: string; quantity: number; unitPrice: Money
@@ -61,6 +66,10 @@ export type PiPaymentCreate = { requestId: string; amount: string; currencyCode:
 export type PiLogisticsCreate = { batchNo: string; carrier?: string; trackingNo?: string; status: string; remark?: string; stockOutBatchId?: number | null; requestId: string; expectedRevision?: number }
 
 export const piApi = {
+  async exportTask(id: number) { return (await api.get<{ data: PiExportJob | null }>(`/api/pis/${id}/export-task`)).data.data },
+  async retryExport(id: number, revision: number, reason: string) { return (await api.post<{ data: PiExportJob }>(`/api/pis/${id}/export-task/retry`, { revision, reason })).data.data },
+  async templates(tradeType: string | undefined, page: number) { return (await api.get<{ data: { records: PiTemplate[]; total: number } }>('/api/pi-templates', { params: { tradeType, page, pageSize: 20 } })).data.data },
+  async publishTemplate(body: PiTemplatePublish) { return (await api.post<{ data: PiTemplate }>('/api/pi-templates', body)).data.data },
   async list(params: { keyword?: string; status?: string; page: number; pageSize: number }) {
     return (await api.get<{ data: { records: PiView[]; total: number } }>('/api/pis', { params })).data.data
   },
