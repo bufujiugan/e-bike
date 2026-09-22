@@ -17,6 +17,7 @@ public class PiExportArchive {
     private final ProductionFileStore files;
     private final ObjectMapper json;
     private final OperationLogMapper logs;
+    @org.springframework.beans.factory.annotation.Autowired private PiTemplateMapper templates;
     public PiExportArchive(PiExportMapper mapper,PiMapper pis,ProductionFileStore files,ObjectMapper json,OperationLogMapper logs) {
         this.mapper=mapper;this.pis=pis;this.files=files;this.json=json;this.logs=logs;
     }
@@ -35,9 +36,12 @@ public class PiExportArchive {
         p.setCurrencyCode(pi.getCurrencyCode());p.setStatus("CONFIRMED");p.setPlannedShipDate(pi.getPlannedShipDate());
         p.setSubtotal(pi.getSubtotal());p.setDiscountAmount(pi.getDiscountAmount());p.setTaxAmount(pi.getTaxAmount());
         p.setFreightAmount(pi.getFreightAmount());p.setTotalAmount(pi.getTotalAmount());p.setRemark(pi.getRemark());
+        p.setOtherFeeAmount(pi.getOtherFeeAmount());
         p.setCreatedAt(pi.getCreatedAt());p.setItems(pis.selectItems(pi.getId()));
         try {p.setDocument(pi.getDocumentJson()==null?pi.getDocument():json.readValue(pi.getDocumentJson(),PiDocumentSnapshot.class));}
         catch(IOException error){throw new BusinessException("PI_DOCUMENT_INVALID","PI单据快照无法读取");}
+        var d=p.getDocument();var template=templates==null||d==null?null:templates.find(d.templateCode(),d.templateVersion());
+        p.setDocumentRenderVersion(templates==null||template!=null&&template.layoutCode().endsWith("_V2")?"PI_V2":"PI_V1");
         return p;
     }
     public PiExportJob status(long id){CurrentOperator.requirePermission("PI_EXPORT");return mapper.get(id);}

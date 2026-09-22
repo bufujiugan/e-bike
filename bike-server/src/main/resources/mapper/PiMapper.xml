@@ -32,7 +32,7 @@
                p.agent_id,a.agent_name,p.source_order_id,p.trade_type,p.currency_code,p.status,
                p.payment_status,p.release_status,p.planned_ship_date,p.subtotal,p.discount_amount,
                <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationStatus"/> reservation_status,
-               p.tax_amount,p.freight_amount,p.total_amount,p.deposit_required_amount,p.shipment_required_amount,
+               p.tax_amount,p.freight_amount,p.other_fee_amount,p.total_amount,p.deposit_required_amount,p.shipment_required_amount,
                COALESCE((SELECT SUM(x.amount) FROM bike_pi_payment x JOIN bike_pi px ON px.id=x.pi_id
                          WHERE (px.series_id=p.series_id OR (px.series_id IS NULL AND p.series_id IS NULL AND px.id=p.id)) AND x.status='CONFIRMED'),0) paid_amount,
                p.document_snapshot document_json,p.remark,p.released_at,p.created_at,p.updated_at
@@ -65,20 +65,20 @@
         INSERT INTO bike_pi(pi_no,revision,customer_id,customer_code,customer_name,agent_id,source_order_id,
             trade_type,currency_code,status,payment_status,release_status,planned_ship_date,subtotal,
             discount_amount,tax_amount,freight_amount,total_amount,deposit_required_amount,
-            shipment_required_amount,document_snapshot,remark,created_by)
+            shipment_required_amount,document_snapshot,remark,created_by,other_fee_amount)
         SELECT #{piNo},1,c.id,c.customer_code,c.customer_name,#{agentId},#{request.sourceOrderId},
             #{tradeType},#{currencyCode},'DRAFT','UNPAID','BLOCKED',#{request.plannedShipDate},#{subtotal},
             #{discountAmount},#{taxAmount},#{freightAmount},#{totalAmount},#{depositRequiredAmount},
-            #{shipmentRequiredAmount},#{documentJson},#{request.remark},#{createdBy}
+            #{shipmentRequiredAmount},#{documentJson},#{request.remark},#{createdBy},COALESCE(#{request.otherFeeAmount},0)
         FROM bike_customer c WHERE c.id=#{request.customerId} AND c.status='ENABLED'
     </insert>
     <insert id="insertItems">
         INSERT INTO bike_pi_item(pi_id,sku_id,product_model_id,sku_code,product_name,specification,model_name,
-            ordered_qty,unit_price,discount_amount,tax_amount,line_total) VALUES
+            ordered_qty,unit_price,discount_amount,tax_amount,line_total,unit,image_attachment_id,image_sha256) VALUES
         <foreach collection="items" item="item" separator=",">
             (#{piId},#{item.skuId},#{item.productModelId},#{item.skuCode},#{item.productName},
              #{item.specification},#{item.modelName},#{item.quantity},#{item.unitPrice},
-             #{item.discountAmount},#{item.taxAmount},#{item.lineTotal})
+             #{item.discountAmount},#{item.taxAmount},#{item.lineTotal},#{item.unit},#{item.imageAttachmentId},#{item.imageSha256})
         </foreach>
     </insert>
     <delete id="deleteItems">DELETE FROM bike_pi_item WHERE pi_id=#{piId}</delete>
@@ -89,7 +89,7 @@
             p.planned_ship_date=#{request.plannedShipDate},p.subtotal=#{subtotal},p.discount_amount=#{discountAmount},
             p.tax_amount=#{taxAmount},p.freight_amount=#{freightAmount},p.total_amount=#{totalAmount},
             p.deposit_required_amount=#{depositRequiredAmount},p.shipment_required_amount=#{shipmentRequiredAmount},
-            p.document_snapshot=#{documentJson},p.remark=#{request.remark}
+            p.document_snapshot=#{documentJson},p.remark=#{request.remark},p.other_fee_amount=COALESCE(#{request.otherFeeAmount},0)
         WHERE p.id=#{id} AND p.status='DRAFT'
     </update>
     <select id="countPayments" resultType="int">SELECT COUNT(*) FROM bike_pi_payment WHERE pi_id=#{id} FOR UPDATE</select>
@@ -104,6 +104,11 @@
         WHERE s.id=#{id} AND s.enabled=1 AND m.enabled=1
     </select>
     <select id="lockOrder" resultType="long">SELECT id FROM bike_sales_order WHERE id=#{id} FOR UPDATE</select>
+    <select id="selectSkuImage" resultType="com.bike.server.pi.PiImageService$StoredImage">
+        SELECT id,object_key,content_type,file_size,sku_id FROM bike_production_attachment WHERE sku_id=#{skuId}
+        <if test="imageId != null and imageId != ''">AND id=#{imageId}</if>
+        ORDER BY created_at,id LIMIT 1
+    </select>
     <select id="countForOrder" resultType="int">SELECT COUNT(*) FROM bike_pi WHERE source_order_id=#{id} FOR UPDATE</select>
     <select id="countOrder" resultType="int">
         SELECT COUNT(*) FROM bike_sales_order WHERE id=#{id} AND customer_id=#{customerId}
@@ -151,7 +156,7 @@
     </insert>
     <select id="selectItems" resultType="com.bike.server.pi.PiItemView">
         SELECT id,sku_id,product_model_id,sku_code,product_name,specification,model_name,
-               ordered_qty quantity,unit_price,discount_amount,tax_amount,line_total
+               ordered_qty quantity,unit_price,discount_amount,tax_amount,line_total,unit,image_attachment_id,image_sha256
         FROM bike_pi_item WHERE pi_id=#{piId} ORDER BY id
     </select>
     <select id="selectPayments" resultType="com.bike.server.pi.PiPaymentView">
@@ -165,14 +170,14 @@
     <insert id="cloneRevision">
         INSERT INTO bike_pi(series_id,previous_revision_id,pi_no,revision,customer_id,customer_code,customer_name,agent_id,
             trade_type,currency_code,status,payment_status,release_status,planned_ship_date,subtotal,discount_amount,tax_amount,
-            freight_amount,total_amount,deposit_required_amount,shipment_required_amount,document_snapshot,source_order_id,remark,created_by)
+            freight_amount,total_amount,deposit_required_amount,shipment_required_amount,document_snapshot,source_order_id,remark,created_by,other_fee_amount)
         SELECT #{seriesId},#{piId},pi_no,#{revision},customer_id,customer_code,customer_name,agent_id,trade_type,currency_code,
             'DRAFT','UNPAID','BLOCKED',planned_ship_date,subtotal,discount_amount,tax_amount,freight_amount,total_amount,
-            deposit_required_amount,shipment_required_amount,document_snapshot,NULL,remark,#{operatorId} FROM bike_pi WHERE id=#{piId}
+            deposit_required_amount,shipment_required_amount,document_snapshot,NULL,remark,#{operatorId},other_fee_amount FROM bike_pi WHERE id=#{piId}
     </insert>
     <insert id="cloneItems">
-        INSERT INTO bike_pi_item(pi_id,sku_id,product_model_id,sku_code,product_name,specification,model_name,ordered_qty,unit_price,discount_amount,tax_amount,line_total)
-        SELECT #{targetPiId},sku_id,product_model_id,sku_code,product_name,specification,model_name,ordered_qty,unit_price,discount_amount,tax_amount,line_total
+        INSERT INTO bike_pi_item(pi_id,sku_id,product_model_id,sku_code,product_name,specification,model_name,ordered_qty,unit_price,discount_amount,tax_amount,line_total,unit,image_attachment_id,image_sha256)
+        SELECT #{targetPiId},sku_id,product_model_id,sku_code,product_name,specification,model_name,ordered_qty,unit_price,discount_amount,tax_amount,line_total,unit,image_attachment_id,image_sha256
         FROM bike_pi_item WHERE pi_id=#{sourcePiId}
     </insert>
 </mapper>

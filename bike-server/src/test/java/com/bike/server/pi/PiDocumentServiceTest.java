@@ -18,6 +18,29 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PiDocumentServiceTest {
     private final PiDocumentService service = new PiDocumentService();
 
+    @Test void v2RendersImageUnitsDatesAndOtherFeesWhileLegacyRendererStaysFrozen()throws Exception {
+        var pi=sample(5);var d=pi.getDocument();
+        pi.setDocument(new PiDocumentSnapshot(d.sellerName(),d.sellerAddress(),d.sellerContact(),d.buyerAddress(),d.buyerContact(),d.bankName(),d.bankAccount(),d.beneficiary(),d.paymentTerms(),d.deliveryTerms(),d.templateCode(),d.templateVersion(),
+                java.time.LocalDate.of(2026,9,23),java.time.LocalDate.of(2026,10,23),"上海市示例收货地址","海运 / Sea","FOB Shanghai","DE","CN"));
+        pi.setTradeType("EXPORT");pi.setOtherFeeAmount(new BigDecimal("12.34"));
+        pi.setSubtotal(new BigDecimal("1250.00"));pi.setDiscountAmount(new BigDecimal("5.00"));
+        pi.setTaxAmount(new BigDecimal("2.50"));pi.setTotalAmount(new BigDecimal("1269.84"));
+        pi.setShipmentRequiredAmount(pi.getTotalAmount());
+        var images=org.mockito.Mockito.mock(PiImageService.class);org.mockito.Mockito.when(images.bytes(org.mockito.ArgumentMatchers.any())).thenReturn(PiImageServiceTest.picture());
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"images",images);
+        for(var item:pi.getItems()){item.setUnit("PCS");item.setImageAttachmentId("image-id");}
+        byte[] pdfBytes=service.pdf(pi);
+        try(var pdf=Loader.loadPDF(pdfBytes)) {
+            assertThat(new PDFTextStripper().getText(pdf)).contains("PCS","2026-09-23","2026-10-23","FOB Shanghai","12.34","Sea");
+            assertThat(pdf.getPage(0).getResources().getXObjectNames()).isNotEmpty();
+            String output=System.getProperty("bike.pi.preview.dir");
+            if(output!=null){Path folder=Path.of(output);Files.createDirectories(folder);Files.write(folder.resolve("pi-v2-images.pdf"),pdfBytes);Files.write(folder.resolve("pi-v2-images.xlsx"),service.excel(pi));var renderer=new PDFRenderer(pdf);for(int i=0;i<pdf.getNumberOfPages();i++)ImageIO.write(renderer.renderImageWithDPI(i,110),"PNG",folder.resolve("pi-v2-images-"+(i+1)+".png").toFile());}
+        }
+        try(var book=new XSSFWorkbook(new ByteArrayInputStream(service.excel(pi)))){assertThat(book.getAllPictures()).hasSize(5);}
+        pi.setDocumentRenderVersion("PI_V1");
+        try(var pdf=Loader.loadPDF(service.pdf(pi))){assertThat(new PDFTextStripper().getText(pdf)).doesNotContain("2026-10-23","FOB Shanghai","12.34");}
+    }
+
     @Test void chineseInvoicePreservesEveryLineAndTermsAcrossPages() throws Exception {
         PiView pi = sample(50);
         byte[] bytes = service.pdf(pi);

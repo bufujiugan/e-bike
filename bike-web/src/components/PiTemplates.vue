@@ -22,7 +22,7 @@ async function publish() {
   try {
     await ElMessageBox.confirm('发布后此版本不可修改。请核对卖方及银行资料；后续变更必须发布新版本。', '发布模板', { type: 'warning' })
     busy.value = true; error.value = ''
-    const result = await piApi.publishTemplate({ ...draft, layoutCode: `${draft.tradeType}_V1` })
+    const result = await piApi.publishTemplate({ ...draft, layoutCode: `${draft.tradeType}_V2` })
     editing.value = false; page.value = 1; await load(); ElMessage.success('模板版本已发布')
     if (props.selectable && result.tradeType === props.tradeType) emit('select', result)
   } catch (e) { if (e !== 'cancel' && e !== 'close') error.value = api.isAxiosError(e) ? e.response?.data?.message || '发布失败' : '发布失败' }
@@ -37,6 +37,7 @@ async function publish() {
     <el-table :data="rows" empty-text="暂无已发布模板，请联系模板管理员">
       <el-table-column prop="templateCode" label="模板" /><el-table-column prop="templateVersion" label="版本" width="80" />
       <el-table-column label="类型" width="80"><template #default="s">{{ s.row.tradeType === 'EXPORT' ? '外销' : '内销' }}</template></el-table-column>
+      <el-table-column label="版式" width="170"><template #default="s">{{ s.row.layoutCode.endsWith('_V2') ? '含图片、日期及运输资料' : '历史版式（无新增资料）' }}</template></el-table-column>
       <el-table-column prop="sellerName" label="卖方" /><el-table-column prop="bankName" label="银行" /><el-table-column prop="bankAccount" label="账号" />
       <el-table-column v-if="selectable" width="80"><template #default="s"><el-button link type="primary" @click="emit('select', s.row)">选用</el-button></template></el-table-column>
     </el-table>

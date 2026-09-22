@@ -114,6 +114,17 @@ class PiServiceTest {
     }
 
     @Test
+    void otherFeesAreIncludedInExactTotalAndUnitIsSaved() {
+        prepareCreate();
+        var request=new PiCreateRequest(1L,null,null,"DOMESTIC","CNY",null,money("1.00"),money("0.03"),money("2.00"),
+                money("0.00"),money("0.00"),null,null,List.of(new PiItemRequest(10L,2,money("100.10"),null,null,"PCS",null)),money("3.07"));
+        service.create(request);
+        verify(mapper).insertPi(anyString(),eq(request),eq("DOMESTIC"),eq("CNY"),eq(money("200.20")),eq(money("1.00")),eq(money("0.03")),eq(money("2.00")),eq(money("204.30")),eq(money("0.00")),eq(money("0.00")),any(),isNull(),isNull());
+        ArgumentCaptor<List<PiCalculatedItem>> rows=ArgumentCaptor.forClass(List.class);verify(mapper).insertItems(eq(1L),rows.capture());
+        assertThat(rows.getValue().getFirst().unit()).isEqualTo("PCS");
+    }
+
+    @Test
     void fixedSkuSourceOrderRejectsAnotherSkuOfTheSameModel() {
         prepareCreate();
         var skuInventory=mock(com.bike.server.stock.SkuInventoryMapper.class);

@@ -191,3 +191,14 @@ H5 使用该接口，可搜索、翻页，翻页保留已选订单；切换客�
 - 原`export.pdf`/`export.xlsx`：草稿即时预览；已发布单据只下载READY归档。未就绪返回PI_EXPORT_NOT_READY；下载核对哈希，失败不重新生成替换原文件。付款、放行、物流变化不改变已存文件，导出不写订单或库存。
 - PDF/Excel统一使用对外商务快照，不含内部到账、付款门槛、库存保留或放行信息。Excel普通金额为数值，SKU/银行账号保持文本；超过15位可靠精度时金额为精确文本并附说明批注。
 - 归档对象及数据库须共同备份。工作进程异常租约10分钟后可领取；文件保存失败为FAILED，授权人员可重排。未关联对象因崩溃或存储/数据库同时不可用可能需要运维按日志对账清理，不删除有数据库引用的文件。
+
+## PI完整资料与确认附件（V40/V41）
+
+草稿document新增issueDate、validUntil、shippingAddress、transportMode、tradeTerms、buyerCountry、sellerCountry。保存拒绝倒置日期；确认要求日期、买方地址/联系方式、收货和运输，外销额外要求国家及贸易术语。otherFeeAmount参与精确总额；items新增unit（新请求未填默认台）、imageAttachmentId（未选取SKU首图），保存图片SHA256且检查SKU归属，历史无图片不回填。
+
+模板支持DOMESTIC_V2/EXPORT_V2，新发布页面默认V2；V1继续按冻结旧布局生成。归档快照固定documentRenderVersion，旧任务无字段时使用PI_V1，重试不能混用版式。
+
+- `GET /api/pis/{id}/items/{itemId}/image`：原PI读取范围、图片归属及哈希校验，no-store/nosniff。
+- `GET /api/pis/{id}/confirmation-attachments`：内部可见全部，客户只可见CUSTOMER，原PI公司范围仍生效。
+- `POST /api/pis/{id}/confirmation-attachments`：multipart file/requestId/visibility，内部PI_READ+PI_WRITE，仅DRAFT/CONFIRMED/RELEASED，每修订50个，每个10MB，真实JPG/PNG/PDF。幂等重复不得改变内容或可见性，元数据及审计同事务，失败清理对象。
+- `GET /api/pis/{id}/confirmation-attachments/{attachmentId}/download`：同范围/可见性及SHA256检查，以附件下载并设置no-store/nosniff/CSP。附件只追加，新修订不复制旧确认附件。

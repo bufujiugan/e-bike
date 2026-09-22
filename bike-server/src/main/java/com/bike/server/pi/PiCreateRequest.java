@@ -23,5 +23,13 @@ public record PiCreateRequest(
         @Size(max = 1000, message = "备注长度不能超过1000") String remark,
         @Valid PiDocumentSnapshot document,
         @NotEmpty(message = "至少需要一条 PI 明细") @Size(max = 100)
-        @Valid List<@NotNull PiItemRequest> items) {}
+        @Valid List<@NotNull PiItemRequest> items,
+        @DecimalMin("0.00") @Digits(integer=16,fraction=2) BigDecimal otherFeeAmount) {
+    public PiCreateRequest(Long customerId,Long agentId,Long sourceOrderId,String tradeType,String currencyCode,LocalDate plannedShipDate,
+            BigDecimal discountAmount,BigDecimal taxAmount,BigDecimal freightAmount,BigDecimal depositRequiredAmount,
+            BigDecimal shipmentRequiredAmount,String remark,PiDocumentSnapshot document,List<PiItemRequest> items) {
+        this(customerId,agentId,sourceOrderId,tradeType,currencyCode,plannedShipDate,discountAmount,taxAmount,freightAmount,
+                depositRequiredAmount,shipmentRequiredAmount,remark,document,items,null);
+    }
+}
 

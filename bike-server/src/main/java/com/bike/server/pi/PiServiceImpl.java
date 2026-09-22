@@ -36,6 +36,7 @@ public class PiServiceImpl implements PiService {
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.order.OrderInventoryGuard orderInventoryGuard;
     @org.springframework.beans.factory.annotation.Autowired private PiTemplateService templates;
     @org.springframework.beans.factory.annotation.Autowired private PiExportArchive archives;
+    @org.springframework.beans.factory.annotation.Autowired private PiImageService images;
 
     public PiServiceImpl(PiMapper mapper, PiDocumentService documents, OperationLogMapper logs,
             ObjectMapper json, Validator validator, OrderReservationCoordinator reservations) {
@@ -133,6 +134,9 @@ public class PiServiceImpl implements PiService {
             fail("TRADE_TYPE_INVALID", "贸易类型必须为 DOMESTIC 或 EXPORT");
         }
         String currency = currency(request.currencyCode());
+        if(request.document()!=null && request.document().issueDate()!=null && request.document().validUntil()!=null
+                && request.document().validUntil().isBefore(request.document().issueDate()))
+            fail("PI_DOCUMENT_DATES_INVALID","有效期不能早于开单日期");
         if(templates!=null && request.document()!=null && normalize(request.document().templateCode())!=null)
             templates.requirePublished(request.document(),trade);
         List<PiCalculatedItem> items = new ArrayList<>();
@@ -148,9 +152,10 @@ public class PiServiceImpl implements PiService {
             BigDecimal raw = money(price.multiply(BigDecimal.valueOf(item.quantity())));
             if (discount.compareTo(raw) > 0) fail("AMOUNT_INVALID", "行折扣不能大于行金额");
             BigDecimal line = money(raw.subtract(discount).add(tax));
+            var image=images==null?new PiImageService.Snapshot(null,null):images.snapshot(sku.id(),item.imageAttachmentId());
             items.add(new PiCalculatedItem(sku.id(), sku.productModelId(), sku.skuCode(),
                     sku.productName(), sku.specification(), sku.modelName(), item.quantity(),
-                    price, discount, tax, line));
+                    price, discount, tax, line,item.unit().trim(),image.attachmentId(),image.sha256()));
             subtotal = money(subtotal.add(raw));
             lineDiscount = money(lineDiscount.add(discount));
             lineTax = money(lineTax.add(tax));
@@ -160,7 +165,7 @@ public class PiServiceImpl implements PiService {
         BigDecimal tax = money(optionalMoney(request.taxAmount()).add(lineTax));
         BigDecimal freight = optionalMoney(request.freightAmount());
         if (discount.compareTo(subtotal) > 0) fail("AMOUNT_INVALID", "总折扣不能大于商品金额");
-        BigDecimal total = money(subtotal.subtract(discount).add(tax).add(freight));
+        BigDecimal total = money(subtotal.subtract(discount).add(tax).add(freight).add(optionalMoney(request.otherFeeAmount())));
         BigDecimal deposit = money(request.depositRequiredAmount());
         BigDecimal shipment = money(request.shipmentRequiredAmount());
         if (deposit.compareTo(total) > 0 || shipment.compareTo(total) > 0) {
@@ -413,7 +418,17 @@ public class PiServiceImpl implements PiService {
                 || normalize(snapshot.templateCode()) == null || normalize(snapshot.templateVersion()) == null) {
             fail("PI_DOCUMENT_INCOMPLETE", "确认 PI 前须填写卖方、付款与交付条款以及模板编号和版本");
         }
-        if(templates!=null)templates.requirePublished(snapshot,pi.getTradeType());
+        if(templates!=null) {
+            templates.requirePublished(snapshot,pi.getTradeType());
+            if(snapshot.issueDate()==null||snapshot.validUntil()==null||snapshot.validUntil().isBefore(snapshot.issueDate()))
+                fail("PI_DOCUMENT_DATES_INVALID","确认前须填写开单日期及不早于开单日期的有效期");
+            if(normalize(snapshot.buyerAddress())==null||normalize(snapshot.buyerContact())==null
+                    ||normalize(snapshot.shippingAddress())==null||normalize(snapshot.transportMode())==null)
+                fail("PI_DOCUMENT_INCOMPLETE","确认前须填写买方地址、联系方式、收货地址及运输方式");
+            if("EXPORT".equals(pi.getTradeType())&&(normalize(snapshot.tradeTerms())==null
+                    ||normalize(snapshot.buyerCountry())==null||normalize(snapshot.sellerCountry())==null))
+                fail("PI_DOCUMENT_INCOMPLETE","外销PI须填写买卖方国家/地区及贸易术语");
+        }
     }
 
     private PiView require(long id) {

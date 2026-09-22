@@ -14,15 +14,19 @@ export type PiDocument = {
   sellerName: string; sellerAddress: string; sellerContact: string
   buyerAddress: string; buyerContact: string; bankName: string; bankAccount: string; beneficiary: string
   paymentTerms: string; deliveryTerms: string; templateCode: string; templateVersion: string
+  issueDate?: string | null; validUntil?: string | null; shippingAddress?: string | null; transportMode?: string | null
+  tradeTerms?: string | null; buyerCountry?: string | null; sellerCountry?: string | null
 }
 export type PiTemplate = Pick<PiDocument, 'templateCode' | 'templateVersion' | 'sellerName' | 'sellerAddress' | 'sellerContact' | 'bankName' | 'bankAccount' | 'beneficiary'> & {
   id: number; tradeType: string; layoutCode: string; publishReason: string; publishedAt: string
 }
 export type PiTemplatePublish = Omit<PiTemplate, 'id' | 'publishedAt' | 'publishReason'> & { reason: string }
 export type PiExportJob = { piId: number; sourceType: string; status: string; revision: number; attempts: number; pdfSha256?: string; pdfSize?: number; xlsxSha256?: string; xlsxSize?: number; errorCode?: string; createdAt: string; updatedAt: string }
+export type PiConfirmationAttachment = { id: string; piId: number; fileName: string; contentType: string; fileSize: number; sha256: string; visibility: 'CUSTOMER' | 'INTERNAL'; createdAt: string }
 export type PiItem = {
   id: number; skuId: number; productModelId: number; skuCode: string; productName: string
   specification: string; modelName: string; quantity: number; unitPrice: Money
+  unit?: string | null; imageAttachmentId?: string | null; imageSha256?: string | null
   discountAmount: Money; taxAmount: Money; lineTotal: Money
 }
 export type PiPayment = {
@@ -46,6 +50,7 @@ export type PiView = {
   tradeType: string; currencyCode: string; status: string; paymentStatus?: string | null; releaseStatus?: string | null
   plannedShipDate?: string | null; subtotal: Money; discountAmount: Money; taxAmount: Money; freightAmount: Money
   totalAmount: Money; depositRequiredAmount?: Money | null; shipmentRequiredAmount?: Money | null; paidAmount?: Money | null
+  otherFeeAmount?: Money | null
   remark?: string | null; createdAt: string; updatedAt: string; releasedAt?: string | null
   document?: PiDocument | null; items: PiItem[]; payments: PiPayment[]; logistics: PiLogistics[]
 }
@@ -59,13 +64,18 @@ export type PiOptions = { customers: PiMasterOption[]; agents: PiMasterOption[];
 export type PiCreate = {
   customerId: number; agentId?: number | null; sourceOrderId?: number | null; tradeType: string; currencyCode: string
   plannedShipDate?: string | null; discountAmount: string; taxAmount: string; freightAmount: string
+  otherFeeAmount?: string
   depositRequiredAmount: string; shipmentRequiredAmount: string; remark?: string; document: PiDocument
-  items: { skuId: number; quantity: number; unitPrice: string; discountAmount: string; taxAmount: string }[]
+  items: { skuId: number; quantity: number; unitPrice: string; discountAmount: string; taxAmount: string; unit?: string; imageAttachmentId?: string | null }[]
 }
 export type PiPaymentCreate = { requestId: string; amount: string; currencyCode: string; receivedAt?: string | null; remark?: string }
 export type PiLogisticsCreate = { batchNo: string; carrier?: string; trackingNo?: string; status: string; remark?: string; stockOutBatchId?: number | null; requestId: string; expectedRevision?: number }
 
 export const piApi = {
+  async confirmationAttachments(id: number) { return (await api.get<{ data: PiConfirmationAttachment[] }>(`/api/pis/${id}/confirmation-attachments`)).data.data },
+  async uploadConfirmation(id: number, requestId: string, visibility: string, file: File) { const form = new FormData(); form.append('requestId', requestId); form.append('visibility', visibility); form.append('file', file); return (await api.post<{ data: PiConfirmationAttachment }>(`/api/pis/${id}/confirmation-attachments`, form)).data.data },
+  async downloadConfirmation(id: number, attachmentId: string) { return (await api.get<Blob>(`/api/pis/${id}/confirmation-attachments/${attachmentId}/download`, { responseType: 'blob' })).data },
+  async itemImage(id: number, itemId: number) { return (await api.get<Blob>(`/api/pis/${id}/items/${itemId}/image`, { responseType: 'blob' })).data },
   async exportTask(id: number) { return (await api.get<{ data: PiExportJob | null }>(`/api/pis/${id}/export-task`)).data.data },
   async retryExport(id: number, revision: number, reason: string) { return (await api.post<{ data: PiExportJob }>(`/api/pis/${id}/export-task/retry`, { revision, reason })).data.data },
   async templates(tradeType: string | undefined, page: number) { return (await api.get<{ data: { records: PiTemplate[]; total: number } }>('/api/pi-templates', { params: { tradeType, page, pageSize: 20 } })).data.data },

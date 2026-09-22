@@ -25,11 +25,14 @@ import java.util.Objects;
 /** Renders only saved PI values. It never re-reads mutable customer, SKU or bank master data. */
 @Service
 public class PiDocumentService {
+    private final PiDocumentRendererV1 legacy=new PiDocumentRendererV1();
+    @org.springframework.beans.factory.annotation.Autowired private PiImageService images;
     private static final Logger log = LoggerFactory.getLogger(PiDocumentService.class);
     private static final Color INK = new Color(28, 49, 66);
     private static final Color PALE = new Color(235, 241, 245);
 
     public byte[] excel(PiView pi) {
+        if("PI_V1".equals(pi.getDocumentRenderVersion()))return legacy.excel(pi);
         try (XSSFWorkbook book = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Sheet sheet = book.createSheet("PI");
             int[] widths = {18, 35, 10, 24, 24, 24, 26};
@@ -52,22 +55,40 @@ public class PiDocumentService {
             for (int i = 0; i < columns.length; i++) cell(head, i, columns[i], heading);
             for (PiItemView item : pi.getItems()) {
                 Row r = sheet.createRow(row++);
-                String product = text(item.getProductName()) + "\n" + text(item.getSpecification());
+                String product = text(item.getProductName()) + "\n" + text(item.getSpecification())
+                        +"\n型号 / Model: "+text(item.getModelName())+"\n单位 / Unit: "+Objects.toString(item.getUnit(),"未记录");
                 r.setHeightInPoints(Math.max(32, Math.min(400, 15 * (2 + product.length() / 20))));
                 cell(r, 0, item.getSkuCode(), body); cell(r, 1, product, body);
                 Cell qty = r.createCell(2); qty.setCellValue(item.getQuantity()); qty.setCellStyle(body);
                 amount(r, 3, item.getUnitPrice(), amount); amount(r, 4, item.getDiscountAmount(), amount);
                 amount(r, 5, item.getTaxAmount(), amount); amount(r, 6, item.getLineTotal(), amount);
+                var thumbnail=thumbnail(item);
+                if(thumbnail!=null) {
+                    r.setHeightInPoints(Math.max(72,r.getHeightInPoints()));
+                    var bytes=new ByteArrayOutputStream();javax.imageio.ImageIO.write(thumbnail,"png",bytes);
+                    var helper=book.getCreationHelper();var anchor=helper.createClientAnchor();
+                    anchor.setCol1(0);anchor.setCol2(0);anchor.setRow1(r.getRowNum());anchor.setRow2(r.getRowNum());
+                    int emu=org.apache.poi.util.Units.EMU_PER_PIXEL;
+                    double factor=Math.min(110.0/thumbnail.getWidth(),64.0/thumbnail.getHeight());
+                    anchor.setDx1(3*emu);anchor.setDy1(22*emu);anchor.setDx2((int)(3+thumbnail.getWidth()*factor)*emu);anchor.setDy2((int)(22+thumbnail.getHeight()*factor)*emu);
+                    var drawing=(org.apache.poi.xssf.usermodel.XSSFDrawing)sheet.createDrawingPatriarch();
+                    drawing.createPicture(anchor,book.addPicture(bytes.toByteArray(),Workbook.PICTURE_TYPE_PNG));
+                    // An explicit extent also works in viewers that cannot size same-cell two-point anchors.
+                    var xml=drawing.getCTDrawing();int last=xml.sizeOfTwoCellAnchorArray()-1;var two=xml.getTwoCellAnchorArray(last);
+                    var one=xml.addNewOneCellAnchor();one.setFrom(two.getFrom());var extent=one.addNewExt();
+                    extent.setCx((long)(thumbnail.getWidth()*factor*emu));extent.setCy((long)(thumbnail.getHeight()*factor*emu));
+                    one.setPic(two.getPic());one.addNewClientData();xml.removeTwoCellAnchor(last);
+                }
             }
             row++;
-            String[] labels={"商品小计 / Subtotal", "折扣合计 / Discount", "税额合计 / Tax", "运费 / Freight", "应付总额 / Total ("+text(pi.getCurrencyCode())+")"};
-            BigDecimal[] values={pi.getSubtotal(),pi.getDiscountAmount(),pi.getTaxAmount(),pi.getFreightAmount(),pi.getTotalAmount()};
+            String[] labels={"商品小计 / Subtotal", "折扣合计 / Discount", "税额合计 / Tax", "运费 / Freight", "其他费用 / Other fees", "应付总额 / Total ("+text(pi.getCurrencyCode())+")"};
+            BigDecimal[] values={pi.getSubtotal(),pi.getDiscountAmount(),pi.getTaxAmount(),pi.getFreightAmount(),Objects.requireNonNullElse(pi.getOtherFeeAmount(),BigDecimal.ZERO),pi.getTotalAmount()};
             for(int i=0;i<labels.length;i++) {
                 Row r=sheet.createRow(row++);r.setHeightInPoints(26);cell(r,0,labels[i],heading);
                 sheet.addMergedRegion(new CellRangeAddress(r.getRowNum(),r.getRowNum(),0,5));amount(r,6,values[i],amount);
             }
             for (String text : terms(pi)) row = merged(sheet, row, text, body);
-            merged(sheet, row, "金额按单据币种显示；超出Excel可靠精度的金额保留精确文本，单元格批注说明。总额含折扣、税额及运费。", body);
+            merged(sheet, row, "金额按单据币种显示；超出Excel可靠精度的金额保留精确文本，单元格批注说明。总额含折扣、税额、运费及其他费用。", body);
             sheet.createFreezePane(2, tableHead + 1);
             sheet.setRepeatingRows(new CellRangeAddress(tableHead, tableHead, -1, -1));
             sheet.setFitToPage(true);
@@ -85,6 +106,7 @@ public class PiDocumentService {
     }
 
     public byte[] pdf(PiView pi) {
+        if("PI_V1".equals(pi.getDocumentRenderVersion()))return legacy.pdf(pi);
         try (PDDocument document = new PDDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream();
              InputStream source = getClass().getResourceAsStream("/fonts/NotoSansSC-Regular.ttf")) {
             if (source == null) throw new IOException("Bundled PI font is missing");
@@ -96,7 +118,7 @@ public class PiDocumentService {
                 layout.gap(10);
                 layout.tableHeader();
                 for (PiItemView item : pi.getItems()) {
-                    layout.item(item);
+                    layout.item(item,thumbnail(item));
                 }
                 layout.gap(12);
                 for (String line : totals(pi)) layout.paragraph(line, 10, 4);
@@ -128,20 +150,39 @@ public class PiDocumentService {
                 + "    计划发货: " + Objects.toString(p.getPlannedShipDate(), "未指定"));
         PiDocumentSnapshot d = p.getDocument();
         if (d != null) {
+            lines.add("开单日期 / Issued: "+Objects.toString(d.issueDate(),"未记录")+"    有效期 / Valid until: "+Objects.toString(d.validUntil(),"未记录"));
             lines.add("卖方 / Seller: " + text(d.sellerName()));
             add(lines, "卖方地址: ", d.sellerAddress()); add(lines, "卖方联系方式: ", d.sellerContact());
+            add(lines,"卖方国家/地区 / Seller country: ",d.sellerCountry());
         }
         lines.add("买方 / Buyer: " + text(p.getCustomerName()) + "    " + text(p.getCustomerCode()));
         if (d != null) {
             add(lines, "买方地址: ", d.buyerAddress()); add(lines, "买方联系方式: ", d.buyerContact());
+            add(lines,"买方国家/地区 / Buyer country: ",d.buyerCountry());
         }
         return lines;
+    }
+
+    private java.awt.image.BufferedImage thumbnail(PiItemView item)throws IOException {
+        if(item.getImageAttachmentId()==null)return null;
+        if(images==null)throw new IOException("PI image resolver unavailable");
+        var original=javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(images.bytes(item)));
+        if(original==null)throw new IOException("PI image decode failed");
+        double ratio=Math.min(1,Math.min(320.0/original.getWidth(),240.0/original.getHeight()));
+        var scaled=new java.awt.image.BufferedImage(Math.max(1,(int)(original.getWidth()*ratio)),Math.max(1,(int)(original.getHeight()*ratio)),java.awt.image.BufferedImage.TYPE_INT_RGB);
+        var graphics=scaled.createGraphics();try {
+            graphics.setColor(Color.WHITE);graphics.fillRect(0,0,scaled.getWidth(),scaled.getHeight());
+            graphics.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+            graphics.drawImage(original,0,0,scaled.getWidth(),scaled.getHeight(),null);
+        } finally{graphics.dispose();}
+        return scaled;
     }
 
     private static List<String> totals(PiView p) {
         List<String> values = new ArrayList<>(List.of("商品小计 / Subtotal: " + money(p.getSubtotal()),
                 "折扣合计 / Discount: " + money(p.getDiscountAmount()) + "    税额合计 / Tax: " + money(p.getTaxAmount()),
                 "运费 / Freight: " + money(p.getFreightAmount()),
+                "其他费用 / Other fees: "+money(Objects.requireNonNullElse(p.getOtherFeeAmount(),BigDecimal.ZERO)),
                 "应付总额 / Total (" + text(p.getCurrencyCode()) + "): " + money(p.getTotalAmount())));
         return values;
     }
@@ -152,6 +193,9 @@ public class PiDocumentService {
         if (d != null) {
             add(lines, "付款条款 / Payment terms: ", d.paymentTerms());
             add(lines, "交付条款 / Delivery terms: ", d.deliveryTerms());
+            add(lines,"收货地址 / Ship to: ",d.shippingAddress());
+            add(lines,"运输方式 / Transport: ",d.transportMode());
+            if("EXPORT".equals(p.getTradeType()))add(lines,"贸易术语 / Trade terms: ",d.tradeTerms());
             add(lines, "收款银行 / Bank: ", d.bankName());
             add(lines, "账户 / Account: ", d.bankAccount());
             add(lines, "收款人 / Beneficiary: ", d.beneficiary());
@@ -252,17 +296,27 @@ public class PiDocumentService {
             draw(stream, font, "单价", 9, 342, y - 15);
             draw(stream, font, "行金额", 9, 461, y - 15); y -= 27;
         }
-        void item(PiItemView item) throws IOException {
-            List<String> identity = wrap(text(item.getSkuCode()) + "  " + text(item.getProductName()), 9, 237);
-            identity.addAll(wrap(text(item.getSpecification()), 8, 237));
+        void item(PiItemView item,java.awt.image.BufferedImage thumbnail) throws IOException {
+            float textWidth=thumbnail==null?237:150,textLeft=thumbnail==null?LEFT+6:LEFT+93;
+            List<String> identity = wrap(text(item.getSkuCode()) + "  " + text(item.getProductName()), 9, textWidth);
+            identity.addAll(wrap(text(item.getSpecification()), 8, textWidth));
+            identity.addAll(wrap("型号: "+text(item.getModelName())+"  单位: "+Objects.toString(item.getUnit(),"未记录"),8,textWidth));
             if (y - Math.min(identity.size() * 13 + 35, 80) < BOTTOM) { newPage(); tableHeader(); }
+            float imageBottom=y;
+            int imagePage=document.getNumberOfPages();
+            if(thumbnail!=null) {
+                var picture=org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory.createFromImage(document,thumbnail);
+                float factor=Math.min(78f/thumbnail.getWidth(),58f/thumbnail.getHeight());
+                stream.drawImage(picture,LEFT+6,y-thumbnail.getHeight()*factor,thumbnail.getWidth()*factor,thumbnail.getHeight()*factor);imageBottom=y-62;
+            }
             draw(stream, font, String.valueOf(item.getQuantity()), 8, 288, y - 9);
             draw(stream, font, money(item.getUnitPrice()), 8, 342, y - 9);
             draw(stream, font, money(item.getLineTotal()), 8, 461, y - 9);
             for (String line : identity) {
                 if (y - 13 < BOTTOM) { newPage(); tableHeader(); }
-                draw(stream, font, line, 9, LEFT + 6, y - 9); y -= 13;
+                draw(stream, font, line, 9, textLeft, y - 9); y -= 13;
             }
+            if(thumbnail!=null&&document.getNumberOfPages()==imagePage&&y>imageBottom)y=imageBottom;
             if (y - 24 < BOTTOM) { newPage(); tableHeader(); }
             draw(stream, font, "行折扣: " + money(item.getDiscountAmount()) + "    行税额: " + money(item.getTaxAmount()), 8, LEFT + 6, y - 10);
             y -= 23; stream.setStrokingColor(PALE); stream.moveTo(LEFT, y); stream.lineTo(LEFT + WIDTH, y); stream.stroke(); y -= 7;

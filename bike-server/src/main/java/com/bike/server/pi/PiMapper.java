@@ -44,6 +44,7 @@ public interface PiMapper {
     int countEnabledCustomer(@Param("id") Long id);
     int countEnabledAgent(@Param("id") Long id);
     PiSkuSnapshot selectEnabledSku(@Param("id") Long id);
+    PiImageService.StoredImage selectSkuImage(@Param("skuId") long skuId,@Param("imageId") String imageId);
     Long lockOrder(@Param("id") long id);
     int countForOrder(@Param("id") long id);
     int countOrder(@Param("id") Long id, @Param("customerId") Long customerId, @Param("agentId") Long agentId);

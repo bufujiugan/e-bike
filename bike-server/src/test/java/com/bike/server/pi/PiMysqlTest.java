@@ -311,7 +311,7 @@ class PiMysqlTest {
                     create("CREATE TABLE " + prefix + ddl + " ENGINE=InnoDB");
                 }
                 for (String file : List.of("V24__pi_multi_item_and_fulfillment.sql", "V30__pi_series_and_atomic_conversion.sql",
-                        "V33__pi_revisions_and_series_payments.sql")) {
+                        "V33__pi_revisions_and_series_payments.sql","V40__pi_document_details.sql")) {
                     try (var input = Resources.getResourceAsStream("db/migration/" + file)) {
                         String ddl = new String(input.readAllBytes(), StandardCharsets.UTF_8).split("INSERT INTO bike_sys_permission")[0]
                                 .replace("bike_", prefix).replaceAll("CONSTRAINT (fk_(?:pi|dispatch|logistics)_[a-z_]+)", "CONSTRAINT "+prefix+"$1");

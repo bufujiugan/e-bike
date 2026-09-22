@@ -28,7 +28,7 @@ public class PiTemplateService {
     @Transactional
     public PiTemplate publish(PiTemplateRequest request) {
         CurrentOperator.requireInternalWebAccess();CurrentOperator.requirePermission("PI_TEMPLATE_MANAGE");
-        if(!validator.validate(request).isEmpty()||!request.layoutCode().equals(request.tradeType()+"_V1"))throw invalid();
+        if(!validator.validate(request).isEmpty()||!Set.of(request.tradeType()+"_V1",request.tradeType()+"_V2").contains(request.layoutCode()))throw invalid();
         try {
             if(mapper.publish(request,CurrentOperator.id())!=1)throw new BusinessException("PI_TEMPLATE_SAVE_FAILED","模板发布失败");
         } catch(DuplicateKeyException error) { throw new BusinessException("PI_TEMPLATE_EXISTS","此模板版本已发布，请使用新版本号"); }

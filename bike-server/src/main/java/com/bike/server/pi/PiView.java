@@ -8,6 +8,12 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public class PiView {
+    @JsonFormat(shape = JsonFormat.Shape.STRING) private BigDecimal otherFeeAmount;
+    public BigDecimal getOtherFeeAmount(){return otherFeeAmount;}
+    public void setOtherFeeAmount(BigDecimal value){otherFeeAmount=value;}
+    private String documentRenderVersion;
+    public String getDocumentRenderVersion(){return documentRenderVersion;}
+    public void setDocumentRenderVersion(String value){documentRenderVersion=value;}
     private Long seriesId;
     private Long previousRevisionId;
     private List<PiFulfillmentLine> fulfillment = List.of();

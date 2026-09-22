@@ -1,7 +1,7 @@
 import { createPiDocument } from './pi-document-fixture.mjs';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID, createHash } from 'node:crypto';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 
 if (process.env.BIKE_ACCEPTANCE_WRITE !== 'isolated') throw new Error('仅允许专用验收库');
 if (!process.env.BIKE_TEST_PASSWORD) throw new Error('缺少验收管理员密码');
@@ -19,6 +19,11 @@ async function req(path, body, { method = body === undefined ? 'GET' : 'POST', t
   return code === 'SUCCESS' ? result.data : result;
 }
 function pass(name) { evidence.checks.push({ name, passed: true }); console.log(`PASS ${name}`); }
+async function uploadFile(path, bytes, { token = admin, requestId = randomUUID(), visibility = 'CUSTOMER', code = 'SUCCESS' } = {}) {
+  const form = new FormData(); form.append('file', new Blob([bytes], { type: 'image/png' }), 'confirmation.png'); form.append('requestId', requestId); form.append('visibility', visibility);
+  const response = await fetch(base + path, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form, signal: AbortSignal.timeout(30000) });
+  const result = await response.json(); assert.equal(result.code, code, `${path}: ${response.status} ${result.code} ${result.message}`); assert.equal(response.ok, code === 'SUCCESS'); return result.data;
+}
 async function account(suffix, codes, agentId = null, workstationId = null) {
   const permissions = await req('/api/roles/permissions');
   const role = await req('/api/roles', { roleCode: prefix + suffix, roleName: `SKU验收${suffix}` });
@@ -55,6 +60,8 @@ try {
     skus.push((await req('/api/production/skus')).find(s => s.skuCode === prefix + color));
   }
   const [red, blue] = skus; assert(red && blue);
+  const imageBytes = await readFile(new URL('./fixtures/after-sales/fault.png', import.meta.url));
+  const productImage = await uploadFile(`/api/production/skus/${red.id}/images`, imageBytes);
   const sales = await account('SALES', ['PI_READ', 'PI_WRITE', 'PI_EXPORT', 'AGENT_LOCK_WRITE', 'ORDER_READ', 'ORDER_WRITE', 'INVENTORY_READ']);
   for (const type of ['STOCK_IN', 'STOCK_OUT']) stations.push(await req('/api/workstations', { workstationCode: prefix + type, workstationName: 'SKU验收' + type, workstationType: type }));
   const warehouseOperator = await account('WAREHOUSE', ['STOCK_OUT_OPERATE', 'ORDER_READ', 'INVENTORY_READ', 'TRACE_READ'], null, stations[1].id);
@@ -82,7 +89,7 @@ try {
   const body = { requestId: randomUUID(), sources: sourceLocks.map(l => ({ lockId: l.id, quantity: 1 })), pi: {
     customerId: customer.id, agentId: agent.id, tradeType: 'DOMESTIC', currencyCode: 'CNY', depositRequiredAmount: '50.00', shipmentRequiredAmount: '200.00',
     document: await createPiDocument(req, prefix, { sellerName: '隔离测试卖方', paymentTerms: '50元保留/200元发货', deliveryTerms: '测试仓库交付', templateCode: 'ACCEPTANCE', templateVersion: '1' }),
-    items: skus.map(s => ({ skuId: s.id, quantity: 1, unitPrice: '100.00' })),
+    items: skus.map(s => ({ skuId: s.id, quantity: 1, unitPrice: '100.00', unit: 'PCS' })), otherFeeAmount: '12.34',
   } };
   const publishRequest = { ...body.pi.document, tradeType: 'DOMESTIC', layoutCode: 'DOMESTIC_V1', reason: '模板权限验证' };
   await req('/api/pi-templates', publishRequest, { token: sales, code: 'PERMISSION_DENIED' });
@@ -102,13 +109,35 @@ try {
 
   const results = await Promise.all([req('/api/pis/from-locks', body, { token: sales }), req('/api/pis/from-locks', { ...body, sources: [...body.sources].reverse() }, { token: sales })]);
   const pi = results[0]; assert.equal(pi.id, results[1].id); assert.equal(pi.fulfillment.length, 2); assert(pi.seriesId);
+  assert.equal(pi.totalAmount, '212.34'); assert.equal(pi.otherFeeAmount, '12.34'); assert(pi.items.every(i => i.unit === 'PCS'));
+  const savedImage = pi.items.find(i => i.skuId === red.id); assert.equal(savedImage.imageAttachmentId, productImage.id);
+  assert.equal(savedImage.imageSha256, createHash('sha256').update(imageBytes).digest('hex'));
   pi.fulfillment.forEach(line => ordersToCancel.add(line.orderId));
   evidence.fixtures.piId = pi.id; evidence.fixtures.orders = pi.fulfillment;
   await req('/api/pis/from-locks', { ...body, pi: { ...body.pi, remark: '同请求改变内容' } }, { token: sales, code: 'PI_CONVERSION_CONFLICT' });
   const draftAgent = await req(`/api/pis?keyword=${pi.piNo}`, undefined, { token: external }); assert.equal(draftAgent.total, 0);
   await req(`/api/pis/${pi.id}`, undefined, { token: external, code: 'FORBIDDEN' });
+  await req(`/api/pis/${pi.id}`, { ...body.pi, document: { ...body.pi.document, issueDate: null, validUntil: null } }, { method: 'PUT', token: sales });
+  await req(`/api/pis/${pi.id}/confirm`, {}, { token: sales, code: 'PI_DOCUMENT_DATES_INVALID' });
+  await req(`/api/pis/${pi.id}`, { ...body.pi, document: { ...body.pi.document, validUntil: '2020-01-01' } }, { method: 'PUT', token: sales, code: 'PI_DOCUMENT_DATES_INVALID' });
+  await req(`/api/pis/${pi.id}`, body.pi, { method: 'PUT', token: sales });
   const confirmed = await req(`/api/pis/${pi.id}/confirm`, {}, { token: sales });
   assert(confirmed.fulfillment.every(line => line.status === 'CONFIRMED'));
+  const imageItem = confirmed.items.find(i => i.skuId === red.id);
+  const imageResponse = await fetch(`${base}/api/pis/${pi.id}/items/${imageItem.id}/image`, { headers: { Authorization: `Bearer ${external}` } });
+  assert.equal(imageResponse.status, 200); assert(Buffer.from(await imageResponse.arrayBuffer()).equals(imageBytes));
+  pass('日期缺失及倒置拒绝确认，其他费用逐分计入总额，单位和SKU图片快照保留且客户按单据范围可读');
+  const attachmentPath = `/api/pis/${pi.id}/confirmation-attachments`, attachmentRequest = randomUUID();
+  const attachments = await Promise.all([uploadFile(attachmentPath, imageBytes, { token: sales, requestId: attachmentRequest }), uploadFile(attachmentPath, imageBytes, { token: sales, requestId: attachmentRequest })]);
+  assert.equal(attachments[0].id, attachments[1].id);
+  const internalAttachment = await uploadFile(attachmentPath, imageBytes, { token: sales, visibility: 'INTERNAL' });
+  await uploadFile(attachmentPath, imageBytes, { token: external, code: 'FORBIDDEN' });
+  await uploadFile(attachmentPath, imageBytes, { token: reader, code: 'PERMISSION_DENIED' });
+  const customerAttachments = await req(attachmentPath, undefined, { token: external }); assert.equal(customerAttachments.length, 1); assert(!('objectKey' in customerAttachments[0]));
+  await req(`${attachmentPath}/${internalAttachment.id}/download`, undefined, { token: external, code: 'ATTACHMENT_NOT_FOUND' });
+  const attachmentResponse = await fetch(`${base}${attachmentPath}/${attachments[0].id}/download`, { headers: { Authorization: `Bearer ${external}` } });
+  assert.equal(attachmentResponse.status, 200); assert.equal(attachmentResponse.headers.get('x-content-type-options'), 'nosniff'); assert(Buffer.from(await attachmentResponse.arrayBuffer()).equals(imageBytes));
+  pass('确认附件并发上传幂等，客户/只读不可上传，内部附件对客户隐藏，公开附件按范围逐字节下载');
   await req(`/api/pis/${pi.id}/export-task`, undefined, { token: reader, code: 'PERMISSION_DENIED' });
   await req(`/api/pis/${pi.id}/export-task/retry`, { revision: 0, reason: '外部越权' }, { token: external, code: 'FORBIDDEN' });
   let exportTask;

@@ -82,3 +82,9 @@ V24 新增 `bike_pi`、`bike_pi_item`、`bike_pi_payment`、`bike_pi_logistics`�
 ## V39 PI导出归档任务
 
 `bike_pi_export`按PI修订ID唯一，保存对外商务快照、PENDING/PROCESSING/READY/FAILED、revision、领取租约、尝试次数和两文件存储键/字节数/SHA256。文件二进制使用现有本地/COS存储。确认事务创建队列，文件生成在独立工作线程；只有两文件都保存后标记READY。失败重试保留成功文件；历史已发布单据需要显式建立LEGACY_SNAPSHOT任务，不回填原发布时间或伪造历史文件。四镜像SHA256为 `4180A74764974AF41419223613E5D0956669F14798985C7B2F575FAC397E52AB`，已在隔离API执行，禁止修改。
+
+## V40/V41 PI资料与确认附件
+
+V40为明细增加unit/image_attachment_id/image_sha256，为PI增加other_fee_amount。历史单位/图片保持空，不猜测原文件；日期和运输保存在原document_json。SHA256：`154FDA511E346C92B8F8B2315961F008F1006EE430C376605FFB6784DC1E8D17`。
+
+V41新增bike_pi_confirmation_attachment，包含PI修订、请求ID、可见范围、文件元数据、对象键和SHA256。请求在PI内唯一；没有复制历史附件。SHA256：`1E482663D9500EF529B652EB576B5BAF17F2D9022C7A791ADA14FE6CF552C0C4`。两迁移四镜像均已在空库/升级库与隔离API执行，禁止修改。

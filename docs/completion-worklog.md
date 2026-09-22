@@ -391,3 +391,13 @@ V38增加仅追加的模板发布记录、独立PI_TEMPLATE_MANAGE权限和审�
 `batch27-web-build.log`类型检查与构建通过，主包1697.10KB告警。`batch27-document-preview.log`3项文件检查通过；实际生成50行中文PDF五页和Excel，逐页/整表渲染后检查表头、中文、页码、长条款及金额布局无裁切或重叠。预览证据在batch27-document-preview目录；此为系统版面检查，不代表客户正式两套样单签认。隔离API18182运行acceptance-batch27-runtime.jar。
 
 PI尚须补齐开单/有效期、收货/运输、单位/商品图片及确认附件并核对原文；页面与现场验证待完成。全项目最终两轮仍为0轮，未推送GitHub。
+
+## 批次28：PI完整资料、图片及确认附件（2026-09-23）
+
+V40增加明细单位、SKU图片引用/哈希和其他费用；单据快照增加开单/有效期、收货/运输、贸易术语和国家。确认检查资料完整和日期顺序；修订克隆保留资料。V2 PDF/Excel输出新资料与等比例图片，冻结V1渲染器及归档版本，旧任务重试不混用新布局。V41增加独立确认附件，JPG/PNG/PDF、每个10MB/每修订50个、公司范围及CUSTOMER/INTERNAL可见性、哈希下载和请求幂等，新修订不冒用旧签认。
+
+真实HTTP首次发现重复确认附件上传在REPEATABLE_READ旧读视图下冲突。改用READ_COMMITTED及PI父行锁，增加真实事务代理、预读屏障的并发回归；修复后batch28-fixed-full-verify.log全量370项通过，0失败/错误/跳过，包含全新b28fixed迁移两库。batch28-fixed-documents-http.json/.log共11组通过且cleanupFailures为空，覆盖212.34精确总额、日期、单位、图片、并发附件、可见范围、归档及实际批次物流。修复前370项结果不替代修复后证据。
+
+Web类型检查及构建通过，主包1697.65KB体积告警保留。PDF实际渲染清晰；artifact-tool导入Excel保留图片但预览不显示，官方签名有效的LibreOffice26.2.6独立渲染证实图片、中文、单位及分页正常，证据在batch28-document-preview/libreoffice。预览仅作版面检查，非正式业务签认。测试预览V2金额夹具另已纠正，使5行、折扣/税费/运费/其他费用平衡。V40/V41四镜像冻结，API18182运行acceptance-batch28-fixed-runtime.jar。
+
+客户主资料地址/国家/Email/币种偏好/业务归属和带入PI仍需补齐，普通岗位页面及正式交付仍未验收。全项目最终两轮仍为0轮；未推送GitHub。

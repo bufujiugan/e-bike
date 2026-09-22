@@ -4,6 +4,15 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import java.math.BigDecimal;
 
 public class PiItemView {
+    private String unit;
+    private String imageAttachmentId;
+    private String imageSha256;
+    public String getUnit(){return unit;}
+    public void setUnit(String value){unit=value;}
+    public String getImageAttachmentId(){return imageAttachmentId;}
+    public void setImageAttachmentId(String value){imageAttachmentId=value;}
+    public String getImageSha256(){return imageSha256;}
+    public void setImageSha256(String value){imageSha256=value;}
     private Long id;
     private Long skuId;
     private Long productModelId;

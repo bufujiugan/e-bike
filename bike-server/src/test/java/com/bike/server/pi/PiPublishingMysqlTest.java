@@ -40,24 +40,26 @@ class PiPublishingMysqlTest {
         final TransactionTemplate tx=new TransactionTemplate(manager);
         final PiTemplateMapper templates;
         final PiExportMapper exports;
+        final PiConfirmationMapper confirmations;
         final PiMapper pis=mock(PiMapper.class);
         final OperationLogMapper logs=mock(OperationLogMapper.class);
         final ObjectMapper json=new ObjectMapper().findAndRegisterModules();
         Fixture()throws Exception {
             var config=new Configuration(new Environment("pi-publishing",new SpringManagedTransactionFactory(),source));config.setMapUnderscoreToCamelCase(true);
-            for(String name:List.of("PiTemplateMapper","PiExportMapper"))try(var input=Resources.getResourceAsStream("mapper/"+name+".xml")) {
+            for(String name:List.of("PiTemplateMapper","PiExportMapper","PiConfirmationMapper"))try(var input=Resources.getResourceAsStream("mapper/"+name+".xml")) {
                 byte[] xml=new String(input.readAllBytes(),StandardCharsets.UTF_8).replace("bike_",prefix).getBytes(StandardCharsets.UTF_8);
                 new XMLMapperBuilder(new ByteArrayInputStream(xml),config,name,config.getSqlFragments()).parse();
             }
             var session=new SqlSessionTemplate(new SqlSessionFactoryBuilder().build(config));templates=session.getMapper(PiTemplateMapper.class);exports=session.getMapper(PiExportMapper.class);
-            for(String file:List.of("V38__pi_published_templates.sql","V39__pi_export_archive.sql"))try(var input=Resources.getResourceAsStream("db/migration-prod/"+file)) {
+            confirmations=session.getMapper(PiConfirmationMapper.class);
+            for(String file:List.of("V38__pi_published_templates.sql","V39__pi_export_archive.sql","V41__pi_confirmation_attachments.sql"))try(var input=Resources.getResourceAsStream("db/migration-prod/"+file)) {
                 var text=new String(input.readAllBytes(),StandardCharsets.UTF_8).replace("bike_",prefix);
                 String end="ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";sql(text.substring(0,text.indexOf(end)+end.length()));
             }
             when(logs.insert(any(),any(),any(),any(),any(),any(),any(),any(),any())).thenReturn(1);
         }
         void sql(String sql)throws Exception{try(var c=source.getConnection();var s=c.createStatement()){s.execute(sql);}}
-        public void close()throws Exception{sql("DROP TABLE "+prefix+"pi_export");sql("DROP TABLE "+prefix+"pi_template");}
+        public void close()throws Exception{sql("DROP TABLE "+prefix+"pi_confirmation_attachment");sql("DROP TABLE "+prefix+"pi_export");sql("DROP TABLE "+prefix+"pi_template");}
         PiTemplateService templateService(){return new PiTemplateService(templates,logs,json,Validation.buildDefaultValidatorFactory().getValidator());}
         ProductionFileStore store(Path path){return new ProductionFileStore(path.toString(),"local","","","","");}
         PiExportArchive archive(ProductionFileStore store){return new PiExportArchive(exports,pis,store,json,logs);}

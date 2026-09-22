@@ -16,6 +16,16 @@ public class PiController {
     @org.springframework.beans.factory.annotation.Autowired private PiLogisticsService logisticsService;
     @org.springframework.beans.factory.annotation.Autowired private PiRevisionService revisions;
     @org.springframework.beans.factory.annotation.Autowired private PiExportArchive archives;
+    @org.springframework.beans.factory.annotation.Autowired private PiImageService images;
+
+    @GetMapping("/{id}/items/{itemId}/image") public ResponseEntity<byte[]> itemImage(@PathVariable long id,@PathVariable long itemId) {
+        var item=service.get(id).getItems().stream().filter(i->i.getId()==itemId).findFirst()
+                .orElseThrow(()->new com.bike.server.common.BusinessException("PI_IMAGE_NOT_FOUND","PI图片不存在"));
+        byte[] bytes=images.bytes(item);
+        if(bytes==null)throw new com.bike.server.common.BusinessException("PI_IMAGE_NOT_FOUND","PI图片不存在");
+        return ResponseEntity.ok().header("X-Content-Type-Options","nosniff").header(HttpHeaders.CACHE_CONTROL,"no-store")
+                .header(HttpHeaders.CONTENT_TYPE,bytes[0]==(byte)0x89?"image/png":"image/jpeg").body(bytes);
+    }
 
     @GetMapping("/{id}/export-task") public ApiResponse<PiExportJob> exportTask(@PathVariable long id) {
         service.get(id);return ApiResponse.success("查询成功",archives.status(id));
