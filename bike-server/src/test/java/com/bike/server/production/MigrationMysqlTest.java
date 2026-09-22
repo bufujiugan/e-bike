@@ -10,7 +10,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 /** 仅针对两个新建的专用空库，禁止清库或重复覆盖已有业务数据。 */
 @EnabledIfEnvironmentVariable(named="BIKE_MIGRATION_CLEAN_URL",matches=".+")
 class MigrationMysqlTest {
-  private static final int LATEST_VERSION = 35;
+  private static final int LATEST_VERSION = 36;
   Flyway flyway(String url,String target) {
     assertThat(url).contains("/bike_migration_");
     var config=Flyway.configure().dataSource(url,System.getenv("BIKE_MYSQL_TEST_USER"),System.getenv("BIKE_MYSQL_TEST_PASSWORD"))
@@ -92,6 +92,7 @@ class MigrationMysqlTest {
     sql.executeUpdate("INSERT INTO bike_sys_role_permission(role_id,permission_id) SELECT r.id,p.id FROM bike_sys_role r JOIN bike_sys_permission p ON (r.role_code='MIGRATE_READ_ONLY' AND p.permission_code='AFTER_SALES_READ') OR (r.role_code='MIGRATE_TECH' AND p.permission_code='AFTER_SALES_TECH')");
   }
   private void verifyLegacyAfterSales(Statement sql)throws Exception {
+    try(var result=sql.executeQuery("SELECT warehouse_name,recipient,address_line,logistics_status FROM bike_after_sales_shipment WHERE id=9001")){assertThat(result.next()).isTrue();for(int i=1;i<=4;i++)assertThat(result.getObject(i)).isNull();}
     try(var result=sql.executeQuery("SELECT status,JSON_UNQUOTE(JSON_EXTRACT(document_json,'$.solution')),JSON_UNQUOTE(JSON_EXTRACT(document_json,'$.internalNote')),JSON_LENGTH(JSON_EXTRACT(document_json,'$.parts')),confirmed_at,approved_at,created_by FROM bike_after_sales_solution_version WHERE case_id=9001")) {
       assertThat(result.next()).isTrue();assertThat(result.getString(1)).isEqualTo("LEGACY");assertThat(result.getString(2)).isEqualTo("旧维修方案");assertThat(result.getString(3)).isEqualTo("历史内部备注");assertThat(result.getInt(4)).isZero();for(int i=5;i<=7;i++)assertThat(result.getObject(i)).isNull();assertThat(result.next()).isFalse();
     }

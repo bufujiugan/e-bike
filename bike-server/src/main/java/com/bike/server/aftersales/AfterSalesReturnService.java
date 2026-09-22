@@ -19,7 +19,7 @@ public class AfterSalesReturnService {
 
     public List<AfterSalesReturnView> list(long caseId) {
         requireRead(); requireCaseScope(mapper, mapper.selectById(caseId));
-        return mapper.selectReturns(caseId);
+        return mapper.selectReturns(caseId).stream().map(this::visible).toList();
     }
 
     @Transactional public AfterSalesReturnView act(long caseId, long shipmentId, AfterSalesReturnRequest request) {
@@ -67,7 +67,12 @@ public class AfterSalesReturnService {
                 throw new BusinessException("AFTER_SALES_AUDIT_FAILED","旧件处理历史保存失败");
         } catch (JsonProcessingException error) { throw new BusinessException("AFTER_SALES_AUDIT_FAILED","旧件处理历史序列化失败"); }
         if (mapper.touchCase(caseId,CurrentOperator.id())!=1) throw new BusinessException("AFTER_SALES_UPDATE_FAILED","案例更新时间保存失败");
-        return after;
+        return visible(after);
+    }
+
+    private AfterSalesReturnView visible(AfterSalesReturnView r) {
+        if(!warehouseOnly())return r;
+        return new AfterSalesReturnView(r.shipmentId(),r.caseId(),r.partName(),r.quantity(),r.status(),r.revision(),r.warehouseName(),r.recipient(),r.phone(),r.addressLine(),r.postalCode(),r.carrier(),r.trackingNo(),r.sentAt(),r.receivedAt(),r.inspectedAt(),null,null,r.completedAt(),r.updatedAt());
     }
 
     private static void state(AfterSalesReturnView record, String... allowed) {

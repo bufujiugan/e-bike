@@ -163,3 +163,13 @@ H5 使用该接口，可搜索、翻页，翻页保留已选订单；切换客�
 `POST .../solution/confirm {versionId}` 由技术确认；审批请求须含solutionVersionId。`GET .../solution/versions` 按公司范围返回历史，内部备注按权限隐藏。REVISE审核动作附原因和当前版本，将案例返回审核；补发必须选择当前批准solutionItemId，案例内同编号累计不超量。`POST .../shipments/{shipmentId}/approval-link {itemId,reason}` 仅审核人员可把旧补发关联当前草稿条目，再次确认审批。
 
 纯仓库只可读取最新批准且有配件或已有补发的案例；列表/count/看板/详情共用条件，仍受公司范围限制。响应隐藏车辆故障、技术方案、费用、Email、留言与非物流历史，附件/版本历史/留言独立接口拒绝，敏感字段筛选拒绝、关键词不匹配车辆故障。派单要求读取和派单权限且不能由纯仓库调用。
+
+## 售后完整发运（V36）
+
+补发请求新增shipping，包含warehouseName、recipient、phone、countryCode、region、city、addressLine、postalCode、expectedArrivalDate、shippedAt。计划未指定时复制案例收货资料；实际发货须完整仓库、收货人、电话、国家和地址。邮编允许为空，实际时间留空使用当前时间，禁止未来发货、预计到达早于发货。
+
+`POST .../shipments/{shipmentId}/dispatch` 必须携带当前revision，可提供shipping确认实际收货快照。过期页面不能覆盖他人已修改地址。发货后地址和时间保留，不能通过物流更新改写。
+
+`POST .../shipments/{shipmentId}/logistics` 接收revision/action/note及操作对应字段：SAVE保存计划shipping；TRACK更新IN_TRANSIT/EXCEPTION/DELIVERED及expectedArrivalDate；CORRECT以原因更正carrier/trackingNo；CANCEL取消未发计划。TRACK/CORRECT/CANCEL说明必填，客户可见；当前仅手工登记，不声称已接承运商追踪接口。已签收不允许回退。
+
+取消保留原记录，批准数量重新可安排；只联动取消尚未启动的旧件记录。已启动旧件退回或已发货不能取消。取消后若仍有未安排批准配件，解决门禁仍生效。全部动作按案例加锁、revision冲突拒绝、审计原子提交。旧数据仓库、地址和当前物流状态未知则保持空，不猜历史。

@@ -7,7 +7,7 @@ const props = defineProps<{ caseId: number; status: CaseStatus; isAgent: boolean
 const emit = defineEmits<{ changed: [] }>()
 const rows = ref<CaseReturn[]>([]), loading = ref(false), saving = ref(false), error = ref(''), visible = ref(false), selected = ref<CaseReturn | null>(null)
 const form = reactive<ReturnRequest>({ revision: 1, action: 'REQUEST', warehouseName: '', recipient: '', phone: '', addressLine: '', postalCode: '', carrier: '', trackingNo: '', inspectionResult: '', reason: '' })
-const names: Record<ReturnStatus, string> = { REQUIRED: '需要退回（待提供地址）', WAITING_CUSTOMER: '等待客户寄回', IN_TRANSIT: '客户已寄出', RECEIVED: '公司已收到', INSPECTED: '已检测', SCRAPPED: '已报废', COMPLETED: '已完成', WAIVED: '已豁免退回' }
+const names: Record<ReturnStatus, string> = { REQUIRED: '需要退回（待提供地址）', WAITING_CUSTOMER: '等待客户寄回', IN_TRANSIT: '客户已寄出', RECEIVED: '公司已收到', INSPECTED: '已检测', SCRAPPED: '已报废', COMPLETED: '已完成', WAIVED: '已豁免退回', CANCELLED: '补发计划已取消' }
 const actions: Record<ReturnAction, string> = { REQUEST: '提供退回地址', SEND: '登记寄回物流', RECEIVE: '确认收到旧件', INSPECT: '登记检测结果', SCRAP: '确认报废', COMPLETE: '完成旧件处理', WAIVE: '豁免退回' }
 const canAct = computed(() => ['APPROVED','IN_PROGRESS','WAITING_PARTS','SHIPPED','RESOLVED'].includes(props.status))
 const needsReason = computed(() => ['SCRAP','COMPLETE','WAIVE'].includes(form.action))

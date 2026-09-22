@@ -204,10 +204,14 @@ public class AfterSalesServiceImpl implements AfterSalesService {
         String tracking = optional(request.trackingNo(), 128, "运单号长度不能超过128");
         if (tracking != null && carrier == null) throw invalid("登记实际发货时必须填写承运商");
         var item=new AfterSalesPlans(mapper).allocate(id,request);
-        var normalized = new AfterSalesShipmentRequest(part, request.quantity(), carrier, tracking, request.oldPartReturnRequired(),item.id());
+        var normalized = new AfterSalesShipmentRequest(part, request.quantity(), carrier, tracking, request.oldPartReturnRequired(),item.id(),request.shipping());
         changed(mapper.insertShipment(id, normalized, CurrentOperator.id()));
         var own = mapper.selectShipmentById(insertedId());
         if (own == null || !Objects.equals(own.getCaseId(), id)) throw new BusinessException("AFTER_SALES_UPDATE_FAILED", "补发记录回读失败");
+        var shipping=(request.shipping()==null?AfterSalesShippingDetails.from(before):request.shipping()).normalized(tracking!=null);
+        changed(mapper.saveShippingDetails(own.getId(),shipping));
+        if(tracking!=null) changed(mapper.updateShipmentLogistics(own.getId(),new AfterSalesLogisticsRequest(own.getRevision(),"TRACK",null,null,null,"IN_TRANSIT",null,shipping.expectedArrivalDate())));
+        own=mapper.selectShipmentById(own.getId());
         if (own.isOldPartReturnRequired()) changed(mapper.insertRequiredReturn(own.getId()));
         changeStatus(before, mapper.countPendingShipments(id) > 0 ? "WAITING_PARTS" : "SHIPPED", null);
         audit(id, tracking == null ? "SHIPMENT_PLANNED" : "SHIPMENT_DISPATCHED", before, Map.of("shipment", own, "case", requireCase(id, false)));
@@ -222,9 +226,12 @@ public class AfterSalesServiceImpl implements AfterSalesService {
         if (shipment == null || !Objects.equals(shipment.getCaseId(), id))
             throw new BusinessException("AFTER_SALES_SHIPMENT_NOT_FOUND", "补发记录不存在");
         if (!"PLANNED".equals(shipment.getStatus())) throw new BusinessException("INVALID_STATUS_TRANSITION", "只有待发货记录可以登记发货");
+        if(request.revision()==null || request.revision()!=shipment.getRevision())throw new BusinessException("AFTER_SALES_SHIPMENT_CONFLICT","发运资料已更新，请刷新后重试");
         new AfterSalesPlans(mapper).requireDispatchApproval(id,shipment);
         var normalized = new AfterSalesDispatchRequest(required(request.carrier(), 128, "承运商不能为空"),
-            required(request.trackingNo(), 128, "运单号不能为空"));
+            required(request.trackingNo(), 128, "运单号不能为空"),
+            (request.shipping()==null?AfterSalesShippingDetails.from(shipment):request.shipping()).normalized(true),shipment.getRevision());
+        changed(mapper.saveShippingDetails(shipmentId,normalized.shipping()));
         changed(mapper.dispatchShipment(id, shipmentId, normalized));
         var updated = mapper.selectShipmentById(shipmentId);
         changeStatus(before, mapper.countPendingShipments(id) > 0 ? "WAITING_PARTS" : "SHIPPED", null);

@@ -57,7 +57,7 @@ class AfterSalesMysqlTest {
             assertThat(shipment.getStatus()).isEqualTo("PLANNED");
             assertThat(shipment.getShippedAt()).isNull();
             assertThat(f.agent(() -> f.service.get(id)).getStatus()).isEqualTo("WAITING_PARTS");
-            var sent = f.admin(() -> f.service.dispatchShipment(id, shipment.getId(), new AfterSalesDispatchRequest("DHL", "AS-TRACK-001")));
+            var sent = f.admin(() -> f.service.dispatchShipment(id, shipment.getId(), new AfterSalesDispatchRequest("DHL","AS-TRACK-001",AfterSalesPlanMysqlTest.shipping(),1)));
             assertThat(sent.getStatus()).isEqualTo("SHIPPED");
             assertThat(sent.getShippedAt()).isNotNull();
             assertThat(f.agent(() -> f.service.get(id)).getStatus()).isEqualTo("SHIPPED");
@@ -242,6 +242,10 @@ class AfterSalesMysqlTest {
                     try(var connection=source.getConnection()) {org.springframework.jdbc.datasource.init.ScriptUtils.executeSqlScript(connection,new org.springframework.core.io.ByteArrayResource(ddl.getBytes(StandardCharsets.UTF_8)));}
                     var matcher=Pattern.compile("CREATE TABLE ([a-z0-9_]+)").matcher(ddl);
                     while(matcher.find())tables.add(matcher.group(1));
+                }
+                try(var input=Resources.getResourceAsStream("db/migration/V36__after_sales_shipping_details.sql")) {
+                    String ddl=new String(input.readAllBytes(),StandardCharsets.UTF_8).replace("bike_",prefix);
+                    try(var connection=source.getConnection()){org.springframework.jdbc.datasource.init.ScriptUtils.executeSqlScript(connection,new org.springframework.core.io.ByteArrayResource(ddl.getBytes(StandardCharsets.UTF_8)));}
                 }
                 sql("INSERT INTO " + prefix + "customer VALUES(44,'Customer A','ENABLED','Customer contact','4400'),(45,'Customer B','ENABLED',NULL,NULL)");
                 sql("INSERT INTO " + prefix + "agent VALUES(8,'Agent A','ENABLED','Agent contact','8000'),(99,'Agent B','ENABLED','Other contact','9900')");

@@ -42,6 +42,11 @@ public interface AfterSalesMapper {
     List<AfterSalesShipmentView> selectShipments(@Param("caseId") long caseId);
     AfterSalesShipmentView selectShipmentById(@Param("id") long id);
     int dispatchShipment(@Param("caseId") long caseId, @Param("id") long id, @Param("request") AfterSalesDispatchRequest request);
+    int saveShippingDetails(@Param("id") long id,@Param("shipping") AfterSalesShippingDetails shipping);
+    int updateShipmentLogistics(@Param("id") long id,@Param("request") AfterSalesLogisticsRequest request);
+    int cancelShipment(@Param("id") long id,@Param("revision") int revision,@Param("reason") String reason);
+    int cancelShipmentReturn(@Param("id") long id,@Param("reason") String reason,@Param("operatorId") Long operatorId);
+    long countShippedShipments(@Param("caseId") long caseId);
     long countPendingShipments(@Param("caseId") long caseId);
     long countCaseShipments(@Param("caseId") long caseId);
     int insertRequiredReturn(@Param("shipmentId") long shipmentId);

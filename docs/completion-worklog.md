@@ -363,3 +363,11 @@ V35保存结构化方案版本、技术确认和审批人/时间，审批固定�
 `batch24-current-verify.log` 后端全量340项通过，0失败/错误/跳过，含两套新库迁移、并发和文件真实API；`batch24-plans-http.json/.log` 10组、`batch24-companies-http.json/.log` 7组、`batch24-attachments-http.json/.log` 4组全部通过且cleanupFailures为空。Web类型检查通过，构建证据 `batch24-warehouse-web-build.log`，主包1695.71KB告警保留。早先337项全量属于仓库修复前代码，不充当当前证据。定向检查首次发现派单无READ权限，收紧接口并增加拒绝用例后全量通过。V35四镜像冻结。隔离API18182已更新至acceptance-batch24-runtime.jar。
 
 本批页面仍缺浏览器验收。发运详情、Email、PI受控模板/归档、普通岗位页面及现场交付仍待完成，完整矩阵见current-acceptance-matrix.md。全项目最终两轮仍为0轮，尚未推送GitHub。
+
+## 批次25：完整补发资料、物流进度与计划取消（2026-09-23）
+
+V36新增发货仓库和独立收货快照、预计到达、手工在途/异常/签收、附原因的运单更正、未发计划取消。实际发货校验完整资料、日期和revision，发货后地址/时间不可被物流更新覆盖。取消释放批准数量且保留历史；旧件退回启动后不能直接取消。旧历史未知字段保持空。仓库旧件投影进一步隐藏技术检测结论和处置责任说明。Web新增发运卡片、地址表单及物流更新操作。
+
+`batch25-logistics-tests.log` 77项售后检查通过后，补充直接发货预计到达和旧件投影回归；`batch25-full-verify.log` 当前全量347项通过，0失败/错误/跳过，包含两套全新b25full迁移库与文件真实API。`batch25-shipping-http.json/.log` 12组通过且cleanupFailures为空，覆盖取消重排、地址快照、过期发货、更正与签收及完整旧件归档。`batch25-web-build.log`类型检查/构建通过，大包告警保留。隔离API18182运行acceptance-batch25-runtime.jar。
+
+本批仍是实施回归，页面尚缺真实浏览器验收。Email正在进入实施（设计见after-sales-email-design.md）；PI模板发布/导出归档及正式交付仍待完成。全项目最终两轮保持0轮，代码未推送GitHub。

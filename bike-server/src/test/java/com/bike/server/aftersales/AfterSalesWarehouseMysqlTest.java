@@ -32,7 +32,7 @@ class AfterSalesWarehouseMysqlTest {
             f.admin(()->f.service.confirmSolution(id,draft.id()));
             f.admin(()->f.service.review(id,new AfterSalesReviewRequest("APPROVE",null,draft.id())));
             var shipment=warehouse(f,()->f.service.addShipment(id,shipment(draft,1)));
-            warehouse(f,()->f.service.dispatchShipment(id,shipment.getId(),new AfterSalesDispatchRequest("DHL","WAREHOUSE-1")));
+            warehouse(f,()->f.service.dispatchShipment(id,shipment.getId(),new AfterSalesDispatchRequest("DHL","WAREHOUSE-1",AfterSalesPlanMysqlTest.shipping(),1)));
             f.admin(()->f.service.review(id,new AfterSalesReviewRequest("REVISE","new diagnostic",draft.id())));
             f.admin(()->f.service.saveSolution(id,plan(draft.id(),"Motor",1,false)));
             assertThat(warehouse(f,()->f.service.get(id)).getShipments()).hasSize(1);

@@ -15,6 +15,7 @@ class AfterSalesPlanMysqlTest {
         return new AfterSalesSolutionRequest("motor test","replace motor","confidential liability",previous,"bearing failure","install replacement","test after repair","IN_WARRANTY","CNY",null,
             List.of(new AfterSalesSolutionRequest.Part("MOTOR",name,quantity,BigDecimal.ZERO,returns)));
     }
+    static AfterSalesShippingDetails shipping() {return new AfterSalesShippingDetails("Test warehouse","Test recipient","000-0000","GB","Region","City","Isolated test address","0000",java.time.LocalDate.now().plusDays(7),null);}
     static long reviewCase(AfterSalesMysqlTest.Fixture f) {long id=f.submittedCase();f.admin(()->f.service.review(id,new AfterSalesReviewRequest("START",null)));return id;}
     static AfterSalesPlanView approve(AfterSalesMysqlTest.Fixture f,long id,AfterSalesSolutionRequest draft) {
         var plan=f.admin(()->f.service.saveSolution(id,draft)).getSolutionVersion();f.admin(()->f.service.confirmSolution(id,plan.id()));
@@ -61,14 +62,14 @@ class AfterSalesPlanMysqlTest {
             var allocated=f.admin(()->f.service.addShipment(id,shipment(first,1)));
             f.admin(()->f.service.review(id,new AfterSalesReviewRequest("REVISE","更新维修说明",first.id())));
             assertCode("INVALID_STATUS_TRANSITION",()->f.admin(()->f.service.review(id,new AfterSalesReviewRequest("REJECT","不再处理"))));
-            assertCode("INVALID_STATUS_TRANSITION",()->f.admin(()->f.service.dispatchShipment(id,allocated.getId(),new AfterSalesDispatchRequest("DHL","P1"))));
+            assertCode("INVALID_STATUS_TRANSITION",()->f.admin(()->f.service.dispatchShipment(id,allocated.getId(),new AfterSalesDispatchRequest("DHL","P1",AfterSalesPlanMysqlTest.shipping(),1))));
             var second=approve(f,id,plan(first.id(),"Motor",2,false));
             assertThat(second.revision()).isEqualTo(2);assertThat(second.parts().getFirst().allocatedQty()).isEqualTo(1);
             assertCode("AFTER_SALES_APPROVED_PART_REQUIRED",()->f.admin(()->f.service.addShipment(id,shipment(first,1))));
-            f.admin(()->f.service.dispatchShipment(id,allocated.getId(),new AfterSalesDispatchRequest("DHL","P1")));
+            f.admin(()->f.service.dispatchShipment(id,allocated.getId(),new AfterSalesDispatchRequest("DHL","P1",AfterSalesPlanMysqlTest.shipping(),1)));
             assertCode("AFTER_SALES_SHIPMENT_PENDING",()->f.admin(()->f.service.resolve(id)));
             var next=f.admin(()->f.service.addShipment(id,shipment(second,1)));
-            f.admin(()->f.service.dispatchShipment(id,next.getId(),new AfterSalesDispatchRequest("DHL","P2")));
+            f.admin(()->f.service.dispatchShipment(id,next.getId(),new AfterSalesDispatchRequest("DHL","P2",AfterSalesPlanMysqlTest.shipping(),1)));
             assertThat(f.admin(()->f.service.resolve(id)).getStatus()).isEqualTo("RESOLVED");
             assertThat(f.mapper.selectShipmentById(allocated.getId()).getSolutionItemId()).isEqualTo(first.parts().getFirst().id());
             assertThat(f.mapper.selectShipmentById(next.getId()).getSolutionItemId()).isEqualTo(second.parts().getFirst().id());
@@ -96,7 +97,7 @@ class AfterSalesPlanMysqlTest {
             assertCode("FORBIDDEN",()->f.agent(()->f.service.reconcileShipment(id,old.getId(),p.parts().getFirst().id(),"check")));
             f.admin(()->f.service.reconcileShipment(id,old.getId(),p.parts().getFirst().id(),"核对原始补发单，明确为同款电机"));
             f.admin(()->f.service.confirmSolution(id,p.id()));f.admin(()->f.service.review(id,new AfterSalesReviewRequest("APPROVE",null,p.id())));
-            f.admin(()->f.service.dispatchShipment(id,old.getId(),new AfterSalesDispatchRequest("DHL","LEGACY")));
+            f.admin(()->f.service.dispatchShipment(id,old.getId(),new AfterSalesDispatchRequest("DHL","LEGACY",AfterSalesPlanMysqlTest.shipping(),1)));
             var reconciled=f.mapper.selectShipmentById(old.getId());assertThat(reconciled.getApprovalSource()).isEqualTo("LEGACY_REVIEWED");
             assertThat(reconciled.getCreatedAt()).isEqualTo(old.getCreatedAt());assertThat(reconciled.getPartName()).isEqualTo("historic motor");
             assertThat(f.admin(()->f.service.get(id)).getSolutionVersion().parts().getFirst().allocatedQty()).isEqualTo(1);

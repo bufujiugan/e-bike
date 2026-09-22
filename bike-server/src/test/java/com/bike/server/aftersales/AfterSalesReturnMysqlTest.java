@@ -23,7 +23,7 @@ class AfterSalesReturnMysqlTest {
         return id;
     }
     private static AfterSalesShipmentView replacement(AfterSalesMysqlTest.Fixture f,long id) {
-        return f.admin(()->f.service.addShipment(id,new AfterSalesShipmentRequest("motor",1,"DHL","OUTGOING-TEST",true,f.service.get(id).getSolutionVersion().parts().getFirst().id())));
+        return f.admin(()->f.service.addShipment(id,new AfterSalesShipmentRequest("motor",1,"DHL","OUTGOING-TEST",true,f.service.get(id).getSolutionVersion().parts().getFirst().id(),AfterSalesPlanMysqlTest.shipping())));
     }
 
     @Test void completeReturnKeepsIndependentPartsAndBlocksPrematureCaseArchive() throws Exception {

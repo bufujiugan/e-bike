@@ -11,7 +11,7 @@ export type CaseDraft = {
   contact: CompanyContact | null; endCustomerPurchaseDate: string | null;
 }
 export type CaseMessage = { id: number; caseId: number; authorId: number | null; visibility: 'CUSTOMER' | 'INTERNAL'; body: string; createdAt: string }
-export type CaseShipment = { id: number; caseId: number; partName: string; quantity: number; carrier: string | null; trackingNo: string | null; status: 'PLANNED' | 'SHIPPED'; shippedAt: string | null; oldPartReturnRequired: boolean; oldPartReturnReceivedAt: string | null; createdAt: string; solutionItemId: number | null; approvalSource: 'VERSIONED' | 'LEGACY_UNLINKED' | 'LEGACY_REVIEWED' }
+export type CaseShipment = { id: number; caseId: number; partName: string; quantity: number; carrier: string | null; trackingNo: string | null; status: 'PLANNED' | 'SHIPPED' | 'CANCELLED'; shippedAt: string | null; oldPartReturnRequired: boolean; oldPartReturnReceivedAt: string | null; createdAt: string; solutionItemId: number | null; approvalSource: 'VERSIONED' | 'LEGACY_UNLINKED' | 'LEGACY_REVIEWED'; revision: number; partCode: string | null; warehouseName: string | null; recipient: string | null; phone: string | null; countryCode: string | null; region: string | null; city: string | null; addressLine: string | null; postalCode: string | null; expectedArrivalDate: string | null; logisticsStatus: 'IN_TRANSIT' | 'EXCEPTION' | 'DELIVERED' | null; logisticsNote: string | null; deliveredAt: string | null; cancelledReason: string | null }
 export type CaseHistory = { id: number; action: string; operatorName: string; operationTime: string }
 export type CaseAttachment = { id: number; caseId: number; messageId: number | null; fileName: string; contentType: string; fileSize: number; sha256: string; visibility: 'CUSTOMER' | 'INTERNAL'; category: string; uploadedBy: number | null; createdAt: string }
 export type AfterSalesCase = CaseDraft & {
@@ -27,13 +27,17 @@ export type SolutionPart = { partCode: string; partName: string; quantity: numbe
 export type SolutionItem = Omit<SolutionPart, 'unitCharge'> & { unitCharge: string | number | null; id: number; versionId: number; allocatedQty: number }
 export type SolutionDraft = { technicalJudgment: string; solution: string; internalNote: string; previousVersionId: number | null; faultCause: string; customerActions: string; repairNotes: string; warrantyStatus: string; currency: string; chargeReason: string; parts: SolutionPart[] }
 export type SolutionVersion = { id: number; revision: number; status: 'DRAFT' | 'CONFIRMED' | 'APPROVED' | 'SUPERSEDED' | 'LEGACY'; document: SolutionDraft; parts: SolutionItem[]; createdAt: string; confirmedAt: string | null; approvedAt: string | null }
-export type ShipmentDraft = { partName: string; quantity: number; carrier: string; trackingNo: string; oldPartReturnRequired: boolean; solutionItemId: number | null }
+export type ShippingDetails = { warehouseName: string; recipient: string; phone: string; countryCode: string; region: string; city: string; addressLine: string; postalCode: string; expectedArrivalDate: string | null; shippedAt: string | null }
+export const blankShipping = (): ShippingDetails => ({ warehouseName: '', recipient: '', phone: '', countryCode: '', region: '', city: '', addressLine: '', postalCode: '', expectedArrivalDate: null, shippedAt: null })
+export function shippingFromShipment(row: CaseShipment): ShippingDetails { const result = blankShipping(); for (const key of Object.keys(result) as (keyof ShippingDetails)[]) Object.assign(result, { [key]: row[key] ?? result[key] }); return result }
+export type LogisticsRequest = { revision: number; action: 'SAVE' | 'TRACK' | 'CORRECT' | 'CANCEL'; shipping?: ShippingDetails; carrier?: string; trackingNo?: string; logisticsStatus?: string; note: string; expectedArrivalDate?: string | null }
+export type ShipmentDraft = { partName: string; quantity: number; carrier: string; trackingNo: string; oldPartReturnRequired: boolean; solutionItemId: number | null; shipping?: ShippingDetails }
 export type CaseOption = { id: number; name: string }
 export type CaseOptions = { customers: CaseOption[]; agents: CaseOption[]; models: CaseOption[] }
 export type CaseQueue = '' | 'PENDING' | 'REVIEW' | 'WAITING_CUSTOMER' | 'PROCESSING' | 'WAITING_SHIPMENT' | 'SHIPPED' | 'COMPLETED' | 'COMPLETED_MONTH'
 export type CaseFilters = { companyName: string; contactName: string; frameSn: string; modelName: string; faultType: string; countryCode: string; assigneeName: string; createdFrom: string | null; createdTo: string | null; queue: CaseQueue }
 export type CaseDashboard = { total: number; pending: number; review: number; waitingCustomer: number; processing: number; waitingShipment: number; shipped: number; completed: number; completedThisMonth: number }
-export type ReturnStatus = 'REQUIRED' | 'WAITING_CUSTOMER' | 'IN_TRANSIT' | 'RECEIVED' | 'INSPECTED' | 'SCRAPPED' | 'COMPLETED' | 'WAIVED'
+export type ReturnStatus = 'REQUIRED' | 'WAITING_CUSTOMER' | 'IN_TRANSIT' | 'RECEIVED' | 'INSPECTED' | 'SCRAPPED' | 'COMPLETED' | 'WAIVED' | 'CANCELLED'
 export type ReturnAction = 'REQUEST' | 'SEND' | 'RECEIVE' | 'INSPECT' | 'SCRAP' | 'COMPLETE' | 'WAIVE'
 export type CaseReturn = { shipmentId: number; caseId: number; partName: string; quantity: number; status: ReturnStatus; revision: number; warehouseName: string | null; recipient: string | null; phone: string | null; addressLine: string | null; postalCode: string | null; carrier: string | null; trackingNo: string | null; sentAt: string | null; receivedAt: string | null; inspectedAt: string | null; inspectionResult: string | null; dispositionNote: string | null; completedAt: string | null; updatedAt: string }
 export type ReturnRequest = { revision: number; action: ReturnAction; warehouseName: string; recipient: string; phone: string; addressLine: string; postalCode: string; carrier: string; trackingNo: string; inspectionResult: string; reason: string }
@@ -81,7 +85,8 @@ export const afterSales = {
   process: async (id: number) => data(await api.post<Envelope<AfterSalesCase>>(`${endpoint}/${id}/process`)),
   message: async (id: number, body: string, visibility: 'CUSTOMER' | 'INTERNAL') => data(await api.post<Envelope<CaseMessage>>(`${endpoint}/${id}/messages`, { body, visibility })),
   shipment: async (id: number, draft: ShipmentDraft) => data(await api.post<Envelope<CaseShipment>>(`${endpoint}/${id}/shipments`, draft)),
-  dispatch: async (id: number, shipmentId: number, carrier: string, trackingNo: string) => data(await api.post<Envelope<CaseShipment>>(`${endpoint}/${id}/shipments/${shipmentId}/dispatch`, { carrier, trackingNo })),
+  dispatch: async (id: number, shipmentId: number, carrier: string, trackingNo: string, shipping: ShippingDetails, revision: number) => data(await api.post<Envelope<CaseShipment>>(`${endpoint}/${id}/shipments/${shipmentId}/dispatch`, { carrier, trackingNo, shipping, revision })),
+  logistics: async (id: number, shipmentId: number, request: LogisticsRequest) => data(await api.post<Envelope<CaseShipment>>(`${endpoint}/${id}/shipments/${shipmentId}/logistics`, request)),
   resolve: async (id: number) => data(await api.post<Envelope<AfterSalesCase>>(`${endpoint}/${id}/resolve`)),
   close: async (id: number) => data(await api.post<Envelope<AfterSalesCase>>(`${endpoint}/${id}/close`)),
 }
