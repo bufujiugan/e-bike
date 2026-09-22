@@ -12,7 +12,8 @@ public class AfterSalesController {
     private final AfterSalesService service;
     public AfterSalesController(AfterSalesService service){this.service=service;}
     @GetMapping("/options") public ApiResponse<java.util.Map<String, List<AfterSalesReferenceOption>>> options(){return ApiResponse.success("查询成功",service.options());}
-    @GetMapping public ApiResponse<PageResponse<AfterSalesCaseView>> list(@RequestParam(required=false) String keyword,@RequestParam(required=false) String status,@RequestParam(defaultValue="1") long page,@RequestParam(defaultValue="20") long pageSize){return ApiResponse.success("查询成功",service.list(keyword,status,page,pageSize));}
+    @GetMapping public ApiResponse<PageResponse<AfterSalesCaseView>> list(@ModelAttribute AfterSalesCaseFilter filter,@RequestParam(defaultValue="1") long page,@RequestParam(defaultValue="20") long pageSize){return ApiResponse.success("查询成功",service.list(filter,page,pageSize));}
+    @GetMapping("/dashboard") public ApiResponse<AfterSalesDashboardView> dashboard(@ModelAttribute AfterSalesCaseFilter filter){return ApiResponse.success("查询成功",service.dashboard(filter));}
     @GetMapping("/{id}") public ApiResponse<AfterSalesCaseView> get(@PathVariable long id){return ApiResponse.success("查询成功",service.get(id));}
     @PostMapping public ApiResponse<AfterSalesCaseView> create(@Valid @RequestBody AfterSalesCaseCreateRequest request){return ApiResponse.success("草稿已创建",service.create(request));}
     @PutMapping("/{id}") public ApiResponse<AfterSalesCaseView> update(@PathVariable long id,@Valid @RequestBody AfterSalesCaseCreateRequest request){return ApiResponse.success("案例已更新",service.update(id,request));}

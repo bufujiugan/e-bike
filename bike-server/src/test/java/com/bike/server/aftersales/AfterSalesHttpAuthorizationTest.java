@@ -27,6 +27,31 @@ class AfterSalesHttpAuthorizationTest {
     @MockitoBean JwtTokenService tokens;
     @MockitoBean TokenRevocationMapper revocations;
 
+    @Test void advancedQueryBindsDatesAndDashboardUsesTheSameNormalizedCriteria() throws Exception {
+        when(mapper.selectFilteredPage(any(), isNull(), isNull(), any(), anyLong(), anyLong())).thenReturn(List.of());
+        when(mapper.selectDashboard(any(), isNull(), isNull(), any())).thenReturn(new AfterSalesDashboardView(0,0,0,0,0,0,0,0,0));
+        mvc.perform(get("/api/after-sales/cases").with(user("admin").roles("SUPER_ADMIN"))
+            .param("companyName"," Bikes ").param("countryCode","gb").param("createdTo","2026-09-20").param("queue","WAITING_SHIPMENT"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value(0));
+        verify(mapper).selectFilteredPage(argThat(f -> "Bikes".equals(f.companyName()) && "GB".equals(f.countryCode())
+            && java.time.LocalDate.of(2026,9,21).equals(f.createdBefore()) && "WAITING_SHIPMENT".equals(f.queue())), isNull(), isNull(), any(), eq(0L), eq(20L));
+        mvc.perform(get("/api/after-sales/cases/dashboard").with(user("admin").roles("SUPER_ADMIN"))
+            .param("status","CLOSED").param("queue","COMPLETED_MONTH").param("countryCode","gb"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value(0));
+        verify(mapper).selectDashboard(argThat(f -> f.status()==null && f.queue()==null && "GB".equals(f.countryCode())),isNull(),isNull(),any());
+    }
+
+    @Test void dashboardRejectsPdaMissingReadPermissionAndMalformedDates() throws Exception {
+        mvc.perform(get("/api/after-sales/cases/dashboard")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/after-sales/cases/dashboard").with(user("pda").roles("PDA_OPERATOR","SUPER_ADMIN")))
+            .andExpect(status().isForbidden());
+        mvc.perform(get("/api/after-sales/cases/dashboard").with(user("reader").roles("WEB_OPERATOR")))
+            .andExpect(status().isForbidden());
+        mvc.perform(get("/api/after-sales/cases").with(user("admin").roles("SUPER_ADMIN")).param("createdTo","not-a-date"))
+            .andExpect(status().isBadRequest());
+        verifyNoInteractions(mapper);
+    }
+
     @Test void anonymousAndPdaCannotReadAfterSales() throws Exception {
         mvc.perform(get("/api/after-sales/cases")).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/after-sales/cases").with(user("pda").authorities(

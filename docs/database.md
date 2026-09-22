@@ -56,3 +56,9 @@ V24 新增 `bike_pi`、`bike_pi_item`、`bike_pi_payment`、`bike_pi_logistics`�
 
 有效占用的统一 SQL 条件为有效订单状态且 `hold_mode='PAID'`，或 `hold_mode='TIMED' AND expires_at>NOW(3)`；数量仍为 `GREATEST(reserved_qty-shipped_qty,0)`。到期任务仅扫描 `TIMED`。收款转保留使用获得互斥锁后的独立条件更新，再次以数据库当前时刻检查期限；到期后登记到账不会恢复库存。锁顺序为库存互斥锁、订单/占用、PI、收款记录，相关业务写入和审计同事务。
 
+
+## V34 售后旧件退回
+
+新增 `bike_after_sales_return`，以补发条目 shipment_id 为主键，记录各配件独立的退回仓库/收件人/地址快照、客户运单、收件/检测/完成时间、检测结论、处置理由和递增 revision。新建要求退回的补发条目时，同事务创建 REQUIRED 记录；全部动作与案例行锁、版本检查和审计绑定。归档案例时所有要求退回条目必须已完成或有审核豁免。
+
+迁移仅对旧 `old_part_return_required=1` 的条目创建记录：已有真实收件时间的保留为 RECEIVED，其余为 REQUIRED。不推测旧退回地址、运单或操作者；无需退回的条目不生成记录。历史已归档案例仍保持归档，不自动重开。V34 四份迁移 SHA256 为 `8E44A43E68A3413F835AA7DDDADA28F73CA402D8FA8B1D249F08BDBB92B5657E`，已在独立全新库、V16升级库及隔离应用库执行，后续不得修改。

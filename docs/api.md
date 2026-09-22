@@ -112,6 +112,28 @@ V22 增加 PRODUCTION_MANAGE 生产管理功能权限。生产管理写接口按
 案例创建/编辑新增可选 `contact` 联系资料对象与 `endCustomerPurchaseDate`。创建时未提交 contact 则复制公司默认资料；案例中的联系人和地址不会随公司资料更新而改变。外部账号即便误授 SCOPE_ALL、公司管理或派单权限也仍只读自身公司且不能执行内部管理动作。只读销售撤销负责关系后，下次请求即重新检查列表、详情、历史、附件和下载范围。V29 代码与测试验收状态以售后实施记录为准。
 
 
+## 售后查询、看板及旧件退回（V34）
+
+`GET /api/after-sales/cases` 新增可选筛选：`companyName`、`contactName`、`frameSn`、`modelName`、`faultType`、`countryCode`（两位国家代码）、`assigneeName`、`createdFrom`、`createdTo`（YYYY-MM-DD，含结束当日）、`queue`。名称为包含查询，`%`、`_` 按字面字符匹配。公司/销售范围从登录身份计算，不能用请求参数扩大。
+
+`GET /api/after-sales/cases/dashboard` 接受相同筛选，返回 total、pending、review、waitingCustomer、processing、waitingShipment、shipped、completed、completedThisMonth。看板忽略 status 与 queue，保留其他条件。对应列表快捷分类为 PENDING、REVIEW、WAITING_CUSTOMER、PROCESSING、WAITING_SHIPMENT、SHIPPED、COMPLETED、COMPLETED_MONTH。待发货只计有真实 PLANNED 配件的有效案例，每个案例只计一次；完成以 CLOSED 为准，本月使用服务器日历月的 closed_at 区间，RESOLVED 尚未归档不计完成。
+
+`GET /api/after-sales/cases/{caseId}/returns` 返回每项需退回配件的独立处理记录和 revision。无需退回的补发条目不建退回记录。
+
+`POST /api/after-sales/cases/{caseId}/returns/{shipmentId}` 必须提交当前 `revision` 和 `action`：
+
+| action | 权限与前置状态 | 必填业务资料 |
+| --- | --- | --- |
+| REQUEST | 内部 AFTER_SALES_LOGISTICS；REQUIRED / WAITING_CUSTOMER | warehouseName、recipient、phone、addressLine、postalCode |
+| SEND | 本公司外部 AFTER_SALES_WRITE，或内部 AFTER_SALES_REVIEW / AFTER_SALES_LOGISTICS；WAITING_CUSTOMER | carrier、trackingNo |
+| RECEIVE | 内部 AFTER_SALES_LOGISTICS；IN_TRANSIT | 核对实物后确认 |
+| INSPECT | 内部 AFTER_SALES_TECH；RECEIVED | inspectionResult（客户可见） |
+| SCRAP | 内部 AFTER_SALES_REVIEW；INSPECTED | reason（客户可见） |
+| COMPLETE | 内部 AFTER_SALES_REVIEW；INSPECTED / SCRAPPED | reason（客户可见） |
+| WAIVE | 内部 AFTER_SALES_REVIEW；REQUIRED / WAITING_CUSTOMER | reason（客户可见），不允许豁免已经寄出的旧件 |
+
+所有动作还须 AFTER_SALES_READ 和案例范围。外部误授内部权限仍不能执行内部动作。案例 DRAFT/SUBMITTED/UNDER_REVIEW/NEEDS_INFO/CLOSED/REJECTED 时禁止退回写操作。过期 revision 返回 `AFTER_SALES_RETURN_CONFLICT`，刷新后按实际状态继续；无匹配条目返回 `AFTER_SALES_RETURN_NOT_FOUND`。案例归档前检查所有要求退回的条目已 COMPLETED 或 WAIVED，否则返回 `AFTER_SALES_RETURN_PENDING`。案例行锁、版本更新、收件兼容时间戳与审计同事务提交；审计失败全部回滚。
+
 ## 历史转换对账
 
 `GET /api/inventory-locks/legacy-conversions?page=1&pageSize=20` 供内部 Web 的订单读取人员只读查询旧版锁定记录：`converted_qty>0` 且没有 `bike_order_reservation` 来源关联的记录会被列出。该接口分页并要求内部 Web、`ORDER_READ`；代理商和 PDA 拒绝访问。它只提供待人工核对的锁定号、代理商、车型、数量、状态和备注，不自动猜测客户、不自动补建订单、不修改库存。

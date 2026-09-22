@@ -6,8 +6,9 @@ import java.util.List;
 
 @Mapper
 public interface AfterSalesMapper {
-    List<AfterSalesCaseView> selectPage(@Param("keyword") String keyword, @Param("status") String status, @Param("agentId") Long agentId, @Param("offset") long offset, @Param("limit") long limit);
-    long count(@Param("keyword") String keyword, @Param("status") String status, @Param("agentId") Long agentId);
+    List<AfterSalesCaseView> selectFilteredPage(@Param("filter") AfterSalesCaseFilter filter, @Param("agentId") Long agentId, @Param("salesUserId") Long salesUserId, @Param("monthStart") java.time.LocalDate monthStart, @Param("offset") long offset, @Param("limit") long limit);
+    long countFiltered(@Param("filter") AfterSalesCaseFilter filter, @Param("agentId") Long agentId, @Param("salesUserId") Long salesUserId, @Param("monthStart") java.time.LocalDate monthStart);
+    AfterSalesDashboardView selectDashboard(@Param("filter") AfterSalesCaseFilter filter, @Param("agentId") Long agentId, @Param("salesUserId") Long salesUserId, @Param("monthStart") java.time.LocalDate monthStart);
     AfterSalesCaseView selectById(@Param("id") long id);
     AfterSalesCaseView selectForUpdate(@Param("id") long id);
     AfterSalesVehicleReference selectVehicleReference(@Param("id") long id);
@@ -30,6 +31,12 @@ public interface AfterSalesMapper {
     AfterSalesShipmentView selectShipmentById(@Param("id") long id);
     int dispatchShipment(@Param("caseId") long caseId, @Param("id") long id, @Param("request") AfterSalesDispatchRequest request);
     long countPendingShipments(@Param("caseId") long caseId);
+    int insertRequiredReturn(@Param("shipmentId") long shipmentId);
+    List<AfterSalesReturnView> selectReturns(@Param("caseId") long caseId);
+    AfterSalesReturnView selectReturn(@Param("shipmentId") long shipmentId);
+    int updateReturn(@Param("caseId") long caseId,@Param("shipmentId") long shipmentId,@Param("status") String status,@Param("request") AfterSalesReturnRequest request,@Param("operatorId") Long operatorId);
+    int markReturnReceived(@Param("caseId") long caseId,@Param("shipmentId") long shipmentId);
+    long countPendingReturns(@Param("caseId") long caseId);
     int touchCase(@Param("id") long id, @Param("operatorId") Long operatorId);
     int insertAudit(@Param("caseId") long caseId, @Param("action") String action, @Param("operatorId") Long operatorId,
                     @Param("operatorName") String operatorName, @Param("beforeData") String beforeData,
@@ -44,8 +51,6 @@ public interface AfterSalesMapper {
         @Param("uploadedBy") Long uploadedBy);
     Long selectInsertedId();
     int countSalesAgent(@Param("userId") long userId, @Param("agentId") long agentId);
-    List<AfterSalesCaseView> selectSalesPage(@Param("keyword") String keyword, @Param("status") String status, @Param("userId") long userId, @Param("offset") long offset, @Param("limit") long limit);
-    long countSalesPage(@Param("keyword") String keyword, @Param("status") String status, @Param("userId") long userId);
     List<AfterSalesCompanyView> selectCompanies(@Param("agentId") Long agentId, @Param("salesUserId") Long salesUserId);
     AfterSalesCompanyView selectCompany(@Param("agentId") long agentId);
     Long lockAgent(@Param("agentId") long agentId);

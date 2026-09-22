@@ -26,6 +26,13 @@ export type SolutionDraft = { technicalJudgment: string; solution: string; inter
 export type ShipmentDraft = { partName: string; quantity: number; carrier: string; trackingNo: string; oldPartReturnRequired: boolean }
 export type CaseOption = { id: number; name: string }
 export type CaseOptions = { customers: CaseOption[]; agents: CaseOption[]; models: CaseOption[] }
+export type CaseQueue = '' | 'PENDING' | 'REVIEW' | 'WAITING_CUSTOMER' | 'PROCESSING' | 'WAITING_SHIPMENT' | 'SHIPPED' | 'COMPLETED' | 'COMPLETED_MONTH'
+export type CaseFilters = { companyName: string; contactName: string; frameSn: string; modelName: string; faultType: string; countryCode: string; assigneeName: string; createdFrom: string | null; createdTo: string | null; queue: CaseQueue }
+export type CaseDashboard = { total: number; pending: number; review: number; waitingCustomer: number; processing: number; waitingShipment: number; shipped: number; completed: number; completedThisMonth: number }
+export type ReturnStatus = 'REQUIRED' | 'WAITING_CUSTOMER' | 'IN_TRANSIT' | 'RECEIVED' | 'INSPECTED' | 'SCRAPPED' | 'COMPLETED' | 'WAIVED'
+export type ReturnAction = 'REQUEST' | 'SEND' | 'RECEIVE' | 'INSPECT' | 'SCRAP' | 'COMPLETE' | 'WAIVE'
+export type CaseReturn = { shipmentId: number; caseId: number; partName: string; quantity: number; status: ReturnStatus; revision: number; warehouseName: string | null; recipient: string | null; phone: string | null; addressLine: string | null; postalCode: string | null; carrier: string | null; trackingNo: string | null; sentAt: string | null; receivedAt: string | null; inspectedAt: string | null; inspectionResult: string | null; dispositionNote: string | null; completedAt: string | null; updatedAt: string }
+export type ReturnRequest = { revision: number; action: ReturnAction; warehouseName: string; recipient: string; phone: string; addressLine: string; postalCode: string; carrier: string; trackingNo: string; inspectionResult: string; reason: string }
 type Envelope<T> = { code: string; message: string; data: T }
 type Page<T> = { records: T[]; total: number; page: number; pageSize: number }
 const endpoint = '/api/after-sales/cases'
@@ -38,6 +45,8 @@ export function afterSalesError(error: unknown): string {
   return error instanceof Error ? error.message : '售后操作失败'
 }
 export const afterSales = {
+  returns: async (id: number) => data(await api.get<Envelope<CaseReturn[]>>(`${endpoint}/${id}/returns`)),
+  returnAction: async (id: number, shipmentId: number, request: ReturnRequest) => data(await api.post<Envelope<CaseReturn>>(`${endpoint}/${id}/returns/${shipmentId}`, request)),
   attachments: async (id: number) => data(await api.get<Envelope<CaseAttachment[]>>(`${endpoint}/${id}/attachments`)),
   upload: async (id: number, files: File[], visibility: 'CUSTOMER' | 'INTERNAL', category: string, messageId?: number) => {
     const form = new FormData(); files.forEach(file => form.append('files', file))
@@ -54,7 +63,8 @@ export const afterSales = {
     }
   },
   options: async () => data(await api.get<Envelope<CaseOptions>>(`${endpoint}/options`)),
-  list: async (keyword: string, status: string, page: number) => data(await api.get<Envelope<Page<AfterSalesCase>>>(endpoint, { params: { keyword, status, page, pageSize: 20 } })),
+  list: async (keyword: string, status: string, page: number, filters?: CaseFilters) => data(await api.get<Envelope<Page<AfterSalesCase>>>(endpoint, { params: { ...filters, keyword, status, page, pageSize: 20 } })),
+  dashboard: async (keyword: string, filters: CaseFilters) => data(await api.get<Envelope<CaseDashboard>>(`${endpoint}/dashboard`, { params: { ...filters, keyword } })),
   get: async (id: number) => data(await api.get<Envelope<AfterSalesCase>>(`${endpoint}/${id}`)),
   create: async (draft: CaseDraft) => data(await api.post<Envelope<AfterSalesCase>>(endpoint, draft)),
   update: async (id: number, draft: CaseDraft) => data(await api.put<Envelope<AfterSalesCase>>(`${endpoint}/${id}`, draft)),

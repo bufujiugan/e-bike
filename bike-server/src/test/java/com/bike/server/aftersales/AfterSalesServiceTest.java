@@ -37,7 +37,7 @@ class AfterSalesServiceTest {
         verify(mapper).selectMessages(1, false);
         verify(mapper, never()).selectMessages(1, true);
         row.setInternalNote("list must also be redacted");
-        when(mapper.selectPage(null, null, 8L, 0, 20)).thenReturn(List.of(row));
+        when(mapper.selectFilteredPage(any(), eq(8L), isNull(), any(), eq(0L), eq(20L))).thenReturn(List.of(row));
         assertThat(service.list(null, null, 1, 20).records().getFirst().getInternalNote()).isNull();
     }
 

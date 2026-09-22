@@ -10,7 +10,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 /** 仅针对两个新建的专用空库，禁止清库或重复覆盖已有业务数据。 */
 @EnabledIfEnvironmentVariable(named="BIKE_MIGRATION_CLEAN_URL",matches=".+")
 class MigrationMysqlTest {
-  private static final int LATEST_VERSION = 33;
+  private static final int LATEST_VERSION = 34;
   Flyway flyway(String url,String target) {
     assertThat(url).contains("/bike_migration_");
     var config=Flyway.configure().dataSource(url,System.getenv("BIKE_MYSQL_TEST_USER"),System.getenv("BIKE_MYSQL_TEST_PASSWORD"))
@@ -86,10 +86,17 @@ class MigrationMysqlTest {
   private void insertLegacyAfterSales(Statement sql)throws Exception {
     sql.executeUpdate("UPDATE bike_agent SET contact_name='迁移联系人',contact_phone='migration-phone' WHERE id=9001");
     sql.executeUpdate("INSERT INTO bike_after_sales_case(id,case_no,agent_id,description,assignee_id) VALUES(9001,'MIGRATE-CASE',9001,'历史案例快照验证',1)");
+    sql.executeUpdate("INSERT INTO bike_after_sales_shipment(id,case_id,part_name,quantity,old_part_return_required,old_part_return_received_at) VALUES(9001,9001,'待退回电机',1,1,NULL),(9002,9001,'已收到电池',2,1,'2025-03-01 12:00:00'),(9003,9001,'无需退回仪表',1,0,NULL)");
     sql.executeUpdate("INSERT INTO bike_sys_role(role_code,role_name,enabled) VALUES('MIGRATE_READ_ONLY','迁移只读角色',1),('MIGRATE_TECH','迁移技术角色',1)");
     sql.executeUpdate("INSERT INTO bike_sys_role_permission(role_id,permission_id) SELECT r.id,p.id FROM bike_sys_role r JOIN bike_sys_permission p ON (r.role_code='MIGRATE_READ_ONLY' AND p.permission_code='AFTER_SALES_READ') OR (r.role_code='MIGRATE_TECH' AND p.permission_code='AFTER_SALES_TECH')");
   }
   private void verifyLegacyAfterSales(Statement sql)throws Exception {
+    try(var result=sql.executeQuery("SELECT shipment_id,status,received_at,warehouse_name,tracking_no,updated_by FROM bike_after_sales_return ORDER BY shipment_id")) {
+      assertThat(result.next()).isTrue();assertThat(result.getLong(1)).isEqualTo(9001);assertThat(result.getString(2)).isEqualTo("REQUIRED");assertThat(result.getObject(3)).isNull();
+      for(int n=4;n<=6;n++)assertThat(result.getObject(n)).isNull();
+      assertThat(result.next()).isTrue();assertThat(result.getLong(1)).isEqualTo(9002);assertThat(result.getString(2)).isEqualTo("RECEIVED");assertThat(result.getTimestamp(3).toLocalDateTime()).isEqualTo(java.time.LocalDateTime.of(2025,3,1,12,0));
+      for(int n=4;n<=6;n++)assertThat(result.getObject(n)).isNull();assertThat(result.next()).isFalse();
+    }
     try(var result=sql.executeQuery("SELECT company_name,contact_name,contact_phone,contact_email,snapshot_source,assignee_name FROM bike_after_sales_case_contact WHERE case_id=9001")) {
       assertThat(result.next()).isTrue();assertThat(result.getString(1)).isEqualTo("迁移保留代理商");
       assertThat(result.getString(2)).isEqualTo("迁移联系人");assertThat(result.getString(3)).isEqualTo("migration-phone");
@@ -110,6 +117,7 @@ class MigrationMysqlTest {
     try(var result=sql.executeQuery("SELECT COUNT(*) FROM bike_sys_role_permission rp JOIN bike_sys_permission p ON p.id=rp.permission_id WHERE p.permission_code='PRODUCTION_MANAGE'")){result.next();assertThat(result.getInt(1)).isZero();}
   }
   private void verifyAfterSalesAndPiSchema(Statement sql)throws Exception {
+    try(var result=sql.executeQuery("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='bike_after_sales_return' AND column_comment!=''")){result.next();assertThat(result.getInt(1)).isEqualTo(20);}
     for(String table:new String[]{"bike_pi_logistics_history","bike_pi_logistics_request","bike_stock_out_batch","bike_stock_out_batch_item","bike_pi_series","bike_pi_order_link","bike_pi_conversion_request","bike_pi_payment_attachment","bike_order_reservation_item","bike_sku_lock_request","bike_after_sales_company_profile","bike_after_sales_sales_agent","bike_after_sales_case_contact"}) {
       try(var result=sql.executeQuery("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='"+table+"'")){result.next();assertThat(result.getInt(1)).as(table).isEqualTo(1);}
       try(var result=sql.executeQuery("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='"+table+"' AND column_comment=''")){result.next();assertThat(result.getInt(1)).as(table+"字段注释").isZero();}

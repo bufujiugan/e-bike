@@ -61,12 +61,15 @@ class AfterSalesMysqlTest {
             assertThat(sent.getShippedAt()).isNotNull();
             assertThat(f.agent(() -> f.service.get(id)).getStatus()).isEqualTo("SHIPPED");
             f.admin(() -> f.service.resolve(id));
+            assertCode("AFTER_SALES_RETURN_PENDING", () -> f.agent(() -> f.service.close(id)));
+            var returns = new AfterSalesReturnService(f.mapper);
+            f.admin(() -> returns.act(id,shipment.getId(),AfterSalesReturnMysqlTest.action(1,"WAIVE")));
             var closed = f.agent(() -> f.service.close(id));
             assertThat(closed.getStatus()).isEqualTo("CLOSED");
             assertThat(closed.getClosedAt()).isNotNull();
             assertCode("INVALID_STATUS_TRANSITION", () -> f.admin(() -> f.service.review(id, new AfterSalesReviewRequest("START", null))));
             assertCode("INVALID_STATUS_TRANSITION", () -> f.agent(() -> f.service.addMessage(id, new AfterSalesMessageRequest("too late", "CUSTOMER"))));
-            assertThat(f.admin(() -> f.service.history(id))).hasSize(12);
+            assertThat(f.admin(() -> f.service.history(id))).hasSize(13);
             assertCode("FORBIDDEN", () -> f.as("AGENT", 99L, () -> f.service.get(id), "ROLE_WEB_AGENT", "PERM_AFTER_SALES_READ"));
             assertThat(f.as("AGENT", 99L, () -> f.service.list(null, null, 1, 20), "ROLE_WEB_AGENT", "PERM_AFTER_SALES_READ").total()).isZero();
         }
@@ -227,6 +230,11 @@ class AfterSalesMysqlTest {
                     while (matcher.find()) { sql(matcher.group()); tables.add(matcher.group(1)); }
                     matcher = Pattern.compile("(?s)CREATE INDEX .*?;").matcher(ddl);
                     while (matcher.find()) sql(matcher.group());
+                }
+                try (var input = Resources.getResourceAsStream("db/migration/V34__after_sales_old_part_returns.sql")) {
+                    String ddl = new String(input.readAllBytes(), StandardCharsets.UTF_8).replace("bike_", prefix);
+                    var matcher = Pattern.compile("(?s)CREATE TABLE ([a-z0-9_]+).*?;").matcher(ddl);
+                    while (matcher.find()) { sql(matcher.group()); tables.add(matcher.group(1)); }
                 }
                 sql("INSERT INTO " + prefix + "customer VALUES(44,'Customer A','ENABLED','Customer contact','4400'),(45,'Customer B','ENABLED',NULL,NULL)");
                 sql("INSERT INTO " + prefix + "agent VALUES(8,'Agent A','ENABLED','Agent contact','8000'),(99,'Agent B','ENABLED','Other contact','9900')");

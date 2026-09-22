@@ -18,8 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AfterSalesServiceImpl implements AfterSalesService {
     private static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules();
-    private static final Set<String> STATUSES = Set.of("DRAFT", "SUBMITTED", "UNDER_REVIEW", "NEEDS_INFO",
-        "APPROVED", "IN_PROGRESS", "WAITING_PARTS", "SHIPPED", "RESOLVED", "CLOSED", "REJECTED");
     private static final Set<String> WARRANTY = Set.of("PENDING", "UNKNOWN", "IN_WARRANTY", "OUT_OF_WARRANTY");
     private final AfterSalesMapper mapper;
 
@@ -33,16 +31,26 @@ public class AfterSalesServiceImpl implements AfterSalesService {
     }
 
     @Override public PageResponse<AfterSalesCaseView> list(String keyword, String status, long page, long pageSize) {
+        return list(AfterSalesCaseFilter.basic(keyword, status), page, pageSize);
+    }
+
+    @Override @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
+    public PageResponse<AfterSalesCaseView> list(AfterSalesCaseFilter request, long page, long pageSize) {
         requireRead();
-        String filter = normalize(status);
-        if (filter != null && !STATUSES.contains(filter)) throw invalid("案例状态不合法");
+        var filter = request.normalized();
         long p = Math.max(1, Math.min(page, Integer.MAX_VALUE)), size = Math.min(100, Math.max(1, pageSize));
         Long scope = isAgent() ? requiredAgent() : null;
         Long sales = salesScope();
-        var rows = sales == null ? mapper.selectPage(normalize(keyword), filter, scope, (p - 1) * size, size)
-            : mapper.selectSalesPage(normalize(keyword), filter, sales, (p - 1) * size, size);
+        var month = java.time.LocalDate.now().withDayOfMonth(1);
+        var rows = mapper.selectFilteredPage(filter, scope, sales, month, (p - 1) * size, size);
         rows.forEach(this::redact);
-        return new PageResponse<>(rows, p, size, sales == null ? mapper.count(normalize(keyword), filter, scope) : mapper.countSalesPage(normalize(keyword),filter,sales));
+        return new PageResponse<>(rows, p, size, mapper.countFiltered(filter, scope, sales, month));
+    }
+
+    @Override public AfterSalesDashboardView dashboard(AfterSalesCaseFilter request) {
+        requireRead();
+        return mapper.selectDashboard(request.normalized().withoutStatusAndQueue(), isAgent() ? requiredAgent() : null,
+            salesScope(), java.time.LocalDate.now().withDayOfMonth(1));
     }
 
     @Override public AfterSalesCaseView get(long id) {
@@ -167,6 +175,7 @@ public class AfterSalesServiceImpl implements AfterSalesService {
         changed(mapper.insertShipment(id, normalized, CurrentOperator.id()));
         var own = mapper.selectShipmentById(insertedId());
         if (own == null || !Objects.equals(own.getCaseId(), id)) throw new BusinessException("AFTER_SALES_UPDATE_FAILED", "补发记录回读失败");
+        if (own.isOldPartReturnRequired()) changed(mapper.insertRequiredReturn(own.getId()));
         changeStatus(before, mapper.countPendingShipments(id) > 0 ? "WAITING_PARTS" : "SHIPPED", null);
         audit(id, tracking == null ? "SHIPMENT_PLANNED" : "SHIPMENT_DISPATCHED", before, Map.of("shipment", own, "case", requireCase(id, false)));
         return own;
@@ -213,6 +222,8 @@ public class AfterSalesServiceImpl implements AfterSalesService {
         requireWrite();
         var before = requireCase(id, true);
         requireState(before, "RESOLVED");
+        if (mapper.countPendingReturns(id) != 0)
+            throw new BusinessException("AFTER_SALES_RETURN_PENDING", "尚有未完成的旧件退回，请完成处理或由审核人员记录豁免原因");
         changeStatus(before, "CLOSED", null);
         return auditedCase(id, "CASE_CLOSED", before);
     }

@@ -2,9 +2,67 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.bike.server.aftersales.AfterSalesMapper">
   <sql id="base">SELECT c.id,c.case_no,c.customer_id,cu.customer_name,c.agent_id,a.agent_name,c.vehicle_id,c.frame_sn,c.product_model_id,m.model_name,c.motor_sn,c.battery_sn,c.display_sn,c.purchase_date,c.failure_time,c.fault_type,c.fault_part,c.error_code,c.description,c.attempted_repair,c.warranty_status,c.status,c.assignee_id,c.technical_judgment,c.solution,c.internal_note,c.rejection_reason,c.created_by,c.updated_by,c.submitted_at,c.closed_at,c.created_at,c.updated_at,cc.company_name,cc.contact_name,cc.contact_phone,cc.contact_email,cc.country_code,cc.region,cc.city,cc.address_line,cc.postal_code,cc.end_customer_purchase_date,cc.snapshot_source,cc.assignee_name FROM bike_after_sales_case c LEFT JOIN bike_after_sales_case_contact cc ON cc.case_id=c.id LEFT JOIN bike_customer cu ON cu.id=c.customer_id LEFT JOIN bike_agent a ON a.id=c.agent_id LEFT JOIN bike_product_model m ON m.id=c.product_model_id</sql>
-  <sql id="where"><where><if test="keyword != null and keyword != ''">AND (c.case_no LIKE CONCAT('%',#{keyword},'%') OR c.frame_sn LIKE CONCAT('%',#{keyword},'%') OR c.description LIKE CONCAT('%',#{keyword},'%') OR cu.customer_name LIKE CONCAT('%',#{keyword},'%'))</if><if test="status != null and status != ''">AND c.status=#{status}</if><if test="agentId != null">AND c.agent_id=#{agentId}</if></where></sql>
-  <select id="selectPage" resultType="com.bike.server.aftersales.AfterSalesCaseView"><include refid="base"/><include refid="where"/> ORDER BY c.updated_at DESC,c.id DESC LIMIT #{offset},#{limit}</select>
-  <select id="count" resultType="long">SELECT COUNT(*) FROM bike_after_sales_case c LEFT JOIN bike_customer cu ON cu.id=c.customer_id <include refid="where"/></select>
+  <sql id="queryJoins">FROM bike_after_sales_case c
+    LEFT JOIN bike_after_sales_case_contact cc ON cc.case_id=c.id
+    LEFT JOIN bike_customer cu ON cu.id=c.customer_id
+    LEFT JOIN bike_agent a ON a.id=c.agent_id
+    LEFT JOIN bike_product_model m ON m.id=c.product_model_id</sql>
+  <sql id="pendingQueue">c.status='SUBMITTED'</sql>
+  <sql id="reviewQueue">c.status='UNDER_REVIEW'</sql>
+  <sql id="waitingCustomerQueue">c.status='NEEDS_INFO'</sql>
+  <sql id="processingQueue">c.status IN ('APPROVED','IN_PROGRESS','WAITING_PARTS')</sql>
+  <sql id="waitingShipmentQueue">c.status IN ('APPROVED','IN_PROGRESS','WAITING_PARTS','SHIPPED') AND EXISTS(SELECT 1 FROM bike_after_sales_shipment sh WHERE sh.case_id=c.id AND sh.status='PLANNED')</sql>
+  <sql id="shippedQueue">c.status='SHIPPED'</sql>
+  <sql id="completedQueue">c.status='CLOSED'</sql>
+  <sql id="completedMonthQueue">c.status='CLOSED' AND c.closed_at &gt;= #{monthStart} AND c.closed_at &lt; DATE_ADD(#{monthStart}, INTERVAL 1 MONTH)</sql>
+  <sql id="filteredWhere">
+    <bind name="keywordPattern" value="filter.keywordLike()"/>
+    <bind name="companyPattern" value="filter.companyNameLike()"/>
+    <bind name="contactPattern" value="filter.contactNameLike()"/>
+    <bind name="framePattern" value="filter.frameSnLike()"/>
+    <bind name="modelPattern" value="filter.modelNameLike()"/>
+    <bind name="assigneePattern" value="filter.assigneeNameLike()"/>
+    <bind name="createdBefore" value="filter.createdBefore()"/>
+    <where>
+      <if test="agentId != null">AND c.agent_id=#{agentId}</if>
+      <if test="salesUserId != null">AND EXISTS(SELECT 1 FROM bike_after_sales_sales_agent scope WHERE scope.agent_id=c.agent_id AND scope.sales_user_id=#{salesUserId} AND scope.enabled=1)</if>
+      <if test="filter.keyword != null">AND (c.case_no LIKE #{keywordPattern} ESCAPE '!' OR c.frame_sn LIKE #{keywordPattern} ESCAPE '!' OR c.description LIKE #{keywordPattern} ESCAPE '!' OR cu.customer_name LIKE #{keywordPattern} ESCAPE '!' OR a.agent_name LIKE #{keywordPattern} ESCAPE '!' OR cc.company_name LIKE #{keywordPattern} ESCAPE '!' OR cc.contact_name LIKE #{keywordPattern} ESCAPE '!')</if>
+      <if test="filter.companyName != null">AND (cc.company_name LIKE #{companyPattern} ESCAPE '!' OR cu.customer_name LIKE #{companyPattern} ESCAPE '!' OR a.agent_name LIKE #{companyPattern} ESCAPE '!')</if>
+      <if test="filter.contactName != null">AND cc.contact_name LIKE #{contactPattern} ESCAPE '!'</if>
+      <if test="filter.frameSn != null">AND c.frame_sn LIKE #{framePattern} ESCAPE '!'</if>
+      <if test="filter.modelName != null">AND m.model_name LIKE #{modelPattern} ESCAPE '!'</if>
+      <if test="filter.faultType != null">AND c.fault_type=#{filter.faultType}</if>
+      <if test="filter.countryCode != null">AND cc.country_code=#{filter.countryCode}</if>
+      <if test="filter.assigneeName != null">AND cc.assignee_name LIKE #{assigneePattern} ESCAPE '!'</if>
+      <if test="filter.createdFrom != null">AND c.created_at &gt;= #{filter.createdFrom}</if>
+      <if test="createdBefore != null">AND c.created_at &lt; #{createdBefore}</if>
+      <if test="filter.status != null">AND c.status=#{filter.status}</if>
+      <choose>
+        <when test="filter.queue == 'PENDING'">AND <include refid="pendingQueue"/></when>
+        <when test="filter.queue == 'REVIEW'">AND <include refid="reviewQueue"/></when>
+        <when test="filter.queue == 'WAITING_CUSTOMER'">AND <include refid="waitingCustomerQueue"/></when>
+        <when test="filter.queue == 'PROCESSING'">AND <include refid="processingQueue"/></when>
+        <when test="filter.queue == 'WAITING_SHIPMENT'">AND <include refid="waitingShipmentQueue"/></when>
+        <when test="filter.queue == 'SHIPPED'">AND <include refid="shippedQueue"/></when>
+        <when test="filter.queue == 'COMPLETED'">AND <include refid="completedQueue"/></when>
+        <when test="filter.queue == 'COMPLETED_MONTH'">AND <include refid="completedMonthQueue"/></when>
+      </choose>
+    </where>
+  </sql>
+  <select id="selectFilteredPage" resultType="com.bike.server.aftersales.AfterSalesCaseView"><include refid="base"/><include refid="filteredWhere"/> ORDER BY c.updated_at DESC,c.id DESC LIMIT #{offset},#{limit}</select>
+  <select id="countFiltered" resultType="long">SELECT COUNT(*) <include refid="queryJoins"/><include refid="filteredWhere"/></select>
+  <select id="selectDashboard" resultType="com.bike.server.aftersales.AfterSalesDashboardView">
+    SELECT COUNT(*) total,
+      COALESCE(SUM(CASE WHEN <include refid="pendingQueue"/> THEN 1 ELSE 0 END),0) pending,
+      COALESCE(SUM(CASE WHEN <include refid="reviewQueue"/> THEN 1 ELSE 0 END),0) review,
+      COALESCE(SUM(CASE WHEN <include refid="waitingCustomerQueue"/> THEN 1 ELSE 0 END),0) waiting_customer,
+      COALESCE(SUM(CASE WHEN <include refid="processingQueue"/> THEN 1 ELSE 0 END),0) processing,
+      COALESCE(SUM(CASE WHEN <include refid="waitingShipmentQueue"/> THEN 1 ELSE 0 END),0) waiting_shipment,
+      COALESCE(SUM(CASE WHEN <include refid="shippedQueue"/> THEN 1 ELSE 0 END),0) shipped,
+      COALESCE(SUM(CASE WHEN <include refid="completedQueue"/> THEN 1 ELSE 0 END),0) completed,
+      COALESCE(SUM(CASE WHEN <include refid="completedMonthQueue"/> THEN 1 ELSE 0 END),0) completed_this_month
+    <include refid="queryJoins"/><include refid="filteredWhere"/>
+  </select>
   <select id="selectById" resultType="com.bike.server.aftersales.AfterSalesCaseView"><include refid="base"/> WHERE c.id=#{id}</select>
   <select id="selectForUpdate" resultType="com.bike.server.aftersales.AfterSalesCaseView">SELECT c.*,cc.company_name,cc.contact_name,cc.contact_phone,cc.contact_email,cc.country_code,cc.region,cc.city,cc.address_line,cc.postal_code,cc.end_customer_purchase_date,cc.snapshot_source,cc.assignee_name FROM bike_after_sales_case c LEFT JOIN bike_after_sales_case_contact cc ON cc.case_id=c.id WHERE c.id=#{id} FOR UPDATE</select>
   <select id="selectVehicleReference" resultType="com.bike.server.aftersales.AfterSalesVehicleReference">
@@ -45,6 +103,22 @@
   <select id="selectShipments" resultType="com.bike.server.aftersales.AfterSalesShipmentView">SELECT id,case_id,part_name,quantity,carrier,tracking_no,status,shipped_at,old_part_return_required,old_part_return_received_at,created_by,created_at,updated_at FROM bike_after_sales_shipment WHERE case_id=#{caseId} ORDER BY created_at ASC,id ASC</select>
   <select id="selectShipmentById" resultType="com.bike.server.aftersales.AfterSalesShipmentView">SELECT id,case_id,part_name,quantity,carrier,tracking_no,status,shipped_at,old_part_return_required,old_part_return_received_at,created_by,created_at,updated_at FROM bike_after_sales_shipment WHERE id=#{id}</select>
   <select id="countPendingShipments" resultType="long">SELECT COUNT(*) FROM bike_after_sales_shipment WHERE case_id=#{caseId} AND status='PLANNED'</select>
+  <insert id="insertRequiredReturn">INSERT INTO bike_after_sales_return(shipment_id,case_id) SELECT id,case_id FROM bike_after_sales_shipment WHERE id=#{shipmentId} AND old_part_return_required=1</insert>
+  <sql id="returnSelect">SELECT r.shipment_id,r.case_id,s.part_name,s.quantity,r.status,r.revision,r.warehouse_name,r.recipient,r.phone,r.address_line,r.postal_code,r.carrier,r.tracking_no,r.sent_at,r.received_at,r.inspected_at,r.inspection_result,r.disposition_note,r.completed_at,r.updated_at FROM bike_after_sales_return r JOIN bike_after_sales_shipment s ON s.id=r.shipment_id AND s.case_id=r.case_id</sql>
+  <select id="selectReturns" resultType="com.bike.server.aftersales.AfterSalesReturnView"><include refid="returnSelect"/> WHERE r.case_id=#{caseId} ORDER BY r.shipment_id</select>
+  <select id="selectReturn" resultType="com.bike.server.aftersales.AfterSalesReturnView"><include refid="returnSelect"/> WHERE r.shipment_id=#{shipmentId}</select>
+  <select id="countPendingReturns" resultType="long">SELECT COUNT(*) FROM bike_after_sales_shipment s LEFT JOIN bike_after_sales_return r ON r.shipment_id=s.id AND r.case_id=s.case_id WHERE s.case_id=#{caseId} AND s.old_part_return_required=1 AND (r.status IS NULL OR r.status NOT IN ('COMPLETED','WAIVED'))</select>
+  <update id="updateReturn">
+    UPDATE bike_after_sales_return SET status=#{status},revision=revision+1,updated_by=#{operatorId},updated_at=CURRENT_TIMESTAMP(3)
+    <if test="request.action == 'REQUEST'">,warehouse_name=#{request.warehouseName},recipient=#{request.recipient},phone=#{request.phone},address_line=#{request.addressLine},postal_code=#{request.postalCode}</if>
+    <if test="request.action == 'SEND'">,carrier=#{request.carrier},tracking_no=#{request.trackingNo},sent_at=CURRENT_TIMESTAMP(3)</if>
+    <if test="request.action == 'RECEIVE'">,received_at=CURRENT_TIMESTAMP(3)</if>
+    <if test="request.action == 'INSPECT'">,inspection_result=#{request.inspectionResult},inspected_at=CURRENT_TIMESTAMP(3)</if>
+    <if test="request.action == 'SCRAP' or request.action == 'COMPLETE' or request.action == 'WAIVE'">,disposition_note=#{request.reason}</if>
+    <if test="request.action == 'COMPLETE' or request.action == 'WAIVE'">,completed_at=CURRENT_TIMESTAMP(3)</if>
+    WHERE shipment_id=#{shipmentId} AND case_id=#{caseId} AND revision=#{request.revision}
+  </update>
+  <update id="markReturnReceived">UPDATE bike_after_sales_shipment SET old_part_return_received_at=CURRENT_TIMESTAMP(3) WHERE case_id=#{caseId} AND id=#{shipmentId} AND old_part_return_required=1 AND old_part_return_received_at IS NULL</update>
   <update id="dispatchShipment">UPDATE bike_after_sales_shipment SET carrier=#{request.carrier},tracking_no=#{request.trackingNo},status='SHIPPED',shipped_at=CURRENT_TIMESTAMP(3),updated_at=CURRENT_TIMESTAMP(3) WHERE id=#{id} AND case_id=#{caseId} AND status='PLANNED'</update>
   <insert id="insertAudit">INSERT INTO bike_operation_log(business_type,business_id,action,operator_id,operator_name,before_data,after_data,client_ip) VALUES('AFTER_SALES',CAST(#{caseId} AS CHAR),#{action},#{operatorId},#{operatorName},#{beforeData},#{afterData},#{clientIp})</insert>
   <select id="selectHistory" resultType="com.bike.server.aftersales.AfterSalesHistoryView">SELECT id,action,operator_name,operation_time FROM bike_operation_log WHERE business_type='AFTER_SALES' AND business_id=CAST(#{caseId} AS CHAR)<if test="!includeInternal"> AND action NOT IN ('INTERNAL_MESSAGE_ADDED','INTERNAL_ATTACHMENTS_ADDED')</if> ORDER BY operation_time ASC,id ASC</select>
@@ -54,11 +128,7 @@
   <select id="selectStoredAttachment" resultType="com.bike.server.aftersales.AfterSalesStoredAttachment">SELECT id,case_id,message_id,object_key,file_name,content_type,file_size,sha256,visibility,category FROM bike_after_sales_attachment WHERE id=#{id}</select>
   <insert id="insertAttachment">INSERT INTO bike_after_sales_attachment(case_id,message_id,object_key,file_name,content_type,file_size,sha256,visibility,category,uploaded_by) VALUES(#{caseId},#{messageId},#{key},#{fileName},#{contentType},#{fileSize},#{sha256},#{visibility},#{category},#{uploadedBy})</insert>
   <select id="selectInsertedId" resultType="long">SELECT LAST_INSERT_ID()</select>
-  <sql id="salesCompanyScope">EXISTS(SELECT 1 FROM bike_after_sales_sales_agent scope WHERE scope.agent_id=c.agent_id AND scope.sales_user_id=#{userId} AND scope.enabled=1)</sql>
-  <sql id="salesWhere"><where><include refid="salesCompanyScope"/><if test="keyword != null and keyword != ''">AND(c.case_no LIKE CONCAT('%',#{keyword},'%') OR c.frame_sn LIKE CONCAT('%',#{keyword},'%') OR c.description LIKE CONCAT('%',#{keyword},'%') OR cu.customer_name LIKE CONCAT('%',#{keyword},'%'))</if><if test="status != null and status != ''">AND c.status=#{status}</if></where></sql>
   <select id="countSalesAgent" resultType="int">SELECT COUNT(*) FROM bike_after_sales_sales_agent WHERE sales_user_id=#{userId} AND agent_id=#{agentId} AND enabled=1</select>
-  <select id="selectSalesPage" resultType="com.bike.server.aftersales.AfterSalesCaseView"><include refid="base"/><include refid="salesWhere"/> ORDER BY c.updated_at DESC,c.id DESC LIMIT #{offset},#{limit}</select>
-  <select id="countSalesPage" resultType="long">SELECT COUNT(*) FROM bike_after_sales_case c LEFT JOIN bike_customer cu ON cu.id=c.customer_id <include refid="salesWhere"/></select>
   <sql id="companyColumns">a.id agent_id,a.agent_name company_name,CASE WHEN p.agent_id IS NULL THEN a.contact_name ELSE p.contact_name END contact_name,CASE WHEN p.agent_id IS NULL THEN a.contact_phone ELSE p.contact_phone END contact_phone,p.contact_email,p.country_code,p.region,p.city,p.address_line,p.postal_code,CASE WHEN p.agent_id IS NULL THEN 'MASTER' ELSE 'PROFILE' END source,p.updated_at</sql>
   <select id="selectCompanies" resultType="com.bike.server.aftersales.AfterSalesCompanyView">SELECT <include refid="companyColumns"/> FROM bike_agent a LEFT JOIN bike_after_sales_company_profile p ON p.agent_id=a.id WHERE a.status='ENABLED'<if test="agentId != null"> AND a.id=#{agentId}</if><if test="salesUserId != null"> AND EXISTS(SELECT 1 FROM bike_after_sales_sales_agent scope WHERE scope.agent_id=a.id AND scope.sales_user_id=#{salesUserId} AND scope.enabled=1)</if> ORDER BY a.agent_name,a.id</select>
   <select id="selectCompany" resultType="com.bike.server.aftersales.AfterSalesCompanyView">SELECT <include refid="companyColumns"/> FROM bike_agent a LEFT JOIN bike_after_sales_company_profile p ON p.agent_id=a.id WHERE a.id=#{agentId} AND a.status='ENABLED'</select>
