@@ -70,3 +70,7 @@ V24 新增 `bike_pi`、`bike_pi_item`、`bike_pi_payment`、`bike_pi_logistics`�
 ## V36 售后发运快照及物流进度
 
 补发增加revision、仓库、独立收货地址、预计到达、物流状态、签收登记及取消原因。旧地址、仓库和物流进度未知则保持NULL，不把历史SHIPPED猜成仍在途。取消保留原行，旧件增CANCELLED状态。四镜像SHA256为 `4BB49A69AB7DAD6106209ED5249E7059077D133D3157011CA20F5D3314B45D3A`，已应用独立空库/V16升级及隔离API，禁止修改。
+
+## V37 售后Email事务队列
+
+新增来源事件/受众唯一的通知队列、原始及当前收件地址、公开模板快照、稳定Message-ID、状态/次数/revision、领取租约及固定失败代码。迁移不回填历史事件，不伪造已发送记录。四镜像SHA256为 `070F790E31E6FB29CE720A9F59E15333C62FF9A24CF7440BACAED2FF4AF814B3`，已通过新库与升级检查，禁止修改。

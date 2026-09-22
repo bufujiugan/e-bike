@@ -357,6 +357,7 @@ public class AfterSalesServiceImpl implements AfterSalesService {
             if (mapper.insertAudit(id, action, CurrentOperator.id(), CurrentOperator.username(),
                 before == null ? null : JSON.writeValueAsString(before), after == null ? null : JSON.writeValueAsString(after),
                 CurrentOperator.clientIp()) != 1) throw new BusinessException("AFTER_SALES_AUDIT_FAILED", "售后变更历史保存失败");
+            AfterSalesNotifications.enqueue(mapper,id,action,after);
         } catch (JsonProcessingException error) { throw new BusinessException("AFTER_SALES_AUDIT_FAILED", "售后变更历史序列化失败"); }
     }
     private void changeStatus(AfterSalesCaseView before, String target, String reason) {

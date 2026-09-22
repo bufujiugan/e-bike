@@ -1,6 +1,17 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.bike.server.aftersales.AfterSalesMapper">
+  <insert id="insertNotification">INSERT INTO bike_after_sales_notification(case_id,event_id,event_type,audience,original_recipient,recipient,message_key,subject,body) VALUES(#{caseId},#{eventId},#{eventType},#{audience},#{recipient},#{recipient},#{messageKey},#{subject},#{body}) ON DUPLICATE KEY UPDATE event_id=VALUES(event_id)</insert>
+  <select id="selectNotifications" resultType="com.bike.server.aftersales.AfterSalesNotification">SELECT * FROM bike_after_sales_notification WHERE case_id=#{caseId} ORDER BY id DESC LIMIT #{offset},#{limit}</select>
+  <select id="countNotifications" resultType="long">SELECT COUNT(*) FROM bike_after_sales_notification WHERE case_id=#{caseId}</select>
+  <select id="selectNotification" resultType="com.bike.server.aftersales.AfterSalesNotification">SELECT * FROM bike_after_sales_notification WHERE id=#{id}</select>
+  <sql id="notificationDue">attempt_count&lt;5 AND ((status IN('PENDING','RETRY') AND next_attempt_at&lt;=CURRENT_TIMESTAMP(3)) OR (status='SENDING' AND claimed_until&lt;CURRENT_TIMESTAMP(3)))</sql>
+  <select id="selectDueNotifications" resultType="long">SELECT id FROM bike_after_sales_notification WHERE <include refid="notificationDue"/> ORDER BY next_attempt_at,id LIMIT 10</select>
+  <update id="expireExhaustedNotifications">UPDATE bike_after_sales_notification SET status='FAILED',last_error='DELIVERY_RESULT_UNKNOWN',claim_token=NULL,claimed_until=NULL,revision=revision+1 WHERE status='SENDING' AND attempt_count&gt;=5 AND claimed_until&lt;CURRENT_TIMESTAMP(3)</update>
+  <update id="claimNotification">UPDATE bike_after_sales_notification SET status='SENDING',attempt_count=attempt_count+1,revision=revision+1,claim_token=#{token},claimed_until=DATE_ADD(CURRENT_TIMESTAMP(3),INTERVAL 5 MINUTE) WHERE id=#{id} AND <include refid="notificationDue"/></update>
+  <update id="finishNotification">UPDATE bike_after_sales_notification SET status=#{status},last_error=#{error},recipient=#{recipient},revision=revision+1,claim_token=NULL,claimed_until=NULL,next_attempt_at=DATE_ADD(CURRENT_TIMESTAMP(3),INTERVAL #{delaySeconds} SECOND),sent_at=CASE WHEN #{status}='SENT' THEN CURRENT_TIMESTAMP(3) ELSE sent_at END WHERE id=#{id} AND status='SENDING' AND claim_token=#{token}</update>
+  <update id="retryNotification">UPDATE bike_after_sales_notification SET recipient=#{recipient},status='PENDING',attempt_count=0,revision=revision+1,next_attempt_at=CURRENT_TIMESTAMP(3),last_error=NULL WHERE id=#{id} AND revision=#{revision} AND status IN('FAILED','BLOCKED','RETRY')</update>
+
   <sql id="planSelect">SELECT id,case_id,revision,status,CAST(document_json AS CHAR) document_json,created_by,created_at,confirmed_by,confirmed_at,approved_by,approved_at FROM bike_after_sales_solution_version</sql>
   <select id="selectLatestPlan" resultType="com.bike.server.aftersales.AfterSalesPlanRecord"><include refid="planSelect"/> WHERE case_id=#{caseId} ORDER BY revision DESC LIMIT 1</select>
   <select id="selectPlanVersions" resultType="com.bike.server.aftersales.AfterSalesPlanRecord"><include refid="planSelect"/> WHERE case_id=#{caseId} ORDER BY revision DESC</select>

@@ -96,10 +96,10 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    @Transactional
+    @Transactional(isolation=org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public UserView updateRoles(long id, UserRoleRequest request) {
         CurrentOperator.requireRole("SUPER_ADMIN");
-        if (mapper.selectById(id) == null) {
+        if (mapper.lockUser(id) == null) {
             throw new BusinessException("USER_NOT_FOUND", "用户不存在");
         }
         if (request.roleIds().stream().anyMatch(java.util.Objects::isNull)
@@ -111,13 +111,16 @@ public class UserServiceImpl implements UserService {
                 && mapper.countExistingRoles(request.roleIds()) != request.roleIds().stream().distinct().count()) {
             throw new BusinessException("ROLE_INVALID", "存在不存在或已停用的角色");
         }
+        var previousRoles=mapper.selectRoleIds(id);
+        var roleIds=request.roleIds().stream().sorted().toList();
         mapper.clearRoles(id);
-        if (!request.roleIds().isEmpty() && mapper.insertRoles(id, request.roleIds()) != request.roleIds().size()) {
+        if (!request.roleIds().isEmpty() && mapper.insertRoles(id, roleIds) != request.roleIds().size()) {
             throw new BusinessException("ROLE_UPDATE_FAILED", "用户角色保存失败");
         }
         UserView updated = mapper.selectById(id);
-        mapper.insertOperationLog(String.valueOf(id), "更新用户角色", CurrentOperator.id(), CurrentOperator.username(),
-                null, "roleCount=" + request.roleIds().size(), CurrentOperator.clientIp());
+        if(mapper.insertOperationLog(String.valueOf(id), "更新用户角色", CurrentOperator.id(), CurrentOperator.username(),
+                "roleIds="+previousRoles, "roleIds="+roleIds, CurrentOperator.clientIp())!=1)
+            throw new BusinessException("ROLE_UPDATE_FAILED","用户角色审计保存失败");
         return updated;
     }
 

@@ -151,6 +151,7 @@ class AfterSalesServiceTest {
     @Test void messageReturnsItsOwnInsertedRecordAndRejectsUnknownVisibility() {
         when(mapper.selectForUpdate(1)).thenReturn(caseRow("UNDER_REVIEW"));
         assertCode("INVALID_PARAMETER", () -> service.addMessage(1, new AfterSalesMessageRequest("text", "SECRET")));
+        when(mapper.selectById(1)).thenReturn(caseRow("UNDER_REVIEW"));
         when(mapper.insertMessage(1, 7L, "CUSTOMER", "this request")).thenReturn(1);
         when(mapper.touchCase(1, 7L)).thenReturn(1);
         when(mapper.selectInsertedId()).thenReturn(91L);

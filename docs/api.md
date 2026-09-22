@@ -173,3 +173,11 @@ H5 使用该接口，可搜索、翻页，翻页保留已选订单；切换客�
 `POST .../shipments/{shipmentId}/logistics` 接收revision/action/note及操作对应字段：SAVE保存计划shipping；TRACK更新IN_TRANSIT/EXCEPTION/DELIVERED及expectedArrivalDate；CORRECT以原因更正carrier/trackingNo；CANCEL取消未发计划。TRACK/CORRECT/CANCEL说明必填，客户可见；当前仅手工登记，不声称已接承运商追踪接口。已签收不允许回退。
 
 取消保留原记录，批准数量重新可安排；只联动取消尚未启动的旧件记录。已启动旧件退回或已发货不能取消。取消后若仍有未安排批准配件，解决门禁仍生效。全部动作按案例加锁、revision冲突拒绝、审计原子提交。旧数据仓库、地址和当前物流状态未知则保持空，不猜历史。
+
+## 售后Email队列（V37）
+
+提交/补充案例、要求补资料、审批/拒绝/重新审核、公开回复/附件、发货、解决和归档在业务审计事务内产生通知。内部留言/附件不发客户邮件，草稿附件不通知。客户地址为案例快照，内部通知使用明确配置的售后公共邮箱。
+
+`GET /api/after-sales/cases/{id}/notifications?page=1&pageSize=20` 仅具READ和REVIEW的内部账号且在公司范围内可读；返回状态、当前/原收件地址、尝试次数、revision、固定错误代码和发送开关，不暴露正文、claim token或存储信息。`POST .../notifications/{notificationId}/retry {revision,recipient?,reason}` 只重排FAILED/BLOCKED/RETRY，拒绝过期请求、正在发送或成功记录；客户地址可有理由更正，原地址保留，内部邮箱只能服务器配置。
+
+状态PENDING/SENDING/RETRY/SENT/FAILED/BLOCKED，SENT仅表示SMTP接受。任务默认关闭，每30秒扫描最多10条；条件领取五分钟租约，SMTP连接/读写10秒超时，最多5次自动尝试，按60/120/240/480秒退避。租约失效的任务可恢复，最后一次发送结果不确定标记DELIVERY_RESULT_UNKNOWN供人工核对。来源事件唯一和稳定Message-ID不能保证SMTP与数据库之间恰好一次，确认结果丢失时可能重复，人工重试前须核对。

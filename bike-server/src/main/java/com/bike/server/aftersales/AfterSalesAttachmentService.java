@@ -91,6 +91,7 @@ public class AfterSalesAttachmentService {
             if (mapper.insertAudit(caseId, scope.equals("INTERNAL") ? "INTERNAL_ATTACHMENTS_ADDED" : "ATTACHMENTS_ADDED", CurrentOperator.id(),
                 CurrentOperator.username(), null, JSON.writeValueAsString(results), CurrentOperator.clientIp()) != 1)
                 throw new BusinessException("AFTER_SALES_AUDIT_FAILED", "附件操作历史保存失败");
+            AfterSalesNotifications.enqueue(mapper,caseId,scope.equals("INTERNAL")?"INTERNAL_ATTACHMENTS_ADDED":"ATTACHMENTS_ADDED",null);
             return List.copyOf(results);
         } catch (IOException | RuntimeException error) {
             cleanup(keys);

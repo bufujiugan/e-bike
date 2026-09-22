@@ -76,15 +76,16 @@ public class RoleServiceImpl implements RoleService {
     }
 
     @Override
-    @Transactional
+    @Transactional(isolation=org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public List<PermissionView> updatePermissions(long roleId, RolePermissionRequest request) {
         CurrentOperator.requireRole("SUPER_ADMIN");
-        require(roleId);
+        if(mapper.lockRole(roleId)==null)throw new BusinessException("ROLE_NOT_FOUND","角色不存在");
+        var previousIds=mapper.selectPermissions(roleId).stream().map(PermissionView::id).sorted().toList();
         if (request.permissionIds().stream().anyMatch(java.util.Objects::isNull)
                 || request.permissionIds().stream().anyMatch(id -> id <= 0)) {
             throw new BusinessException("PERMISSION_INVALID", "权限 ID 必须为正数");
         }
-        List<Long> permissionIds = request.permissionIds().stream().distinct().toList();
+        List<Long> permissionIds = request.permissionIds().stream().distinct().sorted().toList();
         if (!permissionIds.isEmpty() && mapper.countExistingPermissions(permissionIds) != permissionIds.size()) {
             throw new BusinessException("PERMISSION_INVALID", "存在无效的权限 ID");
         }
@@ -92,8 +93,8 @@ public class RoleServiceImpl implements RoleService {
         if (!permissionIds.isEmpty() && mapper.insertPermissions(roleId, permissionIds) != permissionIds.size()) {
             throw new BusinessException("PERMISSION_UPDATE_FAILED", "角色权限保存失败");
         }
-        operationLogMapper.insert("PERMISSION_CHANGE", String.valueOf(roleId), "更新角色权限", CurrentOperator.id(), CurrentOperator.username(), null,
-                "{\"permissionCount\":" + permissionIds.size() + "}", CurrentOperator.clientIp(), null);
+        if(operationLogMapper.insert("PERMISSION_CHANGE", String.valueOf(roleId), "更新角色权限", CurrentOperator.id(), CurrentOperator.username(), "{\"permissionIds\":"+previousIds+"}",
+                "{\"permissionIds\":"+permissionIds+"}", CurrentOperator.clientIp(), null)!=1)throw new BusinessException("PERMISSION_UPDATE_FAILED","角色权限审计保存失败");
         return mapper.selectPermissions(roleId);
     }
 

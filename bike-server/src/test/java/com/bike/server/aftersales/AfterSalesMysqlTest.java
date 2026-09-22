@@ -247,6 +247,11 @@ class AfterSalesMysqlTest {
                     String ddl=new String(input.readAllBytes(),StandardCharsets.UTF_8).replace("bike_",prefix);
                     try(var connection=source.getConnection()){org.springframework.jdbc.datasource.init.ScriptUtils.executeSqlScript(connection,new org.springframework.core.io.ByteArrayResource(ddl.getBytes(StandardCharsets.UTF_8)));}
                 }
+                try(var input=Resources.getResourceAsStream("db/migration/V37__after_sales_email_outbox.sql")) {
+                    String ddl=new String(input.readAllBytes(),StandardCharsets.UTF_8).replace("bike_",prefix);
+                    try(var connection=source.getConnection()){org.springframework.jdbc.datasource.init.ScriptUtils.executeSqlScript(connection,new org.springframework.core.io.ByteArrayResource(ddl.getBytes(StandardCharsets.UTF_8)));}
+                    tables.add(prefix+"after_sales_notification");
+                }
                 sql("INSERT INTO " + prefix + "customer VALUES(44,'Customer A','ENABLED','Customer contact','4400'),(45,'Customer B','ENABLED',NULL,NULL)");
                 sql("INSERT INTO " + prefix + "agent VALUES(8,'Agent A','ENABLED','Agent contact','8000'),(99,'Agent B','ENABLED','Other contact','9900')");
                 sql("INSERT INTO " + prefix + "sys_user VALUES(7,'sales','Sales','WEB_OPERATOR',NULL,1),(70,'tech','Technician','WEB_OPERATOR',NULL,1),(71,'local-tech','Local technician','WEB_OPERATOR',NULL,1),(72,'disabled-tech','Disabled technician','WEB_OPERATOR',NULL,0),(73,'agent-a','Company employee','AGENT',8,1),(74,'pda','PDA','PDA_OPERATOR',NULL,1),(75,'agent-a2','Second employee','AGENT',8,1)");

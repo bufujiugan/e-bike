@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.bike.server.system.UserMapper">
+    <select id="lockUser" resultType="long">SELECT id FROM bike_sys_user WHERE id=#{id} FOR UPDATE</select>
     <select id="selectPage" resultType="com.bike.server.system.UserView">SELECT id,username,display_name,user_type,agent_id,workstation_id,enabled,must_change_password,last_login_at,created_at FROM bike_sys_user <if test="keyword != null">WHERE username LIKE CONCAT('%',#{keyword},'%') OR display_name LIKE CONCAT('%',#{keyword},'%')</if> ORDER BY updated_at DESC LIMIT #{offset},#{limit}</select>
     <select id="count" resultType="long">SELECT COUNT(*) FROM bike_sys_user <if test="keyword != null">WHERE username LIKE CONCAT('%',#{keyword},'%') OR display_name LIKE CONCAT('%',#{keyword},'%')</if></select>
     <select id="selectById" resultType="com.bike.server.system.UserView">SELECT id,username,display_name,user_type,agent_id,workstation_id,enabled,must_change_password,last_login_at,created_at FROM bike_sys_user WHERE id=#{id}</select>

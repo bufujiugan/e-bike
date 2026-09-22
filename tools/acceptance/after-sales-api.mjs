@@ -99,6 +99,16 @@ try {
     assert(!JSON.stringify(current).includes('仅供内部'));
   }
   await req(casePath(id), undefined, { token: warehouse.token, code: 'FORBIDDEN' });
+  const notifications = await req(casePath(id) + '/notifications', undefined, { token: reviewer.token });
+  assert.equal(notifications.sendingEnabled, false);
+  assert(notifications.notifications.records.some(n => n.eventType === 'CASE_SUBMITTED' && n.audience === 'STAFF' && n.status === 'PENDING'));
+  assert(notifications.notifications.records.every(n => !('body' in n) && !('messageKey' in n) && !('claimToken' in n)));
+  assert(!notifications.notifications.records.some(n => n.eventType === 'INTERNAL_MESSAGE_ADDED'));
+  await req(casePath(id) + '/notifications', undefined, { token: externalA.token, code: 'FORBIDDEN' });
+  await req(casePath(id) + '/notifications', undefined, { token: warehouse.token, code: 'PERMISSION_DENIED' });
+  const pending = notifications.notifications.records[0];
+  await req(casePath(id) + '/notifications/' + pending.id + '/retry', { revision: pending.revision, reason: '不得重复待发队列' }, { token: reviewer.token, code: 'AFTER_SALES_NOTIFICATION_CONFLICT' });
+  pass('业务事件自动产生Email队列；默认关闭外发，内部留言不入客户通知，队列按岗位隔离且不暴露发送凭据');
   const internal = await req(casePath(id), undefined, { token: technician.token });
   assert.equal(internal.internalNote, '仅供内部：责任分析记录'); assert(internal.messages.some(message => message.id === privateMessage.id));
   const ownList = await req(`/api/after-sales/cases?keyword=${encodeURIComponent(own.caseNo)}`, undefined, { token: externalA.token }); assert.equal(ownList.records[0].internalNote, null);

@@ -41,6 +41,8 @@ export type ReturnStatus = 'REQUIRED' | 'WAITING_CUSTOMER' | 'IN_TRANSIT' | 'REC
 export type ReturnAction = 'REQUEST' | 'SEND' | 'RECEIVE' | 'INSPECT' | 'SCRAP' | 'COMPLETE' | 'WAIVE'
 export type CaseReturn = { shipmentId: number; caseId: number; partName: string; quantity: number; status: ReturnStatus; revision: number; warehouseName: string | null; recipient: string | null; phone: string | null; addressLine: string | null; postalCode: string | null; carrier: string | null; trackingNo: string | null; sentAt: string | null; receivedAt: string | null; inspectedAt: string | null; inspectionResult: string | null; dispositionNote: string | null; completedAt: string | null; updatedAt: string }
 export type ReturnRequest = { revision: number; action: ReturnAction; warehouseName: string; recipient: string; phone: string; addressLine: string; postalCode: string; carrier: string; trackingNo: string; inspectionResult: string; reason: string }
+export type CaseNotification = { id: number; eventType: string; audience: 'CUSTOMER' | 'STAFF'; originalRecipient: string | null; recipient: string | null; status: 'PENDING' | 'SENDING' | 'RETRY' | 'SENT' | 'FAILED' | 'BLOCKED'; attemptCount: number; revision: number; lastError: string | null; nextAttemptAt: string; sentAt: string | null; createdAt: string }
+export type NotificationPage = { notifications: Page<CaseNotification>; sendingEnabled: boolean; smtpConfigured: boolean }
 type Envelope<T> = { code: string; message: string; data: T }
 type Page<T> = { records: T[]; total: number; page: number; pageSize: number }
 const endpoint = '/api/after-sales/cases'
@@ -53,6 +55,8 @@ export function afterSalesError(error: unknown): string {
   return error instanceof Error ? error.message : '售后操作失败'
 }
 export const afterSales = {
+  notifications: async (id: number, page: number) => data(await api.get<Envelope<NotificationPage>>(`${endpoint}/${id}/notifications`, { params: { page, pageSize: 20 } })),
+  retryNotification: async (id: number, notificationId: number, revision: number, recipient: string | undefined, reason: string) => data(await api.post<Envelope<CaseNotification>>(`${endpoint}/${id}/notifications/${notificationId}/retry`, { revision, recipient, reason })),
   returns: async (id: number) => data(await api.get<Envelope<CaseReturn[]>>(`${endpoint}/${id}/returns`)),
   returnAction: async (id: number, shipmentId: number, request: ReturnRequest) => data(await api.post<Envelope<CaseReturn>>(`${endpoint}/${id}/returns/${shipmentId}`, request)),
   attachments: async (id: number) => data(await api.get<Envelope<CaseAttachment[]>>(`${endpoint}/${id}/attachments`)),

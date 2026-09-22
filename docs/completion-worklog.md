@@ -371,3 +371,13 @@ V36新增发货仓库和独立收货快照、预计到达、手工在途/异常/
 `batch25-logistics-tests.log` 77项售后检查通过后，补充直接发货预计到达和旧件投影回归；`batch25-full-verify.log` 当前全量347项通过，0失败/错误/跳过，包含两套全新b25full迁移库与文件真实API。`batch25-shipping-http.json/.log` 12组通过且cleanupFailures为空，覆盖取消重排、地址快照、过期发货、更正与签收及完整旧件归档。`batch25-web-build.log`类型检查/构建通过，大包告警保留。隔离API18182运行acceptance-batch25-runtime.jar。
 
 本批仍是实施回归，页面尚缺真实浏览器验收。Email正在进入实施（设计见after-sales-email-design.md）；PI模板发布/导出归档及正式交付仍待完成。全项目最终两轮保持0轮，代码未推送GitHub。
+
+## 批次26：Email事务队列与角色分配并发修复（2026-09-23）
+
+V37在售后业务审计同事务写入通知队列，保存公开模板与原收件地址；独立工作线程使用领取租约、固定Message-ID和有界退避，失败对审核岗位可见，可附原因更正地址重排。内部内容不会写入客户邮件，仓库/客户不能查询队列。默认关闭外发，本机ServerSocket实际接收SMTP验证中文、收件人和消息标识；SMTP接受不代表最终送达，崩溃窗口不承诺恰好一次。
+
+公司与附件HTTP并行检查首次发现两个不同新用户角色替换在REPEATABLE_READ下的空范围DELETE/INSERT死锁。用户角色和角色权限替换改为READ_COMMITTED并锁定对应父行，排序写入且审计失败整体回滚；真实MySQL并发屏障测试验证不同对象不死锁、同对象不混合。测试夹具首次缺workstation_id导致错误，补齐后16项定向检查通过。API复测首次因本机配置仍为18181导致连接失败，明确指定原验收端口18182后复测通过，旧18181实例未停止。
+
+`batch26-fixed-full-verify.log`当前后端全量358项通过，0失败/错误/跳过，包含全新b26fixed空库/升级库和文件真实API；`batch26-fixed-api-r2.json/.log`13组、`batch26-fixed-companies-r2.json/.log`7组、`batch26-fixed-attachments-r2.json/.log`4组并行通过且cleanupFailures为空。`batch26-fixed-web-build.log`类型检查与构建通过，主包1696.70KB告警保留。API18182运行acceptance-batch26-fixed-runtime.jar；V37四镜像冻结哈希见database.md。
+
+本批为实施回归，普通岗位页面、正式SMTP与现场交付仍待验证；PI受控模板和固定导出文件继续实施。全项目最终两轮仍为0轮，未推送GitHub。

@@ -6,6 +6,16 @@ import java.util.List;
 
 @Mapper
 public interface AfterSalesMapper {
+    int insertNotification(@Param("caseId") long caseId,@Param("eventId") long eventId,@Param("eventType") String eventType,@Param("audience") String audience,@Param("recipient") String recipient,@Param("messageKey") String messageKey,@Param("subject") String subject,@Param("body") String body);
+    List<AfterSalesNotification> selectNotifications(@Param("caseId") long caseId,@Param("offset") long offset,@Param("limit") long limit);
+    long countNotifications(@Param("caseId") long caseId);
+    AfterSalesNotification selectNotification(@Param("id") long id);
+    List<Long> selectDueNotifications();
+    int expireExhaustedNotifications();
+    int claimNotification(@Param("id") long id,@Param("token") String token);
+    int finishNotification(@Param("id") long id,@Param("token") String token,@Param("status") String status,@Param("error") String error,@Param("delaySeconds") int delaySeconds,@Param("recipient") String recipient);
+    int retryNotification(@Param("id") long id,@Param("revision") int revision,@Param("recipient") String recipient);
+
     AfterSalesPlanRecord selectLatestPlan(@Param("caseId") long caseId);
     List<AfterSalesPlanRecord> selectPlanVersions(@Param("caseId") long caseId);
     int insertPlan(@Param("caseId") long caseId,@Param("revision") int revision,@Param("document") String document,@Param("operatorId") Long operatorId);

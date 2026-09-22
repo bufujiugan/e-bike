@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.bike.server.system.RoleMapper">
+    <select id="lockRole" resultType="long">SELECT id FROM bike_sys_role WHERE id=#{id} FOR UPDATE</select>
     <sql id="base">SELECT r.id,r.role_code,r.role_name,r.enabled,COUNT(rp.permission_id) permission_count,r.updated_at FROM bike_sys_role r LEFT JOIN bike_sys_role_permission rp ON rp.role_id=r.id</sql>
     <select id="selectPage" resultType="com.bike.server.system.RoleView"><include refid="base"/><if test="keyword != null">WHERE r.role_code LIKE CONCAT('%',#{keyword},'%') OR r.role_name LIKE CONCAT('%',#{keyword},'%')</if> GROUP BY r.id ORDER BY r.updated_at DESC</select>
     <select id="selectById" resultType="com.bike.server.system.RoleView"><include refid="base"/> WHERE r.id=#{id} GROUP BY r.id</select>

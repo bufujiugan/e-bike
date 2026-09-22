@@ -38,6 +38,17 @@ springdoc:
     path: /swagger-ui.html
 
 bike:
+  after-sales:
+    mail:
+      enabled: ${BIKE_AFTER_SALES_MAIL_ENABLED:false}
+      host: ${BIKE_AFTER_SALES_MAIL_HOST:}
+      port: ${BIKE_AFTER_SALES_MAIL_PORT:587}
+      username: ${BIKE_AFTER_SALES_MAIL_USERNAME:}
+      password: ${BIKE_AFTER_SALES_MAIL_PASSWORD:}
+      from: ${BIKE_AFTER_SALES_MAIL_FROM:}
+      staff-recipient: ${BIKE_AFTER_SALES_STAFF_EMAIL:}
+      start-tls: ${BIKE_AFTER_SALES_MAIL_START_TLS:true}
+      ssl: ${BIKE_AFTER_SALES_MAIL_SSL:false}
   production:
     storage: ${BIKE_PRODUCTION_STORAGE:local}
     file-root: ${BIKE_PRODUCTION_FILE_ROOT:./storage/production}
