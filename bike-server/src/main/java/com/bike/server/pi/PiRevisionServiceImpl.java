@@ -55,6 +55,7 @@ public class PiRevisionServiceImpl implements PiRevisionService {
         if (current == null || current.getSeriesId() == null) fail("PI_NOT_FOUND", "PI不存在");
         return mapper.selectRevisions(current.getSeriesId()).stream().peek(v -> {
             v.setItems(List.of()); v.setPayments(List.of()); v.setLogistics(List.of());
+            if(!com.bike.server.common.FinancialAuditAccess.allowed()){v.setPaidAmount(null);v.setPaymentStatus(null);}
         }).toList();
     }
 
@@ -62,6 +63,6 @@ public class PiRevisionServiceImpl implements PiRevisionService {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); }
         catch (Exception e) { throw new IllegalStateException(e); }
     }
-    private static void require(String permission) { if (!CurrentOperator.hasPermission(permission)) fail("FORBIDDEN", "无权限执行PI修订"); }
+    private static void require(String permission) { CurrentOperator.requireInternalWebAccess();CurrentOperator.requirePermission(permission); }
     private static void fail(String code, String message) { throw new BusinessException(code, message); }
 }

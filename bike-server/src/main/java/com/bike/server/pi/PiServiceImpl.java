@@ -247,7 +247,11 @@ public class PiServiceImpl implements PiService {
         PiPaymentRequest normalized = new PiPaymentRequest(normalize(request.requestId()),
                 money(request.amount()), currency(request.currencyCode()),
                 normalize(request.voucherObjectKey()), request.receivedAt() == null ? null
-                        : request.receivedAt().truncatedTo(ChronoUnit.MILLIS), normalize(request.remark()));
+                        : request.receivedAt().truncatedTo(ChronoUnit.MILLIS), normalize(request.remark()),request.paymentMethod(),normalize(request.paymentMethodNote()));
+        if("OTHER".equals(normalized.paymentMethod()) && normalized.paymentMethodNote()==null)
+            fail("PAYMENT_METHOD_INVALID","其他收款方式须填写说明");
+        if(normalized.paymentMethod()==null && normalized.paymentMethodNote()!=null)
+            fail("PAYMENT_METHOD_INVALID","请先选择收款方式");
         if (normalized.receivedAt() != null && normalized.receivedAt().isAfter(LocalDateTime.now())) {
             fail("PAYMENT_DATE_INVALID", "到账时间不能晚于当前时间");
         }
@@ -265,12 +269,42 @@ public class PiServiceImpl implements PiService {
         BigDecimal after = money(before.add(normalized.amount()));
         if (mapper.insertPayment(id, normalized, CurrentOperator.id()) != 1) fail("PI_PAYMENT_FAILED", "收款登记失败");
         String paymentStatus = paymentStatus(after, pi);
-        if (mapper.updatePaymentStatus(id, paymentStatus) != 1) fail("PI_PAYMENT_FAILED", "收款状态更新失败");
+        if (mapper.syncSeriesPaymentStatus(id, after) < 1) fail("PI_PAYMENT_FAILED", "收款状态更新失败");
         String reservationStatus = reservations.retainAfterPayment(pi, after);
         audit(id, "登记 PI 收款", Map.of("paidAmount", before, "paymentStatus", pi.getPaymentStatus()),
                 Map.of("paidAmount", after, "paymentStatus", paymentStatus, "requestId", normalized.requestId(),
                         "amount", normalized.amount(), "currency", normalized.currencyCode(),
                         "reservationStatus", Objects.toString(reservationStatus, "NONE")), normalized.remark());
+        return enrich(require(id));
+    }
+
+    @Override
+    @Transactional
+    public PiView reversePayment(long id,long paymentId,PiPaymentReverseRequest request) {
+        requireInternal("PI_PAYMENT_REVERSE");CurrentOperator.requirePermission("PI_READ");validate(request);
+        var r=new PiPaymentReverseRequest(request.requestId().trim(),request.revision(),request.reason().trim());
+        var pi=lockOrderAndPi(id);
+        Long activeId=mapper.currentRevisionId(id);long currentId=activeId==null?id:activeId;
+        var current=currentId==id?pi:locked(currentId);
+        if(series!=null) {Long seriesId=series.seriesId(id);if(seriesId!=null){var locked=series.lockSeries(seriesId);if(locked.currentPiId()!=currentId)fail("PI_REVISION_CONFLICT","当前版本已变化，请刷新核对");}}
+        Long origin=mapper.paymentOrigin(id,paymentId);
+        if(origin==null)fail("PI_PAYMENT_NOT_FOUND","该PI系列没有此收款记录");
+        // Receipt uploads lock the originating PI before its payment, including receipts on older revisions.
+        if(origin!=id && mapper.lockPi(origin)==null)fail("PI_PAYMENT_NOT_FOUND","收款所属PI不存在");
+        var payment=mapper.selectPaymentForUpdate(id,paymentId);
+        if(payment==null)fail("PI_PAYMENT_NOT_FOUND","该PI系列没有此收款记录");
+        if("REVERSED".equals(payment.status())) {
+            if(Objects.equals(payment.reversalRequestId(),r.requestId()) && Objects.equals(payment.reversalReason(),r.reason()) && payment.revision()==r.revision()+1)return enrich(require(id));
+            fail("PI_PAYMENT_REVERSE_CONFLICT","此收款已撤回，请刷新核对原记录");
+        }
+        if(payment.revision()!=r.revision())fail("PI_PAYMENT_REVERSE_CONFLICT","收款记录已变化，请刷新后重试");
+        if(!PUBLISHED.contains(current.getStatus()))fail("INVALID_STATUS_TRANSITION","仅已发布系列可撤回错误收款登记");
+        BigDecimal before=mapper.paymentTotal(id);
+        if(mapper.reversePayment(paymentId,r,CurrentOperator.id())!=1)fail("PI_PAYMENT_REVERSE_CONFLICT","收款已变更，请刷新核对");
+        BigDecimal after=mapper.paymentTotal(id);
+        if(mapper.syncSeriesPaymentStatus(id,after)<1 || mapper.blockReleaseAfterCorrection(currentId)!=1)fail("PI_PAYMENT_REVERSE_FAILED","收款状态更正失败");
+        audit(id,"撤回PI错误收款登记",Map.of("paidAmount",before,"paymentId",paymentId,"status",payment.status(),"currentPiId",currentId,"releaseStatus",Objects.toString(current.getReleaseStatus(),"BLOCKED")),
+                Map.of("paidAmount",after,"paymentId",paymentId,"status","REVERSED","currentPiId",currentId,"releaseStatus","BLOCKED","requestId",r.requestId()),r.reason());
         return enrich(require(id));
     }
 
@@ -387,7 +421,7 @@ public class PiServiceImpl implements PiService {
 
     private static boolean canReadFinance() {
         return !CurrentOperator.hasRole("WEB_AGENT") && (CurrentOperator.hasRole("SUPER_ADMIN")
-                || CurrentOperator.hasPermission("PI_PAYMENT_CONFIRM") || CurrentOperator.hasPermission("PI_RELEASE"));
+                || CurrentOperator.hasPermission("PI_PAYMENT_CONFIRM") || CurrentOperator.hasPermission("PI_RELEASE") || CurrentOperator.hasPermission("PI_PAYMENT_REVERSE"));
     }
 
     private void redactFinance(PiView pi) {
@@ -547,6 +581,8 @@ public class PiServiceImpl implements PiService {
                 && Objects.equals(previous.currencyCode(), request.currencyCode())
                 && Objects.equals(previous.voucherObjectKey(), request.voucherObjectKey())
                 && Objects.equals(previous.remark(), request.remark())
+                && Objects.equals(previous.paymentMethod(),request.paymentMethod())
+                && Objects.equals(previous.paymentMethodNote(),request.paymentMethodNote())
                 && (request.receivedAt() == null || Objects.equals(previous.receivedAt(), request.receivedAt()));
     }
 

@@ -84,7 +84,8 @@ public class ModuleServiceImpl implements ModuleService {
             case "agents" -> CurrentOperator.requirePermission("MASTER_READ");
             case "trace" -> CurrentOperator.requirePermission("TRACE_READ");
             case "parts" -> CurrentOperator.requirePermission("PART_READ");
-            case "customers", "suppliers", "models", "warehouses" -> CurrentOperator.requirePermission("MASTER_READ");
+            case "customers" -> CurrentOperator.requireAnyPermission("MASTER_READ","CUSTOMER_PROFILE_WRITE");
+            case "suppliers", "models", "warehouses" -> CurrentOperator.requirePermission("MASTER_READ");
             case "locations" -> CurrentOperator.requireAnyPermission("MASTER_READ", "INVENTORY_READ", "STOCK_IN_OPERATE");
             case "assembly" -> CurrentOperator.requirePermission("ASSEMBLY_OPERATE");
             case "rework" -> CurrentOperator.requirePermission("REWORK_OPERATE");

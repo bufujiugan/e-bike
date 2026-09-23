@@ -54,6 +54,12 @@ public interface PiMapper {
     int insertPayment(@Param("piId") long piId, @Param("request") PiPaymentRequest request,
             @Param("operatorId") Long operatorId);
     PiPaymentView selectPaymentByRequest(@Param("piId") long piId, @Param("requestId") String requestId);
+    PiPaymentView selectPaymentForUpdate(@Param("piId") long piId,@Param("paymentId") long paymentId);
+    Long paymentOrigin(@Param("piId") long piId,@Param("paymentId") long paymentId);
+    Long currentRevisionId(@Param("piId") long piId);
+    int reversePayment(@Param("paymentId") long paymentId,@Param("request") PiPaymentReverseRequest request,@Param("operatorId") Long operatorId);
+    int syncSeriesPaymentStatus(@Param("piId") long piId,@Param("amount") BigDecimal amount);
+    int blockReleaseAfterCorrection(@Param("id") long id);
     BigDecimal paymentTotal(@Param("piId") long piId);
     int updatePaymentStatus(@Param("id") long id, @Param("status") String status);
     int insertLogistics(@Param("piId") long piId, @Param("request") PiLogisticsRequest request,

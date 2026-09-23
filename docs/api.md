@@ -210,3 +210,11 @@ H5 使用该接口，可搜索、翻页，翻页保留已选订单；切换客�
 `PUT /api/master/customers/{id}/profile`：内部CUSTOMER_PROFILE_WRITE；请求revision、address、country、email、preferredCurrency、businessOwner、reason。邮箱格式、长度和ISO币种检查，币种转大写，业务归属仅文字。父客户行锁和READ_COMMITTED下校验revision，过期页面拒绝；资料与前后值审计同事务。
 
 新建PI时把未明确填写的买方地址/联系人/电话/Email/国家、收货地址、业务归属从主资料带入document_snapshot；前端选择客户带入币种偏好，可在保存前明确调整。编辑、读取、修订克隆、导出不重新读取客户主资料。document新增buyerContactName/buyerPhone/buyerEmail/businessOwner，旧JSON未知字段保持空，V2文件显示已保存内容。
+
+## 收款方式与错误登记撤回（V43）
+
+到账请求增加paymentMethod（BANK_TRANSFER/CASH/OTHER）及paymentMethodNote；OTHER必须说明。新Web必须选择，旧接口未提供方式时保留为空并显示未记录，不猜渠道。方式和说明参与到账请求幂等比较；recordedAt为系统登记时间，与receivedAt区分，旧行不伪造登记时间。
+
+`POST /api/pis/{id}/payments/{paymentId}/reverse`：仅内部PI_READ+PI_PAYMENT_REVERSE，请求requestId/revision/reason。收款须属于同一系列，父业务锁与收款revision避免并发重复；同请求同原因重试返回原结果，改变内容拒绝。原行标记REVERSED，保留金额、方式、到账/登记时间与原凭证，记录撤回人/时间/原因。
+
+撤回后按仍CONFIRMED的到账重算系列各版本付款状态，当前发布PI取消放行并回到CONFIRMED，需重新核对门槛后放行。已发车辆/数量和既有库存保留不自动改变，不是退款或撤销出库。新修订的收款列表包含原记录piId，凭证入口使用原记录所属版本；已撤回凭证可读取、不可继续补传。通用日志/看板/导出对无财务权限账号隐藏撤回原因。

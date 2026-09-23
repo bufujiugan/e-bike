@@ -8,6 +8,7 @@ public final class FinancialAuditAccess {
         return !CurrentOperator.hasRole("WEB_AGENT") && !CurrentOperator.hasRole("PDA_OPERATOR")
                 && (CurrentOperator.hasRole("SUPER_ADMIN")
                     || CurrentOperator.hasPermission("PI_PAYMENT_CONFIRM")
+                    || CurrentOperator.hasPermission("PI_PAYMENT_REVERSE")
                     || CurrentOperator.hasPermission("PI_RELEASE"));
     }
 }

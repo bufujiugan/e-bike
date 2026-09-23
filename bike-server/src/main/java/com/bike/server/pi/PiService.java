@@ -12,6 +12,7 @@ public interface PiService {
     PiView cancel(long id, PiCancelRequest request);
     PiView confirm(long id);
     PiView recordPayment(long id, PiPaymentRequest request);
+    PiView reversePayment(long id,long paymentId,PiPaymentReverseRequest request);
     PiView release(long id, PiReleaseRequest request);
     PiView addLogistics(long id, PiLogisticsRequest request);
     byte[] excel(long id);

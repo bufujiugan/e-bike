@@ -33,6 +33,8 @@ export type PiItem = {
 export type PiPayment = {
   id: number; amount: Money; currencyCode: string; status: string; receivedAt: string
   voucherObjectKey?: string | null; remark?: string | null
+  piId: number; paymentMethod?: string | null; paymentMethodNote?: string | null; recordedAt?: string | null
+  confirmedBy?: number | null; revision: number; reversalReason?: string | null; reversedBy?: number | null; reversedAt?: string | null
 }
 export type PiReceiptAttachment = {
   id: string; paymentId: number; fileName: string; contentType: string; fileSize: number
@@ -69,7 +71,7 @@ export type PiCreate = {
   depositRequiredAmount: string; shipmentRequiredAmount: string; remark?: string; document: PiDocument
   items: { skuId: number; quantity: number; unitPrice: string; discountAmount: string; taxAmount: string; unit?: string; imageAttachmentId?: string | null }[]
 }
-export type PiPaymentCreate = { requestId: string; amount: string; currencyCode: string; receivedAt?: string | null; remark?: string }
+export type PiPaymentCreate = { requestId: string; amount: string; currencyCode: string; receivedAt?: string | null; remark?: string; paymentMethod?: string; paymentMethodNote?: string }
 export type PiLogisticsCreate = { batchNo: string; carrier?: string; trackingNo?: string; status: string; remark?: string; stockOutBatchId?: number | null; requestId: string; expectedRevision?: number }
 
 export const piApi = {
@@ -94,6 +96,7 @@ export const piApi = {
   async cancel(id: number, reason: string) { return (await api.post<{ data: PiView }>(`/api/pis/${id}/cancel`, { reason })).data.data },
   async confirm(id: number) { return (await api.post<{ data: PiView }>(`/api/pis/${id}/confirm`, {})).data.data },
   async payment(id: number, body: PiPaymentCreate) { return (await api.post<{ data: PiView }>(`/api/pis/${id}/payments`, body)).data.data },
+  async reversePayment(id: number, paymentId: number, body: { requestId: string; revision: number; reason: string }) { return (await api.post<{ data: PiView }>(`/api/pis/${id}/payments/${paymentId}/reverse`, body)).data.data },
   async receiptAttachments(piId: number, paymentId: number) {
     return (await api.get<{ data: PiReceiptAttachment[] }>(`/api/pis/${piId}/payments/${paymentId}/attachments`)).data.data
   },

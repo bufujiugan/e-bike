@@ -23,6 +23,14 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 class PiServiceTest {
+    @Test void paymentReversalRequiresDedicatedInternalPermissionEvenWithAccidentalAdminRole() {
+        var request=new PiPaymentReverseRequest("reverse",1L,"核对错误登记");
+        login("ROLE_WEB_OPERATOR","PERM_PI_READ","PERM_PI_PAYMENT_CONFIRM");
+        assertCode(()->service.reversePayment(1,1,request),"PERMISSION_DENIED");
+        login("ROLE_WEB_AGENT","ROLE_SUPER_ADMIN");assertCode(()->service.reversePayment(1,1,request),"FORBIDDEN");
+        login("ROLE_PDA_OPERATOR","ROLE_SUPER_ADMIN");assertCode(()->service.reversePayment(1,1,request),"PERMISSION_DENIED");
+        verifyNoInteractions(mapper,reservations);
+    }
     private final PiMapper mapper = mock(PiMapper.class);
     private final OperationLogMapper logs = mock(OperationLogMapper.class);
     private final ObjectMapper json = new ObjectMapper().findAndRegisterModules();
@@ -224,7 +232,7 @@ class PiServiceTest {
         PiView pi = prepareLocked("CONFIRMED");
         when(mapper.paymentTotal(1L)).thenReturn(money("0.00"));
         when(mapper.insertPayment(eq(1L), any(), isNull())).thenReturn(1);
-        when(mapper.updatePaymentStatus(1L, "DEPOSIT_MET")).thenReturn(1);
+        when(mapper.syncSeriesPaymentStatus(1L, money("30.00"))).thenReturn(1);
         service.recordPayment(1, payment("request-a", "30.00"));
         var order = inOrder(mapper);
         order.verify(mapper).lockPi(1L);
@@ -232,7 +240,7 @@ class PiServiceTest {
         order.verify(mapper).selectPaymentByRequest(1L, "request-a");
         order.verify(mapper).paymentTotal(1L);
         order.verify(mapper).insertPayment(eq(1L), any(), isNull());
-        verify(mapper).updatePaymentStatus(1L, "DEPOSIT_MET");
+        verify(mapper).syncSeriesPaymentStatus(1L, money("30.00"));
     }
 
     @Test
@@ -269,9 +277,9 @@ class PiServiceTest {
         prepareLocked("RELEASED");
         when(mapper.paymentTotal(1L)).thenReturn(money("30.00"));
         when(mapper.insertPayment(eq(1L), any(), isNull())).thenReturn(1);
-        when(mapper.updatePaymentStatus(1L, "PAID")).thenReturn(1);
+        when(mapper.syncSeriesPaymentStatus(1L, money("100.00"))).thenReturn(1);
         service.recordPayment(1, payment("balance", "70.00"));
-        verify(mapper).updatePaymentStatus(1L, "PAID");
+        verify(mapper).syncSeriesPaymentStatus(1L, money("100.00"));
     }
 
     @Test

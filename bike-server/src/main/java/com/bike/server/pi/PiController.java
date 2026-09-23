@@ -62,6 +62,11 @@ public class PiController {
     @GetMapping("/{id}")
     public ApiResponse<PiView> get(@PathVariable long id) { return ApiResponse.success("查询成功", service.get(id)); }
 
+    @PostMapping("/{id}/payments/{paymentId}/reverse")
+    public ApiResponse<PiView> reversePayment(@PathVariable long id,@PathVariable long paymentId,@Valid @RequestBody PiPaymentReverseRequest request) {
+        return ApiResponse.success("错误到账登记已撤回，请重新核对放行条件",service.reversePayment(id,paymentId,request));
+    }
+
     @GetMapping("/{id}/dispatch-batches/{batchId}")
     public ApiResponse<java.util.Map<String,Object>> batch(@PathVariable long id,@PathVariable long batchId) {
         var pi=service.get(id);var batch=dispatch.get(batchId);

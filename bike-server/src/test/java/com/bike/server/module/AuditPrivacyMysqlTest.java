@@ -49,7 +49,8 @@ class AuditPrivacyMysqlTest {
                     + "(6,'PI','public-confirm','确认 PI',NULL,'clerk','public-note','2026-09-20 10:05:00'),"
                     + "(7,'PI','finance-attachment','上传 PI 收款凭证',NULL,'finance','RECEIPTSECRET 银行凭证.pdf','2026-09-20 10:06:00'),"
                     + "(8,'AFTER_SALES','private-case','CASE_ASSIGNED',NULL,'service','COMPANYSECRET case','2026-09-20 10:07:00'),"
-                    + "(9,'AFTER_SALES_COMPANY','private-company','COMPANY_CONTACT_UPDATED',NULL,'service','COMPANYSECRET contact','2026-09-20 10:08:00')");
+                    + "(9,'AFTER_SALES_COMPANY','private-company','COMPANY_CONTACT_UPDATED',NULL,'service','COMPANYSECRET contact','2026-09-20 10:08:00'),"
+                    + "(10,'PI','finance-reverse','撤回PI错误收款登记',NULL,'finance','REVERSALSECRET reason','2026-09-20 10:09:00')");
             var mapper = session.getMapper(ModuleMapper.class);
             var columns = List.of("时间", "操作", "业务对象", "操作人", "业务类型", "备注");
             assertThat(mapper.countRows("logs", null, columns, null, false)).isEqualTo(2);
@@ -57,6 +58,8 @@ class AuditPrivacyMysqlTest {
             assertThat(mapper.countRows("logs", null, columns, "companysecret", false)).isZero();
             assertThat(mapper.countRows("logs", null, columns, "companysecret", true)).isZero();
             assertThat(mapper.countRows("logs", null, columns, "receiptsecret", false)).isZero();
+            assertThat(mapper.countRows("logs", null, columns, "reversalsecret", false)).isZero();
+            assertThat(mapper.countRows("logs", null, columns, "reversalsecret", true)).isEqualTo(1);
             assertThat(mapper.selectRowsPage("logs", null, columns, "receiptsecret", "时间", 0, 20, false)).isEmpty();
             assertThat(mapper.countRows("logs", null, columns, "receiptsecret", true)).isEqualTo(1);
             assertThat(mapper.selectRowsPage("logs", null, columns, "banksecret", "时间", 0, 20, false)).isEmpty();
@@ -65,10 +68,10 @@ class AuditPrivacyMysqlTest {
                     .singleElement().extracting(row -> row.get("备注")).isEqualTo("BANKSECRET 500.00");
             assertThat(mapper.selectRows("logs", null, false)).hasSize(2);
             assertThat(mapper.selectRows("trace", null, false)).hasSize(2);
-            assertThat(mapper.selectRows("trace", null, true)).hasSize(7);
+            assertThat(mapper.selectRows("trace", null, true)).hasSize(8);
             assertThat(session.getMapper(DashboardMapper.class).selectRecentOperations(false))
                     .extracting(row -> row.get("target")).containsExactly("public-confirm", "FRAME1");
-            assertThat(session.getMapper(DashboardMapper.class).selectRecentOperations(true)).hasSize(7);
+            assertThat(session.getMapper(DashboardMapper.class).selectRecentOperations(true)).hasSize(8);
         } finally {
             try (var connection = source.getConnection(); var sql = connection.createStatement()) {
                 for (String table : tables) {

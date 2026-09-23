@@ -133,11 +133,39 @@
         </if>
     </update>
     <insert id="insertPayment">
-        INSERT INTO bike_pi_payment(pi_id,request_id,amount,currency_code,voucher_object_key,status,received_at,confirmed_by,remark)
+        INSERT INTO bike_pi_payment(pi_id,request_id,amount,currency_code,voucher_object_key,status,received_at,confirmed_by,remark,payment_method,payment_method_note,recorded_at)
         VALUES(#{piId},#{request.requestId},#{request.amount},#{request.currencyCode},#{request.voucherObjectKey},
-            'CONFIRMED',COALESCE(#{request.receivedAt},CURRENT_TIMESTAMP(3)),#{operatorId},#{request.remark})
+            'CONFIRMED',COALESCE(#{request.receivedAt},CURRENT_TIMESTAMP(3)),#{operatorId},#{request.remark},#{request.paymentMethod},#{request.paymentMethodNote},CURRENT_TIMESTAMP(3))
     </insert>
-    <sql id="paymentColumns">pay.id,pay.pi_id,pay.request_id,pay.amount,pay.currency_code,pay.voucher_object_key,pay.status,pay.received_at,pay.confirmed_by,pay.remark</sql>
+    <sql id="paymentColumns">pay.id,pay.pi_id,pay.request_id,pay.amount,pay.currency_code,pay.voucher_object_key,pay.status,pay.received_at,pay.confirmed_by,pay.remark,pay.payment_method,pay.payment_method_note,pay.recorded_at,pay.revision,pay.reversal_request_id,pay.reversal_reason,pay.reversed_by,pay.reversed_at</sql>
+    <select id="selectPaymentForUpdate" resultType="com.bike.server.pi.PiPaymentView">
+        SELECT <include refid="paymentColumns"/> FROM bike_pi_payment pay JOIN bike_pi p0 ON p0.id=pay.pi_id
+        JOIN bike_pi p1 ON (p1.series_id=p0.series_id OR (p1.series_id IS NULL AND p0.series_id IS NULL AND p1.id=p0.id))
+        WHERE p1.id=#{piId} AND pay.id=#{paymentId} FOR UPDATE
+    </select>
+    <select id="paymentOrigin" resultType="long">
+        SELECT pay.pi_id FROM bike_pi_payment pay JOIN bike_pi p0 ON p0.id=pay.pi_id
+        JOIN bike_pi p1 ON (p1.series_id=p0.series_id OR (p1.series_id IS NULL AND p0.series_id IS NULL AND p1.id=p0.id))
+        WHERE p1.id=#{piId} AND pay.id=#{paymentId}
+    </select>
+    <select id="currentRevisionId" resultType="long">
+        SELECT COALESCE(s.current_pi_id,p.id) FROM bike_pi p LEFT JOIN bike_pi_series s ON s.id=p.series_id WHERE p.id=#{piId}
+    </select>
+    <update id="reversePayment">
+        UPDATE bike_pi_payment SET status='REVERSED',revision=revision+1,reversal_request_id=#{request.requestId},
+          reversal_reason=#{request.reason},reversed_by=#{operatorId},reversed_at=CURRENT_TIMESTAMP(3)
+        WHERE id=#{paymentId} AND status='CONFIRMED' AND revision=#{request.revision}
+    </update>
+    <update id="syncSeriesPaymentStatus">
+        UPDATE bike_pi target JOIN bike_pi anchor ON (target.series_id=anchor.series_id OR (target.series_id IS NULL AND anchor.series_id IS NULL AND target.id=anchor.id))
+        SET target.payment_status=CASE WHEN #{amount}&gt;=target.total_amount THEN 'PAID'
+          WHEN #{amount}&gt;=target.deposit_required_amount THEN 'DEPOSIT_MET' WHEN #{amount}&gt;0 THEN 'PARTIAL' ELSE 'UNPAID' END
+        WHERE anchor.id=#{piId}
+    </update>
+    <update id="blockReleaseAfterCorrection">
+        UPDATE bike_pi SET status=CASE WHEN status='RELEASED' THEN 'CONFIRMED' ELSE status END,
+            release_status='BLOCKED',released_at=NULL WHERE id=#{id}
+    </update>
     <select id="selectPaymentByRequest" resultType="com.bike.server.pi.PiPaymentView">
         SELECT <include refid="paymentColumns"/> FROM bike_pi_payment pay JOIN bike_pi p0 ON p0.id=pay.pi_id
         JOIN bike_pi p1 ON (p1.series_id=p0.series_id OR (p1.series_id IS NULL AND p0.series_id IS NULL AND p1.id=p0.id))
@@ -160,7 +188,9 @@
         FROM bike_pi_item WHERE pi_id=#{piId} ORDER BY id
     </select>
     <select id="selectPayments" resultType="com.bike.server.pi.PiPaymentView">
-        SELECT <include refid="paymentColumns"/> FROM bike_pi_payment pay WHERE pay.pi_id=#{piId} ORDER BY pay.received_at,pay.id
+        SELECT <include refid="paymentColumns"/> FROM bike_pi_payment pay JOIN bike_pi p0 ON p0.id=pay.pi_id
+        JOIN bike_pi p1 ON (p1.series_id=p0.series_id OR (p1.series_id IS NULL AND p0.series_id IS NULL AND p1.id=p0.id))
+        WHERE p1.id=#{piId} ORDER BY pay.received_at,pay.id
     </select>
     <select id="selectLogistics" resultType="com.bike.server.pi.PiLogisticsView">
         SELECT id,pi_id,batch_no,carrier,tracking_no,status,shipped_at,remark,created_by,created_at

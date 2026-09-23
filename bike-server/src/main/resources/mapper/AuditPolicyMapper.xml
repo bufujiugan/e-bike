@@ -7,7 +7,7 @@
         AND business_type NOT IN ('AFTER_SALES','AFTER_SALES_COMPANY')
         <if test="!financialAudit">
             AND NOT (
-                (business_type='PI' AND action IN ('登记 PI 收款','放行 PI 发货','上传 PI 收款凭证'))
+                (business_type='PI' AND action IN ('登记 PI 收款','放行 PI 发货','上传 PI 收款凭证','撤回PI错误收款登记'))
                 OR (business_type='ORDER_RESERVATION' AND action IN ('收款达标保留订单占用','收款已达条件但占用已到期'))
             )
         </if>

@@ -69,7 +69,8 @@ try {
   const reader = await account('READER', ['PI_READ', 'INVENTORY_READ']);
   const finance = await account('FINANCE', ['PI_READ', 'PI_PAYMENT_CONFIRM', 'PI_RELEASE']);
   const logisticsOperator = await account('LOGISTICS', ['PI_READ', 'PI_LOGISTICS_WRITE']);
-  const external = await account('AGENT', ['PI_READ', 'PI_WRITE', 'PI_EXPORT', 'PI_TEMPLATE_MANAGE', 'AGENT_INVENTORY_READ', 'AGENT_LOCK_WRITE', 'ORDER_WRITE', 'ORDER_READ'], agent.id);
+  const external = await account('AGENT', ['PI_READ', 'PI_WRITE', 'PI_EXPORT', 'PI_TEMPLATE_MANAGE', 'PI_PAYMENT_REVERSE', 'AGENT_INVENTORY_READ', 'AGENT_LOCK_WRITE', 'ORDER_WRITE', 'ORDER_READ'], agent.id);
+  const paymentCorrector = await account('CORRECTOR', ['PI_READ', 'PI_PAYMENT_REVERSE']);
   const customerManager = await account('CUSTOMER', ['CUSTOMER_PROFILE_WRITE']);
   const profilePath = `/api/master/customers/${customer.id}/profile`;
   assert.equal((await req(profilePath, undefined, { token: sales })).revision, 0);
@@ -79,6 +80,7 @@ try {
   await req(profilePath, undefined, { token: external, code: 'FORBIDDEN' });
   await req(profilePath, customerProfile, { method: 'PUT', token: external, code: 'FORBIDDEN' });
   const savedProfile = await req(profilePath, customerProfile, { method: 'PUT', token: customerManager });
+  await req('/api/modules/customers', undefined, { token: customerManager });
   assert.equal(savedProfile.preferredCurrency, 'EUR'); assert.equal(savedProfile.revision, 1);
   await req(profilePath, { ...customerProfile, address: '过期覆盖' }, { method: 'PUT', token: customerManager, code: 'CUSTOMER_PROFILE_CONFLICT' });
   await req(profilePath, { ...customerProfile, revision: 1, preferredCurrency: 'ZZZ' }, { method: 'PUT', token: customerManager, code: 'CUSTOMER_PROFILE_INVALID' });
@@ -290,6 +292,29 @@ try {
   for (const l of sourceLocks) { await req(`/api/inventory-locks/${l.id}/release?reason=释放本次未转换一台`, {}, { token: sales }); locksToRelease.delete(l.id); }
   await expectSku(model.id, red.id, 1, 0, 0, 1); await expectSku(secondModel.id, blue.id, 1, 0, 0, 1);
   pass('同PI两车型经普通仓管真实出库，撤销后可重新履约；剩余锁释放，实物与承诺守恒且收款只记一次');
+  const extraRequest = { requestId: randomUUID(), amount: '12.34', currencyCode: 'CNY', paymentMethod: 'BANK_TRANSFER', remark: '隔离核对方式' };
+  const extra = await req(`/api/pis/${pi.id}/payments`, extraRequest, { token: finance });
+  const receipt = extra.payments.find(p => p.requestId === extraRequest.requestId); assert(receipt); assert.equal(receipt.paymentMethod, 'BANK_TRANSFER'); assert(receipt.recordedAt); assert.equal(receipt.revision, 1);
+  await req(`/api/pis/${pi.id}/payments`, { ...extraRequest, paymentMethod: 'CASH' }, { token: finance, code: 'PAYMENT_REQUEST_CONFLICT' });
+  await req(`/api/pis/${pi.id}/payments`, { ...extraRequest, requestId: randomUUID(), paymentMethod: 'OTHER' }, { token: finance, code: 'PAYMENT_METHOD_INVALID' });
+  const receiptPath = `/api/pis/${pi.id}/payments/${receipt.id}/attachments`;
+  const receiptFile = await uploadFile(receiptPath, imageBytes, { token: finance });
+  const reversalPath = `/api/pis/${pi.id}/payments/${receipt.id}/reverse`, reversalBody = { requestId: randomUUID(), revision: 1, reason: '重复登记验收，保留实际出库事实' };
+  await req(reversalPath, reversalBody, { token: finance, code: 'PERMISSION_DENIED' });
+  await req(reversalPath, reversalBody, { token: external, code: 'FORBIDDEN' });
+  await req(reversalPath, { ...reversalBody, revision: 2 }, { token: paymentCorrector, code: 'PI_PAYMENT_REVERSE_CONFLICT' });
+  const reversed = await Promise.all([req(reversalPath, reversalBody, { token: paymentCorrector }), req(reversalPath, reversalBody, { token: paymentCorrector })]);
+  for (const result of reversed) {
+    assert.equal(result.paidAmount, '200.00'); assert.equal(result.status, 'CONFIRMED'); assert.equal(result.releaseStatus, 'BLOCKED');
+    assert(result.fulfillment.every(line => line.shippedQty === 1)); const row = result.payments.find(p => p.id === receipt.id); assert.equal(row.status, 'REVERSED'); assert.equal(row.revision, 2); assert.equal(row.reversalReason, reversalBody.reason); assert(!('reversalRequestId' in row));
+  }
+  await req(reversalPath, { ...reversalBody, reason: '同请求改原因' }, { token: paymentCorrector, code: 'PI_PAYMENT_REVERSE_CONFLICT' });
+  const downloadReceipt = await fetch(`${base}${receiptPath}/${receiptFile.id}/download`, { headers: { Authorization: `Bearer ${paymentCorrector}` } }); assert.equal(downloadReceipt.status, 200); assert(Buffer.from(await downloadReceipt.arrayBuffer()).equals(imageBytes));
+  await uploadFile(receiptPath, imageBytes, { token: finance, code: 'INVALID_STATUS_TRANSITION' });
+  const revisionAfter = await req(`/api/pis/${revision.id}`, undefined, { token: finance }); assert.equal(revisionAfter.paidAmount, '200.00'); assert.equal(revisionAfter.payments.find(p => p.id === receipt.id).piId, pi.id);
+  const sameExport = await req(`/api/pis/${pi.id}/export-task`, undefined, { token: sales }); assert.equal(sameExport.pdfSha256, exported.pdf); assert.equal(sameExport.xlsxSha256, exported.xlsx);
+  await expectSku(model.id, red.id, 1, 0, 0, 1); await expectSku(secondModel.id, blue.id, 1, 0, 0, 1);
+  pass('收款方式参与幂等，独立权限并发撤回只生效一次；已发数量/库存及归档不变、凭证保留、系列历史连续并重新阻止放行');
 } catch (error) { evidence.error = error.stack || error.message; console.error(error); process.exitCode = 1; }
 finally {
   for (const id of ordersToCancel) try { await req(`/api/orders/${id}/cancel?reason=SKU验收结束清理未完成订单`, {}); } catch(error) { evidence.cleanupFailures.push({ orderId: id, error: error.message }); }

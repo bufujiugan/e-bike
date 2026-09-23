@@ -113,7 +113,7 @@ const navPermissionMap: Record<string, string[]> = {
   dashboard: ['DASHBOARD_READ'], assembly: ['ASSEMBLY_OPERATE'], vehicles: ['VEHICLE_READ'], inventory: ['INVENTORY_READ'],
   'stock-in': ['STOCK_READ'], 'stock-out': ['STOCK_READ'], stock: ['STOCK_READ'], orders: ['ORDER_READ'],
   agents: ['MASTER_READ'], 'inventory-locks': ['AGENT_INVENTORY_READ', 'AGENT_LOCK_WRITE'], rework: ['REWORK_OPERATE'], trace: ['TRACE_READ'],
-  parts: ['PART_READ'], customers: ['MASTER_READ'], suppliers: ['MASTER_READ'], models: ['MASTER_READ'], warehouses: ['MASTER_READ'], locations: ['MASTER_READ'],
+  parts: ['PART_READ'], customers: ['MASTER_READ', 'CUSTOMER_PROFILE_WRITE'], suppliers: ['MASTER_READ'], models: ['MASTER_READ'], warehouses: ['MASTER_READ'], locations: ['MASTER_READ'],
   users: ['USER_READ'], roles: ['ROLE_READ'], workstations: ['WORKSTATION_READ'], config: ['SYSTEM_CONFIG_WRITE'],
   logs: ['DATA_EXPORT'], 'operation-logs': ['DATA_EXPORT'], customs: ['DATA_EXPORT'], 'agent-dashboard': ['AGENT_INVENTORY_READ'],
   'agent-inventory': ['AGENT_INVENTORY_READ'], 'agent-locks': ['AGENT_INVENTORY_READ', 'AGENT_LOCK_WRITE'], 'purchase-intents': ['AGENT_INVENTORY_READ', 'PURCHASE_INTENT_WRITE'],

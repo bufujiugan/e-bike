@@ -343,7 +343,7 @@ class SkuCommitmentMysqlTest {
                 exec("INSERT INTO @warehouse_location VALUES(1,1,'库位','ENABLED')");
                 addVehicle(100,10);addVehicle(101,11);addVehicle(102,null);
                 if(withPi) {
-                    for(String file:List.of("V24__pi_multi_item_and_fulfillment.sql","V30__pi_series_and_atomic_conversion.sql","V31__pi_dispatch_batches.sql","V32__pi_logistics_actual_batches.sql","V33__pi_revisions_and_series_payments.sql","V40__pi_document_details.sql")) {
+                    for(String file:List.of("V24__pi_multi_item_and_fulfillment.sql","V30__pi_series_and_atomic_conversion.sql","V31__pi_dispatch_batches.sql","V32__pi_logistics_actual_batches.sql","V33__pi_revisions_and_series_payments.sql","V40__pi_document_details.sql","V43__pi_payment_corrections.sql")) {
                         try(var input=Resources.getResourceAsStream("db/migration/"+file)) {
                             String ddl=new String(input.readAllBytes(),StandardCharsets.UTF_8).split("INSERT INTO bike_sys_permission")[0]
                                     .replace("bike_",prefix).replaceAll("CONSTRAINT (fk_(?:pi|dispatch|logistics)_[a-z_]+)","CONSTRAINT "+prefix+"$1");

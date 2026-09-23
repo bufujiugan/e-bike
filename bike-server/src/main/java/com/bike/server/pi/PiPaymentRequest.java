@@ -11,4 +11,10 @@ public record PiPaymentRequest(
         @NotBlank(message = "币种不能为空") @Size(max = 3) String currencyCode,
         @Size(max = 500) String voucherObjectKey,
         LocalDateTime receivedAt,
-        @Size(max = 500) String remark) {}
+        @Size(max = 500) String remark,
+        @Pattern(regexp="BANK_TRANSFER|CASH|OTHER") String paymentMethod,
+        @Size(max=200) String paymentMethodNote) {
+    public PiPaymentRequest(String requestId,BigDecimal amount,String currencyCode,String voucherObjectKey,LocalDateTime receivedAt,String remark) {
+        this(requestId,amount,currencyCode,voucherObjectKey,receivedAt,remark,null,null);
+    }
+}

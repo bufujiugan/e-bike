@@ -92,3 +92,7 @@ V41新增bike_pi_confirmation_attachment，包含PI修订、请求ID、可见范
 ## V42 客户商务资料
 
 新增bike_customer_profile，以原客户ID关联地址、国家/地区、Email、币种偏好、业务归属、revision及修改人员/时间。历史未知资料不回填。业务归属为部门/负责人文字，不改变账号权限；新增CUSTOMER_PROFILE_WRITE仅默认分配超级管理员，可独立授权内部岗位。四镜像SHA256：`17FD441ADC43AF27CCA9E35834918BE6FEE571A4D4C08172AEC08C6AC95EF093`，已应用隔离API，禁止修改。
+
+## V43 收款方式及撤回审计
+
+bike_pi_payment增加payment_method/payment_method_note/recorded_at/revision及reversal_request_id/reversal_reason/reversed_by/reversed_at。旧方式和登记时间留空。PI_PAYMENT_REVERSE默认仅管理员，可独立授权。四镜像SHA256：`CB099A8054865C0050776BBE58029887F51AC1EC5858BECAC395D474FE934D57`，已用于真实MySQL迁移夹具，不再修改。
