@@ -218,3 +218,9 @@ H5 使用该接口，可搜索、翻页，翻页保留已选订单；切换客�
 `POST /api/pis/{id}/payments/{paymentId}/reverse`：仅内部PI_READ+PI_PAYMENT_REVERSE，请求requestId/revision/reason。收款须属于同一系列，父业务锁与收款revision避免并发重复；同请求同原因重试返回原结果，改变内容拒绝。原行标记REVERSED，保留金额、方式、到账/登记时间与原凭证，记录撤回人/时间/原因。
 
 撤回后按仍CONFIRMED的到账重算系列各版本付款状态，当前发布PI取消放行并回到CONFIRMED，需重新核对门槛后放行。已发车辆/数量和既有库存保留不自动改变，不是退款或撤销出库。新修订的收款列表包含原记录piId，凭证入口使用原记录所属版本；已撤回凭证可读取、不可继续补传。通用日志/看板/导出对无财务权限账号隐藏撤回原因。
+
+## PI物流附件（V44）
+
+GET/POST `/api/pis/{piId}/logistics/{logisticsId}/attachments` 查询/上传，GET `.../{attachmentId}/download` 下载。先验证原PI访问范围及物流记录确属该系列；上传必须内部PI_READ+PI_LOGISTICS_WRITE。客户仅可读CUSTOMER，INTERNAL仅内部可见。
+
+multipart file/requestId/visibility；真实JPG/PNG/PDF、10MB、每物流50个。物流父行锁和READ_COMMITTED保护状态、限额及幂等；同请求不同内容拒绝。PLANNED/SHIPPED允许新增，WITHDRAWN保留原附件下载且拒绝新增，原请求相同内容重试返回原记录。元数据、审计同事务，失败清理对象；下载核验SHA256，返回no-store/nosniff/CSP。

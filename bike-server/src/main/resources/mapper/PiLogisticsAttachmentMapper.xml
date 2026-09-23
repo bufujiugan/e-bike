@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.pi.PiLogisticsAttachmentMapper">
+    <sql id="fields">id,logistics_id,request_id,object_key,file_name,content_type,file_size,sha256,visibility,created_by,created_at</sql>
+    <select id="list" resultType="com.bike.server.pi.PiLogisticsAttachment">SELECT <include refid="fields"/> FROM bike_pi_logistics_attachment WHERE logistics_id=#{logisticsId}<if test="!internal"> AND visibility='CUSTOMER'</if> ORDER BY created_at,id LIMIT 50</select>
+    <select id="get" resultType="com.bike.server.pi.PiLogisticsAttachment">SELECT <include refid="fields"/> FROM bike_pi_logistics_attachment WHERE logistics_id=#{logisticsId} AND id=#{id}</select>
+    <select id="byRequest" resultType="com.bike.server.pi.PiLogisticsAttachment">SELECT <include refid="fields"/> FROM bike_pi_logistics_attachment WHERE logistics_id=#{logisticsId} AND request_id=#{requestId}</select>
+    <select id="count" resultType="long">SELECT COUNT(*) FROM bike_pi_logistics_attachment WHERE logistics_id=#{logisticsId}</select>
+    <select id="lockLogistics" resultType="string">SELECT status FROM bike_pi_logistics WHERE id=#{logisticsId} FOR UPDATE</select>
+    <insert id="insert">INSERT INTO bike_pi_logistics_attachment(id,logistics_id,request_id,object_key,file_name,content_type,file_size,sha256,visibility,created_by) VALUES(#{r.id},#{r.logisticsId},#{r.requestId},#{r.objectKey},#{r.fileName},#{r.contentType},#{r.fileSize},#{r.sha256},#{r.visibility},#{r.createdBy})</insert>
+</mapper>

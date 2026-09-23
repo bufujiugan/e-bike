@@ -266,6 +266,15 @@ try {
     await req(`/api/pis/${pi.id}/logistics`, { ...logisticsBase, stockOutBatchId: batch.id }, { token: external, code: 'FORBIDDEN' });
     const planBody = { ...logisticsBase, status: 'PLANNED' };
     const plan = (await req(`/api/pis/${pi.id}/logistics`, planBody, { token: logisticsOperator })).logistics[0];
+    const logisticsAttachmentsPath = `/api/pis/${pi.id}/logistics/${plan.id}/attachments`, logisticsUploadRequest = randomUUID();
+    const logisticsFiles = await Promise.all([uploadFile(logisticsAttachmentsPath, imageBytes, { token: logisticsOperator, requestId: logisticsUploadRequest }), uploadFile(logisticsAttachmentsPath, imageBytes, { token: logisticsOperator, requestId: logisticsUploadRequest })]);
+    assert.equal(logisticsFiles[0].id, logisticsFiles[1].id);
+    const privateLogisticsFile = await uploadFile(logisticsAttachmentsPath, imageBytes, { token: logisticsOperator, visibility: 'INTERNAL' });
+    await uploadFile(logisticsAttachmentsPath, imageBytes, { token: sales, code: 'PERMISSION_DENIED' });
+    await uploadFile(logisticsAttachmentsPath, imageBytes, { token: external, code: 'FORBIDDEN' });
+    const publicLogisticsFiles = await req(logisticsAttachmentsPath, undefined, { token: external }); assert.equal(publicLogisticsFiles.length, 1); assert(!('objectKey' in publicLogisticsFiles[0]));
+    await req(`${logisticsAttachmentsPath}/${privateLogisticsFile.id}/download`, undefined, { token: external, code: 'ATTACHMENT_NOT_FOUND' });
+    await req(`/api/pis/${pi.id}/logistics/9223372036854775807/attachments`, undefined, { token: sales, code: 'ATTACHMENT_NOT_FOUND' });
     assert.equal(plan.linkType,'PLAN_UNLINKED'); assert.equal(plan.revision,1);
     assert.equal((await req(`/api/pis/${pi.id}/logistics`, planBody, { token: logisticsOperator })).logistics.length,1);
     await req(`/api/pis/${pi.id}/logistics`, { ...planBody, remark: '改变同一请求' }, { token: logisticsOperator, code: 'LOGISTICS_REQUEST_CONFLICT' });
@@ -281,6 +290,10 @@ try {
     const withdrawal={requestId:randomUUID(),expectedRevision:2,reason:'承运商取消，已核实货物未离库'};
     await req(`/api/pis/${pi.id}/logistics/${plan.id}/withdraw`,withdrawal,{token:logisticsOperator});
     const withdrawn=await req(`/api/pis/${pi.id}/logistics/${plan.id}/withdraw`,withdrawal,{token:logisticsOperator});assert.equal(withdrawn.logistics[0].revision,3);
+    await uploadFile(logisticsAttachmentsPath, imageBytes, { token: logisticsOperator, code: 'INVALID_STATUS_TRANSITION' });
+    const logisticsFileResponse = await fetch(`${base}${logisticsAttachmentsPath}/${logisticsFiles[0].id}/download`, { headers: { Authorization: `Bearer ${external}` } }); assert.equal(logisticsFileResponse.status, 200); assert.equal(logisticsFileResponse.headers.get('x-content-type-options'), 'nosniff'); assert(Buffer.from(await logisticsFileResponse.arrayBuffer()).equals(imageBytes));
+    assert.equal((await req(`/api/pis/${revision.id}/logistics/${plan.id}/attachments`, undefined, { token: sales })).length, 2);
+    pass('物流附件绑定实际记录，普通物流并发上传幂等、客户只读公开文件；跨记录拒绝，撤回后保留下载并拒绝新增');
     const history=await req(`/api/pis/${pi.id}/logistics/${plan.id}/history`,undefined,{token:logisticsOperator});assert.equal(history.length,3);assert(JSON.stringify(history).includes(logisticsBase.trackingNo));
     await req(`/api/pis/${pi.id}/logistics/${plan.id}/history`,undefined,{token:external,code:'FORBIDDEN'});
     await req(`/api/stock-out/${active.stockOutId}/cancel?reason=授权撤回后实际撤销`,{},{token:warehouseOperator});

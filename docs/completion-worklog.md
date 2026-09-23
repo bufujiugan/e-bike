@@ -421,3 +421,11 @@ batch30-payment-tests.log首次36项中1项因测试SQL误用current_status列�
 batch30-payment-http.json/.log 14组真实HTTP通过且cleanupFailures为空；普通登记财务没有撤回权限、误授代理仍被拒绝，双请求并发撤回生效一次，原凭证逐字节可读但不可补传，系列累计到账连续，已发数量/实物/固定文件哈希不变。batch30-final-web-build.log类型检查/构建通过，主包1698.10KB告警。V43四镜像冻结，API18182运行acceptance-batch30-runtime.jar。
 
 剩余物流附件、内部销售客户范围、业务看板/列表导出、修订数量与币种保护需继续逐条核对；UI/正式交付仍待验收。本批不计全项目最终两轮，当前仍为0轮；代码尚未推送GitHub。
+
+## 批次31：实际物流记录附件（2026-09-23）
+
+V44新增物流记录附件，绑定真实logisticsId；内部PI_READ+PI_LOGISTICS_WRITE上传，销售编辑权限不足以代替物流权限。客户只读CUSTOMER，内部可读INTERNAL；原PI系列和客户范围仍检查。真实JPG/PNG/PDF、每个10MB/每物流50个、SHA256授权下载。READ_COMMITTED和物流父行锁串行化状态/数量/请求幂等，审计失败回滚并清理对象。撤回物流保留原附件可读，相同请求可重试，禁止新增。Web增加进度、失败提示和下载入口。
+
+batch31-logistics-file-tests.log定向7项通过；batch31-full-verify.log全量382项通过，0失败/错误/跳过，包含全新b31full两迁移库。batch31-logistics-files-http.json/.log真实HTTP15组全部通过且cleanupFailures为空，新增并发附件、物流岗位与客户边界、跨记录拒绝及撤回后只读。batch31-web-build.log类型检查/构建通过，主包1698.68KB体积告警保留。API18182运行acceptance-batch31-runtime.jar，health为UP。V44四镜像冻结。
+
+内部销售客户范围、PI修订数量与币种保护、业务看板/列表导出及格式容量仍须核对和补齐。普通岗位浏览器、正式SMTP/COS/设备和现场交付仍待验收。本批属于实施回归，全项目最终两轮仍为0轮；尚未推送GitHub。

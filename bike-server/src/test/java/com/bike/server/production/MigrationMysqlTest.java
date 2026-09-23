@@ -10,7 +10,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 /** 仅针对两个新建的专用空库，禁止清库或重复覆盖已有业务数据。 */
 @EnabledIfEnvironmentVariable(named="BIKE_MIGRATION_CLEAN_URL",matches=".+")
 class MigrationMysqlTest {
-  private static final int LATEST_VERSION = 43;
+  private static final int LATEST_VERSION = 44;
   Flyway flyway(String url,String target) {
     assertThat(url).contains("/bike_migration_");
     var config=Flyway.configure().dataSource(url,System.getenv("BIKE_MYSQL_TEST_USER"),System.getenv("BIKE_MYSQL_TEST_PASSWORD"))
@@ -123,7 +123,7 @@ class MigrationMysqlTest {
     try(var result=sql.executeQuery("SELECT COUNT(*) FROM bike_sys_role_permission rp JOIN bike_sys_permission p ON p.id=rp.permission_id WHERE p.permission_code='PRODUCTION_MANAGE'")){result.next();assertThat(result.getInt(1)).isZero();}
   }
   private void verifyAfterSalesAndPiSchema(Statement sql)throws Exception {
-    for(String table: new String[]{"bike_pi_template","bike_pi_export","bike_pi_confirmation_attachment","bike_customer_profile"}) {
+    for(String table: new String[]{"bike_pi_template","bike_pi_export","bike_pi_confirmation_attachment","bike_customer_profile","bike_pi_logistics_attachment"}) {
       try(var result=sql.executeQuery("SELECT COUNT(*) FROM "+table)){result.next();assertThat(result.getInt(1)).as("不伪造历史模板发布或导出："+table).isZero();}
     }
     try(var result=sql.executeQuery("SELECT COUNT(*) FROM bike_sys_role_permission rp JOIN bike_sys_role r ON r.id=rp.role_id JOIN bike_sys_permission p ON p.id=rp.permission_id WHERE p.permission_code='PI_TEMPLATE_MANAGE' AND r.role_code!='SUPER_ADMIN'")){result.next();assertThat(result.getInt(1)).isZero();}

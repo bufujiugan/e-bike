@@ -24,6 +24,7 @@ export type PiTemplate = Pick<PiDocument, 'templateCode' | 'templateVersion' | '
 export type PiTemplatePublish = Omit<PiTemplate, 'id' | 'publishedAt' | 'publishReason'> & { reason: string }
 export type PiExportJob = { piId: number; sourceType: string; status: string; revision: number; attempts: number; pdfSha256?: string; pdfSize?: number; xlsxSha256?: string; xlsxSize?: number; errorCode?: string; createdAt: string; updatedAt: string }
 export type PiConfirmationAttachment = { id: string; piId: number; fileName: string; contentType: string; fileSize: number; sha256: string; visibility: 'CUSTOMER' | 'INTERNAL'; createdAt: string }
+export type PiLogisticsAttachment = Omit<PiConfirmationAttachment, 'piId'> & { logisticsId: number }
 export type PiItem = {
   id: number; skuId: number; productModelId: number; skuCode: string; productName: string
   specification: string; modelName: string; quantity: number; unitPrice: Money
@@ -75,6 +76,12 @@ export type PiPaymentCreate = { requestId: string; amount: string; currencyCode:
 export type PiLogisticsCreate = { batchNo: string; carrier?: string; trackingNo?: string; status: string; remark?: string; stockOutBatchId?: number | null; requestId: string; expectedRevision?: number }
 
 export const piApi = {
+  async logisticsAttachments(piId: number, logisticsId: number) { return (await api.get<{ data: PiLogisticsAttachment[] }>(`/api/pis/${piId}/logistics/${logisticsId}/attachments`)).data.data },
+  async uploadLogisticsAttachment(piId: number, logisticsId: number, requestId: string, visibility: string, file: File, progress: (percent: number) => void) {
+    const form = new FormData(); form.append('file', file); form.append('requestId', requestId); form.append('visibility', visibility)
+    return (await api.post<{ data: PiLogisticsAttachment }>(`/api/pis/${piId}/logistics/${logisticsId}/attachments`, form, { onUploadProgress: e => { if (e.total) progress(Math.min(99, Math.round(e.loaded * 100 / e.total))) } })).data.data
+  },
+  async downloadLogisticsAttachment(piId: number, logisticsId: number, id: string) { return (await api.get<Blob>(`/api/pis/${piId}/logistics/${logisticsId}/attachments/${id}/download`, { responseType: 'blob' })).data },
   async confirmationAttachments(id: number) { return (await api.get<{ data: PiConfirmationAttachment[] }>(`/api/pis/${id}/confirmation-attachments`)).data.data },
   async uploadConfirmation(id: number, requestId: string, visibility: string, file: File) { const form = new FormData(); form.append('requestId', requestId); form.append('visibility', visibility); form.append('file', file); return (await api.post<{ data: PiConfirmationAttachment }>(`/api/pis/${id}/confirmation-attachments`, form)).data.data },
   async downloadConfirmation(id: number, attachmentId: string) { return (await api.get<Blob>(`/api/pis/${id}/confirmation-attachments/${attachmentId}/download`, { responseType: 'blob' })).data },

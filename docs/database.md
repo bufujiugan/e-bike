@@ -96,3 +96,7 @@ V41新增bike_pi_confirmation_attachment，包含PI修订、请求ID、可见范
 ## V43 收款方式及撤回审计
 
 bike_pi_payment增加payment_method/payment_method_note/recorded_at/revision及reversal_request_id/reversal_reason/reversed_by/reversed_at。旧方式和登记时间留空。PI_PAYMENT_REVERSE默认仅管理员，可独立授权。四镜像SHA256：`CB099A8054865C0050776BBE58029887F51AC1EC5858BECAC395D474FE934D57`，已用于真实MySQL迁移夹具，不再修改。
+
+## V44 PI物流记录附件
+
+新增bike_pi_logistics_attachment，实际logistics_id外键、每记录请求唯一、CUSTOMER/INTERNAL可见性及文件字节数/类型/对象键/SHA256。历史无文件不回填。四镜像SHA256：`426A33F0C93CF2E212CBF6B8D717F3270438260833C64837B993C0AD755D174C`，已执行新库/升级库及隔离API，不再修改。
