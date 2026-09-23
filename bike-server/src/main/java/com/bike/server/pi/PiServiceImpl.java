@@ -38,6 +38,7 @@ public class PiServiceImpl implements PiService {
     @org.springframework.beans.factory.annotation.Autowired private PiExportArchive archives;
     @org.springframework.beans.factory.annotation.Autowired private PiImageService images;
     @org.springframework.beans.factory.annotation.Autowired private PiCustomerSnapshotService customerSnapshots;
+    @org.springframework.beans.factory.annotation.Autowired private PiQuantityService quantityRevisions;
 
     public PiServiceImpl(PiMapper mapper, PiDocumentService documents, OperationLogMapper logs,
             ObjectMapper json, Validator validator, OrderReservationCoordinator reservations) {
@@ -214,6 +215,11 @@ public class PiServiceImpl implements PiService {
         requirePublishableDocument(pi);
         PiView previousRevision = pi.getPreviousRevisionId() == null ? null
                 : requireRevisionIdentity(pi, pi.getCustomerId(), pi.getAgentId(), pi.getCurrencyCode());
+        if(previousRevision!=null && quantityRevisions!=null) {
+            var requested=new TreeMap<Long,Integer>();
+            for(var item:mapper.selectItems(id))requested.put(item.getSkuId(),item.getQuantity());
+            quantityRevisions.apply(id,requested);
+        }
         if (series != null && pi.getSourceOrderId() == null && previousRevision == null) {
             for (long orderId : orderIds(pi)) {
                 var order = fulfillmentOrders.selectForUpdate(orderId);
@@ -544,6 +550,13 @@ public class PiServiceImpl implements PiService {
         if(lines.isEmpty()) return;
         if(!Objects.equals(pi.getCustomerId(),request.customerId())||!Objects.equals(pi.getAgentId(),request.agentId()))
             fail("LOCK_CUSTOMER_MISMATCH","锁定转换的PI必须保留原客户和代理商");
+        if(pi.getPreviousRevisionId()!=null && quantityRevisions!=null) {
+            var requested=new TreeMap<Long,Integer>();
+            for(var item:request.items()) {
+                if(requested.put(item.skuId(),item.quantity())!=null)fail("DUPLICATE_SKU","PI明细不能重复SKU");
+            }
+            quantityRevisions.validate(pi.getId(),requested);return;
+        }
         var fixed=new TreeMap<Long,Long>();
         for(var line:lines) {
             if(line.skuId()==null) fail("ORDER_SKU_MISMATCH","履约子单缺少SKU，请先核对");

@@ -271,7 +271,7 @@ class SkuCommitmentMysqlTest {
         Fixture(boolean withPi) throws Exception {
             var config=new Configuration(new Environment("sku-commitment",new SpringManagedTransactionFactory(),source));
             config.setMapUnderscoreToCamelCase(true);
-            for(String name:List.of("InventoryPolicyMapper","AuditPolicyMapper","AgentModelAccessMapper","InventoryLockMapper","SkuLockMapper","SkuInventoryMapper","OrderMapper","OrderReservationMapper","ProductionMapper","VehicleMapper","StockMapper","OperationLogMapper","ModuleMapper","DashboardMapper","PiMapper","PiSeriesMapper","PiShipmentMapper","PiDispatchMapper","PiLogisticsMapper"))
+            for(String name:List.of("InventoryPolicyMapper","AuditPolicyMapper","AgentModelAccessMapper","InventoryLockMapper","SkuLockMapper","SkuInventoryMapper","OrderMapper","OrderReservationMapper","ProductionMapper","VehicleMapper","StockMapper","OperationLogMapper","ModuleMapper","DashboardMapper","PiMapper","PiSeriesMapper","PiShipmentMapper","PiDispatchMapper","PiLogisticsMapper","PiQuantityMapper"))
                 try(var input=Resources.getResourceAsStream("mapper/"+name+".xml")) {
                     var xml=new String(input.readAllBytes(),StandardCharsets.UTF_8).replace("bike_",prefix);
                     new XMLMapperBuilder(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)),config,name,config.getSqlFragments()).parse();
@@ -358,6 +358,8 @@ class SkuCommitmentMysqlTest {
                     ReflectionTestUtils.setField(coordinator,"series",piSeries);
                     pis=new com.bike.server.pi.PiServiceImpl(mapper,mock(com.bike.server.pi.PiDocumentService.class),session.getMapper(OperationLogMapper.class),json,validation.getValidator(),coordinator);
                     ReflectionTestUtils.setField(pis,"series",piSeries);ReflectionTestUtils.setField(pis,"skuInventory",inventory);
+                    ReflectionTestUtils.setField(pis,"quantityRevisions",new com.bike.server.pi.PiQuantityService(piSeries,
+                            session.getMapper(com.bike.server.pi.PiQuantityMapper.class),inventory,reservations,orders,session.getMapper(OperationLogMapper.class),json,mapper));
                     ReflectionTestUtils.setField(pis,"fulfillmentOrders",orders);ReflectionTestUtils.setField(pis,"orderInventoryGuard",inventoryGuard);
                     piConversion=new com.bike.server.pi.PiConversionService(lockMapper,conversion,pis,piSeries,guard,json,validation.getValidator());
                     var gate=new com.bike.server.pi.PiShipmentGuard(session.getMapper(com.bike.server.pi.PiShipmentMapper.class));

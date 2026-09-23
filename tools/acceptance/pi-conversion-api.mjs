@@ -350,6 +350,35 @@ try {
   const archivedPrior = await req(`/api/pis/${pi.id}/export-task`, undefined, { token: sales }); assert.equal(archivedPrior.pdfSha256, exported.pdf); assert.equal(archivedPrior.xlsxSha256, exported.xlsx);
   await expectSku(model.id, red.id, 1, 0, 0, 1); await expectSku(secondModel.id, blue.id, 1, 0, 0, 1);
   pass('商业修订禁止混币和转移客户，取消草稿保留执行；并发新建一次且版本不复用，已发订单可确认新修订，旧版转历史并保持原归档和系列收款');
+  const quantitiesRequest = { requestId: randomUUID(), expectedRevision: 3, reason: '增加原SKU剩余一台，核对增量库存' };
+  const quantityDraft = await req(`/api/pis/${next.id}/revisions`, quantitiesRequest, { token: sales });
+  const quantityBody = { ...revisionEdit, otherFeeAmount: '15.34', items: body.pi.items.map(item => ({ ...item, quantity: item.skuId === red.id ? 3 : 1 })) };
+  await req(`/api/pis/${quantityDraft.id}`, quantityBody, { method: 'PUT', token: sales });
+  await req(`/api/pis/${quantityDraft.id}/confirm`, {}, { token: sales, code: 'SKU_INVENTORY_NOT_ENOUGH' });
+  assert.equal((await req(`/api/pis/${next.id}`, undefined, { token: sales })).status, 'CONFIRMED');
+  quantityBody.items = body.pi.items.map(item => ({ ...item, quantity: item.skuId === red.id ? 2 : 1 }));
+  await req(`/api/pis/${quantityDraft.id}`, quantityBody, { method: 'PUT', token: sales });
+  await expectSku(model.id, red.id, 1, 0, 0, 1);
+  const quantityPublished = await req(`/api/pis/${quantityDraft.id}/confirm`, {}, { token: sales });
+  assert.equal(quantityPublished.fulfillment.find(line => line.skuId === red.id).orderedQty, 2);
+  await expectSku(model.id, red.id, 1, 0, 1, 0);
+  const reduction = await req(`/api/pis/${quantityDraft.id}/revisions`, { requestId: randomUUID(), expectedRevision: 4, reason: '减回一台，释放新增未发占用' }, { token: sales });
+  await req(`/api/pis/${reduction.id}`, { ...quantityBody, items: body.pi.items }, { method: 'PUT', token: sales });
+  await expectSku(model.id, red.id, 1, 0, 1, 0);
+  await req(`/api/pis/${reduction.id}/confirm`, {}, { token: sales });
+  await expectSku(model.id, red.id, 1, 0, 0, 1);
+  const addedAgain = await req(`/api/pis/${reduction.id}/revisions`, { requestId: randomUUID(), expectedRevision: 5, reason: '重新增加并实际发出剩余一台' }, { token: sales });
+  await req(`/api/pis/${addedAgain.id}`, quantityBody, { method: 'PUT', token: sales });
+  await req(`/api/pis/${addedAgain.id}/confirm`, {}, { token: sales });
+  await req(`/api/pis/${addedAgain.id}/release`, { reason: '数量修订后重新核对放行' }, { token: finance });
+  await req('/api/stock-out', { customerId: customer.id, orderId: reds.orderId, vehicleQrCodes: [vehicles[1].qrCode] }, { token: warehouseOperator });
+  await expectSku(model.id, red.id, 0, 0, 0, 0);
+  const tooSmall = await req(`/api/pis/${addedAgain.id}/revisions`, { requestId: randomUUID(), expectedRevision: 6, reason: '核对实际已发数量下限' }, { token: sales });
+  await req(`/api/pis/${tooSmall.id}`, { ...quantityBody, items: body.pi.items }, { method: 'PUT', token: sales, code: 'PI_QUANTITY_BELOW_SHIPPED' });
+  await req(`/api/pis/${tooSmall.id}/cancel`, { reason: '结束下限检查，保留实际发货' }, { token: sales });
+  const originalLock = await req(`/api/inventory-locks/by-no/${sourceLocks[0].lockNo}`, undefined, { token: sales }); assert.equal(originalLock.convertedQty, 1);
+  assert.equal((await req(`/api/pis/${addedAgain.id}`, undefined, { token: finance })).paidAmount, '200.00');
+  pass('同SKU数量草稿不改变占用，确认才原子加减；库存不足整单拒绝，已发数量为下限，普通仓管按新增数量完成实际出库，来源锁定历史与收款保持');
 } catch (error) { evidence.error = error.stack || error.message; console.error(error); process.exitCode = 1; }
 finally {
   for (const id of ordersToCancel) try { await req(`/api/orders/${id}/cancel?reason=SKU验收结束清理未完成订单`, {}); } catch(error) { evidence.cleanupFailures.push({ orderId: id, error: error.message }); }

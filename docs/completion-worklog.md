@@ -436,3 +436,12 @@ batch31-logistics-file-tests.log定向7项通过；batch31-full-verify.log全量
 首次专项因测试使用了记录式访问器而编译失败，改为PiItemView真实getter后，batch32-revision-tests-r2.log 20项通过。batch32-full-verify.log全量386项通过，0失败/错误/跳过，含全新b32full空库/升级库；batch32-web-build.log类型检查/构建通过，主包1698.84KB告警保留。batch32-revision-lifecycle-http.json/.log 16组真实HTTP通过且cleanupFailures为空，新增普通销售取消/重建/编辑/发布、并发与幂等、混币/客户转移拒绝、旧版RELEASED正确转历史、系列收款/实际出库/归档不变。API18182更新至acceptance-batch32-runtime.jar，health为UP。
 
 本批没有新增或修改迁移。关联订单的SKU数量仍固定，客户/币种跨系列转移未实现，不能宣布修订需求全部完成。数量调整边界见pi-revision-lifecycle.md，内部客户范围旁路清单见internal-customer-scope-design.md。普通岗位浏览器及最终交付仍待验证，全项目最终两轮仍为0轮，尚未推送GitHub。
+## 批次33：原SKU数量修订与库存差额（2026-09-23）
+
+原SKU修订草稿可调整未发数量，保存不改变当前订单；确认时统一库存锁/全部关联订单占用锁，按SKU计算一次总差额，多子单稳定分配。先减后加，加量同时核对SKU与车型可用容量，拒绝到期/释放占用自动恢复、低于实际已发数量和不明确的历史多SKU子单。同步更新订单数量、SKU明细、车型占用头和状态；减至零的未发子单保留原数量/关联，记关闭数量并取消。来源锁定converted_qty不改写，差额有独立人时/修订/子单审计。数量、占用、版本发布和归档任务同事务，审计失败全回滚。Web开放原SKU数量输入并解释确认时生效。
+
+batch33-quantity-tests.log首次测试断言多余右括号导致编译失败；修正后batch33-quantity-tests-r2.log 16项通过。随后增加出库与减量并发回归及历史车型单据保持原数量的兼容处理，batch33-full-verify.log当前全量391项通过，0失败/错误/跳过，包含全新b33full空库/升级库和5项数量修订真实MySQL检查。batch33-web-build.log类型检查/构建通过，主包1698.84KB告警保留。
+
+batch33-quantity-http.json/.log 17组真实HTTP全部通过且cleanupFailures为空：普通销售加量库存不足拒绝、草稿不改变占用、确认加量/减量逐台守恒、原收款和来源锁保持、普通仓管实际发出新增一台、低于已发下限拒绝。API18182运行acceptance-batch33-runtime.jar，health为UP。未新增或修改迁移，数据库仍V44。
+
+新增SKU、客户/币种转移、内部销售授权客户范围、业务看板/PI列表导出及搜索、WebP/XLSX附件与批量上传仍需处理；普通岗位浏览器和正式交付仍待验证。当前证据不算全项目最终验收，最终两轮仍为0轮；未推送GitHub。
