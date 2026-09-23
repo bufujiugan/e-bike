@@ -70,6 +70,19 @@ try {
   const finance = await account('FINANCE', ['PI_READ', 'PI_PAYMENT_CONFIRM', 'PI_RELEASE']);
   const logisticsOperator = await account('LOGISTICS', ['PI_READ', 'PI_LOGISTICS_WRITE']);
   const external = await account('AGENT', ['PI_READ', 'PI_WRITE', 'PI_EXPORT', 'PI_TEMPLATE_MANAGE', 'AGENT_INVENTORY_READ', 'AGENT_LOCK_WRITE', 'ORDER_WRITE', 'ORDER_READ'], agent.id);
+  const customerManager = await account('CUSTOMER', ['CUSTOMER_PROFILE_WRITE']);
+  const profilePath = `/api/master/customers/${customer.id}/profile`;
+  assert.equal((await req(profilePath, undefined, { token: sales })).revision, 0);
+  const customerProfile = { revision: 0, address: '原客户商务地址', country: 'DE', email: 'buyer@example.invalid', preferredCurrency: 'eur', businessOwner: '出口业务验收组', reason: '隔离验收客户资料' };
+  await req(profilePath, customerProfile, { method: 'PUT', token: sales, code: 'PERMISSION_DENIED' });
+  await req(profilePath, undefined, { token: warehouseOperator, code: 'PERMISSION_DENIED' });
+  await req(profilePath, undefined, { token: external, code: 'FORBIDDEN' });
+  await req(profilePath, customerProfile, { method: 'PUT', token: external, code: 'FORBIDDEN' });
+  const savedProfile = await req(profilePath, customerProfile, { method: 'PUT', token: customerManager });
+  assert.equal(savedProfile.preferredCurrency, 'EUR'); assert.equal(savedProfile.revision, 1);
+  await req(profilePath, { ...customerProfile, address: '过期覆盖' }, { method: 'PUT', token: customerManager, code: 'CUSTOMER_PROFILE_CONFLICT' });
+  await req(profilePath, { ...customerProfile, revision: 1, preferredCurrency: 'ZZZ' }, { method: 'PUT', token: customerManager, code: 'CUSTOMER_PROFILE_INVALID' });
+  pass('客户商务资料独立权限、仓库和代理拒绝读取，币种规范化和过期版本拒绝覆盖');
   const vehicles = [];
   for (const sku of skus) for (let i = 0; i < 2; i++) {
     const taskId = randomUUID(), tag = `${prefix}${sku.id}V${i}`;
@@ -91,6 +104,7 @@ try {
     document: await createPiDocument(req, prefix, { sellerName: '隔离测试卖方', paymentTerms: '50元保留/200元发货', deliveryTerms: '测试仓库交付', templateCode: 'ACCEPTANCE', templateVersion: '1' }),
     items: skus.map(s => ({ skuId: s.id, quantity: 1, unitPrice: '100.00', unit: 'PCS' })), otherFeeAmount: '12.34',
   } };
+  Object.assign(body.pi.document, { buyerAddress: '', buyerCountry: '', shippingAddress: '' });
   const publishRequest = { ...body.pi.document, tradeType: 'DOMESTIC', layoutCode: 'DOMESTIC_V1', reason: '模板权限验证' };
   await req('/api/pi-templates', publishRequest, { token: sales, code: 'PERMISSION_DENIED' });
   await req('/api/pi-templates', publishRequest, { token: external, code: 'FORBIDDEN' });
@@ -109,6 +123,12 @@ try {
 
   const results = await Promise.all([req('/api/pis/from-locks', body, { token: sales }), req('/api/pis/from-locks', { ...body, sources: [...body.sources].reverse() }, { token: sales })]);
   const pi = results[0]; assert.equal(pi.id, results[1].id); assert.equal(pi.fulfillment.length, 2); assert(pi.seriesId);
+  assert.equal(pi.document.buyerAddress, customerProfile.address); assert.equal(pi.document.shippingAddress, customerProfile.address);
+  assert.equal(pi.document.buyerCountry, customerProfile.country); assert.equal(pi.document.buyerEmail, customerProfile.email); assert.equal(pi.document.businessOwner, customerProfile.businessOwner);
+  await req(profilePath, { ...customerProfile, revision: 1, address: '修改后的客户商务地址', email: 'new-buyer@example.invalid' }, { method: 'PUT', token: customerManager });
+  const originalSnapshot = (await req(`/api/pis/${pi.id}`, undefined, { token: sales })).document;
+  assert.equal(originalSnapshot.buyerAddress, customerProfile.address); assert.equal(originalSnapshot.buyerEmail, customerProfile.email);
+  pass('新PI自动带入客户商务资料并形成快照，主资料修改不覆盖已保存PI');
   assert.equal(pi.totalAmount, '212.34'); assert.equal(pi.otherFeeAmount, '12.34'); assert(pi.items.every(i => i.unit === 'PCS'));
   const savedImage = pi.items.find(i => i.skuId === red.id); assert.equal(savedImage.imageAttachmentId, productImage.id);
   assert.equal(savedImage.imageSha256, createHash('sha256').update(imageBytes).digest('hex'));
@@ -117,6 +137,7 @@ try {
   await req('/api/pis/from-locks', { ...body, pi: { ...body.pi, remark: '同请求改变内容' } }, { token: sales, code: 'PI_CONVERSION_CONFLICT' });
   const draftAgent = await req(`/api/pis?keyword=${pi.piNo}`, undefined, { token: external }); assert.equal(draftAgent.total, 0);
   await req(`/api/pis/${pi.id}`, undefined, { token: external, code: 'FORBIDDEN' });
+  body.pi.document = originalSnapshot;
   await req(`/api/pis/${pi.id}`, { ...body.pi, document: { ...body.pi.document, issueDate: null, validUntil: null } }, { method: 'PUT', token: sales });
   await req(`/api/pis/${pi.id}/confirm`, {}, { token: sales, code: 'PI_DOCUMENT_DATES_INVALID' });
   await req(`/api/pis/${pi.id}`, { ...body.pi, document: { ...body.pi.document, validUntil: '2020-01-01' } }, { method: 'PUT', token: sales, code: 'PI_DOCUMENT_DATES_INVALID' });

@@ -202,3 +202,11 @@ H5 使用该接口，可搜索、翻页，翻页保留已选订单；切换客�
 - `GET /api/pis/{id}/confirmation-attachments`：内部可见全部，客户只可见CUSTOMER，原PI公司范围仍生效。
 - `POST /api/pis/{id}/confirmation-attachments`：multipart file/requestId/visibility，内部PI_READ+PI_WRITE，仅DRAFT/CONFIRMED/RELEASED，每修订50个，每个10MB，真实JPG/PNG/PDF。幂等重复不得改变内容或可见性，元数据及审计同事务，失败清理对象。
 - `GET /api/pis/{id}/confirmation-attachments/{attachmentId}/download`：同范围/可见性及SHA256检查，以附件下载并设置no-store/nosniff/CSP。附件只追加，新修订不复制旧确认附件。
+
+## 客户商务资料及PI带入（V42）
+
+`GET /api/master/customers/{id}/profile`：内部MASTER_READ、PI_WRITE或CUSTOMER_PROFILE_WRITE可读。除扩展资料外返回原客户code/name/contactName/contactPhone/status；尚无扩展记录时revision=0、未知字段为空。PDA、代理优先拒绝，普通库存权限不能读取。
+
+`PUT /api/master/customers/{id}/profile`：内部CUSTOMER_PROFILE_WRITE；请求revision、address、country、email、preferredCurrency、businessOwner、reason。邮箱格式、长度和ISO币种检查，币种转大写，业务归属仅文字。父客户行锁和READ_COMMITTED下校验revision，过期页面拒绝；资料与前后值审计同事务。
+
+新建PI时把未明确填写的买方地址/联系人/电话/Email/国家、收货地址、业务归属从主资料带入document_snapshot；前端选择客户带入币种偏好，可在保存前明确调整。编辑、读取、修订克隆、导出不重新读取客户主资料。document新增buyerContactName/buyerPhone/buyerEmail/businessOwner，旧JSON未知字段保持空，V2文件显示已保存内容。

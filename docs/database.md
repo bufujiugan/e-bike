@@ -88,3 +88,7 @@ V24 新增 `bike_pi`、`bike_pi_item`、`bike_pi_payment`、`bike_pi_logistics`�
 V40为明细增加unit/image_attachment_id/image_sha256，为PI增加other_fee_amount。历史单位/图片保持空，不猜测原文件；日期和运输保存在原document_json。SHA256：`154FDA511E346C92B8F8B2315961F008F1006EE430C376605FFB6784DC1E8D17`。
 
 V41新增bike_pi_confirmation_attachment，包含PI修订、请求ID、可见范围、文件元数据、对象键和SHA256。请求在PI内唯一；没有复制历史附件。SHA256：`1E482663D9500EF529B652EB576B5BAF17F2D9022C7A791ADA14FE6CF552C0C4`。两迁移四镜像均已在空库/升级库与隔离API执行，禁止修改。
+
+## V42 客户商务资料
+
+新增bike_customer_profile，以原客户ID关联地址、国家/地区、Email、币种偏好、业务归属、revision及修改人员/时间。历史未知资料不回填。业务归属为部门/负责人文字，不改变账号权限；新增CUSTOMER_PROFILE_WRITE仅默认分配超级管理员，可独立授权内部岗位。四镜像SHA256：`17FD441ADC43AF27CCA9E35834918BE6FEE571A4D4C08172AEC08C6AC95EF093`，已应用隔离API，禁止修改。

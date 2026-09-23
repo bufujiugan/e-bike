@@ -10,6 +10,7 @@ import PiExportTask from './PiExportTask.vue'
 import PiItemImage from './PiItemImage.vue'
 import PiConfirmationAttachments from './PiConfirmationAttachments.vue'
 import type { PiTemplate } from '../pi-api'
+import { customerProfileApi } from '../customer-profile-api'
 
 const props = defineProps<{ context: (PermissionContext & { userType?: string }) | null }>()
 const isAgent = computed(() => hasRole(props.context, 'WEB_AGENT') || props.context?.userType === 'AGENT')
@@ -60,6 +61,7 @@ const documentLabels: [keyof PiDocument, string][] = [
   ['deliveryTerms', '交付条款'], ['templateCode', '模板名称 / 编码'], ['templateVersion', '模板版本'],
   ['issueDate', '开单日期'], ['validUntil', '有效期'], ['shippingAddress', '收货地址'], ['transportMode', '运输方式'],
   ['tradeTerms', '贸易术语（外销）'], ['buyerCountry', '买方国家/地区'], ['sellerCountry', '卖方国家/地区'],
+  ['buyerContactName', '买方联系人'], ['buyerPhone', '买方电话'], ['buyerEmail', '买方Email'], ['businessOwner', '业务归属'],
 ]
 function emptyDocument(): PiDocument {
   return { sellerName: '', sellerAddress: '', sellerContact: '', buyerAddress: '', buyerContact: '', bankName: '', bankAccount: '', beneficiary: '', paymentTerms: '', deliveryTerms: '', templateCode: '', templateVersion: '' }
@@ -68,6 +70,21 @@ type DraftItem = { key: string; skuId: number | undefined; quantity: number; uni
 function newItem(): DraftItem { return { key: crypto.randomUUID(), skuId: undefined, quantity: 1, unitPrice: '', discountAmount: '0.00', taxAmount: '0.00', unit: '台' } }
 const draft = reactive({ customerId: undefined as number | undefined, agentId: undefined as number | undefined, sourceOrderId: undefined as number | undefined, tradeType: 'DOMESTIC', currencyCode: 'CNY', plannedShipDate: '', discountAmount: '0.00', taxAmount: '0.00', freightAmount: '0.00', otherFeeAmount: '0.00', depositRequiredAmount: '', shipmentRequiredAmount: '', remark: '', document: emptyDocument(), items: [newItem()] })
 const filteredOrders = computed(() => options.value.orders.filter(order => order.customerId === draft.customerId))
+const customerBusy = ref(false)
+const customerLoadFailed = ref(false)
+let customerLoadVersion = 0
+async function chooseCustomer(id: number) {
+  const version = ++customerLoadVersion; customerBusy.value = true; customerLoadFailed.value = false; createError.value = ''
+  Object.assign(draft.document, { buyerAddress: '', buyerCountry: '', shippingAddress: '', buyerContact: '', buyerContactName: '', buyerPhone: '', buyerEmail: '', businessOwner: '' })
+  try {
+    const customer = await customerProfileApi.get(id)
+    if (version !== customerLoadVersion || draft.customerId !== id || !createVisible.value) return
+    Object.assign(draft.document, { buyerAddress: customer.address || '', buyerCountry: customer.country || '', shippingAddress: customer.address || '',
+      buyerContact: [customer.contactName, customer.contactPhone].filter(Boolean).join(' / '), buyerContactName: customer.contactName || '', buyerPhone: customer.contactPhone || '', buyerEmail: customer.email || '', businessOwner: customer.businessOwner || '' })
+    draft.currencyCode = customer.preferredCurrency || 'CNY'
+  } catch (error) { if (version === customerLoadVersion) { customerLoadFailed.value = true; createError.value = message(error, '客户商务资料带入失败，请重新选择客户') } }
+  finally { if (version === customerLoadVersion) customerBusy.value = false }
+}
 watch(() => draft.customerId, () => { if (editingId.value == null && !filteredOrders.value.some(order => order.id === draft.sourceOrderId)) draft.sourceOrderId = undefined })
 watch(() => draft.sourceOrderId, (id) => { const source = options.value.orders.find(order => order.id === id); if (source) draft.agentId = source.agentId ?? undefined })
 watch([() => draft.customerId, () => draft.agentId], () => {
@@ -156,6 +173,7 @@ async function loadOptions() {
 }
 async function openCreate() {
   if (!canWrite.value) return
+  customerLoadVersion++; customerBusy.value = false; customerLoadFailed.value = false
   editingId.value = null
   fromLocks.value = false; selectedLocks.value = []; conversionKey = ''; conversionFingerprint = ''
   Object.assign(draft, { customerId: undefined, agentId: undefined, sourceOrderId: undefined, tradeType: 'DOMESTIC', currencyCode: 'CNY', plannedShipDate: '', discountAmount: '0.00', taxAmount: '0.00', freightAmount: '0.00', otherFeeAmount: '0.00', depositRequiredAmount: '', shipmentRequiredAmount: '', remark: '', document: emptyDocument(), items: [newItem()] })
@@ -165,6 +183,7 @@ async function openConversion() { await openCreate(); fromLocks.value = true; dr
 async function openEdit() {
   const current = detail.value
   if (!canWrite.value || !current || current.status !== 'DRAFT') return
+  customerLoadVersion++; customerBusy.value = false; customerLoadFailed.value = false
   editingId.value = current.id
   fromLocks.value = false; selectedLocks.value = []
   const lineDiscount = current.items.reduce((sum, item) => sum + (cents(String(item.discountAmount)) ?? 0n), 0n)
@@ -213,6 +232,7 @@ function payload(): PiCreate {
 }
 async function saveCreate() {
   if (!canWrite.value || actionBusy.value) return
+  if (customerBusy.value || customerLoadFailed.value) { createError.value = '客户商务资料尚未成功带入，请重新选择客户后再保存'; return }
   createError.value = ''
   try {
     const body = payload(); actionBusy.value = true
@@ -393,15 +413,15 @@ onMounted(() => { if (canRead.value) void load() })
         <el-pagination v-model:current-page="lockPage" :total="lockTotal" :page-size="20" layout="total, prev, pager, next" @current-change="loadLocks" />
         <el-table v-if="selectedLocks.length" :data="selectedLocks"><el-table-column prop="lockNo" label="已选来源" /><el-table-column prop="skuCode" label="SKU" /><el-table-column label="本次转换数量" width="180"><template #default="{ row }"><el-input-number v-model="row.quantity" :min="1" :max="row.remainingQty" :precision="0" @change="syncLockItems" /></template></el-table-column><el-table-column label="操作" width="80"><template #default="{ row }"><el-button link type="danger" @click="removeLock(row.id)">移除</el-button></template></el-table-column></el-table>
       </section>
-      <el-form v-loading="optionsBusy" label-position="top" class="pi-form" @submit.prevent="saveCreate">
-        <div class="pi-grid"><el-form-item label="客户" required><el-select v-model="draft.customerId" :disabled="fixedItems && !fromLocks" filterable placeholder="选择客户"><el-option v-for="c in options.customers" :key="c.id" :value="c.id" :label="`${c.code} · ${c.name}`" /></el-select></el-form-item><el-form-item label="所属代理商"><el-select v-model="draft.agentId" :disabled="fixedItems && !fromLocks" clearable filterable placeholder="可选；确认后该代理商可查看"><el-option v-for="a in options.agents" :key="a.id" :value="a.id" :label="`${a.code} · ${a.name}`" /></el-select></el-form-item><el-form-item label="来源销售订单"><el-select v-model="draft.sourceOrderId" clearable filterable :disabled="fromLocks || !draft.customerId || editingId !== null" placeholder="先选客户，再选来源订单"><el-option v-for="o in filteredOrders" :key="o.id" :value="o.id" :label="o.orderNo" /></el-select></el-form-item><el-form-item label="贸易类型" required><el-select v-model="draft.tradeType"><el-option value="DOMESTIC" label="内销" /><el-option value="EXPORT" label="外销" /></el-select></el-form-item><el-form-item label="币种" required><el-input v-model="draft.currencyCode" maxlength="3" placeholder="CNY / USD / EUR" /></el-form-item><el-form-item label="计划发货日期"><el-date-picker v-model="draft.plannedShipDate" type="date" value-format="YYYY-MM-DD" /></el-form-item></div>
+      <el-form v-loading="optionsBusy || customerBusy" label-position="top" class="pi-form" @submit.prevent="saveCreate">
+        <div class="pi-grid"><el-form-item label="客户" required><el-select v-model="draft.customerId" :loading="customerBusy" @change="chooseCustomer" :disabled="fixedItems && !fromLocks" filterable placeholder="选择客户"><el-option v-for="c in options.customers" :key="c.id" :value="c.id" :label="`${c.code} · ${c.name}`" /></el-select></el-form-item><el-form-item label="所属代理商"><el-select v-model="draft.agentId" :disabled="fixedItems && !fromLocks" clearable filterable placeholder="可选；确认后该代理商可查看"><el-option v-for="a in options.agents" :key="a.id" :value="a.id" :label="`${a.code} · ${a.name}`" /></el-select></el-form-item><el-form-item label="来源销售订单"><el-select v-model="draft.sourceOrderId" clearable filterable :disabled="fromLocks || !draft.customerId || editingId !== null" placeholder="先选客户，再选来源订单"><el-option v-for="o in filteredOrders" :key="o.id" :value="o.id" :label="o.orderNo" /></el-select></el-form-item><el-form-item label="贸易类型" required><el-select v-model="draft.tradeType"><el-option value="DOMESTIC" label="内销" /><el-option value="EXPORT" label="外销" /></el-select></el-form-item><el-form-item label="币种" required><el-input v-model="draft.currencyCode" maxlength="3" placeholder="CNY / USD / EUR" /></el-form-item><el-form-item label="计划发货日期"><el-date-picker v-model="draft.plannedShipDate" type="date" value-format="YYYY-MM-DD" /></el-form-item></div>
         <h3>商品明细</h3><p class="pi-hint">首次保存自动带入SKU首张产品图；保存后的图片与单位随单据保留。</p><div class="pi-items-scroll"><table class="pi-draft-items"><thead><tr><th>SKU / 商品 / 规格</th><th>数量 / 单位</th><th>单价</th><th>行折扣</th><th>行税费</th><th>行金额</th><th>操作</th></tr></thead><tbody><tr v-for="(item, index) in draft.items" :key="item.key"><td><el-select v-model="item.skuId" @change="item.imageAttachmentId = undefined" :disabled="fixedItems" filterable :aria-label="`第${index + 1}行 SKU`" placeholder="选择 SKU"><el-option v-for="sku in options.skus" :key="sku.id" :value="sku.id" :disabled="sku.enabled === false || draft.items.some(other => other.key !== item.key && other.skuId === sku.id)" :label="`${sku.skuCode} · ${sku.productName}${sku.specification ? ' · ' + sku.specification : ''}`" /></el-select></td><td><el-input-number v-model="item.quantity" :disabled="fixedItems" :aria-label="`第${index + 1}行数量`" :min="1" :max="2147483647" :precision="0" controls-position="right" /><el-input v-model="item.unit" maxlength="32" :aria-label="`第${index + 1}行单位`" /></td><td><el-input v-model="item.unitPrice" :aria-label="`第${index + 1}行单价`" inputmode="decimal" placeholder="0.00" /></td><td><el-input v-model="item.discountAmount" :aria-label="`第${index + 1}行折扣`" inputmode="decimal" /></td><td><el-input v-model="item.taxAmount" :aria-label="`第${index + 1}行税费`" inputmode="decimal" /></td><td>{{ lineTotal(item) == null ? '—' : fromCents(lineTotal(item)!) }}</td><td><el-button link type="danger" :disabled="fixedItems || draft.items.length === 1" @click="draft.items.splice(index, 1)">移除</el-button></td></tr></tbody></table></div><el-button :disabled="fixedItems || draft.items.length >= 100" @click="draft.items.push(newItem())">添加商品行</el-button>
         <div class="pi-grid pi-amounts"><el-form-item label="全单追加折扣"><el-input v-model="draft.discountAmount" inputmode="decimal" /></el-form-item><el-form-item label="全单追加税费"><el-input v-model="draft.taxAmount" inputmode="decimal" /></el-form-item><el-form-item label="运费"><el-input v-model="draft.freightAmount" inputmode="decimal" /></el-form-item><el-form-item label="其他费用"><el-input v-model="draft.otherFeeAmount" inputmode="decimal" /></el-form-item><el-form-item label="保留库存所需收款金额" required><el-input v-model="draft.depositRequiredAmount" inputmode="decimal" placeholder="明确填写金额，无门槛填 0.00" /></el-form-item><el-form-item label="放行发货所需收款金额" required><el-input v-model="draft.shipmentRequiredAmount" inputmode="decimal" placeholder="明确填写金额，无门槛填 0.00" /></el-form-item><div class="pi-preview"><span>预计总金额 · {{ draft.currencyCode }}</span><strong>{{ preview ? fromCents(preview.total) : '—' }}</strong><small>商品金额 − 行及全单折扣 + 行及全单税费 + 运费 + 其他费用</small></div></div>
         <h3>单据资料与交易条款</h3><p class="pi-hint">填写本单据约定的双方资料、付款与交付条款，以及经业务核对的模板名称和版本。资料随单据保存。</p>
-        <PiTemplates :trade-type="draft.tradeType" :can-manage="canManageTemplates" selectable @select="chooseTemplate" /><div class="pi-grid"><el-form-item v-for="[key, label] in documentLabels" :key="key" :label="label" :required="['sellerName', 'paymentTerms', 'deliveryTerms', 'templateCode', 'templateVersion'].includes(key)"><el-date-picker v-if="['issueDate', 'validUntil'].includes(key)" v-model="draft.document[key]" type="date" value-format="YYYY-MM-DD" /><el-input v-else v-model="draft.document[key]" :readonly="fixedDocumentFields.includes(key)" :type="['paymentTerms', 'deliveryTerms', 'sellerAddress', 'buyerAddress', 'shippingAddress'].includes(key) ? 'textarea' : 'text'" :rows="3" :maxlength="['paymentTerms', 'deliveryTerms'].includes(key) ? 2000 : ['sellerAddress', 'buyerAddress', 'shippingAddress'].includes(key) ? 1000 : key === 'templateVersion' ? 32 : key === 'templateCode' ? 64 : ['sellerContact', 'buyerContact'].includes(key) ? 300 : 200" /></el-form-item></div>
+        <PiTemplates :trade-type="draft.tradeType" :can-manage="canManageTemplates" selectable @select="chooseTemplate" /><div class="pi-grid"><el-form-item v-for="[key, label] in documentLabels" :key="key" :label="label" :required="['sellerName', 'paymentTerms', 'deliveryTerms', 'templateCode', 'templateVersion'].includes(key)"><el-date-picker v-if="['issueDate', 'validUntil'].includes(key)" v-model="draft.document[key]" type="date" value-format="YYYY-MM-DD" /><el-input v-else v-model="draft.document[key]" :readonly="fixedDocumentFields.includes(key)" :type="['paymentTerms', 'deliveryTerms', 'sellerAddress', 'buyerAddress', 'shippingAddress'].includes(key) ? 'textarea' : 'text'" :rows="3" :maxlength="['paymentTerms', 'deliveryTerms'].includes(key) ? 2000 : ['sellerAddress', 'buyerAddress', 'shippingAddress'].includes(key) ? 1000 : key === 'buyerEmail' ? 254 : key === 'businessOwner' ? 150 : ['buyerContactName', 'buyerCountry', 'sellerCountry', 'transportMode', 'tradeTerms'].includes(key) ? 100 : key === 'buyerPhone' ? 64 : key === 'templateVersion' ? 32 : key === 'templateCode' ? 64 : ['sellerContact', 'buyerContact'].includes(key) ? 300 : 200" /></el-form-item></div>
         <el-form-item label="备注"><el-input v-model="draft.remark" type="textarea" maxlength="1000" show-word-limit /></el-form-item>
       </el-form><el-alert v-if="createError" :title="createError" type="error" :closable="false" show-icon />
-      <template #footer><el-button :disabled="actionBusy" @click="createVisible = false">取消</el-button><el-button type="primary" :loading="actionBusy" :disabled="optionsBusy || Boolean(optionsError)" @click="saveCreate">保存草稿</el-button></template>
+      <template #footer><el-button :disabled="actionBusy" @click="createVisible = false">取消</el-button><el-button type="primary" :loading="actionBusy" :disabled="optionsBusy || customerBusy || customerLoadFailed || Boolean(optionsError)" @click="saveCreate">保存草稿</el-button></template>
     </el-dialog>
 
     <el-dialog v-model="detailVisible" :title="detail ? `${detail.piNo} · V${detail.revision}` : 'PI 详情'" width="min(1100px, 96vw)" :close-on-click-modal="false">

@@ -35,6 +35,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/api/parts/**").hasAnyAuthority("ROLE_SUPER_ADMIN", "PERM_PART_WRITE")
                         .requestMatchers(HttpMethod.POST, "/api/orders", "/api/orders/import").hasAnyAuthority("ROLE_SUPER_ADMIN", "PERM_ORDER_WRITE")
                         .requestMatchers(HttpMethod.POST, "/api/inventory-locks").hasAnyAuthority("ROLE_SUPER_ADMIN", "PERM_AGENT_LOCK_WRITE")
+                        .requestMatchers(HttpMethod.PUT, "/api/master/customers/*/profile").authenticated()
                         // 功能权限和账号数据范围由 Service 检查，不能把可配置角色限制为固定角色名。
                         .requestMatchers(HttpMethod.GET, "/api/vehicles/**", "/api/parts/**", "/api/inventory/**", "/api/stock-in/**", "/api/stock-out/**", "/api/master/**", "/api/orders/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/system-config/**", "/api/users/**", "/api/roles/**", "/api/workstations/**").hasRole("SUPER_ADMIN")

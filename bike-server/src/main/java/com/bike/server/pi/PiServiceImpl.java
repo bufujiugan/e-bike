@@ -37,6 +37,7 @@ public class PiServiceImpl implements PiService {
     @org.springframework.beans.factory.annotation.Autowired private PiTemplateService templates;
     @org.springframework.beans.factory.annotation.Autowired private PiExportArchive archives;
     @org.springframework.beans.factory.annotation.Autowired private PiImageService images;
+    @org.springframework.beans.factory.annotation.Autowired private PiCustomerSnapshotService customerSnapshots;
 
     public PiServiceImpl(PiMapper mapper, PiDocumentService documents, OperationLogMapper logs,
             ObjectMapper json, Validator validator, OrderReservationCoordinator reservations) {
@@ -171,17 +172,19 @@ public class PiServiceImpl implements PiService {
         if (deposit.compareTo(total) > 0 || shipment.compareTo(total) > 0) {
             fail("AMOUNT_INVALID", "保留库存及放行发货所需收款金额不能大于应付总额");
         }
+        PiDocumentSnapshot document=existing==null && customerSnapshots!=null ? customerSnapshots.capture(request.customerId(),request.document()) : request.document();
+        if(document!=null && !validator.validate(document).isEmpty())fail("PI_DOCUMENT_INVALID","客户单据资料格式不正确");
         long id;
         if (existing == null) {
             String no = "PI" + UUID.randomUUID().toString().replace("-", "").toUpperCase(Locale.ROOT);
             if (mapper.insertPi(no, request, trade, currency, subtotal, discount, tax, freight,
-                    total, deposit, shipment, serialize(request.document()), request.agentId(),
+                    total, deposit, shipment, serialize(document), request.agentId(),
                     CurrentOperator.id()) != 1) fail("PI_CREATE_FAILED", "PI 创建失败");
             id = mapper.selectInsertedId();
         } else {
             id = existing.getId();
             if (mapper.updatePi(id, request, trade, currency, subtotal, discount, tax, freight,
-                    total, deposit, shipment, serialize(request.document()), request.agentId()) != 1) {
+                    total, deposit, shipment, serialize(document), request.agentId()) != 1) {
                 fail("PI_UPDATE_FAILED", "PI 草稿更新失败");
             }
             mapper.deleteItems(id);

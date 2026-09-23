@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.master.CustomerProfileMapper">
+    <select id="get" resultType="com.bike.server.master.CustomerProfile">
+        SELECT c.id customer_id,c.customer_code code,c.customer_name name,c.contact_name,c.contact_phone,c.status,
+               p.address,p.country,p.email,p.preferred_currency,p.business_owner,COALESCE(p.revision,0) revision,
+               COALESCE(p.updated_at,c.updated_at) updated_at
+        FROM bike_customer c LEFT JOIN bike_customer_profile p ON p.customer_id=c.id WHERE c.id=#{id}
+    </select>
+    <select id="lockCustomer" resultType="long">SELECT id FROM bike_customer WHERE id=#{id} FOR UPDATE</select>
+    <insert id="insert">
+        INSERT INTO bike_customer_profile(customer_id,address,country,email,preferred_currency,business_owner,updated_by)
+        VALUES(#{id},#{r.address},#{r.country},#{r.email},#{r.preferredCurrency},#{r.businessOwner},#{userId})
+    </insert>
+    <update id="update">
+        UPDATE bike_customer_profile SET address=#{r.address},country=#{r.country},email=#{r.email},
+        preferred_currency=#{r.preferredCurrency},business_owner=#{r.businessOwner},revision=revision+1,updated_by=#{userId}
+        WHERE customer_id=#{id} AND revision=#{r.revision}
+    </update>
+</mapper>

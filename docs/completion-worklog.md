@@ -401,3 +401,13 @@ V40增加明细单位、SKU图片引用/哈希和其他费用；单据快照增�
 Web类型检查及构建通过，主包1697.65KB体积告警保留。PDF实际渲染清晰；artifact-tool导入Excel保留图片但预览不显示，官方签名有效的LibreOffice26.2.6独立渲染证实图片、中文、单位及分页正常，证据在batch28-document-preview/libreoffice。预览仅作版面检查，非正式业务签认。测试预览V2金额夹具另已纠正，使5行、折扣/税费/运费/其他费用平衡。V40/V41四镜像冻结，API18182运行acceptance-batch28-fixed-runtime.jar。
 
 客户主资料地址/国家/Email/币种偏好/业务归属和带入PI仍需补齐，普通岗位页面及正式交付仍未验收。全项目最终两轮仍为0轮；未推送GitHub。
+
+## 批次29：客户商务资料及PI快照带入（2026-09-23）
+
+V42新增客户商务资料：地址、国家/地区、Email、币种偏好和业务归属文字。独立CUSTOMER_PROFILE_WRITE权限可分配内部岗位，代理/PDA优先拒绝，普通库存账号不能读取。父客户锁、READ_COMMITTED与revision防止并发覆盖，资料和前后值审计同事务。Web客户管理增加商务资料入口；选择客户新建PI时带入资料及币种，可明确调整；后端创建捕获缺失资料。历史PI读取/编辑/修订/导出保持保存快照，V2显示联系人/电话/Email/业务归属。
+
+batch29-customer-tests.log 38项通过；batch29-full-verify.log最初373项通过。真实HTTP随后发现统一master PUT管理员拦截阻止独立授权账号，已增加仅profile路径的认证入口，仍由业务层执行独立权限与账号边界；新增2项真实SecurityConfig的MockMvc回归。batch29-fixed-full-verify.log修复后全量375项通过，0失败/错误/跳过，含全新b29fixed两迁移库；batch29-fixed-customer-http.json/.log 13组全部通过且cleanupFailures为空。修复前373项不代替当前证据。
+
+batch29-final-web-build.log类型检查/构建通过，Web主包1698.00KB告警保留。V42四镜像冻结；恢复会话时本机服务已停止，恢复隔离MySQL并等待就绪后启动API18182，现运行acceptance-batch29-fixed-runtime.jar。首次API启动早于数据库就绪而失败，第二次启动成功，不更换验收端口。GitHub只读查询已恢复，main仍为e9671d7b19f73934d784d8aef1220fdeb136bf39，尚未推送。
+
+继续核对PRD发现收款方式/撤回确认、物流附件、PI内部销售授权客户范围，以及业务看板/PI列表导出需继续补齐或逐项核对。业务归属文字不是访问授权。普通岗位浏览器及正式交付仍待验收，全项目最终两轮为0轮。

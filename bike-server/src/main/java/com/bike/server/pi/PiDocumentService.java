@@ -159,6 +159,10 @@ public class PiDocumentService {
         if (d != null) {
             add(lines, "买方地址: ", d.buyerAddress()); add(lines, "买方联系方式: ", d.buyerContact());
             add(lines,"买方国家/地区 / Buyer country: ",d.buyerCountry());
+            add(lines,"买方联系人 / Contact: ",d.buyerContactName());
+            add(lines,"买方电话 / Phone: ",d.buyerPhone());
+            add(lines,"买方邮箱 / Email: ",d.buyerEmail());
+            add(lines,"业务归属 / Account owner: ",d.businessOwner());
         }
         return lines;
     }

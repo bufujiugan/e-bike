@@ -18,7 +18,9 @@ public class MasterServiceImpl implements MasterService {
 
     @Override public java.util.List<MasterItem> list(String type, String keyword) {
         validateType(type);
-        if (Set.of("models", "warehouses").contains(type) && CurrentOperator.hasPermission("PRODUCTION_MANAGE")) {
+        if ("customers".equals(type) && CurrentOperator.hasPermission("CUSTOMER_PROFILE_WRITE")) {
+            CurrentOperator.requireInternalWebAccess();
+        } else if (Set.of("models", "warehouses").contains(type) && CurrentOperator.hasPermission("PRODUCTION_MANAGE")) {
             CurrentOperator.requireInternalWebAccess();
         } else {
             CurrentOperator.requireAnyPermission("MASTER_READ", "INVENTORY_READ", "ORDER_READ", "AGENT_INVENTORY_READ", "STOCK_IN_OPERATE", "STOCK_OUT_OPERATE");

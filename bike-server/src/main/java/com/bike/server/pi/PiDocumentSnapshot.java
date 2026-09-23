@@ -23,7 +23,17 @@ public record PiDocumentSnapshot(
         @Size(max = 100) String transportMode,
         @Size(max = 100) String tradeTerms,
         @Size(max = 100) String buyerCountry,
-        @Size(max = 100) String sellerCountry) {
+        @Size(max = 100) String sellerCountry,
+        @Size(max = 100) String buyerContactName,
+        @Size(max = 64) String buyerPhone,
+        @jakarta.validation.constraints.Email @Size(max = 254) String buyerEmail,
+        @Size(max = 150) String businessOwner) {
+    public PiDocumentSnapshot(String sellerName,String sellerAddress,String sellerContact,String buyerAddress,String buyerContact,
+            String bankName,String bankAccount,String beneficiary,String paymentTerms,String deliveryTerms,String templateCode,String templateVersion,
+            LocalDate issueDate,LocalDate validUntil,String shippingAddress,String transportMode,String tradeTerms,String buyerCountry,String sellerCountry) {
+        this(sellerName,sellerAddress,sellerContact,buyerAddress,buyerContact,bankName,bankAccount,beneficiary,paymentTerms,deliveryTerms,
+                templateCode,templateVersion,issueDate,validUntil,shippingAddress,transportMode,tradeTerms,buyerCountry,sellerCountry,null,null,null,null);
+    }
     /** Historical JSON and old drafts keep unknown dates and terms empty. */
     public PiDocumentSnapshot(String sellerName,String sellerAddress,String sellerContact,String buyerAddress,String buyerContact,
             String bankName,String bankAccount,String beneficiary,String paymentTerms,String deliveryTerms,String templateCode,String templateVersion) {
