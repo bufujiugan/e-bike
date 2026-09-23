@@ -328,6 +328,28 @@ try {
   const sameExport = await req(`/api/pis/${pi.id}/export-task`, undefined, { token: sales }); assert.equal(sameExport.pdfSha256, exported.pdf); assert.equal(sameExport.xlsxSha256, exported.xlsx);
   await expectSku(model.id, red.id, 1, 0, 0, 1); await expectSku(secondModel.id, blue.id, 1, 0, 0, 1);
   pass('收款方式参与幂等，独立权限并发撤回只生效一次；已发数量/库存及归档不变、凭证保留、系列历史连续并重新阻止放行');
+  const revisionEdit = { ...body.pi, document: revisionAfter.document, remark: '已收款并完成出库后的商业条款修订' };
+  await req(`/api/pis/${revision.id}`, { ...revisionEdit, currencyCode: 'USD' }, { method: 'PUT', token: sales, code: 'PI_REVISION_CURRENCY_IMMUTABLE' });
+  await req(`/api/pis/${revision.id}`, { ...revisionEdit, customerId: otherCustomer.id }, { method: 'PUT', token: sales, code: 'PI_REVISION_PARTY_IMMUTABLE' });
+  await req(`/api/pis/${pi.id}/revisions`, { ...revisionRequest, requestId: randomUUID() }, { token: sales, code: 'PI_REVISION_DRAFT_EXISTS' });
+  await req(`/api/pis/${revision.id}/cancel`, { reason: '取消本次修订，保持当前有效版本' }, { token: sales });
+  const stillCurrent = await req(`/api/pis/${pi.id}`, undefined, { token: finance });
+  assert.equal(stillCurrent.status, 'CONFIRMED'); assert.equal(stillCurrent.paidAmount, '200.00'); assert(stillCurrent.fulfillment.every(line => line.shippedQty === 1));
+  const nextRequest = { ...revisionRequest, requestId: randomUUID(), reason: '第二次修订，保留取消版本历史' };
+  const nexts = await Promise.all([req(`/api/pis/${pi.id}/revisions`, nextRequest, { token: sales }), req(`/api/pis/${pi.id}/revisions`, nextRequest, { token: sales })]);
+  const next = nexts[0]; assert.equal(next.id, nexts[1].id); assert.equal(next.revision, 3);
+  await req(`/api/pis/${next.id}`, { ...revisionEdit, otherFeeAmount: '15.34' }, { method: 'PUT', token: sales });
+  await req(`/api/pis/${pi.id}/release`, { reason: '修订发布前核对当前版本' }, { token: finance });
+  const publishedRevision = await req(`/api/pis/${next.id}/confirm`, {}, { token: sales });
+  assert.equal(publishedRevision.status, 'CONFIRMED'); assert.equal(publishedRevision.releaseStatus, 'BLOCKED'); assert.equal(publishedRevision.totalAmount, '215.34');
+  const prior = await req(`/api/pis/${pi.id}`, undefined, { token: finance }); assert.equal(prior.status, 'SUPERSEDED'); assert.equal(prior.totalAmount, '212.34');
+  assert.equal((await req(`/api/pis/${pi.id}/revisions`, nextRequest, { token: sales })).id, next.id);
+  const history = await req(`/api/pis/${next.id}/revisions`, undefined, { token: sales }); assert.deepEqual(history.map(row => row.revision), [1, 2, 3]); assert(history.every(row => row.paidAmount == null));
+  await req(`/api/pis/${next.id}/cancel`, { reason: '不能取消已有旧版到账的系列' }, { token: sales, code: 'PI_HAS_PAYMENTS' });
+  const currentFinance = await req(`/api/pis/${next.id}`, undefined, { token: finance }); assert.equal(currentFinance.paidAmount, '200.00'); assert(currentFinance.fulfillment.every(line => line.shippedQty === 1 && line.status === 'SHIPPED'));
+  const archivedPrior = await req(`/api/pis/${pi.id}/export-task`, undefined, { token: sales }); assert.equal(archivedPrior.pdfSha256, exported.pdf); assert.equal(archivedPrior.xlsxSha256, exported.xlsx);
+  await expectSku(model.id, red.id, 1, 0, 0, 1); await expectSku(secondModel.id, blue.id, 1, 0, 0, 1);
+  pass('商业修订禁止混币和转移客户，取消草稿保留执行；并发新建一次且版本不复用，已发订单可确认新修订，旧版转历史并保持原归档和系列收款');
 } catch (error) { evidence.error = error.stack || error.message; console.error(error); process.exitCode = 1; }
 finally {
   for (const id of ordersToCancel) try { await req(`/api/orders/${id}/cancel?reason=SKU验收结束清理未完成订单`, {}); } catch(error) { evidence.cleanupFailures.push({ orderId: id, error: error.message }); }

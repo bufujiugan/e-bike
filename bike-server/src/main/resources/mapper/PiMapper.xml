@@ -92,7 +92,11 @@
             p.document_snapshot=#{documentJson},p.remark=#{request.remark},p.other_fee_amount=COALESCE(#{request.otherFeeAmount},0)
         WHERE p.id=#{id} AND p.status='DRAFT'
     </update>
-    <select id="countPayments" resultType="int">SELECT COUNT(*) FROM bike_pi_payment WHERE pi_id=#{id} FOR UPDATE</select>
+    <select id="countPayments" resultType="int">
+        SELECT COUNT(*) FROM bike_pi_payment pay JOIN bike_pi origin ON origin.id=pay.pi_id
+        JOIN bike_pi target ON target.id=#{id}
+        WHERE origin.id=target.id OR (target.series_id IS NOT NULL AND origin.series_id=target.series_id) FOR UPDATE
+    </select>
     <select id="countShipments" resultType="int">
         SELECT COUNT(*) FROM bike_stock_out_record WHERE order_id=#{orderId} FOR UPDATE
     </select>

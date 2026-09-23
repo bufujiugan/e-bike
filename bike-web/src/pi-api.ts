@@ -47,6 +47,7 @@ export type PiLogistics = {
   stockOutBatchId?: number | null; linkType: string; revision: number; shippedQtySnapshot?: number | null; revokeReason?: string | null
 }
 export type PiView = {
+  previousRevisionId?: number | null
   seriesId?: number; fulfillment?: PiFulfillment[]; dispatchBatches?: PiDispatchBatch[]
   id: number; piNo: string; revision: number; customerId: number; customerCode?: string; customerName: string
   agentId?: number | null; agentName?: string | null; sourceOrderId?: number | null
@@ -76,6 +77,8 @@ export type PiPaymentCreate = { requestId: string; amount: string; currencyCode:
 export type PiLogisticsCreate = { batchNo: string; carrier?: string; trackingNo?: string; status: string; remark?: string; stockOutBatchId?: number | null; requestId: string; expectedRevision?: number }
 
 export const piApi = {
+  async revisions(id: number) { return (await api.get<{ data: PiView[] }>(`/api/pis/${id}/revisions`)).data.data },
+  async createRevision(id: number, body: { requestId: string; expectedRevision: number; reason: string }) { return (await api.post<{ data: PiView }>(`/api/pis/${id}/revisions`, body)).data.data },
   async logisticsAttachments(piId: number, logisticsId: number) { return (await api.get<{ data: PiLogisticsAttachment[] }>(`/api/pis/${piId}/logistics/${logisticsId}/attachments`)).data.data },
   async uploadLogisticsAttachment(piId: number, logisticsId: number, requestId: string, visibility: string, file: File, progress: (percent: number) => void) {
     const form = new FormData(); form.append('file', file); form.append('requestId', requestId); form.append('visibility', visibility)

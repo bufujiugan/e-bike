@@ -58,3 +58,10 @@ V44新增物流记录附件，绑定真实logisticsId；内部PI_READ+PI_LOGISTI
 batch31-logistics-file-tests.log定向7项通过；batch31-full-verify.log全量382项通过，0失败/错误/跳过，包含全新b31full两迁移库。batch31-logistics-files-http.json/.log真实HTTP15组全部通过且cleanupFailures为空，新增并发附件、物流岗位与客户边界、跨记录拒绝及撤回后只读。batch31-web-build.log类型检查/构建通过，主包1698.68KB体积告警保留。API18182运行acceptance-batch31-runtime.jar，health为UP。V44四镜像冻结。
 
 内部销售客户范围、PI修订数量与币种保护、业务看板/列表导出及格式容量仍须核对和补齐。普通岗位浏览器、正式SMTP/COS/设备和现场交付仍待验收。本批属于实施回归，全项目最终两轮仍为0轮；尚未推送GitHub。
+## 批次32：PI商业修订生命周期与页面入口（2026-09-23）
+
+修复取消修订草稿错误释放当前订单占用、已放行旧版未转历史、已发子单阻止商业修订确认、历史收款未用于取消门禁、修订混币、取消版本号复用及审计返回未检查。创建统一库存锁顺序、系列锁/请求幂等，一次只允许一个修订草稿；相同请求在发布或取消后仍可重试。商业资料允许收款和出库后修订，客户/代理/币种暂固定；确认新修订保持原履约及归档，按系列到账更新状态，新版重新放行。Web补齐创建修订与版本历史入口、错误重试和历史状态显示。
+
+首次专项因测试使用了记录式访问器而编译失败，改为PiItemView真实getter后，batch32-revision-tests-r2.log 20项通过。batch32-full-verify.log全量386项通过，0失败/错误/跳过，含全新b32full空库/升级库；batch32-web-build.log类型检查/构建通过，主包1698.84KB告警保留。batch32-revision-lifecycle-http.json/.log 16组真实HTTP通过且cleanupFailures为空，新增普通销售取消/重建/编辑/发布、并发与幂等、混币/客户转移拒绝、旧版RELEASED正确转历史、系列收款/实际出库/归档不变。API18182更新至acceptance-batch32-runtime.jar，health为UP。
+
+本批没有新增或修改迁移。关联订单的SKU数量仍固定，客户/币种跨系列转移未实现，不能宣布修订需求全部完成。数量调整边界见pi-revision-lifecycle.md，内部客户范围旁路清单见internal-customer-scope-design.md。普通岗位浏览器及最终交付仍待验证，全项目最终两轮仍为0轮，尚未推送GitHub。

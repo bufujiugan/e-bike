@@ -23,7 +23,9 @@
   <select id="lockSeries" resultType="com.bike.server.pi.PiSeriesMapper$SeriesLock">
     SELECT id,current_pi_id currentPiId,next_revision nextRevision,version FROM bike_pi_series WHERE id=#{seriesId} FOR UPDATE
   </select>
-  <update id="publishRevision">UPDATE bike_pi_series SET current_pi_id=#{piId},next_revision=#{revision}+1,version=version+1
+  <update id="reserveRevision">UPDATE bike_pi_series SET next_revision=#{revision}+1,version=version+1
+    WHERE id=#{seriesId} AND next_revision&lt;=#{revision}</update>
+  <update id="publishRevision">UPDATE bike_pi_series SET current_pi_id=#{piId},next_revision=GREATEST(next_revision,#{revision}+1),version=version+1
     WHERE id=#{seriesId} AND current_pi_id=#{previousPiId}</update>
   <select id="revisionRequest" resultType="com.bike.server.pi.PiSeriesMapper$RevisionRequest">
     SELECT pi_id,payload_hash payloadHash FROM bike_pi_revision_request WHERE operator_id=#{operatorId} AND request_id=#{requestId}

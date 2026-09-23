@@ -10,6 +10,7 @@ public interface PiSeriesMapper {
     int insertSeries(@Param("piId") long piId);
     int assignSeries(@Param("piId") long piId);
     SeriesLock lockSeries(@Param("seriesId") long seriesId);
+    int reserveRevision(@Param("seriesId") long seriesId, @Param("revision") int revision);
     int publishRevision(@Param("seriesId") long seriesId, @Param("piId") long piId,
             @Param("previousPiId") long previousPiId, @Param("revision") int revision);
     RevisionRequest revisionRequest(@Param("operatorId") long operatorId, @Param("requestId") String requestId);

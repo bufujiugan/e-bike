@@ -224,3 +224,8 @@ H5 使用该接口，可搜索、翻页，翻页保留已选订单；切换客�
 GET/POST `/api/pis/{piId}/logistics/{logisticsId}/attachments` 查询/上传，GET `.../{attachmentId}/download` 下载。先验证原PI访问范围及物流记录确属该系列；上传必须内部PI_READ+PI_LOGISTICS_WRITE。客户仅可读CUSTOMER，INTERNAL仅内部可见。
 
 multipart file/requestId/visibility；真实JPG/PNG/PDF、10MB、每物流50个。物流父行锁和READ_COMMITTED保护状态、限额及幂等；同请求不同内容拒绝。PLANNED/SHIPPED允许新增，WITHDRAWN保留原附件下载且拒绝新增，原请求相同内容重试返回原记录。元数据、审计同事务，失败清理对象；下载核验SHA256，返回no-store/nosniff/CSP。
+## PI商业修订生命周期（批次32）
+
+POST `/api/pis/{id}/revisions` 请求requestId/expectedRevision/reason，内部PI_READ+PI_WRITE；GET同路径读取内部版本历史，财务金额依权限隐藏。一个系列只允许一个草稿，版本分配、克隆、幂等和审计同事务；取消版本不复用。原请求在生成版本发布/取消后重试仍返回原版本，改变原因返回冲突。
+
+取消修订草稿不改变当前有效版本及订单占用。有效PI取消按系列全部历史收款检查。收款/出库后的商业金额和条款可在修订草稿编辑；当前禁止改变系列客户/代理/币种，确认亦重新校验旧草稿。关联履约SKU/数量仍固定，后续数量调整尚未完成。新修订确认不重做已发订单确认，原CONFIRMED/RELEASED转SUPERSEDED，当前版本重算系列付款状态并保持BLOCKED，须重新授权放行。归档文件及已发车辆保持原事实。

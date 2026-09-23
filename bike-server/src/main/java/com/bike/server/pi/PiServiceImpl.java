@@ -99,7 +99,8 @@ public class PiServiceImpl implements PiService {
         if (!Objects.equals(existing.getSourceOrderId(), request.sourceOrderId())) {
             fail("PI_SOURCE_ORDER_IMMUTABLE", "草稿的来源订单不可改绑，请取消后重新核对业务");
         }
-        requireNoFinancialOrShipmentActivity(existing);
+        if (existing.getPreviousRevisionId() == null) requireNoFinancialOrShipmentActivity(existing);
+        else requireRevisionIdentity(existing, request.customerId(), request.agentId(), currency(request.currencyCode()));
         checkLinkedDraft(existing, request);
         return persistDraft(existing, request);
     }
@@ -113,8 +114,11 @@ public class PiServiceImpl implements PiService {
         if (!Set.of("DRAFT", "CONFIRMED").contains(existing.getStatus())) {
             fail("INVALID_STATUS_TRANSITION", "只有未放行的草稿或已确认 PI 可以取消");
         }
-        requireNoFinancialOrShipmentActivity(existing);
-        for (long orderId : orderIds(existing)) reservations.release(orderId, "取消PI：" + request.reason().trim());
+        boolean revisionDraft = "DRAFT".equals(existing.getStatus()) && existing.getPreviousRevisionId() != null;
+        if (!revisionDraft) {
+            requireNoFinancialOrShipmentActivity(existing);
+            for (long orderId : orderIds(existing)) reservations.release(orderId, "取消PI：" + request.reason().trim());
+        }
         if (mapper.updateStatus(id, existing.getStatus(), "CANCELLED", CurrentOperator.id(), false) != 1) {
             fail("PI_CANCEL_FAILED", "PI 取消失败");
         }
@@ -208,7 +212,9 @@ public class PiServiceImpl implements PiService {
         requireInternal("PI_WRITE");
         PiView pi = lockOrderAndPi(id);
         requirePublishableDocument(pi);
-        if (series != null && pi.getSourceOrderId() == null) {
+        PiView previousRevision = pi.getPreviousRevisionId() == null ? null
+                : requireRevisionIdentity(pi, pi.getCustomerId(), pi.getAgentId(), pi.getCurrencyCode());
+        if (series != null && pi.getSourceOrderId() == null && previousRevision == null) {
             for (long orderId : orderIds(pi)) {
                 var order = fulfillmentOrders.selectForUpdate(orderId);
                 if (!Set.of("DRAFT","PENDING","CONFIRMED").contains(order.getStatus()))
@@ -229,13 +235,15 @@ public class PiServiceImpl implements PiService {
         if (pi.getPreviousRevisionId() != null && pi.getSeriesId() != null) {
             if (series.publishRevision(pi.getSeriesId(), id, pi.getPreviousRevisionId(), pi.getRevision()) != 1)
                 fail("PI_REVISION_CONFLICT", "PI当前版本已变化，请刷新后重试");
-            mapper.updateStatus(pi.getPreviousRevisionId(), "CONFIRMED", "SUPERSEDED", CurrentOperator.id(), false);
+            if (mapper.updateStatus(previousRevision.getId(), previousRevision.getStatus(), "SUPERSEDED", CurrentOperator.id(), false) != 1)
+                fail("PI_REVISION_CONFLICT", "旧PI版本已变化，请刷新后重试");
             BigDecimal seriesPaid = mapper.paymentTotal(id);
-            mapper.updatePaymentStatus(id, paymentStatus(seriesPaid, pi));
+            if (mapper.updatePaymentStatus(id, paymentStatus(seriesPaid, pi)) != 1)
+                fail("PI_CONFIRM_FAILED", "修订付款状态保存失败");
         }
         audit(id, "确认 PI", Map.of("status", "DRAFT"), Map.of("status", "CONFIRMED"), null);
         if(archives!=null)archives.enqueue(require(id),"CONFIRMATION");
-        if (pi.getDepositRequiredAmount().signum() == 0) reservations.retainAfterPayment(pi, mapper.paymentTotal(id));
+        reservations.retainAfterPayment(pi, mapper.paymentTotal(id));
         return enrich(require(id));
     }
 
@@ -496,6 +504,19 @@ public class PiServiceImpl implements PiService {
         for (long orderId : orderIds(pi)) {
             if(mapper.countShipments(orderId)>0) fail("PI_HAS_SHIPMENTS", "PI 来源订单已有实际出库记录，不能编辑或直接取消");
         }
+    }
+
+    /** A commercial draft does not change the party or currency of existing receipts and fulfillment. */
+    private PiView requireRevisionIdentity(PiView pi, Long customerId, Long agentId, String currencyCode) {
+        PiView previous = locked(pi.getPreviousRevisionId());
+        var current = series.lockSeries(pi.getSeriesId());
+        if (current == null || current.currentPiId() != previous.getId() || !PUBLISHED.contains(previous.getStatus()))
+            fail("PI_REVISION_CONFLICT", "修订基线已变化，请基于当前有效版本重新修订");
+        if (!Objects.equals(previous.getCustomerId(), customerId) || !Objects.equals(previous.getAgentId(), agentId))
+            fail("PI_REVISION_PARTY_IMMUTABLE", "修订须保留原客户和代理商，不能转移既有收款或履约");
+        if (!Objects.equals(previous.getCurrencyCode(), currencyCode))
+            fail("PI_REVISION_CURRENCY_IMMUTABLE", "同一PI系列须保持币种一致，不能转换既有到账金额");
+        return previous;
     }
 
     private List<Long> orderIds(PiView pi) {
