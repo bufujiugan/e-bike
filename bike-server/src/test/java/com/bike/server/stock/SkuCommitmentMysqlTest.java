@@ -343,10 +343,10 @@ class SkuCommitmentMysqlTest {
                 exec("INSERT INTO @warehouse_location VALUES(1,1,'库位','ENABLED')");
                 addVehicle(100,10);addVehicle(101,11);addVehicle(102,null);
                 if(withPi) {
-                    for(String file:List.of("V24__pi_multi_item_and_fulfillment.sql","V30__pi_series_and_atomic_conversion.sql","V31__pi_dispatch_batches.sql","V32__pi_logistics_actual_batches.sql","V33__pi_revisions_and_series_payments.sql","V40__pi_document_details.sql","V43__pi_payment_corrections.sql")) {
+                    for(String file:List.of("V24__pi_multi_item_and_fulfillment.sql","V30__pi_series_and_atomic_conversion.sql","V31__pi_dispatch_batches.sql","V32__pi_logistics_actual_batches.sql","V33__pi_revisions_and_series_payments.sql","V40__pi_document_details.sql","V43__pi_payment_corrections.sql","V48__pi_revision_sku_sources.sql")) {
                         try(var input=Resources.getResourceAsStream("db/migration/"+file)) {
                             String ddl=new String(input.readAllBytes(),StandardCharsets.UTF_8).split("INSERT INTO bike_sys_permission")[0]
-                                    .replace("bike_",prefix).replaceAll("CONSTRAINT (fk_(?:pi|dispatch|logistics)_[a-z_]+)","CONSTRAINT "+prefix+"$1");
+                                    .replace("bike_",prefix).replaceAll("CONSTRAINT ((?:fk|ck)_(?:pi|dispatch|logistics)_[a-z_]+)","CONSTRAINT "+prefix+"$1");
                             for(String statement:ddl.split(";")) {
                                 String clean=statement.replaceAll("(?m)^--.*$","").trim();if(clean.isBlank())continue;jdbc.execute(clean);
                                 if(clean.startsWith("CREATE TABLE"))tables.add(clean.replaceFirst("CREATE TABLE (IF NOT EXISTS )?","").split("[ (\\r\\n]",2)[0].substring(prefix.length()));
@@ -358,8 +358,10 @@ class SkuCommitmentMysqlTest {
                     ReflectionTestUtils.setField(coordinator,"series",piSeries);
                     pis=com.bike.server.common.CustomerScopeTestSupport.isolated(new com.bike.server.pi.PiServiceImpl(mapper,mock(com.bike.server.pi.PiDocumentService.class),session.getMapper(OperationLogMapper.class),json,validation.getValidator(),coordinator));
                     ReflectionTestUtils.setField(pis,"series",piSeries);ReflectionTestUtils.setField(pis,"skuInventory",inventory);
-                    ReflectionTestUtils.setField(pis,"quantityRevisions",new com.bike.server.pi.PiQuantityService(piSeries,
+                    var quantity=com.bike.server.common.CustomerScopeTestSupport.isolated(new com.bike.server.pi.PiQuantityService(piSeries,
                             session.getMapper(com.bike.server.pi.PiQuantityMapper.class),inventory,reservations,orders,session.getMapper(OperationLogMapper.class),json,mapper));
+                    ReflectionTestUtils.setField(quantity,"locks",lockMapper);ReflectionTestUtils.setField(quantity,"converter",conversion);
+                    ReflectionTestUtils.setField(pis,"quantityRevisions",quantity);
                     ReflectionTestUtils.setField(pis,"fulfillmentOrders",orders);ReflectionTestUtils.setField(pis,"orderInventoryGuard",inventoryGuard);
                     piConversion=com.bike.server.common.CustomerScopeTestSupport.isolated(new com.bike.server.pi.PiConversionService(lockMapper,conversion,pis,piSeries,guard,json,validation.getValidator()));
                     var gate=new com.bike.server.pi.PiShipmentGuard(session.getMapper(com.bike.server.pi.PiShipmentMapper.class));

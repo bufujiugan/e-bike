@@ -495,3 +495,14 @@ batch37-files-http.json/.log共28组真实HTTP全部通过，cleanupFailures为�
 API18182运行acceptance-batch37-runtime.jar，SHA256 2F9CD5163723FECBDE2BBD60ED29C9E6ADF909862D6CF9072DD97509DB09892D，health UP、bike_schema_history确认V47成功。最初查询误用默认flyway_schema_history导致表不存在，按项目配置bike_schema_history核实，不是迁移失败。V47四镜像SHA256 A997A6AC65D77B499758472F9362A3EBCC0F8C8C3F7DDAD8FF916CA3F6162934并冻结。
 
 COS私有桶短时授权、绑定失败持久化待核对、PI新增/移除SKU与客户转移、普通岗位浏览器和正式交付仍待完成或验证。本批为实施回归，全项目最终两轮仍为0轮，未推送GitHub。
+## 批次38：PI修订新增来源SKU及移除未发商品（2026-09-24）
+
+V48保存修订草稿所选来源锁定、SKU、数量、原截止和确认后的订单ID。保存/取消草稿不改变有效订单及来源转换量；确认在库存互斥事务内重新校验客户范围、功能权限、来源状态和可用量，先释放减量再增加或转换新来源，保留原截止。新增SKU必须足额选择来源；移除只允许完全未发SKU，历史子单保留关闭数量及来源关系。已关闭SKU重新加入必须新来源；同SKU新增独立子单只计算未发增量。
+
+旧CONFIRMED/RELEASED版本归入历史，新版本重新放行。关闭且无待发量的子单不再阻挡其余有效子单；原付款、出库流水和归档不改。新增子单、来源转换、数量差额、系列发布、审计和归档排队同事务回滚。内部转换采用随机请求号，避免普通转单预占可预测请求号。空revisionSources不进入首次转换序列化，保留V47请求幂等。Web支持来源查询/选择、移除商品、恢复草稿选择、详情来源与子单追溯。
+
+batch38-sku-targeted-r2.log早期29项通过。batch38-full-verify.log跑430项有两个新测试夹具错误：JsonNode重建改变BigDecimal表示、已放行夹具重复放行；修正后补充普通转单预占和归档失败回滚，batch38-final-targeted.log 13项通过。当前完整依据batch38-final-full-verify.log：431项，0失败/错误/跳过，含全新b38final空库/升级库和8项新增SKU MySQL用例。batch38-web-build.log类型检查/构建通过，主包1703.39KB告警保留。
+
+batch38-sku-revision-http.json/.log共30组全部通过，cleanupFailures为空。新增普通销售来源草稿/取消/发布、缺来源/跨客户/PI单权限/代理写入拒绝、旧版快照与原收款、原截止、单次来源转换、未发移除释放、财务重新放行、普通仓管实际出库及已发移除拒绝。没有浏览器验收。
+
+API18182运行acceptance-batch38-runtime.jar，SHA256 160E89887279B10025F1F2AFF243ACAFFE920126F5EA84F304D3645DDA46E152，health UP、bike_schema_history为V48成功。V48四镜像SHA256 B311D486C7725A3AD31CF1779F1A365436F52136106716F3383793B8A7089330并冻结。客户转移、历史车型准确SKU关系、COS短时授权/绑定失败待核对、普通岗位浏览器和正式交付仍待完成或验证。本批是实施回归，不计全项目最终两轮；最终仍为0轮，未推送GitHub。

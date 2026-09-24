@@ -8,6 +8,9 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public class PiView {
+    private List<PiRevisionSourceView> revisionSources = List.of();
+    public List<PiRevisionSourceView> getRevisionSources(){return revisionSources;}
+    public void setRevisionSources(List<PiRevisionSourceView> value){revisionSources=List.copyOf(value);}
     private String businessOwner;
     public String getBusinessOwner(){return businessOwner;}
     public void setBusinessOwner(String value){businessOwner=value;}

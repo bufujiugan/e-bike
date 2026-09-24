@@ -1,6 +1,17 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.bike.server.pi.PiQuantityMapper">
+  <select id="sources" resultType="com.bike.server.pi.PiRevisionSourceView">
+    SELECT lock_id,sku_id,quantity,lock_no,sku_code,product_name,expires_at,order_id
+    FROM bike_pi_revision_source WHERE pi_id=#{piId} ORDER BY lock_id
+  </select>
+  <delete id="clearSources">DELETE FROM bike_pi_revision_source WHERE pi_id=#{piId} AND order_id IS NULL</delete>
+  <insert id="insertSource">
+    INSERT INTO bike_pi_revision_source(pi_id,lock_id,sku_id,quantity,lock_no,sku_code,product_name,expires_at)
+    VALUES(#{piId},#{source.lockId},#{source.skuId},#{source.quantity},#{source.lockNo},#{source.skuCode},#{source.productName},#{source.expiresAt})
+  </insert>
+  <update id="convertedSource">UPDATE bike_pi_revision_source SET order_id=#{orderId}
+    WHERE pi_id=#{piId} AND lock_id=#{lockId} AND order_id IS NULL</update>
   <update id="resizeSku">UPDATE bike_order_reservation_item SET ordered_qty=#{quantity}
     WHERE order_id=#{orderId} AND sku_id=#{skuId} AND closed_qty=0 AND shipped_qty&lt;=#{quantity} AND #{quantity}&gt;0</update>
   <update id="resizeOrder">UPDATE bike_sales_order_item SET ordered_qty=#{quantity}

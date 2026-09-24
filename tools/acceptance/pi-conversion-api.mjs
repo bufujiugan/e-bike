@@ -547,6 +547,89 @@ try {
   const scopeExported = await fetch(`${base}/api/export/orders?keyword=${encodeURIComponent(reds.orderNo)}`, { headers: { Authorization: `Bearer ${scopeB}` } });
   assert.equal(scopeExported.status, 200);assert((await scopeExported.arrayBuffer()).byteLength > 100);
   pass('PI修订、导出文件和任务、商品图片、确认附件、收款凭证、物流历史、批次、订单与库存锁直接ID及写入口拒绝跨客户访问');
+  const revisionModel = await master('models', 'REV');
+  const revisionSkus = [], revisionVehicles = [];
+  for (const color of ['R1', 'R2', 'R3']) {
+    const skuCode = prefix + color;
+    await req('/api/production/skus', { modelId: revisionModel.id, skuCode, productName: '修订替换SKU验收', specification: color, templateId: template.id, enabled: true });
+    const sku = (await req('/api/production/skus')).find(row => row.skuCode === skuCode); assert(sku); revisionSkus.push(sku);
+    const taskId = randomUUID(), tag = `${prefix}${color}`;
+    for (const type of ['MOTOR', 'BATTERY', 'DISPLAY']) await req('/api/parts', { partSn: tag + type, partType: type, qcStatus: 'PASSED' });
+    await req('/api/production/tasks', { requestId: taskId, skuId: sku.id, batchNo: prefix });
+    for (const type of ['FRAME', 'DISPLAY', 'MOTOR', 'BATTERY']) await req(`/api/production/tasks/${taskId}/scan`, { code: tag + type, expectedType: type });
+    const vehicle = await req(`/api/production/tasks/${taskId}`); assert.equal(vehicle.status, 'COMPLETED');
+    await req('/api/stock-in', { vehicleQrCode: vehicle.qrCode, warehouseId: warehouse.id, locationId: location.id }, { token: inboundOperator });
+    revisionVehicles.push(vehicle);
+  }
+  const [keptSku, removedSku, newSku] = revisionSkus;
+  const revisionLocks = await req('/api/sku-locks', { requestId: randomUUID(), customerId: customer.id, agentId: agent.id,
+    items: revisionSkus.map(sku => ({ skuId: sku.id, quantity: 1 })) }, { token: sales });
+  revisionLocks.forEach(lock => locksToRelease.add(lock.id));
+  const sourceFor = sku => revisionLocks.find(lock => lock.skuId === sku.id);
+  const itemFor = sku => ({ skuId: sku.id, quantity: 1, unitPrice: '100.00', unit: 'PCS' });
+  const revisionBase = { ...body.pi, otherFeeAmount: '0.00', items: [itemFor(keptSku), itemFor(removedSku)], shipmentRequiredAmount: '200.00' };
+  const originalSkuPi = await req('/api/pis/from-locks', { requestId: randomUUID(), pi: revisionBase,
+    sources: [keptSku, removedSku].map(sku => ({ lockId: sourceFor(sku).id, quantity: 1 })) }, { token: sales });
+  [keptSku, removedSku].forEach(sku => locksToRelease.delete(sourceFor(sku).id));
+  await req(`/api/pis/${originalSkuPi.id}/confirm`, {}, { token: sales });
+  await req(`/api/pis/${originalSkuPi.id}/payments`, { requestId: randomUUID(), amount: '200.00', currencyCode: 'CNY', paymentMethod: 'BANK_TRANSFER' }, { token: finance });
+  const newSource = sourceFor(newSku); assert(newSource);
+  const replacedBody = { ...revisionBase, items: [itemFor(keptSku), itemFor(newSku)], revisionSources: [{ lockId: newSource.id, quantity: 1 }] };
+  const makeSkuRevision = (current, reason) => req(`/api/pis/${current.id}/revisions`, { requestId: randomUUID(), expectedRevision: current.revision, reason }, { token: sales });
+  const abandonedSkuRevision = await makeSkuRevision(originalSkuPi, '取消草稿不得消耗新增来源');
+  await req(`/api/pis/${abandonedSkuRevision.id}`, replacedBody, { method: 'PUT', token: sales });
+  await req(`/api/pis/${abandonedSkuRevision.id}/cancel`, { reason: '重新核对来源' }, { token: sales });
+  await expectSku(revisionModel.id, newSku.id, 1, 1, 0, 0);
+  await expectSku(revisionModel.id, removedSku.id, 1, 0, 1, 0);
+  const skuRevision = await makeSkuRevision(originalSkuPi, '新增SKU并移除未发商品');
+  await req(`/api/pis/${skuRevision.id}`, { ...replacedBody, revisionSources: [] }, { method: 'PUT', token: sales, code: 'PI_REVISION_SOURCE_REQUIRED' });
+  await req(`/api/pis/${skuRevision.id}`, replacedBody, { method: 'PUT', token: scopeB, code: 'CUSTOMER_SCOPE_DENIED' });
+  await req(`/api/pis/${skuRevision.id}`, replacedBody, { method: 'PUT', token: reader, code: 'PERMISSION_DENIED' });
+  await req(`/api/pis/${skuRevision.id}`, replacedBody, { method: 'PUT', token: external, code: 'FORBIDDEN' });
+  const limitedEditor = await account('PI_ONLY', ['PI_READ', 'PI_WRITE']);
+  await req(`/api/pis/${skuRevision.id}`, replacedBody, { method: 'PUT', token: limitedEditor, code: 'PERMISSION_DENIED' });
+  const savedSkuRevision = await req(`/api/pis/${skuRevision.id}`, replacedBody, { method: 'PUT', token: sales });
+  assert.equal(savedSkuRevision.revisionSources.length, 1); assert.equal(savedSkuRevision.revisionSources[0].orderId, null);
+  assert.equal(savedSkuRevision.revisionSources[0].expiresAt, newSource.expireTime);
+  await expectSku(revisionModel.id, newSku.id, 1, 1, 0, 0);
+  await expectSku(revisionModel.id, removedSku.id, 1, 0, 1, 0);
+  assert.equal((await req(`/api/pis/${skuRevision.id}`, undefined, { token: sales })).revisionSources[0].lockId, newSource.id);
+  await req(`/api/pis/${skuRevision.id}/confirm`, {}, { token: limitedEditor, code: 'PERMISSION_DENIED' });
+  await expectSku(revisionModel.id, newSku.id, 1, 1, 0, 0);
+  pass('普通销售修订可保存新增SKU来源并移除未发商品，草稿及取消不转换或释放有效占用；缺来源与跨客户/角色写入被拒绝');
+  const publishedSkuRevision = await req(`/api/pis/${skuRevision.id}/confirm`, {}, { token: sales });
+  locksToRelease.delete(newSource.id);
+  await req(`/api/pis/${skuRevision.id}/confirm`, {}, { token: sales, code: 'INVALID_STATUS_TRANSITION' });
+  assert.equal(publishedSkuRevision.status, 'CONFIRMED'); assert.equal(publishedSkuRevision.releaseStatus, 'BLOCKED');
+  const financeSkuRevision = await req(`/api/pis/${skuRevision.id}`, undefined, { token: finance });
+  assert.equal(financeSkuRevision.paidAmount, '200.00'); assert.equal(financeSkuRevision.payments.length, 1);
+  const removedLine = publishedSkuRevision.fulfillment.find(line => line.skuId === removedSku.id);
+  const newLine = publishedSkuRevision.fulfillment.find(line => line.skuId === newSku.id);
+  assert.equal(removedLine.status, 'CANCELLED'); assert.equal(removedLine.closedQty, 1); assert.equal(removedLine.remainingQty, 0);
+  assert.equal(newLine.status, 'CONFIRMED'); assert.equal(newLine.remainingQty, 1);
+  assert.equal(publishedSkuRevision.revisionSources[0].orderId, newLine.orderId);
+  assert.equal(publishedSkuRevision.revisionSources[0].expiresAt, newSource.expireTime);
+  await expectSku(revisionModel.id, newSku.id, 1, 0, 1, 0);
+  await expectSku(revisionModel.id, removedSku.id, 1, 0, 0, 1);
+  const oldSkuPi = await req(`/api/pis/${originalSkuPi.id}`, undefined, { token: sales });
+  assert.equal(oldSkuPi.status, 'SUPERSEDED'); assert.deepEqual(oldSkuPi.items.map(item => item.skuId), [keptSku.id, removedSku.id]);
+  assert.deepEqual((await req(`/api/pis/${skuRevision.id}`, undefined, { token: external })).revisionSources, []);
+  const conversions = await req(`/api/inventory-locks/${newSource.id}/orders`, undefined, { token: sales });
+  assert.equal(conversions.total, 1); assert.equal(conversions.records[0].id, newLine.orderId);
+  await req(`/api/pis/${skuRevision.id}/release`, { reason: '核对新增和移除后的有效履约子单' }, { token: finance });
+  for (const sku of [keptSku, newSku]) {
+    const line = publishedSkuRevision.fulfillment.find(row => row.skuId === sku.id), vehicle = revisionVehicles[revisionSkus.indexOf(sku)];
+    await req('/api/stock-out', { customerId: customer.id, orderId: line.orderId, vehicleQrCodes: [vehicle.qrCode] }, { token: warehouseOperator });
+  }
+  const shippedSkuRevision = await req(`/api/pis/${skuRevision.id}`, undefined, { token: sales });
+  assert.equal(shippedSkuRevision.fulfillment.reduce((sum, line) => sum + line.shippedQty, 0), 2);
+  const cannotRemoveShipped = await makeSkuRevision(shippedSkuRevision, '已发商品移除必须拒绝');
+  await req(`/api/pis/${cannotRemoveShipped.id}`, { ...revisionBase, depositRequiredAmount: '0.00', shipmentRequiredAmount: '0.00',
+    items: [itemFor(keptSku)], revisionSources: [] }, { method: 'PUT', token: sales, code: 'PI_QUANTITY_BELOW_SHIPPED' });
+  await req(`/api/pis/${cannotRemoveShipped.id}/cancel`, { reason: '已发数量下限已验证' }, { token: sales });
+  evidence.fixtures.skuRevision = { originalPiId: originalSkuPi.id, revisionPiId: skuRevision.id, sourceLockId: newSource.id, newOrderId: newLine.orderId,
+    removedOrderId: removedLine.orderId, skus: revisionSkus.map(sku => sku.id) };
+  pass('修订发布一次转换来源、保留截止和旧版金额事实、释放已移除SKU占用；财务重新放行后普通仓管实际出库，已发商品不得移除');
   const scopeManager = await account('SCOPE_MANAGER', ['CUSTOMER_SCOPE_MANAGE','PI_READ'], null, null, []);
   const scopedUsers = await req(`/api/customer-scopes/users?keyword=${encodeURIComponent(scopeAUser.username)}&pageSize=1`, undefined, { token: scopeManager });
   assert.equal(scopedUsers.total, 1);assert.equal(scopedUsers.records[0].id, scopeAUser.id);

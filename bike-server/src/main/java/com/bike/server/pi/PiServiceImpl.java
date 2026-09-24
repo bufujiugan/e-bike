@@ -89,6 +89,7 @@ public class PiServiceImpl implements PiService {
     public PiView create(PiCreateRequest request) {
         requireInternal("PI_WRITE");
         validate(request);
+        if(!request.revisionSources().isEmpty())fail("PI_REVISION_SOURCE_INVALID","新建PI请使用锁定转PI入口");
         reservations.lockInventory();
         return persistDraft(null, request);
     }
@@ -103,7 +104,10 @@ public class PiServiceImpl implements PiService {
         if (!Objects.equals(existing.getSourceOrderId(), request.sourceOrderId())) {
             fail("PI_SOURCE_ORDER_IMMUTABLE", "草稿的来源订单不可改绑，请取消后重新核对业务");
         }
-        if (existing.getPreviousRevisionId() == null) requireNoFinancialOrShipmentActivity(existing);
+        if (existing.getPreviousRevisionId() == null) {
+            if(!request.revisionSources().isEmpty())fail("PI_REVISION_SOURCE_INVALID","新增来源须通过已确认PI的修订处理");
+            requireNoFinancialOrShipmentActivity(existing);
+        }
         else requireRevisionIdentity(existing, request.customerId(), request.agentId(), currency(request.currencyCode()));
         checkLinkedDraft(existing, request);
         return persistDraft(existing, request);
@@ -170,7 +174,7 @@ public class PiServiceImpl implements PiService {
             lineDiscount = money(lineDiscount.add(discount));
             lineTax = money(lineTax.add(tax));
         }
-        checkSourceOrder(request, items, existing != null);
+        if(existing==null || existing.getPreviousRevisionId()==null)checkSourceOrder(request, items, existing != null);
         BigDecimal discount = money(optionalMoney(request.discountAmount()).add(lineDiscount));
         BigDecimal tax = money(optionalMoney(request.taxAmount()).add(lineTax));
         BigDecimal freight = optionalMoney(request.freightAmount());
@@ -204,6 +208,7 @@ public class PiServiceImpl implements PiService {
             if (request.sourceOrderId() != null && series.link(id,request.sourceOrderId(),"LEGACY_SOURCE") != 1)
                 fail("PI_CREATE_FAILED", "PI来源订单关联失败");
         }
+        if(existing!=null && quantityRevisions!=null)quantityRevisions.saveSources(id,request.revisionSources());
         audit(id, existing == null ? "创建 PI 草稿" : "编辑 PI 草稿", existing,
                 Map.of("status", "DRAFT", "totalAmount", total, "currency", currency,
                         "skuCount", items.size(), "depositRequiredAmount", deposit,
@@ -216,6 +221,7 @@ public class PiServiceImpl implements PiService {
     public PiView confirm(long id) {
         requireInternal("PI_WRITE");
         PiView pi = lockOrderAndPi(id);
+        if(!"DRAFT".equals(pi.getStatus()))fail("INVALID_STATUS_TRANSITION","只有草稿 PI 可以确认");
         requirePublishableDocument(pi);
         PiView previousRevision = pi.getPreviousRevisionId() == null ? null
                 : requireRevisionIdentity(pi, pi.getCustomerId(), pi.getAgentId(), pi.getCurrencyCode());
@@ -340,7 +346,7 @@ public class PiServiceImpl implements PiService {
         }
         for (long orderId : orderIds(pi)) {
             var reservation = reservations.lockReservation(orderId);
-            if (reservation != null && java.util.Set.of("EXPIRED_REQUIRES_REACQUIRE", "RELEASED")
+            if (reservation != null && reservation.remainingQuantity()>0 && java.util.Set.of("EXPIRED_REQUIRES_REACQUIRE", "RELEASED")
                     .contains(reservation.reservationStatus())) fail("ORDER_RESERVATION_EXPIRED", "订单占用已失效，须重新核对库存并办理占用后放行");
         }
         if (mapper.updateStatus(id, "CONFIRMED", "RELEASED", CurrentOperator.id(), true) != 1) {
@@ -427,6 +433,7 @@ public class PiServiceImpl implements PiService {
 
     private PiView enrich(PiView pi) {
         enrichFulfillment(pi);
+        if(quantityRevisions!=null && !CurrentOperator.hasRole("WEB_AGENT"))pi.setRevisionSources(quantityRevisions.sources(pi.getId()));
         if(dispatch!=null)pi.setDispatchBatches(dispatch.batches(pi.getId()));
         pi.setItems(mapper.selectItems(pi.getId()));
         pi.setLogistics(logisticsMapper==null?mapper.selectLogistics(pi.getId()):logisticsMapper.list(pi.getId()));
@@ -553,7 +560,7 @@ public class PiServiceImpl implements PiService {
     }
 
     private void checkLinkedDraft(PiView pi,PiCreateRequest request) {
-        if(series==null||pi.getSourceOrderId()!=null) return;
+        if(series==null) return;
         var lines=series.fulfillment(pi.getId());
         if(lines.isEmpty()) return;
         if(!Objects.equals(pi.getCustomerId(),request.customerId())||!Objects.equals(pi.getAgentId(),request.agentId()))
@@ -563,8 +570,9 @@ public class PiServiceImpl implements PiService {
             for(var item:request.items()) {
                 if(requested.put(item.skuId(),item.quantity())!=null)fail("DUPLICATE_SKU","PI明细不能重复SKU");
             }
-            quantityRevisions.validate(pi.getId(),requested);return;
+            quantityRevisions.validate(pi.getId(),requested,request.revisionSources());return;
         }
+        if(pi.getSourceOrderId()!=null)return;
         var fixed=new TreeMap<Long,Long>();
         for(var line:lines) {
             if(line.skuId()==null) fail("ORDER_SKU_MISMATCH","履约子单缺少SKU，请先核对");

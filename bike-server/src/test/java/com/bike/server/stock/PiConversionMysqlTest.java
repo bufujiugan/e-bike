@@ -13,6 +13,22 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
 @EnabledIfEnvironmentVariable(named="BIKE_MYSQL_TEST_URL",matches=".+")
 class PiConversionMysqlTest {
+    @Test void preRevisionSourcesConversionHashStillAcceptsTheOriginalRetryAfterUpgrade() throws Exception {
+        try(var f=new SkuCommitmentMysqlTest.Fixture(true)) {
+            var request=request(f);var draft=f.tx(()->f.piConversion.convert(request));
+            var json=new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules();
+            var normalized=new PiConversionRequest(request.requestId(),request.sources().stream()
+                    .sorted(Comparator.comparingLong(PiConversionRequest.Source::lockId)).toList(),request.pi());
+            // Preserve the original numeric spelling: a JsonNode round trip can change BigDecimal scale.
+            String legacy=json.writeValueAsString(normalized).replace(",\"revisionSources\":[]", "");
+            assertThat(legacy).doesNotContain("revisionSources");
+            String legacyHash=HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(legacy.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            f.exec("UPDATE @pi_conversion_request SET payload_hash='"+legacyHash+"'");
+            assertThat(f.tx(()->f.piConversion.convert(request)).getId()).isEqualTo(draft.getId());
+            assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(2);
+        }
+    }
     @Test void differentModelsConvertAndPayTogetherButRemainExactSkuOrders() throws Exception {
         try(var f=new SkuCommitmentMysqlTest.Fixture(true)) {
             var request=request(f);

@@ -237,7 +237,15 @@ multipart file/requestId/visibility；图片JPG/PNG/WebP最大20MB、文档PDF/X
 
 POST `/api/pis/{id}/revisions` 请求requestId/expectedRevision/reason，内部PI_READ+PI_WRITE；GET同路径读取内部版本历史，财务金额依权限隐藏。一个系列只允许一个草稿，版本分配、克隆、幂等和审计同事务；取消版本不复用。原请求在生成版本发布/取消后重试仍返回原版本，改变原因返回冲突。
 
-取消修订草稿不改变当前有效版本及订单占用。有效PI取消按系列全部历史收款检查。收款/出库后的商业金额和条款可在修订草稿编辑；当前禁止改变系列客户/代理/币种，确认亦重新校验旧草稿。原SKU数量可通过修订按实际已发下限调整，保存草稿不改占用，确认时原子应用差额；新增/整行移除SKU仍待实现。新修订确认不重做已发订单确认，原CONFIRMED/RELEASED转SUPERSEDED，当前版本重算系列付款状态并保持BLOCKED，须重新授权放行。归档文件及已发车辆保持原事实。
+取消修订草稿不改变当前有效版本及订单占用。有效PI取消按系列全部历史收款检查。收款/出库后的商业金额和条款可在修订草稿编辑；当前禁止改变系列客户/代理/币种，确认亦重新校验旧草稿。原SKU数量可通过修订按实际已发下限调整，保存草稿不改占用，确认时原子应用差额。V48支持选择新SKU来源及移除完全未发SKU，见下文。新修订确认不重做已发订单确认，原CONFIRMED/RELEASED转SUPERSEDED，当前版本重算系列付款状态并保持BLOCKED，须重新授权放行。归档文件及已发车辆保持原事实。
+
+### 修订新增SKU来源（V48）
+
+`PUT /api/pis/{id}`修订草稿接受可选`revisionSources: [{lockId, quantity}]`，最多100笔，来源不重复，每笔1至100万。来源须为同客户及代理、启用SKU、未到期且剩余足够的SKU锁定。调用者除PI_WRITE外须有ORDER_WRITE和AGENT_LOCK_WRITE及客户范围。通过已有`GET /api/pis/lock-options`查询，不接受手填不存在的内部ID。普通新建/首次转换不接受非空revisionSources。
+
+来源数量包含在`items`对应SKU的总数量内。保存或取消草稿不转换、不更改当前有效订单。`POST /api/pis/{id}/confirm`重新校验并转换，保存来源与新子单的关联；`GET /api/pis/{id}`内部视图返回来源快照及orderId（确认前为null），代理返回空列表。来源续期后须重新保存，过期/消耗拒绝确认。可移除完全未发SKU；低于已发量拒绝。所有库存差额、来源转换、发布、归档排队和审计同事务。
+
+常见错误：`PI_REVISION_SOURCE_REQUIRED`缺新增SKU来源；`PI_REVISION_SOURCE_UNAVAILABLE`来源关闭/到期/不足；`PI_REVISION_SOURCE_CHANGED`保存后截止已变化；`PI_QUANTITY_BELOW_SHIPPED`低于实际已发；`PI_QUANTITY_LEGACY_ORDER`旧车型订单没有准确SKU关系。详细数量分配见`pi-revision-lifecycle.md`。
 ## 原SKU数量修订（批次33）
 
 PUT `/api/pis/{id}` 对关联准确SKU订单的修订草稿允许原SKU内调整quantity；保存只记录草稿，不改变有效版本的库存。确认接口重新核对实际累计已发量与当前占用，按SKU总量稳定分配各子单差额。增加同时检查SKU与车型可用量，失败全部回滚；未到期的原截止与PAID保留语义不变，不自动恢复已释放或到期占用。

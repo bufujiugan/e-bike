@@ -65,8 +65,9 @@ public class LockOrderService {
         if(lock.getSkuId()!=null && (skuInventory.markSkuScope(order.getId())!=1
                 ||skuInventory.insertReservationItem(order.getId(),lock.getSkuId(),request.quantity())!=1))
             throw new BusinessException("ORDER_CREATE_FAILED","固定SKU订单占用保存失败");
-        orders.insertOperationLog("ORDER_CREATE",no,"锁定转入订单",CurrentOperator.id(),CurrentOperator.username(),null,"DRAFT",CurrentOperator.clientIp(),"来源："+lock.getLockNo());
-        locks.insertOperationLog(lock.getLockNo(),"库存锁定转订单",CurrentOperator.id(),CurrentOperator.username(),"订单："+no+"，数量："+request.quantity(),CurrentOperator.clientIp());
+        if(orders.insertOperationLog("ORDER_CREATE",no,"锁定转入订单",CurrentOperator.id(),CurrentOperator.username(),null,"DRAFT",CurrentOperator.clientIp(),"来源："+lock.getLockNo())!=1
+                || locks.insertOperationLog(lock.getLockNo(),"库存锁定转订单",CurrentOperator.id(),CurrentOperator.username(),"订单："+no+"，数量："+request.quantity(),CurrentOperator.clientIp())!=1)
+            throw new BusinessException("ORDER_AUDIT_FAILED","来源锁定转换审计失败");
         return orders.selectById(order.getId());
     }
 }

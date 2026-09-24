@@ -10,7 +10,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 /** 仅针对两个新建的专用空库，禁止清库或重复覆盖已有业务数据。 */
 @EnabledIfEnvironmentVariable(named="BIKE_MIGRATION_CLEAN_URL",matches=".+")
 class MigrationMysqlTest {
-  private static final int LATEST_VERSION = 47;
+  private static final int LATEST_VERSION = 48;
   Flyway flyway(String url,String target) {
     assertThat(url).contains("/bike_migration_");
     var config=Flyway.configure().dataSource(url,System.getenv("BIKE_MYSQL_TEST_USER"),System.getenv("BIKE_MYSQL_TEST_PASSWORD"))
@@ -30,6 +30,7 @@ class MigrationMysqlTest {
       try(var result=sql.executeQuery("SELECT must_change_password,auth_version FROM bike_sys_user WHERE username='admin'")){assertThat(result.next()).isTrue();assertThat(result.getInt(1)).isEqualTo(1);assertThat(result.getLong(2)).isZero();}
       try(var result=sql.executeQuery("SELECT COUNT(*) FROM bike_production_scan_failure")){result.next();assertThat(result.getInt(1)).isZero();}
       try(var result=sql.executeQuery("SELECT COUNT(*) FROM bike_agent_model_access")){result.next();assertThat(result.getInt(1)).isZero();}
+      try(var result=sql.executeQuery("SELECT COUNT(*) FROM bike_pi_revision_source")){result.next();assertThat(result.getInt(1)).isZero();}
       verifyManagementPermission(sql); verifyAfterSalesAndPiSchema(sql);
     }
     assertThat(flyway.migrate().migrationsExecuted).isZero();

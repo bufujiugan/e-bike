@@ -5,6 +5,7 @@ import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import com.bike.server.pi.PiConversionRequest.Source;
 
 public record PiCreateRequest(
         @NotNull(message = "客户不能为空") @Positive Long customerId,
@@ -24,7 +25,18 @@ public record PiCreateRequest(
         @Valid PiDocumentSnapshot document,
         @NotEmpty(message = "至少需要一条 PI 明细") @Size(max = 100)
         @Valid List<@NotNull PiItemRequest> items,
-        @DecimalMin("0.00") @Digits(integer=16,fraction=2) BigDecimal otherFeeAmount) {
+        @DecimalMin("0.00") @Digits(integer=16,fraction=2) BigDecimal otherFeeAmount,
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_EMPTY)
+        @Size(max=100) @Valid List<@NotNull Source> revisionSources) {
+    public PiCreateRequest {
+        revisionSources = revisionSources == null ? List.of() : java.util.Collections.unmodifiableList(new java.util.ArrayList<>(revisionSources));
+    }
+    public PiCreateRequest(Long customerId,Long agentId,Long sourceOrderId,String tradeType,String currencyCode,LocalDate plannedShipDate,
+            BigDecimal discountAmount,BigDecimal taxAmount,BigDecimal freightAmount,BigDecimal depositRequiredAmount,
+            BigDecimal shipmentRequiredAmount,String remark,PiDocumentSnapshot document,List<PiItemRequest> items,BigDecimal otherFeeAmount) {
+        this(customerId,agentId,sourceOrderId,tradeType,currencyCode,plannedShipDate,discountAmount,taxAmount,freightAmount,
+                depositRequiredAmount,shipmentRequiredAmount,remark,document,items,otherFeeAmount,List.of());
+    }
     public PiCreateRequest(Long customerId,Long agentId,Long sourceOrderId,String tradeType,String currencyCode,LocalDate plannedShipDate,
             BigDecimal discountAmount,BigDecimal taxAmount,BigDecimal freightAmount,BigDecimal depositRequiredAmount,
             BigDecimal shipmentRequiredAmount,String remark,PiDocumentSnapshot document,List<PiItemRequest> items) {

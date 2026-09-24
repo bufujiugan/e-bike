@@ -51,6 +51,7 @@ export type PiLogistics = {
   stockOutBatchId?: number | null; linkType: string; revision: number; shippedQtySnapshot?: number | null; revokeReason?: string | null
 }
 export type PiView = {
+  revisionSources?: { lockId: number; skuId: number; quantity: number; lockNo: string; skuCode: string; productName: string; expiresAt: string; orderId?: number | null }[]
   businessOwner?: string | null
   previousRevisionId?: number | null
   seriesId?: number; fulfillment?: PiFulfillment[]; dispatchBatches?: PiDispatchBatch[]
@@ -72,6 +73,7 @@ export type PiSkuOption = { id: number; modelId?: number; productModelId?: numbe
 export type PiOrderOption = { id: number; orderNo: string; customerId: number; agentId?: number | null; status: string }
 export type PiOptions = { customers: PiMasterOption[]; agents: PiMasterOption[]; skus: PiSkuOption[]; orders: PiOrderOption[] }
 export type PiCreate = {
+  revisionSources?: { lockId: number; quantity: number }[]
   customerId: number; agentId?: number | null; sourceOrderId?: number | null; tradeType: string; currencyCode: string
   plannedShipDate?: string | null; discountAmount: string; taxAmount: string; freightAmount: string
   otherFeeAmount?: string
