@@ -77,6 +77,15 @@ V22 增加 PRODUCTION_MANAGE 生产管理功能权限。生产管理写接口按
 
 ## PI 基础（V24）
 
+### PI业务看板、列表与Excel导出（批次35）
+
+- `GET /api/pis/dashboard?keyword=`：内部Web + PI_READ，返回EXPIRING_LOCKS、MISSING_PI、AWAITING_PAYMENT、AWAITING_SHIPMENT、PARTIAL_SHIPMENT计数。未获得对应功能权限的队列返回null。当前已发布版本按系列计一次，草稿独立列入待补PI。
+- `GET /api/pis/dashboard/{queue}?keyword=&page=1&pageSize=20`：相同范围及条件的分页明细与total，最大100条；关键词匹配业务编号/客户名称。收款队列要求财务权限；到期锁要求锁定/代理库存读取权限；待补PI中的未关联订单额外要求ORDER_READ。
+- `GET /api/pis/export.xlsx?keyword=&status=`：PI_READ + PI_EXPORT，按PI列表条件和范围导出全部分页；客户/编号为文本，金额通常为数值，超过Excel安全精度时文本保留并批注，非财务/代理不含付款字段。审计保存失败则不返回成功文件。
+- PI列表关键词扩展至客户编号、SKU、履约订单、出库单/实际出库批次及物流批次/运单号；列表追加负责人，页面展示履约发货进度与创建时间。全部查询在SQL分页前应用V45客户范围，代理仍只见自己的已发布版本。
+
+统计口径、权限与验收见`docs/pi-business-reporting.md`。
+
 - `GET /api/pis`：按 keyword/status 分页；`GET /api/pis/{id}`：明细。要求 `PI_READ`；代理商仅可读取自己的已发布单据，财务金额和收款记录另行脱敏。
 - `GET /api/pis/options?keyword=`：业务员搜索客户、代理商、SKU 和来源订单，要求 `PI_WRITE`。
 - `POST /api/pis`、`PUT /api/pis/{id}`：创建及完整编辑草稿，要求内部 Web 与 `PI_WRITE`。商品必须关联真实 SKU；价格和金额使用最多两位小数的十进制字符串，保存客户、商品和条款快照。关联来源订单不可改绑，也不能从旧订单接口改数量绕过 PI。

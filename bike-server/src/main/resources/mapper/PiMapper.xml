@@ -35,6 +35,7 @@
                p.tax_amount,p.freight_amount,p.other_fee_amount,p.total_amount,p.deposit_required_amount,p.shipment_required_amount,
                COALESCE((SELECT SUM(x.amount) FROM bike_pi_payment x JOIN bike_pi px ON px.id=x.pi_id
                          WHERE (px.series_id=p.series_id OR (px.series_id IS NULL AND p.series_id IS NULL AND px.id=p.id)) AND x.status='CONFIRMED'),0) paid_amount,
+               JSON_UNQUOTE(JSON_EXTRACT(p.document_snapshot,'$.businessOwner')) business_owner,
                p.document_snapshot document_json,p.remark,p.released_at,p.created_at,p.updated_at
         FROM bike_pi p LEFT JOIN bike_agent a ON a.id=p.agent_id
         LEFT JOIN bike_sales_order o ON o.id=p.source_order_id
@@ -43,7 +44,18 @@
     <sql id="where">
         <where><bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=p.customer_id)</if>
             <if test="keyword != null and keyword != ''">
-                AND (p.pi_no LIKE CONCAT('%',#{keyword},'%') OR p.customer_name LIKE CONCAT('%',#{keyword},'%'))
+                AND (p.pi_no LIKE CONCAT('%',#{keyword},'%') OR p.customer_name LIKE CONCAT('%',#{keyword},'%')
+                  OR p.customer_code LIKE CONCAT('%',#{keyword},'%')
+                  OR EXISTS(SELECT 1 FROM bike_pi_item item WHERE item.pi_id=p.id AND item.sku_code LIKE CONCAT('%',#{keyword},'%'))
+                  OR EXISTS(SELECT 1 FROM bike_pi_order_link link JOIN bike_sales_order ord ON ord.id=link.order_id
+                    WHERE link.series_id=p.series_id AND ord.order_no LIKE CONCAT('%',#{keyword},'%'))
+                  OR EXISTS(SELECT 1 FROM bike_pi_order_link link JOIN bike_stock_out_record so ON so.order_id=link.order_id
+                    WHERE link.series_id=p.series_id AND so.stock_out_no LIKE CONCAT('%',#{keyword},'%'))
+                  OR EXISTS(SELECT 1 FROM bike_stock_out_batch batch WHERE batch.series_id=p.series_id
+                    AND batch.batch_no LIKE CONCAT('%',#{keyword},'%'))
+                  OR EXISTS(SELECT 1 FROM bike_pi_logistics lg JOIN bike_pi original ON original.id=lg.pi_id
+                    WHERE (original.series_id=p.series_id OR original.id=p.id)
+                      AND (lg.tracking_no LIKE CONCAT('%',#{keyword},'%') OR lg.batch_no LIKE CONCAT('%',#{keyword},'%'))))
             </if>
             <if test="status != null and status != ''">AND p.status=#{status}</if>
             <if test="agentId != null">AND p.agent_id=#{agentId} AND p.status IN ('CONFIRMED','RELEASED')</if>

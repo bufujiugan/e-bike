@@ -51,6 +51,7 @@ class CustomerScopeMysqlTest {
         final CustomerScopeService management;
         final OperationLogMapper audit=mock(OperationLogMapper.class);
         final MasterMapper masters;
+        final PiReportMapper reports;
         final com.bike.server.trace.TraceMapper trace;
         final OrderServiceImpl orders;
         Fixture()throws Exception {
@@ -66,13 +67,14 @@ class CustomerScopeMysqlTest {
                 f.jdbc.execute(ddl);f.tables.add("user_customer_scope");
             }
             var config=new Configuration(new Environment("scope",new SpringManagedTransactionFactory(),f.source));config.setMapUnderscoreToCamelCase(true);
-            for(String name:List.of("CustomerScopeMapper","MasterMapper","VehicleMapper","TraceMapper"))try(var input=Resources.getResourceAsStream("mapper/"+name+".xml")) {
+            for(String name:List.of("CustomerScopeMapper","MasterMapper","VehicleMapper","TraceMapper","PiReportMapper"))try(var input=Resources.getResourceAsStream("mapper/"+name+".xml")) {
                 byte[] xml=new String(input.readAllBytes(),StandardCharsets.UTF_8).replace("bike_",f.prefix).getBytes(StandardCharsets.UTF_8);
                 new XMLMapperBuilder(new ByteArrayInputStream(xml),config,name,config.getSqlFragments()).parse();
             }
             var session=new SqlSessionTemplate(new SqlSessionFactoryBuilder().build(config));
             mapper=session.getMapper(CustomerScopeMapper.class);masters=session.getMapper(MasterMapper.class);access=new CustomerScopeAccess(mapper);
             trace=session.getMapper(com.bike.server.trace.TraceMapper.class);
+            reports=session.getMapper(PiReportMapper.class);
             management=new CustomerScopeService(mapper,audit,new ObjectMapper().findAndRegisterModules());
             when(audit.insert(any(),any(),any(),any(),any(),any(),any(),any(),any())).thenReturn(1);
             orders=new OrderServiceImpl(f.orders);

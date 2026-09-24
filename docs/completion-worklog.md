@@ -458,3 +458,14 @@ batch34-final-scope-http.json/.log 21组全部通过，cleanupFailures为空：�
 batch34-web-final-build.log类型检查与构建通过，主包1699.72KB告警仍在；未进行普通岗位浏览器验收。API18182运行acceptance-batch34-final-runtime.jar，SHA256为9652DC4386BAB4BD7BBD6F575FF2EA756E94805E7803AF048E7FC02C9439C566，health为UP。恢复时本机MySQL进程已停止，恢复原13326数据目录后重启同端口API；未启动此前被拒绝的Web/H5服务。V45四镜像SHA256为BBF677F8BED0558F0B3F2D1216D4E07F7854449C19881117784BFF81ED674B87并冻结。
 
 下一项继续业务看板/PI列表导出和搜索；新增/移除SKU、客户转移、附件WebP/XLSX及批量容量、普通岗位浏览器和正式交付仍待完成或验证。专项不计最终两轮，目前仍0轮，尚未推送GitHub。
+## 批次35：PI业务看板、列表导出与关联搜索（2026-09-24）
+
+实现五类业务待办：未来24小时到期锁定、待补PI、待收款、待发货、部分发货。SQL先应用客户范围再分页和count；已发布单据按系列当前版计一次，旧版收款累计、撤回剔除，关闭/取消余量不计待发。财务和锁定队列须相应功能权限，未授权返回null；代理无内部看板权限。Web可点击计数分页查看并打开PI，列表增加负责人、创建时间和发货进度。
+
+PI列表支持客户编号、SKU、关联订单、实际出库单/批次及物流批次/运单检索；导出按同条件分批读取全量，有审计、撤权互斥、完整记录数校验和Excel容量上限。编号与文字用字符串，金额正常为数值；超安全精度以完整文本加批注保存，不丢分位。看板API金额用十进制字符串。非财务/代理导出不含付款列，不附带银行和凭证。
+
+初次前端模板内带类型的reduce导致类型检查语法错误，改为script帮助函数后通过。batch35-report-targeted.log首次代理用例引用不存在的fixture代理1，修正为真实代理9；batch35-report-targeted-final.log六项真实MySQL通过。batch35-full-verify.log 405项全量通过后复核补充超大金额精度保护；当前依据batch35-final-full-verify.log为406项，0失败/错误/跳过，包含全新b35final空库/升级库和7项报表真实MySQL用例。覆盖105条完整XLSX及公式文本、付款/修订/发货/关闭余量、范围撤销和审计失败。
+
+batch35-web-build.log类型检查与构建通过，主包1699.98KB告警保留。batch35-report-http.json/.log共23组真实HTTP通过且cleanupFailures为空，覆盖普通账号五队列相关权限、实际出库/撤销统计、跨字段搜索、XLSX响应及撤权后统计清零。API18182运行acceptance-batch35-runtime.jar，SHA256为2E07C005ED1C80657E4295576F456A814382970C3D195DCC67FBC913CCFF15BA，health为UP；本批无迁移变动，仍V45。
+
+新增/移除SKU、客户转移、卖方受控国家及联系方式、附件WebP/XLSX和批量容量、普通岗位浏览器及正式交付仍待完成或验证。批次35是实施回归，不是全项目最终验收；最终两轮仍为0轮，未推送GitHub。

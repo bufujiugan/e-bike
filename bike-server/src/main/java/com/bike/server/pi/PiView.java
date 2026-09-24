@@ -8,6 +8,9 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public class PiView {
+    private String businessOwner;
+    public String getBusinessOwner(){return businessOwner;}
+    public void setBusinessOwner(String value){businessOwner=value;}
     @JsonFormat(shape = JsonFormat.Shape.STRING) private BigDecimal otherFeeAmount;
     public BigDecimal getOtherFeeAmount(){return otherFeeAmount;}
     public void setOtherFeeAmount(BigDecimal value){otherFeeAmount=value;}

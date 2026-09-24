@@ -11,6 +11,7 @@ import PiItemImage from './PiItemImage.vue'
 import PiConfirmationAttachments from './PiConfirmationAttachments.vue'
 import PiLogisticsAttachments from './PiLogisticsAttachments.vue'
 import PiRevisions from './PiRevisions.vue'
+import PiBusinessDashboard from './PiBusinessDashboard.vue'
 import type { PiTemplate } from '../pi-api'
 import { customerProfileApi } from '../customer-profile-api'
 
@@ -36,6 +37,7 @@ const logisticsAttachment = ref<PiLogistics | null>(null)
 const logisticsAttachmentVisible = ref(false)
 function openLogisticsAttachment(row: PiLogistics) { logisticsAttachment.value = row; logisticsAttachmentVisible.value = true }
 const canExport = computed(() => hasPermission(props.context, 'PI_EXPORT'))
+const reportRefresh = ref(0), exportBusy = ref(false)
 const showFinance = computed(() => canPay.value || canRelease.value || canReversePayment.value)
 const rows = ref<PiView[]>([]), total = ref(0), page = ref(1), pageSize = ref(20)
 const keyword = ref(''), status = ref(''), busy = ref(false), loadError = ref('')
@@ -131,6 +133,12 @@ function money(value: Money | null | undefined): string {
   const text = String(value), parsed = cents(text)
   return parsed == null ? text : fromCents(parsed)
 }
+function shipmentProgress(row: PiView): string {
+  if (!row.fulfillment?.length) return '待建立履约订单'
+  const shipped = row.fulfillment.reduce((sum, item) => sum + item.shippedQty, 0)
+  const remaining = row.fulfillment.reduce((sum, item) => sum + item.remainingQty, 0)
+  return `已发 ${shipped} / 未发 ${remaining}`
+}
 function lineTotal(item: DraftItem): bigint | null {
   const price = cents(item.unitPrice), discount = cents(item.discountAmount), tax = cents(item.taxAmount)
   if (price == null || discount == null || tax == null || !Number.isSafeInteger(item.quantity) || item.quantity < 1) return null
@@ -152,12 +160,23 @@ let listVersion = 0, detailVersion = 0
 async function load() {
   if (!canRead.value) return
   const version = ++listVersion; busy.value = true; loadError.value = ''
-  try { const result = await piApi.list({ keyword: keyword.value.trim() || undefined, status: status.value || undefined, page: page.value, pageSize: pageSize.value }); if (version === listVersion) { rows.value = result.records; total.value = result.total } }
+  try { const result = await piApi.list({ keyword: keyword.value.trim() || undefined, status: status.value || undefined, page: page.value, pageSize: pageSize.value }); if (version === listVersion) { rows.value = result.records; total.value = result.total; reportRefresh.value++ } }
   catch (error) { if (version === listVersion) { rows.value = []; total.value = 0; loadError.value = message(error, 'PI 列表加载失败') } }
   finally { if (version === listVersion) busy.value = false }
 }
 function search() { page.value = 1; void load() }
-async function openDetail(row: PiView) {
+async function exportList() {
+  if (exportBusy.value) return
+  exportBusy.value = true; loadError.value = ''
+  try {
+    const blob = await piApi.exportList({ keyword: keyword.value.trim() || undefined, status: status.value || undefined })
+    const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = 'PI列表.xlsx'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
+  } catch (e) {
+    if (api.isAxiosError(e) && e.response?.data instanceof Blob) { try { loadError.value = JSON.parse(await e.response.data.text()).message || 'PI列表导出失败' } catch { loadError.value = 'PI列表导出失败' } }
+    else loadError.value = message(e, 'PI列表导出失败')
+  } finally { exportBusy.value = false }
+}
+async function openDetail(row: Pick<PiView, 'id'>) {
   const version = ++detailVersion; detail.value = null; detailVisible.value = true; detailBusy.value = true; detailTab.value = 'items'; operationError.value = ''
   try { const result = await piApi.get(row.id); if (version === detailVersion) detail.value = result }
   catch (error) { if (version === detailVersion) operationError.value = message(error, 'PI 详情加载失败') }
@@ -410,7 +429,8 @@ onMounted(() => { if (canRead.value) void load() })
     <el-empty v-if="!canRead" description="当前账号没有 PI 查看权限" />
     <template v-else>
       <div class="pi-heading"><div><h2>{{ isAgent ? '我的 PI 单据' : 'PI 与销售履约' }}</h2><p>{{ isAgent ? '查看已发布的单据、商品和物流进度。' : '维护商品与交易条款，跟进收款、放行和物流。' }}</p></div><div><el-button v-if="canManageTemplates" @click="templateVisible = true">模板与银行资料</el-button><el-button v-if="canWrite && canManageReservation" type="primary" @click="openConversion">从 SKU 锁定生成 PI</el-button><el-button v-if="canWrite" @click="openCreate">新建 PI</el-button></div></div>
-      <form class="pi-filters" @submit.prevent="search"><el-input v-model="keyword" aria-label="搜索 PI 编号或客户" placeholder="搜索 PI 编号或客户" clearable /><el-select v-model="status" aria-label="PI 状态" clearable placeholder="全部状态"><el-option v-for="s in states" :key="s" :value="s" :label="stateNames[s]" /></el-select><el-button native-type="submit" type="primary" :loading="busy">查询</el-button><el-button @click="keyword = ''; status = ''; search()">重置</el-button></form>
+      <PiBusinessDashboard v-if="internal" :refresh="reportRefresh" @open-pi="id => openDetail({ id })" />
+      <form class="pi-filters" @submit.prevent="search"><el-input v-model="keyword" aria-label="搜索PI、客户、SKU、订单、出库单或物流单号" placeholder="PI / 客户 / SKU / 订单 / 出库单 / 物流单号" clearable /><el-select v-model="status" aria-label="PI 状态" clearable placeholder="全部状态"><el-option v-for="s in states" :key="s" :value="s" :label="stateNames[s]" /></el-select><el-button native-type="submit" type="primary" :loading="busy">查询</el-button><el-button @click="keyword = ''; status = ''; search()">重置</el-button><el-button v-if="canExport" :loading="exportBusy" @click="exportList">导出当前查询全部 PI</el-button></form>
       <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false" />
       <el-table v-loading="busy" :data="rows" empty-text="没有符合条件的 PI" row-key="id">
         <el-table-column prop="piNo" label="PI 编号" min-width="200"><template #default="scope"><el-button link type="primary" @click="openDetail(scope.row)">{{ scope.row.piNo }}</el-button></template></el-table-column>
@@ -420,6 +440,8 @@ onMounted(() => { if (canRead.value) void load() })
         <el-table-column label="状态" width="100"><template #default="scope"><el-tag :type="scope.row.status === 'RELEASED' ? 'success' : scope.row.status === 'DRAFT' ? 'info' : 'primary'">{{ stateNames[scope.row.status] ?? scope.row.status }}</el-tag></template></el-table-column>
         <el-table-column v-if="showFinance" label="收款状态" min-width="125"><template #default="scope">{{ paymentNames[scope.row.paymentStatus] ?? scope.row.paymentStatus ?? '—' }}</template></el-table-column>
         <el-table-column label="库存占用" min-width="185"><template #default="scope">{{ reservationLabel(scope.row.reservationStatus, isAgent) }}</template></el-table-column>
+        <el-table-column label="发货进度" min-width="140"><template #default="{ row }">{{ shipmentProgress(row) }}</template></el-table-column>
+        <el-table-column prop="businessOwner" label="负责人" min-width="120" /><el-table-column prop="createdAt" label="创建时间" min-width="180" />
         <el-table-column prop="plannedShipDate" label="计划发货" width="120" /><el-table-column label="操作" width="90" fixed="right"><template #default="scope"><el-button link type="primary" @click="openDetail(scope.row)">查看详情</el-button></template></el-table-column>
       </el-table>
       <el-pagination v-model:current-page="page" v-model:page-size="pageSize" :page-sizes="[10, 20, 50, 100]" :total="total" layout="total, sizes, prev, pager, next" @current-change="load" @size-change="search" />

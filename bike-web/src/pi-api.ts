@@ -47,6 +47,7 @@ export type PiLogistics = {
   stockOutBatchId?: number | null; linkType: string; revision: number; shippedQtySnapshot?: number | null; revokeReason?: string | null
 }
 export type PiView = {
+  businessOwner?: string | null
   previousRevisionId?: number | null
   seriesId?: number; fulfillment?: PiFulfillment[]; dispatchBatches?: PiDispatchBatch[]
   id: number; piNo: string; revision: number; customerId: number; customerCode?: string; customerName: string
@@ -77,6 +78,9 @@ export type PiPaymentCreate = { requestId: string; amount: string; currencyCode:
 export type PiLogisticsCreate = { batchNo: string; carrier?: string; trackingNo?: string; status: string; remark?: string; stockOutBatchId?: number | null; requestId: string; expectedRevision?: number }
 
 export const piApi = {
+  async dashboard() { return (await api.get<{ data: Record<string, number | null> }>('/api/pis/dashboard')).data.data },
+  async queue(queue: string, params: { keyword?: string; page: number; pageSize: number }) { return (await api.get<{ data: { total: number; records: PiQueueRow[] } }>(`/api/pis/dashboard/${queue}`, { params })).data.data },
+  async exportList(params: { keyword?: string; status?: string }) { return (await api.get<Blob>('/api/pis/export.xlsx', { params, responseType: 'blob' })).data },
   async revisions(id: number) { return (await api.get<{ data: PiView[] }>(`/api/pis/${id}/revisions`)).data.data },
   async createRevision(id: number, body: { requestId: string; expectedRevision: number; reason: string }) { return (await api.post<{ data: PiView }>(`/api/pis/${id}/revisions`, body)).data.data },
   async logisticsAttachments(piId: number, logisticsId: number) { return (await api.get<{ data: PiLogisticsAttachment[] }>(`/api/pis/${piId}/logistics/${logisticsId}/attachments`)).data.data },
@@ -125,3 +129,5 @@ export const piApi = {
   async logisticsHistory(id: number, logisticsId: number) { return (await api.get<{ data: { revision: number; action: string; snapshot: string; createdAt: string }[] }>(`/api/pis/${id}/logistics/${logisticsId}/history`)).data.data },
   async download(id: number, format: 'xlsx' | 'pdf') { return (await api.get<Blob>(`/api/pis/${id}/export.${format}`, { responseType: 'blob' })).data },
 }
+
+export type PiQueueRow = { recordType: 'PI' | 'ORDER' | 'LOCK'; id: number; piId?: number; referenceNo: string; customerName?: string; status: string; expiresAt?: string; createdAt: string; revision?: number; orderedQty: number; shippedQty: number; remainingQty: number; businessOwner?: string }

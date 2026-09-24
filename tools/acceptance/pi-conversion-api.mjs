@@ -148,6 +148,16 @@ try {
   await req(`/api/pis/${pi.id}`, body.pi, { method: 'PUT', token: sales });
   const confirmed = await req(`/api/pis/${pi.id}/confirm`, {}, { token: sales });
   assert(confirmed.fulfillment.every(line => line.status === 'CONFIRMED'));
+  const dashboardQuery = `?keyword=${encodeURIComponent(customer.name)}`;
+  const salesSummary = await req('/api/pis/dashboard' + dashboardQuery, undefined, { token: sales });
+  assert.equal(salesSummary.AWAITING_PAYMENT, null); assert.equal(salesSummary.AWAITING_SHIPMENT, 1); assert.equal(salesSummary.MISSING_PI, 0);
+  assert.equal((await req('/api/pis/dashboard' + dashboardQuery, undefined, { token: finance })).AWAITING_PAYMENT, 1);
+  await req('/api/pis/dashboard/AWAITING_PAYMENT', undefined, { token: sales, code: 'PERMISSION_DENIED' });
+  await req('/api/pis/dashboard', undefined, { token: external, code: 'FORBIDDEN' });
+  await req('/api/pis/dashboard', undefined, { token: warehouseOperator, code: 'PERMISSION_DENIED' });
+  const waitingPi = await req('/api/pis/dashboard/AWAITING_SHIPMENT' + dashboardQuery, undefined, { token: sales });
+  assert.equal(waitingPi.total, 1); assert.equal(waitingPi.records[0].piId, pi.id); assert.equal(waitingPi.records[0].remainingQty, 2); assert(!('paidAmount' in waitingPi.records[0]));
+  pass('普通销售看板按客户统计待发、草稿；收款队列需独立财务权限，仓管和代理不能绕过内部看板限制');
   const imageItem = confirmed.items.find(i => i.skuId === red.id);
   const imageResponse = await fetch(`${base}/api/pis/${pi.id}/items/${imageItem.id}/image`, { headers: { Authorization: `Bearer ${external}` } });
   assert.equal(imageResponse.status, 200); assert(Buffer.from(await imageResponse.arrayBuffer()).equals(imageBytes));
@@ -247,9 +257,12 @@ try {
   await req(`/api/stock-out/${redOut.id}/cancel?reason=PI多车型履约受控撤销`, {}, { token: warehouseOperator });
   const restored = await req(`/api/pis/${pi.id}`, undefined, { token: sales });
   assert.equal(restored.fulfillment.find(line => line.orderId === reds.orderId).remainingQty, 1);
+  const partialQueue = await req('/api/pis/dashboard/PARTIAL_SHIPMENT' + dashboardQuery, undefined, { token: sales });
+  assert.equal(partialQueue.total, 1); assert.equal(partialQueue.records[0].shippedQty, 1); assert.equal(partialQueue.records[0].remainingQty, 1);
   await req('/api/stock-out', redShipment, { token: warehouseOperator }); ordersToCancel.delete(reds.orderId);
   const complete = await req(`/api/pis/${pi.id}`, undefined, { token: finance });
   assert(complete.fulfillment.every(line => line.shippedQty === 1 && line.remainingQty === 0)); assert.equal(complete.paidAmount, '200.00'); assert.equal(complete.payments.length, 3);
+  assert.equal((await req('/api/pis/dashboard/PARTIAL_SHIPMENT' + dashboardQuery, undefined, { token: sales })).total, 0);
   const revisionRequest = { requestId: randomUUID(), expectedRevision: 1, reason: '已收款PI条款修订验收' };
   const revision = await req(`/api/pis/${pi.id}/revisions`, revisionRequest, { token: sales });
   assert.equal(revision.revision, 2); assert.equal(revision.status, 'DRAFT'); assert.equal(revision.previousRevisionId, pi.id);
@@ -401,6 +414,20 @@ try {
   const currentA = await req(`/api/pis/${addedAgain.id}`);
   const payment = currentA.payments.find(p => p.status === 'CONFIRMED'), actualLogistics = currentA.logistics[0], actualBatch = currentA.dispatchBatches[0];
   assert(payment && actualLogistics && actualBatch);
+  for(const term of [red.skuCode, reds.orderNo, actualLogistics.trackingNo, actualBatch.batchNo]) {
+    if (!term) continue;
+    const found = await req(`/api/pis?keyword=${encodeURIComponent(term)}&pageSize=100`, undefined, { token: sales });
+    assert(found.records.some(row => row.id === addedAgain.id), `PI search missing current version: ${term}`);
+    assert(found.records.every(row => row.customerId === customer.id));
+  }
+  const bSummary = await req('/api/pis/dashboard', undefined, { token: scopeB }); assert.equal(bSummary.MISSING_PI, 1); assert.equal(bSummary.AWAITING_PAYMENT, 0);
+  assert.equal((await req('/api/pis/dashboard/MISSING_PI' + dashboardQuery, undefined, { token: scopeB })).total, 0);
+  await req('/api/pis/export.xlsx', undefined, { token: reader, code: 'PERMISSION_DENIED' });
+  const reportResponse = await fetch(`${base}/api/pis/export.xlsx?keyword=${encodeURIComponent(customer.name)}`, { headers: { Authorization: `Bearer ${sales}` }, signal: AbortSignal.timeout(30000) });
+  assert.equal(reportResponse.status, 200); assert(reportResponse.headers.get('content-type').includes('spreadsheetml')); assert.equal(reportResponse.headers.get('cache-control'), 'no-store');
+  const reportBytes = Buffer.from(await reportResponse.arrayBuffer()); assert.equal(reportBytes.subarray(0, 2).toString(), 'PK');
+  evidence.fixtures.piListExport = { bytes: reportBytes.length, sha256: createHash('sha256').update(reportBytes).digest('hex') };
+  pass('实际出库与撤销同步部分发货队列；SKU/订单/物流/出库批次可检索系列当前版，客户隔离和PI列表Excel下载权限有效');
   const scopeReceiptPath = `/api/pis/${payment.piId || pi.id}/payments/${payment.id}/attachments`;
   const proof = await uploadFile(scopeReceiptPath, imageBytes, { token: finance });
   const readBypasses = [
@@ -456,6 +483,8 @@ try {
   await req(`/api/users/${scopeAUser.id}/customer-scope`, { revision: aScope.revision, customerIds: [], reason: '撤权验收' }, { method: 'PUT', token: scopeManager });
   await req(`/api/users/${scopeAUser.id}/customer-scope`, { revision: aScope.revision, customerIds: [customer.id], reason: '旧版本不得覆盖' }, { method: 'PUT', token: scopeManager, code: 'CUSTOMER_SCOPE_CONFLICT' });
   assert.equal((await req('/api/pis?pageSize=100', undefined, { token: sales })).total, 0);
+  const revokedSummary = await req('/api/pis/dashboard', undefined, { token: sales });
+  assert(Object.values(revokedSummary).every(value => value == null || value === 0));
   await req(`/api/pis/${addedAgain.id}`, undefined, { token: sales, code: 'CUSTOMER_SCOPE_DENIED' });
   assert.deepEqual(await req('/api/master/customers', undefined, { token: sales }), []);
   assert.equal((await req(`/api/pis/${piB.id}`, undefined, { token: scopeB })).customerId, otherCustomer.id);
