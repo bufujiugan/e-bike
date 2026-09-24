@@ -30,7 +30,7 @@ class ModuleServiceTest {
         SecurityContextHolder.getContext().setAuthentication(authentication("WEB_OPERATOR", "PERM_DASHBOARD_READ"));
         ModuleMapper mapper = mock(ModuleMapper.class);
 
-        assertThatThrownBy(() -> new ModuleServiceImpl(mapper).list("vehicles", null, 1, 20))
+        assertThatThrownBy(() -> com.bike.server.common.CustomerScopeTestSupport.isolated(new ModuleServiceImpl(mapper)).list("vehicles", null, 1, 20))
                 .isInstanceOf(BusinessException.class)
                 .extracting(BusinessException.class::cast)
                 .extracting(BusinessException::getCode)
@@ -47,7 +47,7 @@ class ModuleServiceTest {
                 Map.of("代理商编号", "AGT-001", "代理商名称", "Global E-Bike", "联系人", "Bob", "联系电话", "139", "状态", "启用", "更新时间", "2026-09-06")
         ));
 
-        ModulePageResponse page = new ModuleServiceImpl(mapper).list("agents", null, 1, 20);
+        ModulePageResponse page = com.bike.server.common.CustomerScopeTestSupport.isolated(new ModuleServiceImpl(mapper)).list("agents", null, 1, 20);
 
         assertThat(page.total()).isEqualTo(1);
         assertThat(page.columns()).containsExactly("代理商编号", "代理商名称", "联系人", "联系电话", "状态", "更新时间");
@@ -63,7 +63,7 @@ class ModuleServiceTest {
                 Map.of("仓库", "成品仓", "仓库编码", "FG-01", "库位", "A区一号位", "库位编码", "A-01-01", "状态", "启用", "更新时间", "2026-09-06")
         ));
 
-        ModulePageResponse page = new ModuleServiceImpl(mapper).list("locations", null, 1, 20);
+        ModulePageResponse page = com.bike.server.common.CustomerScopeTestSupport.isolated(new ModuleServiceImpl(mapper)).list("locations", null, 1, 20);
 
         assertThat(page.total()).isEqualTo(1);
         assertThat(page.rows().get(0)).containsExactly("成品仓", "FG-01", "A区一号位", "A-01-01", "启用", "2026-09-06");
@@ -82,7 +82,7 @@ class ModuleServiceTest {
                 Map.of("业务单号", "OUT-1", "类型", "整车出库", "整车数量", "1 台", "客户 / 仓库", "客户 A", "操作人", "admin", "操作时间", "2026-09-06", "状态", "已完成")
         ));
 
-        ModuleService service = new ModuleServiceImpl(mapper);
+        ModuleService service = com.bike.server.common.CustomerScopeTestSupport.isolated(new ModuleServiceImpl(mapper));
         assertThat(service.list("stock-in", null, 1, 20).rows().get(0).get(1)).isEqualTo("整车入库");
         assertThat(service.list("stock-out", null, 1, 20).rows().get(0).get(1)).isEqualTo("整车出库");
         verify(mapper).selectRowsPage(eq("stock-in"), isNull(), anyList(), isNull(), eq("操作时间"), eq(0L), eq(20L), eq(false));

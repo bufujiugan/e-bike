@@ -17,6 +17,7 @@ public class DashboardServiceImpl implements DashboardService {
 
     @Override
     public DashboardSummary getSummary() {
+        com.bike.server.common.CurrentOperator.requireInternalWebAccess();
         com.bike.server.common.CurrentOperator.requirePermission("DASHBOARD_READ");
         Map<String, Object> counts = dashboardMapper.selectSummaryCounts();
         Map<String,Object> inventory = dashboardMapper.selectInventorySummary();
@@ -62,6 +63,7 @@ public class DashboardServiceImpl implements DashboardService {
 
     @Override
     public DashboardTrend getTrend(int days) {
+        com.bike.server.common.CurrentOperator.requireInternalWebAccess();
         com.bike.server.common.CurrentOperator.requirePermission("DASHBOARD_READ");
         int range = Math.min(31, Math.max(1, days));
         Map<String, DashboardTrend.Point> grouped = new java.util.HashMap<>();

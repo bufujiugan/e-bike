@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class SkuLockService {
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.common.CustomerScopeAccess customerScope;
     private final SkuLockMapper mapper;
     private final InventoryLockMapper locks;
     private final SkuInventoryMapper inventory;
@@ -42,6 +43,7 @@ public class SkuLockService {
             throw new BusinessException("INVALID_PARAMETER","同一批锁定不能重复提交同一SKU");
         var request=new SkuLockRequest(input.requestId().trim(),input.customerId(),input.agentId(),
                 input.expiresAt(),input.remark(),sorted);
+        customerScope.requireCustomer(request.customerId());
         guard.lock();
         long operator=CurrentOperator.id();
         String hash=hash(request);

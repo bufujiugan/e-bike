@@ -20,7 +20,7 @@ class InventoryLockServiceTest {
         InventoryLockMapper mapper = Mockito.mock(InventoryLockMapper.class);
         InventoryLockView record = lock(101L, 1L, "LOCKED", 10, 0, 0);
         Mockito.when(mapper.selectByNo("LK101")).thenReturn(record);
-        assertThat(new InventoryLockServiceImpl(mapper).getByNo(" LK101 ")).isSameAs(record);
+        assertThat(com.bike.server.common.CustomerScopeTestSupport.isolated(new InventoryLockServiceImpl(mapper)).getByNo(" LK101 ")).isSameAs(record);
         Mockito.verify(mapper).selectByNo("LK101");
         Mockito.verify(mapper, Mockito.never()).selectPage(Mockito.any(), Mockito.anyLong(), Mockito.anyLong());
     }
@@ -33,7 +33,7 @@ class InventoryLockServiceTest {
         SecurityContextHolder.getContext().setAuthentication(authentication);
         InventoryLockMapper mapper = Mockito.mock(InventoryLockMapper.class);
         Mockito.when(mapper.selectByNo("LK101")).thenReturn(lock(101L, 1L, "LOCKED", 10, 0, 0));
-        assertThatThrownBy(() -> new InventoryLockServiceImpl(mapper).getByNo("LK101"))
+        assertThatThrownBy(() -> com.bike.server.common.CustomerScopeTestSupport.isolated(new InventoryLockServiceImpl(mapper)).getByNo("LK101"))
                 .isInstanceOf(BusinessException.class)
                 .extracting("code").isEqualTo("FORBIDDEN");
     }
@@ -57,7 +57,7 @@ class InventoryLockServiceTest {
                 new SimpleGrantedAuthority("PERM_AGENT_LOCK_WRITE"))));
         InventoryLockMapper mapper = Mockito.mock(InventoryLockMapper.class);
 
-        assertThatThrownBy(() -> new InventoryLockServiceImpl(mapper).list(null, 1, 20))
+        assertThatThrownBy(() -> com.bike.server.common.CustomerScopeTestSupport.isolated(new InventoryLockServiceImpl(mapper)).list(null, 1, 20))
                 .isInstanceOf(BusinessException.class)
                 .extracting(BusinessException.class::cast)
                 .extracting(BusinessException::getCode)
@@ -73,7 +73,7 @@ class InventoryLockServiceTest {
                 new SimpleGrantedAuthority("PERM_AGENT_LOCK_WRITE"))));
         InventoryLockMapper mapper = Mockito.mock(InventoryLockMapper.class);
 
-        assertThatThrownBy(() -> new InventoryLockServiceImpl(mapper).release(8L, "业务取消"))
+        assertThatThrownBy(() -> com.bike.server.common.CustomerScopeTestSupport.isolated(new InventoryLockServiceImpl(mapper)).release(8L, "业务取消"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(BusinessException.class::cast)
                 .extracting(BusinessException::getCode)
@@ -88,7 +88,7 @@ class InventoryLockServiceTest {
         Mockito.when(mapper.selectPhysicalForUpdate(1L)).thenReturn(2L);
         Mockito.when(mapper.selectActiveLockedForUpdate(1L)).thenReturn(1L);
 
-        assertThatThrownBy(() -> new InventoryLockServiceImpl(mapper)
+        assertThatThrownBy(() -> com.bike.server.common.CustomerScopeTestSupport.isolated(new InventoryLockServiceImpl(mapper))
                 .create(new InventoryLockCreateRequest(1L, 1L, 2, null, "test")))
                 .isInstanceOf(BusinessException.class)
                 .extracting(BusinessException.class::cast)
@@ -109,7 +109,7 @@ class InventoryLockServiceTest {
         InventoryLockView created = lock(8L, 1L, "LOCKED", 2, 0, 0);
         Mockito.when(mapper.selectById(8L)).thenReturn(created);
 
-        InventoryLockView result = new InventoryLockServiceImpl(mapper)
+        InventoryLockView result = com.bike.server.common.CustomerScopeTestSupport.isolated(new InventoryLockServiceImpl(mapper))
                 .create(new InventoryLockCreateRequest(1L, 1L, 2, LocalDateTime.now().plusHours(2), "test"));
 
         assertThat(result.getId()).isEqualTo(8L);
@@ -136,7 +136,7 @@ class InventoryLockServiceTest {
         Mockito.when(mapper.countAuthorizedModel(101L, 1L)).thenReturn(1);
         Mockito.when(mapper.lockAgentAccess(101L)).thenReturn(101L);
 
-        InventoryLockView result = new InventoryLockServiceImpl(mapper)
+        InventoryLockView result = com.bike.server.common.CustomerScopeTestSupport.isolated(new InventoryLockServiceImpl(mapper))
                 .create(new InventoryLockCreateRequest(null, 1L, 1, null, "agent lock"));
 
         assertThat(result.getAgentId()).isEqualTo(101L);
@@ -149,7 +149,7 @@ class InventoryLockServiceTest {
         InventoryLockView lock = lock(8L, 1L, "PARTIAL_CONVERTED", 5, 0, 4);
         Mockito.when(mapper.selectById(8L)).thenReturn(lock);
 
-        assertThatThrownBy(() -> new InventoryLockServiceImpl(mapper).convert(8L, 2))
+        assertThatThrownBy(() -> com.bike.server.common.CustomerScopeTestSupport.isolated(new InventoryLockServiceImpl(mapper)).convert(8L, 2))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("超过锁定数量");
         Mockito.verify(mapper, Mockito.never()).convert(Mockito.anyLong(), Mockito.anyInt());
@@ -163,7 +163,7 @@ class InventoryLockServiceTest {
         Mockito.when(mapper.selectById(8L)).thenReturn(before, after);
         Mockito.when(mapper.release(8L, "业务取消")).thenReturn(1);
 
-        InventoryLockView result = new InventoryLockServiceImpl(mapper).release(8L, "业务取消");
+        InventoryLockView result = com.bike.server.common.CustomerScopeTestSupport.isolated(new InventoryLockServiceImpl(mapper)).release(8L, "业务取消");
 
         assertThat(result.getStatus()).isEqualTo("RELEASED");
         Mockito.verify(mapper).insertOperationLog("LOCK-8", "释放库存锁定", null, "test-admin", "业务取消", null);
@@ -176,7 +176,7 @@ class InventoryLockServiceTest {
         expired.setExpireTime(LocalDateTime.now().minusSeconds(1));
         Mockito.when(mapper.selectById(8L)).thenReturn(expired);
 
-        assertThatThrownBy(() -> new InventoryLockServiceImpl(mapper).release(8L, "过期测试"))
+        assertThatThrownBy(() -> com.bike.server.common.CustomerScopeTestSupport.isolated(new InventoryLockServiceImpl(mapper)).release(8L, "过期测试"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(BusinessException.class::cast)
                 .extracting(BusinessException::getCode)
@@ -191,7 +191,7 @@ class InventoryLockServiceTest {
         expired.setExpireTime(LocalDateTime.now().minusSeconds(1));
         Mockito.when(mapper.selectById(8L)).thenReturn(expired);
 
-        assertThatThrownBy(() -> new InventoryLockServiceImpl(mapper).convert(8L, 1))
+        assertThatThrownBy(() -> com.bike.server.common.CustomerScopeTestSupport.isolated(new InventoryLockServiceImpl(mapper)).convert(8L, 1))
                 .isInstanceOf(BusinessException.class)
                 .extracting(BusinessException.class::cast)
                 .extracting(BusinessException::getCode)
@@ -210,7 +210,7 @@ class InventoryLockServiceTest {
         Mockito.when(mapper.selectPage(101L, 0L, 20L)).thenReturn(java.util.List.of());
         Mockito.when(mapper.count(101L)).thenReturn(0L);
 
-        new InventoryLockServiceImpl(mapper).list(202L, 1, 20);
+        com.bike.server.common.CustomerScopeTestSupport.isolated(new InventoryLockServiceImpl(mapper)).list(202L, 1, 20);
 
         Mockito.verify(mapper).selectPage(101L, 0L, 20L);
         Mockito.verify(mapper).count(101L);
@@ -227,7 +227,7 @@ class InventoryLockServiceTest {
         InventoryLockMapper mapper = Mockito.mock(InventoryLockMapper.class);
         Mockito.when(mapper.selectById(8L)).thenReturn(lock(8L, 202L, "LOCKED", 1, 0, 0));
 
-        assertThatThrownBy(() -> new InventoryLockServiceImpl(mapper).release(8L, "越权测试"))
+        assertThatThrownBy(() -> com.bike.server.common.CustomerScopeTestSupport.isolated(new InventoryLockServiceImpl(mapper)).release(8L, "越权测试"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(BusinessException.class::cast)
                 .extracting(BusinessException::getCode)
@@ -243,7 +243,7 @@ class InventoryLockServiceTest {
         Mockito.when(mapper.selectLegacyConversions(20L, 20L)).thenReturn(java.util.List.of(row));
         Mockito.when(mapper.countLegacyConversions()).thenReturn(21L);
 
-        var result = new InventoryLockServiceImpl(mapper).legacyConversions(2, 20);
+        var result = com.bike.server.common.CustomerScopeTestSupport.isolated(new InventoryLockServiceImpl(mapper)).legacyConversions(2, 20);
 
         assertThat(result.records()).containsExactly(row);
         assertThat(result.page()).isEqualTo(2);
@@ -259,7 +259,7 @@ class InventoryLockServiceTest {
                 "agent", "N/A", java.util.List.of(new SimpleGrantedAuthority("ROLE_WEB_AGENT"),
                 new SimpleGrantedAuthority("PERM_ORDER_READ"))));
         InventoryLockMapper mapper = Mockito.mock(InventoryLockMapper.class);
-        assertThatThrownBy(() -> new InventoryLockServiceImpl(mapper).legacyConversions(1, 20))
+        assertThatThrownBy(() -> com.bike.server.common.CustomerScopeTestSupport.isolated(new InventoryLockServiceImpl(mapper)).legacyConversions(1, 20))
                 .isInstanceOf(BusinessException.class)
                 .extracting(BusinessException.class::cast)
                 .extracting(BusinessException::getCode)

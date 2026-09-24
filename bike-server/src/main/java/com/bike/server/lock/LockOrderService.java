@@ -10,6 +10,7 @@ import java.util.UUID;
 
 @Service
 public class LockOrderService {
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.common.CustomerScopeAccess customerScope;
     private final InventoryLockMapper locks;
     private final OrderMapper orders;
     private final OrderReservationMapper reservations;
@@ -22,6 +23,7 @@ public class LockOrderService {
         CurrentOperator.requirePermission("ORDER_READ");
         InventoryLockView lock=locks.selectById(id);
         if(lock==null)throw new BusinessException("INVENTORY_LOCK_NOT_FOUND","库存锁定不存在");
+        customerScope.requireCustomer(lock.getCustomerId());
         if(CurrentOperator.hasRole("WEB_AGENT")&&!java.util.Objects.equals(CurrentOperator.agentId(),lock.getAgentId()))
             throw new BusinessException("FORBIDDEN","无权查看其他代理商锁定的订单");
         long p=Math.min(10000000,Math.max(1,page)),size=Math.min(100,Math.max(1,pageSize));
@@ -32,9 +34,11 @@ public class LockOrderService {
     @Transactional
     public SalesOrderView convert(long id,LockOrderRequest request){
         CurrentOperator.requireInternalWebAccess();CurrentOperator.requirePermission("AGENT_LOCK_WRITE");CurrentOperator.requirePermission("ORDER_WRITE");
+        customerScope.requireCustomer(request.customerId());
         guard.lock();
         InventoryLockView lock=locks.selectById(id);
         if(lock==null)throw new BusinessException("INVENTORY_LOCK_NOT_FOUND","库存锁定不存在");
+        customerScope.requireCustomer(lock.getCustomerId());
         Long existing=reservations.findOrder(id,request.requestId());
         if(existing!=null){
             SalesOrderView previous=orders.selectById(existing);

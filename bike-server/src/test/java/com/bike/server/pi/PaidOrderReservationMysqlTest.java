@@ -152,7 +152,7 @@ class PaidOrderReservationMysqlTest {
         try (var f = new PiMysqlTest.Fixture()) {
             long id = reservedPi(f, "30.00", true);
             f.at(DEADLINE - 1, () -> f.service.recordPayment(id, PiServiceTest.payment("deposit", "30.00")));
-            var service = new OrderServiceImpl(f.orders);
+            var service = com.bike.server.common.CustomerScopeTestSupport.isolated(new OrderServiceImpl(f.orders));
             ReflectionTestUtils.setField(service, "guard", f.guard);
             ReflectionTestUtils.setField(service, "reservations", f.coordinator);
             f.at(DEADLINE + 1, () -> service.cancel(1, "业务取消，款项另行处理"));
@@ -186,7 +186,7 @@ class PaidOrderReservationMysqlTest {
         try (var f = new PiMysqlTest.Fixture()) {
             long id = reservedPi(f, "30.00", true);
             var coordinator = new OrderReservationCoordinator(f.guard, f.reservations, mock(OperationLogMapper.class), f.json);
-            var service = new PiServiceImpl(f.mapper, mock(PiDocumentService.class), f.logs, f.json, f.validation.getValidator(), coordinator);
+            var service = com.bike.server.common.CustomerScopeTestSupport.isolated(new PiServiceImpl(f.mapper, mock(PiDocumentService.class), f.logs, f.json, f.validation.getValidator(), coordinator));
             assertCode(() -> f.at(DEADLINE - 1, () -> service.recordPayment(id, PiServiceTest.payment("audit-fail", "30.00"))), "ORDER_AUDIT_FAILED");
             PiView unchanged = f.at(DEADLINE - 1, () -> f.service.get(id));
             assertThat(unchanged.getPayments()).isEmpty();

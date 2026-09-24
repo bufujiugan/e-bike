@@ -12,6 +12,7 @@ import java.util.Set;
 
 @Service
 public class ModuleServiceImpl implements ModuleService {
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.common.CustomerScopeAccess customerScope;
     private static final Set<String> SUPPORTED_MODULES = Set.of(
             "assembly", "vehicles", "inventory", "stock", "orders", "agents", "trace",
             "parts", "customers", "suppliers", "models", "warehouses", "users", "roles",
@@ -44,6 +45,7 @@ public class ModuleServiceImpl implements ModuleService {
         }
         requireModulePermission(module);
         requireModuleAccess(module);
+        customerScope.lockForBusiness();
         ModuleDefinition definition = DEFINITIONS.get(module);
         String normalizedKeyword = keyword == null || keyword.isBlank() ? null : keyword.trim().toLowerCase(java.util.Locale.ROOT);
         long normalizedPage = Math.min(10_000_000, Math.max(1, page));

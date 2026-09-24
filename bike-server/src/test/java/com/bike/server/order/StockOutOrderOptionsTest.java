@@ -19,7 +19,7 @@ class StockOutOrderOptionsTest {
     private final StockOutOrderOptionsMapper mapper = mock(StockOutOrderOptionsMapper.class);
     private final OrderService ordinaryOrders = mock(OrderService.class);
     private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new OrderController(ordinaryOrders),
-            new StockOutOrderOptionsController(new StockOutOrderOptionsService(mapper)))
+            new StockOutOrderOptionsController(com.bike.server.common.CustomerScopeTestSupport.isolated(new StockOutOrderOptionsService(mapper))))
             .setControllerAdvice(new GlobalExceptionHandler()).build();
 
     @AfterEach void clearSecurity() { SecurityContextHolder.clearContext(); }

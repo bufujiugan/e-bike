@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.common.CustomerScopeMapper">
+  <select id="lockReader" resultType="long">SELECT id FROM bike_sys_user WHERE id=#{id} AND enabled=1 FOR SHARE</select>
+  <select id="readable" resultType="long">SELECT customer_id FROM bike_user_customer_scope WHERE user_id=#{userId} AND customer_id=#{customerId}</select>
+  <select id="allowed" resultType="long">SELECT customer_id FROM bike_user_customer_scope WHERE user_id=#{userId} AND customer_id=#{customerId} FOR SHARE</select>
+  <select id="lockUser" resultType="com.bike.server.common.CustomerScopeMapper$User">SELECT id,user_type,enabled,customer_scope_version revision FROM bike_sys_user WHERE id=#{id} FOR UPDATE</select>
+  <select id="user" resultType="com.bike.server.common.CustomerScopeMapper$User">SELECT id,user_type,enabled,customer_scope_version revision FROM bike_sys_user WHERE id=#{id}</select>
+  <select id="customers" resultType="long">SELECT customer_id FROM bike_user_customer_scope WHERE user_id=#{id} ORDER BY customer_id</select>
+  <select id="assignedCustomers" resultType="com.bike.server.common.CustomerScopeMapper$CustomerOption">SELECT c.id,c.customer_code code,c.customer_name name,c.status FROM bike_customer c JOIN bike_user_customer_scope cs ON cs.customer_id=c.id WHERE cs.user_id=#{id} ORDER BY c.customer_code,c.id</select>
+  <sql id="customerSearch"><if test="keyword != null"> AND (customer_code LIKE CONCAT('%',#{keyword},'%') OR customer_name LIKE CONCAT('%',#{keyword},'%'))</if></sql>
+  <select id="customerOptions" resultType="com.bike.server.common.CustomerScopeMapper$CustomerOption">SELECT id,customer_code code,customer_name name,status FROM bike_customer WHERE 1=1 <include refid="customerSearch"/> ORDER BY customer_code,id LIMIT #{offset},#{limit}</select>
+  <select id="customerCount" resultType="long">SELECT COUNT(*) FROM bike_customer WHERE 1=1 <include refid="customerSearch"/></select>
+  <sql id="userSearch">WHERE user_type IN ('WEB_ADMIN','WEB_OPERATOR') <if test="keyword != null"> AND (username LIKE CONCAT('%',#{keyword},'%') OR display_name LIKE CONCAT('%',#{keyword},'%'))</if></sql>
+  <select id="users" resultType="com.bike.server.common.CustomerScopeMapper$UserOption">SELECT id,username,display_name,user_type,enabled FROM bike_sys_user <include refid="userSearch"/> ORDER BY username,id LIMIT #{offset},#{limit}</select>
+  <select id="userCount" resultType="long">SELECT COUNT(*) FROM bike_sys_user <include refid="userSearch"/></select>
+  <select id="customer" resultType="long">SELECT id FROM bike_customer WHERE id=#{id}</select>
+  <delete id="clear">DELETE FROM bike_user_customer_scope WHERE user_id=#{id}</delete>
+  <insert id="grant">INSERT INTO bike_user_customer_scope(user_id,customer_id,updated_by) VALUES(#{userId},#{customerId},#{operator})</insert>
+  <update id="advance">UPDATE bike_sys_user SET customer_scope_version=customer_scope_version+1 WHERE id=#{id} AND customer_scope_version=#{revision}</update>
+</mapper>

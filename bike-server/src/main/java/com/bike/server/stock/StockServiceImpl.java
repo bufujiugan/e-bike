@@ -16,6 +16,7 @@ import java.util.Map;
 
 @Service
 public class StockServiceImpl implements StockService {
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.common.CustomerScopeAccess customerScope;
     private final StockMapper stockMapper;
     private final OrderMapper orderMapper;
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.production.ProductionGuard productionGuard;
@@ -48,6 +49,7 @@ public class StockServiceImpl implements StockService {
         }
         SalesOrderView order = orderMapper.selectById(request.orderId());
         if (order == null) return new StockValidationResult(false, vehicle.getFrameSn(), vehicle.getStatus(), "订单不存在");
+        customerScope.requireCustomer(order.getCustomerId());
         if (!request.customerId().equals(order.getCustomerId())) {
             return new StockValidationResult(false, vehicle.getFrameSn(), vehicle.getStatus(), "客户与订单不匹配");
         }
@@ -108,6 +110,7 @@ public class StockServiceImpl implements StockService {
         String operator = CurrentOperator.username();
         SalesOrderView order = orderMapper.selectForUpdate(request.orderId());
         if (order == null) throw new BusinessException("ORDER_NOT_FOUND", "订单不存在");
+        customerScope.requireCustomer(order.getCustomerId());
         if (!request.customerId().equals(order.getCustomerId())) throw new BusinessException("ORDER_CUSTOMER_MISMATCH", "客户与订单不匹配");
         if (!"CONFIRMED".equals(order.getStatus()) && !"PARTIAL_SHIPPED".equals(order.getStatus())) throw new BusinessException("INVALID_STATUS_TRANSITION", "订单当前不允许出库");
         if (order.getOrderQty() - order.getShippedQty() < request.vehicleQrCodes().size()) throw new BusinessException("ORDER_QTY_NOT_ENOUGH", "订单剩余数量不足");
@@ -167,6 +170,7 @@ public class StockServiceImpl implements StockService {
         CurrentOperator.requirePermission("STOCK_OUT_OPERATE");
         CurrentOperator.requireWorkstation("STOCK_OUT");
         StockRecordView record = stockMapper.selectStockOut(id);
+        if(record!=null)customerScope.requireCustomer(record.getCustomerId());
         if (record == null) throw new BusinessException("STOCK_OUT_NOT_FOUND", "出库记录不存在");
         if (!"COMPLETED".equals(record.getStatus())) throw new BusinessException("INVALID_STATUS_TRANSITION", "出库记录当前不可撤销");
         if(logistics!=null&&logistics.shippedForStock(id)>0)
@@ -191,6 +195,7 @@ public class StockServiceImpl implements StockService {
         if (CurrentOperator.hasRole("WEB_AGENT")) throw new BusinessException("FORBIDDEN", "代理商不能查看仓库记录");
         if (stockNo == null || stockNo.isBlank()) throw new BusinessException("INVALID_PARAMETER", "业务单号不能为空");
         StockRecordView record = "IN".equals(type) ? stockMapper.selectStockInByNo(stockNo.trim()) : stockMapper.selectStockOutByNo(stockNo.trim());
+        if(record!=null && !"IN".equals(type))customerScope.requireCustomer(record.getCustomerId());
         if (record == null) throw new BusinessException("STOCK_RECORD_NOT_FOUND", "出入库记录不存在");
         return record;
     }

@@ -3,6 +3,8 @@
 <mapper namespace="com.bike.server.common.AuditPolicyMapper">
     <!-- Keep receipt/release notes out of generic logs, search, exports and dashboard previews. -->
     <sql id="financialVisibility">
+        <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/>
+        <if test="customerScopeUser != null">AND 1=0</if>
         <!-- After-sales history is exposed only by its company/case-scoped endpoints. -->
         AND business_type NOT IN ('AFTER_SALES','AFTER_SALES_COMPANY')
         <if test="!financialAudit">

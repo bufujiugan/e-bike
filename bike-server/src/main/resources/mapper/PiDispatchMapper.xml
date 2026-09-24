@@ -29,7 +29,7 @@
     FROM bike_stock_out_batch_item i JOIN bike_stock_out_record so ON so.id=i.stock_out_id
     JOIN bike_sales_order o ON o.id=so.order_id JOIN bike_vehicle v ON v.id=so.vehicle_id
     LEFT JOIN bike_production_sku s ON s.id=i.sku_id WHERE i.batch_id=#{batchId} ORDER BY so.id</select>
-  <sql id="optionsWhere">p.status='RELEASED' AND p.release_status='RELEASED'
+  <sql id="optionsWhere">p.status='RELEASED' AND p.release_status='RELEASED' <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=p.customer_id)</if>
     AND EXISTS(SELECT 1 FROM bike_pi_order_link l JOIN bike_sales_order o ON o.id=l.order_id WHERE l.series_id=p.series_id AND o.status IN ('CONFIRMED','PARTIAL_SHIPPED'))
     <if test="keyword != null">AND (p.pi_no LIKE CONCAT('%',#{keyword},'%') OR p.customer_name LIKE CONCAT('%',#{keyword},'%'))</if>
   </sql>

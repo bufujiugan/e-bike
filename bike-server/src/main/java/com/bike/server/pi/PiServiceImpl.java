@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class PiServiceImpl implements PiService {
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.common.CustomerScopeAccess customerScope;
     private static final BigDecimal ZERO = new BigDecimal("0.00");
     private static final BigDecimal MAX_MONEY = new BigDecimal("9999999999999999.99");
     private static final Set<String> PUBLISHED = Set.of("CONFIRMED", "RELEASED");
@@ -53,6 +54,7 @@ public class PiServiceImpl implements PiService {
     @Override
     public PiOptionsView options(String keyword) {
         requireInternal("PI_WRITE");
+        customerScope.lockForBusiness();
         String query = normalize(keyword);
         var orderOptions=mapper.selectOrderOptions(query);
         if(series!=null) orderOptions=orderOptions.stream().filter(order->series.currentPiForOrder(((Number)order.get("id")).longValue())==null).toList();
@@ -63,6 +65,7 @@ public class PiServiceImpl implements PiService {
     @Override
     public PageResponse<PiView> list(String keyword, String status, long page, long pageSize) {
         requireRead();
+        customerScope.lockForBusiness();
         long p = Math.min(10_000_000, Math.max(1, page));
         long size = Math.min(100, Math.max(1, pageSize));
         Long agent = CurrentOperator.hasRole("WEB_AGENT") ? agentId() : null;
@@ -129,6 +132,7 @@ public class PiServiceImpl implements PiService {
     }
 
     private PiView persistDraft(PiView existing, PiCreateRequest request) {
+        customerScope.requireCustomer(request.customerId());
         if (mapper.countEnabledCustomer(request.customerId()) != 1) {
             fail("CUSTOMER_NOT_FOUND", "客户不存在或已停用");
         }
@@ -485,6 +489,7 @@ public class PiServiceImpl implements PiService {
     private PiView require(long id) {
         PiView pi = mapper.selectById(id);
         if (pi == null) fail("PI_NOT_FOUND", "PI 不存在");
+        customerScope.requireCustomer(pi.getCustomerId());
         return pi;
     }
 
@@ -492,6 +497,7 @@ public class PiServiceImpl implements PiService {
         if (mapper.lockPi(id) == null) fail("PI_NOT_FOUND", "PI 不存在");
         PiView pi = mapper.selectForUpdate(id);
         if (pi == null) fail("PI_NOT_FOUND", "PI 不存在");
+        customerScope.requireCustomer(pi.getCustomerId());
         return pi;
     }
 

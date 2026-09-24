@@ -19,7 +19,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class PiReceiptAttachmentService {
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.common.CustomerScopeAccess customerScope;
     private static final Logger LOG = LoggerFactory.getLogger(PiReceiptAttachmentService.class);
+    @org.springframework.beans.factory.annotation.Autowired private PiMapper pis;
     private final PiReceiptAttachmentMapper mapper;
     private final ProductionFileStore files;
     private final PiReceiptFileValidator validator;
@@ -31,12 +33,12 @@ public class PiReceiptAttachmentService {
     }
 
     public List<PiReceiptAttachmentView> list(long piId, long paymentId) {
-        requireRead(); requireReceipt(mapper.selectReceipt(piId, paymentId));
+        requireRead(); requirePiScope(piId); requireReceipt(mapper.selectReceipt(piId, paymentId));
         return mapper.selectAttachments(paymentId);
     }
 
     public Download download(long piId, long paymentId, String attachmentId) {
-        requireRead(); requireReceipt(mapper.selectReceipt(piId, paymentId));
+        requireRead(); requirePiScope(piId); requireReceipt(mapper.selectReceipt(piId, paymentId));
         var attachment = mapper.selectStored(paymentId, attachmentId);
         if (attachment == null || !Objects.equals(attachment.paymentId(), paymentId)) throw missing();
         if (attachment.objectKey() == null || !attachment.objectKey().matches("(?:local:|cos:production/)pi-receipt-[0-9a-f-]{36}\\.(?:jpg|jpeg|png|pdf)"))
@@ -46,7 +48,7 @@ public class PiReceiptAttachmentService {
 
     @Transactional(rollbackFor = Exception.class)
     public PiReceiptAttachmentView upload(long piId, long paymentId, String requestId, MultipartFile upload) throws IOException {
-        requireRead(); CurrentOperator.requirePermission("PI_PAYMENT_CONFIRM");
+        requireRead(); requirePiScope(piId); CurrentOperator.requirePermission("PI_PAYMENT_CONFIRM");
         requireConfirmed(mapper.selectReceipt(piId, paymentId));
         if (requestId == null || !requestId.matches("[A-Za-z0-9_-]{1,64}"))
             throw new BusinessException("INVALID_PARAMETER", "凭证请求标识须为1至64位字母、数字、横线或下划线");
@@ -82,6 +84,11 @@ public class PiReceiptAttachmentService {
         } catch (IOException | RuntimeException error) {
             cleanup(keys); throw error;
         }
+    }
+
+    private void requirePiScope(long piId) {
+        var pi=pis.selectById(piId);if(pi==null)throw missing();
+        customerScope.requireCustomer(pi.getCustomerId());
     }
 
     private static void requireRead() {

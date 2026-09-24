@@ -178,7 +178,7 @@ class PiReceiptAttachmentMysqlTest {
         }
         PiReceiptAttachmentService service(ProductionFileStore files, PiReceiptAttachmentMapper mapper, OperationLogMapper logs) {
             var validator = new PiReceiptFileValidator(new AfterSalesUploadValidator(new AfterSalesVideoValidator(8_294_400, 600, 72000)));
-            return new PiReceiptAttachmentService(mapper, files, validator, logs, core.json);
+            return com.bike.server.common.CustomerScopeTestSupport.isolated(new PiReceiptAttachmentService(mapper, files, validator, logs, core.json));
         }
         long receipt(long piId) { return core.transaction(() -> core.service.recordPayment(piId, PiServiceTest.payment("receipt-" + UUID.randomUUID(), "30.00"))).getPayments().getFirst().id(); }
         <T> T finance(Supplier<T> action) {

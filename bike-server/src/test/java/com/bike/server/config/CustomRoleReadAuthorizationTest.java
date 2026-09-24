@@ -21,7 +21,8 @@ import static org.mockito.Mockito.*;
 @WebMvcTest({PartController.class,VehicleController.class})
 @Import({SecurityConfig.class,PartServiceImpl.class,VehicleServiceImpl.class})
 class CustomRoleReadAuthorizationTest {
-  @Autowired MockMvc mvc;
+  @MockitoBean com.bike.server.common.CustomerScopeAccess customerScope;
+    @Autowired MockMvc mvc;
   @MockitoBean PartMapper parts;
   @MockitoBean VehicleMapper vehicles;
   @MockitoBean SnRuleService snRules;

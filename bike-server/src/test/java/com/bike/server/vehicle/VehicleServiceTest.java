@@ -22,7 +22,7 @@ class VehicleServiceTest {
                 "operator", null, List.of(new SimpleGrantedAuthority("ROLE_WEB_OPERATOR"))));
         VehicleMapper mapper = mock(VehicleMapper.class);
 
-        assertThatThrownBy(() -> new VehicleServiceImpl(mapper).create(new VehicleCreateRequest("FRAME-1", null)))
+        assertThatThrownBy(() -> com.bike.server.common.CustomerScopeTestSupport.isolated(new VehicleServiceImpl(mapper)).create(new VehicleCreateRequest("FRAME-1", null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(BusinessException.class::cast)
                 .extracting(BusinessException::getCode)
@@ -43,7 +43,7 @@ class VehicleServiceTest {
                         new SimpleGrantedAuthority("PERM_VEHICLE_READ"))));
         VehicleMapper mapper = mock(VehicleMapper.class);
 
-        assertThatThrownBy(() -> new VehicleServiceImpl(mapper).regenerateQr(7L))
+        assertThatThrownBy(() -> com.bike.server.common.CustomerScopeTestSupport.isolated(new VehicleServiceImpl(mapper)).regenerateQr(7L))
                 .isInstanceOf(BusinessException.class)
                 .extracting(BusinessException.class::cast)
                 .extracting(BusinessException::getCode)
@@ -66,7 +66,7 @@ class VehicleServiceTest {
         when(mapper.updateQr(eq(7L), anyString(), anyString(), eq(3))).thenReturn(1);
         when(mapper.insertOperationLog(eq("7"), eq("重新生成整车二维码"), isNull(), eq("admin"), eq("qrVersion=2"), eq("qrVersion=3"), isNull())).thenReturn(1);
 
-        new VehicleServiceImpl(mapper).regenerateQr(7L);
+        com.bike.server.common.CustomerScopeTestSupport.isolated(new VehicleServiceImpl(mapper)).regenerateQr(7L);
 
         verify(mapper).updateQr(eq(7L), startsWith("BIKE:7:"), anyString(), eq(3));
         verify(mapper).insertOperationLog(eq("7"), eq("重新生成整车二维码"), isNull(), eq("admin"), eq("qrVersion=2"), eq("qrVersion=3"), isNull());

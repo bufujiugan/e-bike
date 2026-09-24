@@ -20,6 +20,10 @@ public final class CurrentOperator {
 
     public static boolean hasRole(String role) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getDetails() instanceof com.bike.server.auth.UserAuthRecord user) {
+            if (role.equals("WEB_AGENT") && user.userType().equals("AGENT")) return true;
+            if (role.equals("PDA_OPERATOR") && user.userType().equals("PDA_OPERATOR")) return true;
+        }
         return authentication != null && authentication.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_" + role));
     }
 
@@ -97,6 +101,15 @@ public final class CurrentOperator {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && authentication.getDetails() instanceof com.bike.server.auth.UserAuthRecord user) return user.agentId();
         return null;
+    }
+
+    /** Null means unrestricted internal scope, or the separately enforced agent scope. */
+    public static Long customerScopeUserId() {
+        requireAuthenticated(SecurityContextHolder.getContext().getAuthentication());
+        if (hasRole("WEB_AGENT")) return null;
+        if (hasRole("SUPER_ADMIN") || hasPermission("CUSTOMER_SCOPE_ALL")) return null;
+        Long user = id();
+        return user == null ? -1L : user;
     }
 
     private static void requireAuthenticated(Authentication authentication) {

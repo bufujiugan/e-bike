@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.*;
 
 @Service
 public class CustomerProfileService {
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.common.CustomerScopeAccess customerScope;
     private final CustomerProfileMapper mapper;
     private final OperationLogMapper logs;
     private final ObjectMapper json;
@@ -20,11 +21,13 @@ public class CustomerProfileService {
     public CustomerProfile get(long id) {
         CurrentOperator.requireInternalWebAccess();
         CurrentOperator.requireAnyPermission("MASTER_READ","PI_WRITE","CUSTOMER_PROFILE_WRITE");
+        customerScope.requireCustomer(id);
         return require(id);
     }
     @Transactional(rollbackFor=Exception.class,isolation=Isolation.READ_COMMITTED)
     public CustomerProfile update(long id,CustomerProfileRequest request) {
         CurrentOperator.requireInternalWebAccess();CurrentOperator.requirePermission("CUSTOMER_PROFILE_WRITE");
+        customerScope.requireCustomer(id);
         if(request==null||!validator.validate(request).isEmpty())throw invalid();
         String currency=clean(request.preferredCurrency());
         if(currency!=null) {

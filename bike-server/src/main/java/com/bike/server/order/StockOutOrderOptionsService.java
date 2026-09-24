@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class StockOutOrderOptionsService {
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.common.CustomerScopeAccess customerScope;
     private final StockOutOrderOptionsMapper mapper;
     public StockOutOrderOptionsService(StockOutOrderOptionsMapper mapper) { this.mapper = mapper; }
 
@@ -18,6 +19,7 @@ public class StockOutOrderOptionsService {
         // Applies to ordinary Web warehouse staff and PDA alike; explicitly rejects agents.
         CurrentOperator.requireWorkstation("STOCK_OUT");
         if (customerId <= 0) throw new BusinessException("INVALID_PARAMETER", "请选择订单客户");
+        customerScope.requireCustomer(customerId);
         String query = keyword == null || keyword.isBlank() ? null : keyword.trim();
         if (query != null && query.length() > 100) {
             throw new BusinessException("INVALID_PARAMETER", "订单搜索内容不能超过100字");

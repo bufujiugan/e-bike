@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class PiConversionService {
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.common.CustomerScopeAccess customerScope;
     private final InventoryLockMapper locks;
     private final LockOrderService converter;
     private final PiService pis;
@@ -28,6 +29,7 @@ public class PiConversionService {
     public PageResponse<Map<String,Object>> options(long customerId,Long agentId,String keyword,long page) {
         CurrentOperator.requireInternalWebAccess();
         for(String permission:List.of("PI_READ","PI_WRITE","AGENT_LOCK_WRITE"))CurrentOperator.requirePermission(permission);
+        customerScope.requireCustomer(customerId);
         long p=Math.min(10000000,Math.max(1,page));
         String query=keyword==null||keyword.isBlank()?null:keyword.trim();
         return new PageResponse<>(series.lockOptions(customerId,agentId,query,(p-1)*20),p,20,series.countLockOptions(customerId,agentId,query));
@@ -41,6 +43,7 @@ public class PiConversionService {
         var sources=input.sources().stream().sorted(Comparator.comparingLong(PiConversionRequest.Source::lockId)).toList();
         if(sources.stream().map(PiConversionRequest.Source::lockId).distinct().count()!=sources.size()) fail("INVALID_PARAMETER","同一锁定不能重复提交");
         var request=new PiConversionRequest(input.requestId().trim(),sources,input.pi());
+        customerScope.requireCustomer(request.pi().customerId());
         guard.lock();
         String hash=hash(request);
         var prior=series.conversion(CurrentOperator.id(),request.requestId());

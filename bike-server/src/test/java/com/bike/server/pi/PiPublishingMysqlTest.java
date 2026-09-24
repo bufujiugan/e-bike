@@ -62,7 +62,7 @@ class PiPublishingMysqlTest {
         public void close()throws Exception{sql("DROP TABLE "+prefix+"pi_confirmation_attachment");sql("DROP TABLE "+prefix+"pi_export");sql("DROP TABLE "+prefix+"pi_template");}
         PiTemplateService templateService(){return new PiTemplateService(templates,logs,json,Validation.buildDefaultValidatorFactory().getValidator());}
         ProductionFileStore store(Path path){return new ProductionFileStore(path.toString(),"local","","","","");}
-        PiExportArchive archive(ProductionFileStore store){return new PiExportArchive(exports,pis,store,json,logs);}
+        PiExportArchive archive(ProductionFileStore store){return CustomerScopeTestSupport.isolated(new PiExportArchive(exports,pis,store,json,logs));}
         PiView pi(){var p=PiDocumentServiceTest.sample(2);p.setStatus("CONFIRMED");when(pis.selectItems(1)).thenReturn(p.getItems());when(pis.selectById(1)).thenReturn(p);when(pis.lockPi(1)).thenReturn(1L);return p;}
     }
     static PiTemplateRequest template(String version){return new PiTemplateRequest("CONTROLLED",version,"DOMESTIC","DOMESTIC_V1","受控卖方","地址","联系人","银行","000123","收款单位","核对后发布");}

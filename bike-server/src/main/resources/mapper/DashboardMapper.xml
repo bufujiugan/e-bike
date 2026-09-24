@@ -8,7 +8,7 @@
             (SELECT COUNT(*) FROM bike_vehicle WHERE status = 2) AS physicalInventory,
             (SELECT COUNT(*) FROM bike_vehicle v WHERE status=2 AND <include refid="com.bike.server.stock.InventoryPolicyMapper.quarantined"/>) AS quarantinedInventory,
             (SELECT COUNT(*) FROM bike_stock_in_record WHERE operation_time &gt;= CURRENT_DATE() AND status = 'COMPLETED') AS todayStockIn,
-            (SELECT COUNT(*) FROM bike_stock_out_record WHERE operation_time &gt;= CURRENT_DATE() AND status = 'COMPLETED') AS todayStockOut
+            (SELECT COUNT(*) FROM bike_stock_out_record WHERE operation_time &gt;= CURRENT_DATE() AND status = 'COMPLETED' <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=bike_stock_out_record.customer_id)</if>) AS todayStockOut
             ,(SELECT COALESCE(SUM(qty),0) FROM (<include refid="com.bike.server.stock.InventoryPolicyMapper.commitments"/>) c) AS lockedInventory
     </select>
     <select id="selectVehicleStatusCounts" resultType="map">
@@ -17,7 +17,7 @@
                COUNT(*) AS count,
                CASE status WHEN 0 THEN '#94a3b8' WHEN 1 THEN '#1677c8' WHEN 2 THEN '#16a36a' WHEN 3 THEN '#8b5cf6'
                     WHEN 4 THEN '#f59e0b' WHEN 5 THEN '#ef4444' ELSE '#64748b' END AS color
-        FROM bike_vehicle GROUP BY status ORDER BY status
+        FROM bike_vehicle WHERE 1=1 <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null">AND (current_customer_id IS NULL OR EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=bike_vehicle.current_customer_id))</if> GROUP BY status ORDER BY status
     </select>
     <select id="selectRecentOperations" resultType="map">
         SELECT DATE_FORMAT(operation_time, '%H:%i:%s') AS time, action,
@@ -40,7 +40,7 @@
             FROM bike_stock_in_record WHERE status = 'COMPLETED' AND operation_time &gt;= DATE_SUB(CURRENT_DATE(), INTERVAL #{days} DAY)
             UNION ALL
             SELECT DATE_FORMAT(operation_time, '%Y-%m-%d'), 0, 0, 1
-            FROM bike_stock_out_record WHERE status = 'COMPLETED' AND operation_time &gt;= DATE_SUB(CURRENT_DATE(), INTERVAL #{days} DAY)
+            FROM bike_stock_out_record WHERE status = 'COMPLETED' AND operation_time &gt;= DATE_SUB(CURRENT_DATE(), INTERVAL #{days} DAY) <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=bike_stock_out_record.customer_id)</if>
         ) events
         GROUP BY event_date ORDER BY event_date
     </select>

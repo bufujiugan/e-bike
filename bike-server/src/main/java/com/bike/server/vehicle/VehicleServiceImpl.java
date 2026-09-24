@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 public class VehicleServiceImpl implements VehicleService {
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.common.CustomerScopeAccess customerScope;
     private final VehicleMapper vehicleMapper;
     private final SnRuleService snRuleService;
     @Autowired private com.bike.server.production.ProductionGuard productionGuard;
@@ -68,8 +69,9 @@ public class VehicleServiceImpl implements VehicleService {
         return getById(id);
     }
 
-    private static VehicleView require(VehicleView vehicle) {
+    private VehicleView require(VehicleView vehicle) {
         if (vehicle == null) throw new BusinessException("VEHICLE_NOT_FOUND", "整车不存在");
+        if(vehicle.getCurrentCustomerId()!=null)customerScope.requireCustomer(vehicle.getCurrentCustomerId());
         return vehicle;
     }
 

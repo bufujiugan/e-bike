@@ -36,7 +36,7 @@ class PiServiceTest {
     private final ObjectMapper json = new ObjectMapper().findAndRegisterModules();
     private final Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
     private final OrderReservationCoordinator reservations = mock(OrderReservationCoordinator.class);
-    private final PiServiceImpl service = new PiServiceImpl(mapper, mock(PiDocumentService.class), logs, json, validator, reservations);
+    private final PiServiceImpl service = com.bike.server.common.CustomerScopeTestSupport.isolated(new PiServiceImpl(mapper, mock(PiDocumentService.class), logs, json, validator, reservations));
 
     @BeforeEach
     void setup() {

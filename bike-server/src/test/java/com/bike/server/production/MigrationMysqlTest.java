@@ -10,7 +10,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 /** 仅针对两个新建的专用空库，禁止清库或重复覆盖已有业务数据。 */
 @EnabledIfEnvironmentVariable(named="BIKE_MIGRATION_CLEAN_URL",matches=".+")
 class MigrationMysqlTest {
-  private static final int LATEST_VERSION = 44;
+  private static final int LATEST_VERSION = 45;
   Flyway flyway(String url,String target) {
     assertThat(url).contains("/bike_migration_");
     var config=Flyway.configure().dataSource(url,System.getenv("BIKE_MYSQL_TEST_USER"),System.getenv("BIKE_MYSQL_TEST_PASSWORD"))

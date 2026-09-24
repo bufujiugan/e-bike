@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class PiLogisticsService {
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.common.CustomerScopeAccess customerScope;
     private final PiLogisticsMapper mapper;
     private final PiMapper pis;
     private final PiSeriesMapper series;
@@ -73,6 +74,8 @@ public class PiLogisticsService {
     }
     public List<Map<String,Object>> history(long piId,long id) {
         CurrentOperator.requireInternalWebAccess();CurrentOperator.requirePermission("PI_READ");
+        var pi=pis.selectById(piId);if(pi==null)fail("PI_NOT_FOUND","PI不存在");
+        customerScope.requireCustomer(pi.getCustomerId());
         require(piId,id);return mapper.history(id);
     }
     private PiLogisticsView require(long piId,long id) {
@@ -82,7 +85,7 @@ public class PiLogisticsService {
     }
     private PiView lock(long piId) {
         guard.lock();for(long id:series.orderIds(piId))orders.selectForUpdate(id);
-        var pi=pis.selectForUpdate(piId);if(pi==null)fail("PI_NOT_FOUND","PI不存在");return pi;
+        var pi=pis.selectForUpdate(piId);if(pi==null)fail("PI_NOT_FOUND","PI不存在");customerScope.requireCustomer(pi.getCustomerId());return pi;
     }
     private void finish(long piId,long id,String key,String hash,String action,PiLogisticsView before,String remark) {
         var after=mapper.get(id);

@@ -37,7 +37,7 @@ class OrderServiceTest {
             order.setReservationHeldAt(java.time.LocalDateTime.of(2019, 12, 31, 0, 0));
             assertThat(order.getReservationExpiresAt()).isNotNull();
             Mockito.when(mapper.selectById(7L)).thenReturn(order);
-            SalesOrderView response = new OrderServiceImpl(mapper).get(7L);
+            SalesOrderView response = com.bike.server.common.CustomerScopeTestSupport.isolated(new OrderServiceImpl(mapper)).get(7L);
             assertThat(response.getReservationStatus()).isEqualTo("ACTIVE");
             assertThat(response.getReservationExpiresAt()).isNull();
             assertThat(response.getReservationHoldMode()).isNull();
@@ -52,7 +52,7 @@ class OrderServiceTest {
         Mockito.when(mapper.selectById(7L)).thenReturn(order);
         Mockito.when(mapper.updateStatus(7L, "CANCELLED")).thenReturn(1);
 
-        SalesOrderView result = new OrderServiceImpl(mapper).cancel(7L, "  客户取消  ");
+        SalesOrderView result = com.bike.server.common.CustomerScopeTestSupport.isolated(new OrderServiceImpl(mapper)).cancel(7L, "  客户取消  ");
 
         assertThat(result).isSameAs(order);
         Mockito.verify(mapper).insertOperationLog("ORDER_UPDATE", "SO-7", "作废订单", null,
@@ -64,7 +64,7 @@ class OrderServiceTest {
         OrderMapper mapper = Mockito.mock(OrderMapper.class);
         Mockito.when(mapper.selectById(7L)).thenReturn(order(7L, "SO-7", "PARTIAL_SHIPPED", 1, 2));
 
-        assertThatThrownBy(() -> new OrderServiceImpl(mapper).cancel(7L, "作废"))
+        assertThatThrownBy(() -> com.bike.server.common.CustomerScopeTestSupport.isolated(new OrderServiceImpl(mapper)).cancel(7L, "作废"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("不可直接作废");
         Mockito.verify(mapper, Mockito.never()).updateStatus(Mockito.anyLong(), Mockito.anyString());
@@ -75,7 +75,7 @@ class OrderServiceTest {
         OrderMapper mapper = Mockito.mock(OrderMapper.class);
         Mockito.when(mapper.selectById(7L)).thenReturn(order(7L, "SO-7", "DRAFT", 2, 3));
 
-        assertThatThrownBy(() -> new OrderServiceImpl(mapper)
+        assertThatThrownBy(() -> com.bike.server.common.CustomerScopeTestSupport.isolated(new OrderServiceImpl(mapper))
                 .update(7L, new SalesOrderCreateRequest(1L, null, 2L, 1, null, null)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("不能小于已出库数量");

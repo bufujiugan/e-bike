@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class PiDispatchService {
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.common.CustomerScopeAccess customerScope;
     private final PiDispatchMapper mapper;
     private final PiSeriesMapper series;
     private final PiDispatchRecorder recorder;
@@ -35,6 +36,7 @@ public class PiDispatchService {
     public Map<String,Object> warehouse(long piId) {
         requireWarehouse();var header=mapper.warehouseHeader(piId);
         if(header==null)fail("PI_NOT_FOUND","当前PI不存在");
+        customerScope.requireCustomer(((Number)header.get("customerId")).longValue());
         if(!"RELEASED".equals(header.get("status")))fail("PI_SHIPMENT_NOT_RELEASED","PI尚未放行出库");
         var result=new LinkedHashMap<>(header);
         // Warehouse staff receive quantities only, never prices, payment facts or hold mode/deadlines.
@@ -53,7 +55,10 @@ public class PiDispatchService {
                 .sorted(Comparator.comparingLong(PiDispatchRequest.Vehicle::orderId).thenComparing(PiDispatchRequest.Vehicle::vehicleQrCode)).toList();
         if(vehicles.stream().map(PiDispatchRequest.Vehicle::vehicleQrCode).distinct().count()!=vehicles.size())fail("INVALID_QR_CODE","同一整车不能重复扫码");
         var request=new PiDispatchRequest(input.requestId().trim(),vehicles);
-        guard.lock();String hash=hash(request);
+        guard.lock();
+        var header=mapper.warehouseHeader(piId);if(header==null)fail("PI_NOT_FOUND","当前PI不存在");
+        customerScope.requireCustomer(((Number)header.get("customerId")).longValue());
+        String hash=hash(request);
         var previous=mapper.prior(piId,CurrentOperator.id(),request.requestId());
         if(previous!=null) {
             if(!Objects.equals(hash,previous.payloadHash()))fail("PI_DISPATCH_CONFLICT","同一批次请求标识不能用于不同车辆");
@@ -77,6 +82,7 @@ public class PiDispatchService {
     }
     public Map<String,Object> warehouseBatch(long id) {
         requireWarehouse();var batch=mapper.get(id);if(batch==null)fail("PI_BATCH_NOT_FOUND","出库批次不存在");
+        customerScope.requireCustomer(batch.customerId());
         return Map.of("batch",batch,"vehicles",mapper.vehicles(id));
     }
     private String hash(PiDispatchRequest request) {try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(json.writeValueAsBytes(request)));}catch(Exception e){throw new IllegalStateException(e);}}

@@ -20,8 +20,8 @@
     ORDER BY r.expires_at,o.id LIMIT 200
   </select>
   <update id="markExpiryAudited">UPDATE bike_order_reservation SET expiry_audited_at=NOW(3) WHERE order_id=#{orderId} AND hold_mode='TIMED' AND expiry_audited_at IS NULL AND expires_at&lt;=NOW(3)</update>
-  <select id="ordersForLock" resultType="com.bike.server.order.SalesOrderView"><include refid="com.bike.server.order.OrderMapper.orderSelect"/> WHERE r.source_lock_id=#{lockId} ORDER BY o.id DESC LIMIT #{offset},#{limit}</select>
-  <select id="countForLock" resultType="long">SELECT COUNT(*) FROM bike_order_reservation WHERE source_lock_id=#{lockId}</select>
+  <select id="ordersForLock" resultType="com.bike.server.order.SalesOrderView"><include refid="com.bike.server.order.OrderMapper.orderSelect"/> WHERE r.source_lock_id=#{lockId} <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=o.customer_id)</if> ORDER BY o.id DESC LIMIT #{offset},#{limit}</select>
+  <select id="countForLock" resultType="long">SELECT COUNT(*) FROM bike_order_reservation r JOIN bike_sales_order o ON o.id=r.order_id WHERE r.source_lock_id=#{lockId} <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=o.customer_id)</if></select>
   <select id="vehicleModel" resultType="long">SELECT model_id FROM bike_vehicle WHERE id=#{vehicleId}</select>
   <update id="renew">
     UPDATE bike_order_reservation SET expires_at=DATE_ADD(NOW(3),INTERVAL #{hours} HOUR),expiry_audited_at=NULL

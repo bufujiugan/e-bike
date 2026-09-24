@@ -17,6 +17,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 /** Uses isolated tables to exercise the real SQL before filtering, counting and pagination. */
 @EnabledIfEnvironmentVariable(named = "BIKE_MYSQL_TEST_URL", matches = ".+")
 class AuditPrivacyMysqlTest {
+    @org.junit.jupiter.api.BeforeEach void explicitCustomerScope() {
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(new org.springframework.security.authentication.UsernamePasswordAuthenticationToken("full-scope-reader",null,java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("PERM_CUSTOMER_SCOPE_ALL"))));
+    }
+    @org.junit.jupiter.api.AfterEach void clearCustomerScope(){org.springframework.security.core.context.SecurityContextHolder.clearContext();}
+
     @Test void financeEventsCannotBeDiscoveredThroughGeneralSearchTraceOrDashboard() throws Exception {
         var source = new UnpooledDataSource("com.mysql.cj.jdbc.Driver", System.getenv("BIKE_MYSQL_TEST_URL"),
                 System.getenv("BIKE_MYSQL_TEST_USER"), System.getenv("BIKE_MYSQL_TEST_PASSWORD"));

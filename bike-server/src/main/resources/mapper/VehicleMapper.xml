@@ -17,7 +17,7 @@
         LEFT JOIN bike_production_vehicle pv ON pv.vehicle_id=v.id LEFT JOIN bike_production_sku sku ON sku.id=pv.sku_id
     </sql>
     <sql id="vehicleWhere">
-        <where>
+        <where><bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND (v.current_customer_id IS NULL OR EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=v.current_customer_id))</if>
             <if test="keyword != null and keyword != ''">AND (v.frame_sn LIKE CONCAT('%', #{keyword}, '%') OR v.vehicle_qr_code LIKE CONCAT('%', #{keyword}, '%') OR v.current_order_no LIKE CONCAT('%', #{keyword}, '%') OR EXISTS (SELECT 1 FROM bike_vehicle_part_binding bx WHERE bx.vehicle_id = v.id AND bx.part_sn LIKE CONCAT('%', #{keyword}, '%')) OR EXISTS (SELECT 1 FROM bike_customer cx WHERE cx.id = v.current_customer_id AND cx.customer_name LIKE CONCAT('%', #{keyword}, '%')))</if>
             <if test="status != null">AND v.status = #{status}</if>
             <if test="modelId != null">AND v.model_id = #{modelId}</if>

@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class OrderServiceImpl implements OrderService {
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.common.CustomerScopeAccess customerScope;
     private final OrderMapper orderMapper;
     @Autowired private ProductionGuard guard;
     @Autowired private OrderInventoryGuard inventoryGuard;
@@ -23,6 +24,7 @@ public class OrderServiceImpl implements OrderService {
     @Override
     public PageResponse<SalesOrderView> list(String keyword, String status, long page, long pageSize) {
         requireOrderRead();
+        customerScope.lockForBusiness();
         long p = Math.max(1, page), size = Math.min(100, Math.max(1, pageSize));
         String normalized = keyword == null || keyword.isBlank() ? null : keyword.trim();
         Long agentId = CurrentOperator.hasRole("WEB_AGENT") ? CurrentOperator.agentId() : null;
@@ -137,7 +139,8 @@ public class OrderServiceImpl implements OrderService {
         if (CurrentOperator.hasRole("PDA_OPERATOR")) CurrentOperator.requireWorkstation("STOCK_OUT");
     }
 
-    private static void checkAgentScope(SalesOrderView order) {
+    private void checkAgentScope(SalesOrderView order) {
+        customerScope.requireCustomer(order.getCustomerId());
         if (CurrentOperator.hasRole("WEB_AGENT") && !Objects.equals(CurrentOperator.agentId(), order.getAgentId())) {
             throw new BusinessException("FORBIDDEN", "无权访问其他代理商订单");
         }
@@ -154,6 +157,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private void validateReferences(SalesOrderCreateRequest request) {
+        customerScope.requireCustomer(request.customerId());
         if (orderMapper.countEnabledCustomer(request.customerId()) != 1) throw new BusinessException("CUSTOMER_NOT_FOUND", "客户不存在或已停用");
         if (orderMapper.countEnabledModel(request.modelId()) != 1) throw new BusinessException("MODEL_NOT_FOUND", "车型不存在或已停用");
         if (request.agentId() != null && orderMapper.countEnabledAgent(request.agentId()) != 1) {

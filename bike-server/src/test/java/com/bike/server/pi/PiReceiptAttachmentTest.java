@@ -43,9 +43,9 @@ class PiReceiptAttachmentTest {
                     List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_SUPER_ADMIN")));
             auth.setDetails(new com.bike.server.auth.UserAuthRecord(1, "misassigned", "", type, null, null, true));
             SecurityContextHolder.getContext().setAuthentication(auth);
-            assertCode("PERMISSION_DENIED", () -> service.list(1, 10));
-            assertCode("PERMISSION_DENIED", () -> service.download(1, 10, "attachment"));
-            assertCode("PERMISSION_DENIED", () -> service.upload(1, 10, "request", file("proof.png", "image/png", image())));
+            assertCode(type.equals("AGENT") ? "FORBIDDEN" : "PERMISSION_DENIED", () -> service.list(1, 10));
+            assertCode(type.equals("AGENT") ? "FORBIDDEN" : "PERMISSION_DENIED", () -> service.download(1, 10, "attachment"));
+            assertCode(type.equals("AGENT") ? "FORBIDDEN" : "PERMISSION_DENIED", () -> service.upload(1, 10, "request", file("proof.png", "image/png", image())));
         }
         verifyNoInteractions(mapper, files, validator);
     }
@@ -136,7 +136,7 @@ class PiReceiptAttachmentTest {
     }
 
     static PiReceiptAttachmentService service(PiReceiptAttachmentMapper mapper, ProductionFileStore files, PiReceiptFileValidator validator) {
-        return new PiReceiptAttachmentService(mapper, files, validator, mock(OperationLogMapper.class), new ObjectMapper().findAndRegisterModules());
+        return com.bike.server.common.CustomerScopeTestSupport.isolated(new PiReceiptAttachmentService(mapper, files, validator, mock(OperationLogMapper.class), new ObjectMapper().findAndRegisterModules()));
     }
     static MockMultipartFile file(String name, String type, byte[] bytes) { return new MockMultipartFile("file", name, type, bytes); }
     static byte[] image() {

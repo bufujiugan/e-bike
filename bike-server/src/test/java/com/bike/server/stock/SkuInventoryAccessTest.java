@@ -39,7 +39,7 @@ class SkuInventoryAccessTest {
         verifyNoInteractions(mapper);
     }
     @Test void agentAndPdaCannotCreateInternalCustomerLocksEvenWithWritePermission() {
-        var service=new SkuLockService(null,null,null,null,null,null,null,null,null);
+        var service=com.bike.server.common.CustomerScopeTestSupport.isolated(new SkuLockService(null,null,null,null,null,null,null,null,null));
         for(String role:List.of("WEB_AGENT","PDA_OPERATOR")) {
             login(role,9L,"AGENT_LOCK_WRITE");
             assertThatThrownBy(()->service.create(null)).isInstanceOf(BusinessException.class);

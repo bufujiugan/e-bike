@@ -21,6 +21,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(CustomerProfileController.class)
 @Import({SecurityConfig.class,CustomerProfileService.class})
 class CustomerProfileHttpAuthorizationTest {
+    @MockitoBean com.bike.server.common.CustomerScopeAccess customerScope;
     @Autowired MockMvc mvc;
     @MockitoBean CustomerProfileMapper mapper;
     @MockitoBean OperationLogMapper logs;

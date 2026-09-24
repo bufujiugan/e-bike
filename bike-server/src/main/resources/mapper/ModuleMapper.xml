@@ -23,7 +23,7 @@
                 FROM bike_vehicle v LEFT JOIN bike_product_model m ON m.id = v.model_id LEFT JOIN bike_vehicle_part_binding b ON b.vehicle_id = v.id
                 LEFT JOIN bike_customer c ON c.id = v.current_customer_id LEFT JOIN bike_warehouse w ON w.id = v.current_warehouse_id LEFT JOIN bike_warehouse_location l ON l.id = v.current_location_id
                 LEFT JOIN bike_production_vehicle pv ON pv.vehicle_id=v.id LEFT JOIN bike_production_sku sku ON sku.id=pv.sku_id
-                GROUP BY v.id, v.frame_sn, m.model_name, v.status, v.assemble_time ORDER BY v.updated_at DESC
+                WHERE 1=1 <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND (v.current_customer_id IS NULL OR EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=v.current_customer_id))</if> GROUP BY v.id, v.frame_sn, m.model_name, v.status, v.assemble_time ORDER BY v.updated_at DESC
             </when>
             <when test="module == 'inventory'">
       <include refid="com.bike.server.stock.InventoryPolicyMapper.inventoryCtes"/>
@@ -40,16 +40,16 @@
             </when>
             <when test="module == 'stock-out'">
                 SELECT so.stock_out_no AS `业务单号`, '整车出库' AS `类型`, '1 台' AS `整车数量`, COALESCE(c.customer_name, '-') AS `客户 / 仓库`, COALESCE(u.display_name, '-') AS `操作人`, so.operation_time AS `操作时间`, CASE so.status WHEN 'COMPLETED' THEN '已完成' WHEN 'CANCELLED' THEN '已撤销' ELSE so.status END AS `状态`
-                FROM bike_stock_out_record so LEFT JOIN bike_customer c ON c.id = so.customer_id LEFT JOIN bike_sys_user u ON u.id = so.operator_id
+                FROM bike_stock_out_record so LEFT JOIN bike_customer c ON c.id = so.customer_id LEFT JOIN bike_sys_user u ON u.id = so.operator_id WHERE 1=1 <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=so.customer_id)</if>
                 ORDER BY so.operation_time DESC
             </when>
             <when test="module == 'stock'">
                 SELECT stock_no AS `业务单号`, type AS `类型`, '1 台' AS `整车数量`, destination AS `客户 / 仓库`, operator_name AS `操作人`, operation_time AS `操作时间`, status AS `状态`
-                FROM (SELECT si.stock_in_no stock_no, '整车入库' type, CONCAT(COALESCE(w.warehouse_name, '-'), ' / ', COALESCE(l.location_name, '-')) destination, COALESCE(u.display_name, '-') operator_name, si.operation_time, CASE si.status WHEN 'COMPLETED' THEN '已完成' WHEN 'CANCELLED' THEN '已撤销' ELSE si.status END status FROM bike_stock_in_record si LEFT JOIN bike_warehouse w ON w.id = si.warehouse_id LEFT JOIN bike_warehouse_location l ON l.id = si.location_id LEFT JOIN bike_sys_user u ON u.id = si.operator_id UNION ALL SELECT so.stock_out_no, '整车出库', COALESCE(c.customer_name, '-'), COALESCE(u.display_name, '-'), so.operation_time, CASE so.status WHEN 'COMPLETED' THEN '已完成' WHEN 'CANCELLED' THEN '已撤销' ELSE so.status END FROM bike_stock_out_record so LEFT JOIN bike_customer c ON c.id = so.customer_id LEFT JOIN bike_sys_user u ON u.id = so.operator_id) records ORDER BY operation_time DESC
+                FROM (SELECT si.stock_in_no stock_no, '整车入库' type, CONCAT(COALESCE(w.warehouse_name, '-'), ' / ', COALESCE(l.location_name, '-')) destination, COALESCE(u.display_name, '-') operator_name, si.operation_time, CASE si.status WHEN 'COMPLETED' THEN '已完成' WHEN 'CANCELLED' THEN '已撤销' ELSE si.status END status FROM bike_stock_in_record si LEFT JOIN bike_warehouse w ON w.id = si.warehouse_id LEFT JOIN bike_warehouse_location l ON l.id = si.location_id LEFT JOIN bike_sys_user u ON u.id = si.operator_id UNION ALL SELECT so.stock_out_no, '整车出库', COALESCE(c.customer_name, '-'), COALESCE(u.display_name, '-'), so.operation_time, CASE so.status WHEN 'COMPLETED' THEN '已完成' WHEN 'CANCELLED' THEN '已撤销' ELSE so.status END FROM bike_stock_out_record so LEFT JOIN bike_customer c ON c.id = so.customer_id LEFT JOIN bike_sys_user u ON u.id = so.operator_id WHERE 1=1 <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=so.customer_id)</if>) records ORDER BY operation_time DESC
             </when>
             <when test="module == 'orders'">
                 SELECT o.order_no AS `订单号`, c.customer_name AS `客户`, m.model_name AS `车型`, CONCAT(i.ordered_qty, ' 台') AS `订单数量`, CONCAT(i.shipped_qty, ' 台') AS `已出库`, o.planned_ship_date AS `计划发货`, CASE o.status WHEN 'DRAFT' THEN '草稿' WHEN 'CONFIRMED' THEN '待出库' WHEN 'PARTIAL_SHIPPED' THEN '部分出库' WHEN 'SHIPPED' THEN '已完成' WHEN 'CANCELLED' THEN '已作废' WHEN 'CLOSED' THEN '已关闭' ELSE o.status END AS `状态`, il.lock_no AS `来源锁定`, <choose><when test="agentId != null">NULL</when><otherwise>CASE WHEN r.hold_mode='PAID' THEN NULL ELSE r.expires_at END</otherwise></choose> AS `占用截止`, CASE WHEN r.order_id IS NULL THEN '未占用' WHEN o.status IN ('CANCELLED','CLOSED') OR r.hold_mode='RELEASED' THEN '已释放' WHEN i.shipped_qty>=i.ordered_qty THEN '已履约' WHEN r.hold_mode='PAID' THEN <choose><when test="agentId != null">'有效'</when><otherwise>'收款达标保留，待人工关闭'</otherwise></choose> WHEN r.expires_at&lt;=NOW(3) THEN '已到期' ELSE '有效' END AS `占用状态`, o.remark AS `备注`
-                FROM bike_sales_order o JOIN bike_customer c ON c.id = o.customer_id JOIN bike_sales_order_item i ON i.order_id = o.id JOIN bike_product_model m ON m.id = i.product_model_id LEFT JOIN bike_order_reservation r ON r.order_id=o.id LEFT JOIN bike_inventory_lock il ON il.id=r.source_lock_id <if test="agentId != null">WHERE o.agent_id = #{agentId}</if> ORDER BY o.created_at DESC
+                FROM bike_sales_order o JOIN bike_customer c ON c.id = o.customer_id JOIN bike_sales_order_item i ON i.order_id = o.id JOIN bike_product_model m ON m.id = i.product_model_id LEFT JOIN bike_order_reservation r ON r.order_id=o.id LEFT JOIN bike_inventory_lock il ON il.id=r.source_lock_id WHERE 1=1 <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=o.customer_id)</if><if test="agentId != null">AND o.agent_id = #{agentId}</if> ORDER BY o.created_at DESC
             </when>
             <when test="module == 'agents'">
                 SELECT agent_code AS `代理商编号`, agent_name AS `代理商名称`, COALESCE(contact_name, '-') AS `联系人`, COALESCE(contact_phone, '-') AS `联系电话`, CASE status WHEN 'ENABLED' THEN '启用' ELSE status END AS `状态`, updated_at AS `更新时间`
@@ -62,14 +62,14 @@
                   CASE WHEN il.status IN ('LOCKED','PARTIAL_CONVERTED') AND il.expire_time&lt;=NOW(3) THEN '已到期'
                     ELSE CASE il.status WHEN 'LOCKED' THEN '锁定中' WHEN 'PARTIAL_CONVERTED' THEN '部分转订单' WHEN 'CONVERTED' THEN '已转订单' WHEN 'RELEASED' THEN '已释放' WHEN 'EXPIRED' THEN '已到期' WHEN 'CANCELLED' THEN '已取消' ELSE il.status END END AS `状态`,il.lock_no AS `锁定单号`
                 FROM bike_inventory_lock il LEFT JOIN bike_agent a ON a.id=il.agent_id JOIN bike_product_model m ON m.id=il.product_model_id LEFT JOIN bike_sys_user u ON u.id=il.created_by
-                <if test="agentId != null">WHERE il.agent_id=#{agentId}</if> ORDER BY il.created_at DESC
+                WHERE 1=1 <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=il.customer_id)</if><if test="agentId != null">AND il.agent_id=#{agentId}</if> ORDER BY il.created_at DESC
             </when>
             <when test="module == 'inventory-locks'">
                 SELECT il.lock_no AS `锁定单号`, COALESCE(a.agent_name,'直接客户') AS `代理商`, m.model_name AS `车型`, il.lock_qty AS `锁定数量`, il.released_qty AS `已释放`, il.converted_qty AS `已转订单`, il.expire_time AS `到期时间`,
                        CASE WHEN il.status IN ('LOCKED','PARTIAL_CONVERTED') AND il.expire_time&lt;=NOW(3) THEN '已到期'
                          ELSE CASE il.status WHEN 'LOCKED' THEN '锁定中' WHEN 'PARTIAL_CONVERTED' THEN '部分转订单' WHEN 'CONVERTED' THEN '已转订单' WHEN 'RELEASED' THEN '已释放' WHEN 'EXPIRED' THEN '已到期' WHEN 'CANCELLED' THEN '已取消' ELSE il.status END END AS `状态`
                 FROM bike_inventory_lock il LEFT JOIN bike_agent a ON a.id=il.agent_id JOIN bike_product_model m ON m.id=il.product_model_id
-                <where><if test="agentId != null">il.agent_id=#{agentId}</if></where> ORDER BY il.created_at DESC
+                <where><bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=il.customer_id)</if><if test="agentId != null">AND il.agent_id=#{agentId}</if></where> ORDER BY il.created_at DESC
             </when>
             <when test="module == 'agent-inventory'">
       <include refid="com.bike.server.stock.InventoryPolicyMapper.inventoryCtes"/>
@@ -88,7 +88,7 @@
                 SELECT p.part_sn AS `零部件 SN`, p.part_type AS `类型`, COALESCE(s.supplier_name, '-') AS `供应商`, COALESCE(p.batch_no, '-') AS `批次`, CASE p.bind_status WHEN 'BOUND' THEN '已绑定' ELSE '未绑定' END AS `绑定状态`, COALESCE(p.current_frame_sn, '-') AS `当前车架`, p.status AS `状态` FROM bike_part p LEFT JOIN bike_supplier s ON s.id = p.supplier_id ORDER BY p.updated_at DESC
             </when>
             <when test="module == 'customers'">
-                SELECT customer_code AS `客户编号`, customer_name AS `客户名称`, COALESCE(contact_name, '-') AS `联系人`, COALESCE(contact_phone, '-') AS `联系电话`, CASE status WHEN 'ENABLED' THEN '启用' ELSE status END AS `状态`, created_at AS `创建时间` FROM bike_customer ORDER BY created_at DESC
+                SELECT customer_code AS `客户编号`, customer_name AS `客户名称`, COALESCE(contact_name, '-') AS `联系人`, COALESCE(contact_phone, '-') AS `联系电话`, CASE status WHEN 'ENABLED' THEN '启用' ELSE status END AS `状态`, created_at AS `创建时间` FROM bike_customer WHERE 1=1 <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=bike_customer.id)</if> ORDER BY created_at DESC
             </when>
             <when test="module == 'suppliers'">
                 SELECT supplier_code AS `供应商编号`, supplier_name AS `供应商名称`, COALESCE(contact_name, '-') AS `联系人`, COALESCE(contact_phone, '-') AS `联系电话`, CASE status WHEN 'ENABLED' THEN '启用' ELSE status END AS `状态`, created_at AS `创建时间` FROM bike_supplier ORDER BY created_at DESC
@@ -115,7 +115,7 @@
             <when test="module == 'customs'">
                 SELECT v.frame_sn AS `车架 SN`, COALESCE(m.model_name, '-') AS `车型`, COALESCE(v.vehicle_qr_code, '-') AS `总二维码`, COALESCE(c.customer_name, '-') AS `客户`, COALESCE(v.current_order_no, '-') AS `订单号`, v.stock_out_time AS `出库时间`, '待申报' AS `报关状态`
                 FROM bike_vehicle v LEFT JOIN bike_product_model m ON m.id=v.model_id LEFT JOIN bike_customer c ON c.id=v.current_customer_id
-                WHERE v.status=3 ORDER BY v.stock_out_time DESC
+                WHERE v.status=3 <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=v.current_customer_id)</if> ORDER BY v.stock_out_time DESC
             </when>
             <when test="module == 'locations'">
                 SELECT w.warehouse_name AS `仓库`, w.warehouse_code AS `仓库编码`, l.location_name AS `库位`,

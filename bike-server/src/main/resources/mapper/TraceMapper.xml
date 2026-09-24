@@ -2,17 +2,17 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.bike.server.trace.TraceMapper">
     <select id="selectFrameByQr" resultType="string">SELECT frame_sn FROM bike_vehicle WHERE vehicle_qr_code=#{qrCode} OR vehicle_qr_token=#{qrCode}</select>
-    <select id="selectVehicleByFrame" resultType="com.bike.server.vehicle.VehicleView"><include refid="com.bike.server.vehicle.VehicleMapper.vehicleSelect"/> WHERE v.frame_sn=#{frameSn} GROUP BY v.id</select>
+    <select id="selectVehicleByFrame" resultType="com.bike.server.vehicle.VehicleView"><include refid="com.bike.server.vehicle.VehicleMapper.vehicleSelect"/> WHERE v.frame_sn=#{frameSn} <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND (v.current_customer_id IS NULL OR EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=v.current_customer_id))</if> GROUP BY v.id</select>
     <select id="selectFrameByPart" resultType="string">SELECT frame_sn FROM bike_vehicle_part_binding WHERE part_sn=#{partSn} ORDER BY is_current DESC,bind_time DESC LIMIT 1</select>
-    <select id="selectVehiclesByPart" resultType="com.bike.server.vehicle.VehicleView"><include refid="com.bike.server.vehicle.VehicleMapper.vehicleSelect"/> WHERE EXISTS (SELECT 1 FROM bike_vehicle_part_binding pb WHERE pb.vehicle_id=v.id AND pb.part_sn=#{partSn}) GROUP BY v.id ORDER BY v.updated_at DESC</select>
+    <select id="selectVehiclesByPart" resultType="com.bike.server.vehicle.VehicleView"><include refid="com.bike.server.vehicle.VehicleMapper.vehicleSelect"/> WHERE 1=1 <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND (v.current_customer_id IS NULL OR EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=v.current_customer_id))</if> AND EXISTS (SELECT 1 FROM bike_vehicle_part_binding pb WHERE pb.vehicle_id=v.id AND pb.part_sn=#{partSn}) GROUP BY v.id ORDER BY v.updated_at DESC</select>
     <select id="selectBindingHistory" resultType="com.bike.server.trace.TraceEvent">SELECT 'BINDING' type,CASE WHEN b.is_current=1 THEN '绑定' ELSE '解绑' END action,b.part_type,b.part_sn,COALESCE(CASE WHEN b.is_current=1 THEN bu.display_name ELSE uu.display_name END,bu.display_name,uu.display_name) operator_name,COALESCE(b.unbind_reason,b.bind_reason) reason,COALESCE(b.unbind_time,b.bind_time) operation_time FROM bike_vehicle_part_binding b LEFT JOIN bike_sys_user bu ON bu.id=b.bind_operator_id LEFT JOIN bike_sys_user uu ON uu.id=b.unbind_operator_id WHERE b.frame_sn=#{frameSn} ORDER BY b.bind_time</select>
     <select id="selectEvents" resultType="com.bike.server.trace.TraceEvent">
         SELECT business_type type,action,COALESCE(JSON_UNQUOTE(JSON_EXTRACT(before_data,'$.partType')),JSON_UNQUOTE(JSON_EXTRACT(after_data,'$.partType'))) part_type,COALESCE(JSON_UNQUOTE(JSON_EXTRACT(before_data,'$.partSn')),JSON_UNQUOTE(JSON_EXTRACT(after_data,'$.partSn'))) part_sn,operator_name,remark reason,operation_time
-        FROM bike_operation_log log WHERE frame_sn=#{frameSn} OR (business_type='PRODUCTION' AND (
+        FROM bike_operation_log log WHERE <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null">1=0 AND </if> (frame_sn=#{frameSn} OR (business_type='PRODUCTION' AND (
           business_id COLLATE utf8mb4_unicode_ci IN (SELECT p.task_id COLLATE utf8mb4_unicode_ci FROM bike_production_vehicle p JOIN bike_vehicle v ON v.id=p.vehicle_id WHERE v.frame_sn=#{frameSn})
           OR business_id COLLATE utf8mb4_unicode_ci IN (SELECT p.id COLLATE utf8mb4_unicode_ci FROM bike_production_print p JOIN bike_vehicle v ON v.id=p.vehicle_id WHERE v.frame_sn=#{frameSn})
           OR business_id COLLATE utf8mb4_unicode_ci IN (SELECT i.id COLLATE utf8mb4_unicode_ci FROM bike_production_issue i WHERE i.code=#{frameSn} OR EXISTS(SELECT 1 FROM bike_vehicle_part_binding b WHERE b.frame_sn=#{frameSn} AND b.part_sn COLLATE utf8mb4_unicode_ci=i.code COLLATE utf8mb4_unicode_ci))
-        )) ORDER BY operation_time
+        ))) ORDER BY operation_time
     </select>
     <select id="selectStockInRecords" resultType="com.bike.server.trace.TraceStockInRecord">
         SELECT si.stock_in_no stock_in_no, w.warehouse_name, l.location_name, si.status, si.operation_time, si.cancel_reason
@@ -24,7 +24,7 @@
         SELECT so.stock_out_no stock_out_no, c.customer_name, o.order_no, so.status, so.operation_time, so.cancel_reason
         FROM bike_stock_out_record so JOIN bike_vehicle v ON v.id=so.vehicle_id
         JOIN bike_customer c ON c.id=so.customer_id JOIN bike_sales_order o ON o.id=so.order_id
-        WHERE v.frame_sn=#{frameSn} ORDER BY so.operation_time
+        WHERE v.frame_sn=#{frameSn} <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=so.customer_id)</if> ORDER BY so.operation_time
     </select>
     <select id="selectReworkRecords" resultType="com.bike.server.trace.TraceReworkRecord">
         SELECT r.rework_no, d.part_type, d.old_part_sn, d.new_part_sn, r.reason, r.status,
@@ -40,6 +40,8 @@
         JOIN bike_vehicle_part_binding b ON b.vehicle_id=v.id AND b.part_sn=#{partSn}
         JOIN bike_warehouse w ON w.id=si.warehouse_id
         JOIN bike_warehouse_location l ON l.id=si.location_id
+        <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/>
+        <if test="customerScopeUser != null">WHERE v.current_customer_id IS NULL OR EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=v.current_customer_id)</if>
         ORDER BY si.operation_time
     </select>
     <select id="selectStockOutRecordsByPart" resultType="com.bike.server.trace.TraceStockOutRecord">
@@ -49,15 +51,18 @@
         JOIN bike_vehicle_part_binding b ON b.vehicle_id=v.id AND b.part_sn=#{partSn}
         JOIN bike_customer c ON c.id=so.customer_id
         JOIN bike_sales_order o ON o.id=so.order_id
-        ORDER BY so.operation_time
+        WHERE 1=1 <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=so.customer_id)</if> ORDER BY so.operation_time
     </select>
     <select id="selectReworkRecordsByPart" resultType="com.bike.server.trace.TraceReworkRecord">
         SELECT r.rework_no, d.part_type, d.old_part_sn, d.new_part_sn, r.reason, r.status,
                COALESCE(u.display_name, '-') operator_name, r.operation_time
         FROM bike_rework_record r
         JOIN bike_rework_part_detail d ON d.rework_id=r.id
+        JOIN bike_vehicle v ON v.frame_sn=r.frame_sn
         LEFT JOIN bike_sys_user u ON u.id=r.operator_id
-        WHERE d.old_part_sn=#{partSn} OR d.new_part_sn=#{partSn}
+        WHERE (d.old_part_sn=#{partSn} OR d.new_part_sn=#{partSn})
+        <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/>
+        <if test="customerScopeUser != null">AND (v.current_customer_id IS NULL OR EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=v.current_customer_id))</if>
         ORDER BY r.operation_time
     </select>
 </mapper>

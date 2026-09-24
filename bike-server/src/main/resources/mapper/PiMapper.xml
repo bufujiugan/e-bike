@@ -2,7 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.bike.server.pi.PiMapper">
     <select id="selectCustomerOptions" resultType="map">
-        SELECT id,customer_code code,customer_name name FROM bike_customer WHERE status='ENABLED'
+        SELECT id,customer_code code,customer_name name FROM bike_customer WHERE status='ENABLED' <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=bike_customer.id)</if>
         <if test="keyword != null">AND (customer_code LIKE CONCAT('%',#{keyword},'%') OR customer_name LIKE CONCAT('%',#{keyword},'%'))</if>
         ORDER BY customer_code,id LIMIT 200
     </select>
@@ -23,7 +23,7 @@
                i.product_model_id modelId,i.ordered_qty quantity
         FROM bike_sales_order o JOIN bike_sales_order_item i ON i.order_id=o.id
         WHERE o.status IN ('DRAFT','PENDING','CONFIRMED') AND i.shipped_qty=0
-        AND NOT EXISTS(SELECT 1 FROM bike_pi p WHERE p.source_order_id=o.id)
+        AND NOT EXISTS(SELECT 1 FROM bike_pi p WHERE p.source_order_id=o.id) <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=o.customer_id)</if>
         <if test="keyword != null">AND o.order_no LIKE CONCAT('%',#{keyword},'%')</if>
         ORDER BY o.id DESC LIMIT 200
     </select>
@@ -41,7 +41,7 @@
         LEFT JOIN bike_order_reservation r ON r.order_id=o.id
     </sql>
     <sql id="where">
-        <where>
+        <where><bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=p.customer_id)</if>
             <if test="keyword != null and keyword != ''">
                 AND (p.pi_no LIKE CONCAT('%',#{keyword},'%') OR p.customer_name LIKE CONCAT('%',#{keyword},'%'))
             </if>

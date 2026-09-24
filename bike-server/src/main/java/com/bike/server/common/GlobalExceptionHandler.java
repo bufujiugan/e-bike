@@ -70,8 +70,8 @@ public class GlobalExceptionHandler {
     private static HttpStatus statusFor(String code) {
         return switch (code) {
             case "UNAUTHORIZED" -> HttpStatus.UNAUTHORIZED;
-            case "PERMISSION_DENIED", "FORBIDDEN", "WORKSTATION_FORBIDDEN", "PASSWORD_CHANGE_REQUIRED" -> HttpStatus.FORBIDDEN;
-            case "DATA_CONFLICT", "PART_ALREADY_BOUND", "INVENTORY_LOCK_CONFLICT" -> HttpStatus.CONFLICT;
+            case "CUSTOMER_SCOPE_DENIED", "PERMISSION_DENIED", "FORBIDDEN", "WORKSTATION_FORBIDDEN", "PASSWORD_CHANGE_REQUIRED" -> HttpStatus.FORBIDDEN;
+            case "CUSTOMER_SCOPE_CONFLICT", "DATA_CONFLICT", "PART_ALREADY_BOUND", "INVENTORY_LOCK_CONFLICT" -> HttpStatus.CONFLICT;
             default -> HttpStatus.BAD_REQUEST;
         };
     }

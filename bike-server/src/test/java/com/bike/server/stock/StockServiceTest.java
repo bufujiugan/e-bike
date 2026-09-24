@@ -30,7 +30,7 @@ class StockServiceTest {
     void stockOutRejectsDuplicateQrInOneBatch() {
         StockMapper stockMapper = Mockito.mock(StockMapper.class);
         OrderMapper orderMapper = Mockito.mock(OrderMapper.class);
-        StockService service = new StockServiceImpl(stockMapper, orderMapper);
+        StockService service = com.bike.server.common.CustomerScopeTestSupport.isolated(new StockServiceImpl(stockMapper, orderMapper));
 
         assertThatThrownBy(() -> service.stockOut(new StockOutRequest(1L, 1L, List.of("QR-1", "QR-1"))))
                 .isInstanceOf(com.bike.server.common.BusinessException.class)
@@ -46,7 +46,7 @@ class StockServiceTest {
         vehicle.setFrameSn("FRAME-1");
         vehicle.setStatus(1);
         Mockito.when(stockMapper.selectVehicleByQrForUpdate("QR-1")).thenReturn(vehicle);
-        StockService service = new StockServiceImpl(stockMapper, orderMapper);
+        StockService service = com.bike.server.common.CustomerScopeTestSupport.isolated(new StockServiceImpl(stockMapper, orderMapper));
 
         StockValidationResult result = service.validateStockOut(new StockValidationRequest("QR-1"));
 
@@ -72,7 +72,7 @@ class StockServiceTest {
         Mockito.when(stockMapper.selectVehicleByQrForUpdate("QR-1")).thenReturn(vehicle);
         Mockito.when(orderMapper.selectById(2L)).thenReturn(order);
 
-        StockValidationResult result = new StockServiceImpl(stockMapper, orderMapper)
+        StockValidationResult result = com.bike.server.common.CustomerScopeTestSupport.isolated(new StockServiceImpl(stockMapper, orderMapper))
                 .validateStockOut(new StockValidationRequest("QR-1", 1L, 2L));
 
         assertThat(result.valid()).isFalse();
@@ -88,7 +88,7 @@ class StockServiceTest {
         vehicle.setStatus(2);
         Mockito.when(stockMapper.selectVehicleByQrForUpdate("QR-1")).thenReturn(vehicle);
 
-        StockValidationResult result = new StockServiceImpl(stockMapper, orderMapper)
+        StockValidationResult result = com.bike.server.common.CustomerScopeTestSupport.isolated(new StockServiceImpl(stockMapper, orderMapper))
                 .validateStockOut(new StockValidationRequest("QR-1"));
 
         assertThat(result.valid()).isFalse();
@@ -108,7 +108,7 @@ class StockServiceTest {
         Mockito.when(stockMapper.selectVehicleByQrForUpdate("QR-1")).thenReturn(vehicle);
 
         BusinessException exception = org.junit.jupiter.api.Assertions.assertThrows(BusinessException.class,
-                () -> new StockServiceImpl(stockMapper, orderMapper)
+                () -> com.bike.server.common.CustomerScopeTestSupport.isolated(new StockServiceImpl(stockMapper, orderMapper))
                         .stockIn(new StockInRequest("QR-1", 1L, 1L)));
 
         assertThat(exception.getCode()).isEqualTo("VEHICLE_ALREADY_STOCKED_IN");
@@ -132,7 +132,7 @@ class StockServiceTest {
         Mockito.when(stockMapper.selectVehicleByQrForUpdate("QR-1")).thenReturn(vehicle);
 
         BusinessException exception = org.junit.jupiter.api.Assertions.assertThrows(BusinessException.class,
-                () -> new StockServiceImpl(stockMapper, orderMapper)
+                () -> com.bike.server.common.CustomerScopeTestSupport.isolated(new StockServiceImpl(stockMapper, orderMapper))
                         .stockOut(new StockOutRequest(1L, 2L, List.of("QR-1"))));
 
         assertThat(exception.getCode()).isEqualTo("VEHICLE_ALREADY_STOCKED_OUT");
@@ -150,7 +150,7 @@ class StockServiceTest {
         Mockito.when(orderMapper.selectForUpdate(2L)).thenReturn(order);
 
         BusinessException exception = org.junit.jupiter.api.Assertions.assertThrows(BusinessException.class,
-                () -> new StockServiceImpl(stockMapper, orderMapper)
+                () -> com.bike.server.common.CustomerScopeTestSupport.isolated(new StockServiceImpl(stockMapper, orderMapper))
                         .stockOut(new StockOutRequest(1L, 2L, List.of("QR-1"))));
 
         assertThat(exception.getCode()).isEqualTo("ORDER_CUSTOMER_MISMATCH");
@@ -177,7 +177,7 @@ class StockServiceTest {
         Mockito.when(stockMapper.selectVehicleByQrForUpdate("QR-1")).thenReturn(vehicle);
 
         BusinessException exception = org.junit.jupiter.api.Assertions.assertThrows(BusinessException.class,
-                () -> new StockServiceImpl(stockMapper, orderMapper)
+                () -> com.bike.server.common.CustomerScopeTestSupport.isolated(new StockServiceImpl(stockMapper, orderMapper))
                         .stockOut(new StockOutRequest(1L, 2L, List.of("QR-1"))));
 
         assertThat(exception.getCode()).isEqualTo("ORDER_MODEL_MISMATCH");
@@ -197,7 +197,7 @@ class StockServiceTest {
         Mockito.when(orderMapper.selectForUpdate(2L)).thenReturn(order);
 
         BusinessException exception = org.junit.jupiter.api.Assertions.assertThrows(BusinessException.class,
-                () -> new StockServiceImpl(stockMapper, orderMapper)
+                () -> com.bike.server.common.CustomerScopeTestSupport.isolated(new StockServiceImpl(stockMapper, orderMapper))
                         .stockOut(new StockOutRequest(1L, 2L, List.of("QR-1"))));
 
         assertThat(exception.getCode()).isEqualTo("ORDER_QTY_NOT_ENOUGH");
@@ -216,7 +216,7 @@ class StockServiceTest {
         Mockito.when(stockMapper.selectVehicleByQrForUpdate("QR-1")).thenReturn(vehicle);
 
         BusinessException exception = org.junit.jupiter.api.Assertions.assertThrows(BusinessException.class,
-                () -> new StockServiceImpl(stockMapper, orderMapper)
+                () -> com.bike.server.common.CustomerScopeTestSupport.isolated(new StockServiceImpl(stockMapper, orderMapper))
                         .stockIn(new StockInRequest("QR-1", 1L, 1L)));
 
         assertThat(exception.getCode()).isEqualTo("VEHICLE_NOT_ASSEMBLED");
@@ -239,7 +239,7 @@ class StockServiceTest {
         record.setStatus("COMPLETED");
         Mockito.when(stockMapper.selectStockInByNo(Mockito.anyString())).thenReturn(record);
 
-        StockRecordView result = new StockServiceImpl(stockMapper, orderMapper)
+        StockRecordView result = com.bike.server.common.CustomerScopeTestSupport.isolated(new StockServiceImpl(stockMapper, orderMapper))
                 .stockIn(new StockInRequest("QR-7", 10L, 20L));
 
         assertThat(result).isSameAs(record);
@@ -274,7 +274,7 @@ class StockServiceTest {
         record.setStatus("COMPLETED");
         Mockito.when(stockMapper.selectStockOutByNo(Mockito.anyString())).thenReturn(record);
 
-        StockRecordView result = new StockServiceImpl(stockMapper, orderMapper)
+        StockRecordView result = com.bike.server.common.CustomerScopeTestSupport.isolated(new StockServiceImpl(stockMapper, orderMapper))
                 .stockOut(new StockOutRequest(10L, 20L, List.of("QR-7")));
 
         assertThat(result).isSameAs(record);
@@ -310,7 +310,7 @@ class StockServiceTest {
         Mockito.when(stockMapper.selectVehicleByQrForUpdate("QR-8")).thenReturn(invalid);
         Mockito.when(stockMapper.updateVehicleStockOut(7L, 10L, 20L)).thenReturn(1);
 
-        assertThatThrownBy(() -> new StockServiceImpl(stockMapper, orderMapper)
+        assertThatThrownBy(() -> com.bike.server.common.CustomerScopeTestSupport.isolated(new StockServiceImpl(stockMapper, orderMapper))
                 .stockOut(new StockOutRequest(10L, 20L, List.of("QR-7", "QR-8"))))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("未入库");
@@ -332,7 +332,7 @@ class StockServiceTest {
         Mockito.when(stockMapper.cancelStockIn(4L, "盘点撤销", null)).thenReturn(1);
         Mockito.when(stockMapper.selectStockIn(4L)).thenReturn(record);
 
-        StockRecordView result = new StockServiceImpl(stockMapper, orderMapper).cancelStockIn(4L, "盘点撤销");
+        StockRecordView result = com.bike.server.common.CustomerScopeTestSupport.isolated(new StockServiceImpl(stockMapper, orderMapper)).cancelStockIn(4L, "盘点撤销");
 
         assertThat(result).isSameAs(record);
         Mockito.verify(stockMapper).insertOperationLog("STOCK_IN_CANCEL", "4", "撤销入库", "FRAME-1", null, "test-admin", "盘点撤销", null);
@@ -357,7 +357,7 @@ class StockServiceTest {
         Mockito.when(stockMapper.updateOrderStatusAfterCancel(2L, "CONFIRMED")).thenReturn(1);
         Mockito.when(stockMapper.selectStockOut(9L)).thenReturn(record);
 
-        StockRecordView result = new StockServiceImpl(stockMapper, orderMapper).cancelStockOut(9L, "撤销出库");
+        StockRecordView result = com.bike.server.common.CustomerScopeTestSupport.isolated(new StockServiceImpl(stockMapper, orderMapper)).cancelStockOut(9L, "撤销出库");
 
         assertThat(result).isSameAs(record);
         Mockito.verify(stockMapper).updateVehicleStockOutCancel(10L, 1L, "SO-2", 9L);
@@ -383,7 +383,7 @@ class StockServiceTest {
         Mockito.when(stockMapper.cancelStockOut(9L, "撤销出库", null)).thenReturn(1);
         Mockito.when(orderMapper.decreaseShipped(2L, 1)).thenReturn(0);
 
-        assertThatThrownBy(() -> new StockServiceImpl(stockMapper, orderMapper).cancelStockOut(9L, "撤销出库"))
+        assertThatThrownBy(() -> com.bike.server.common.CustomerScopeTestSupport.isolated(new StockServiceImpl(stockMapper, orderMapper)).cancelStockOut(9L, "撤销出库"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(BusinessException.class::cast)
                 .extracting(BusinessException::getCode)

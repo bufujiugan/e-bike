@@ -50,7 +50,7 @@ class CustomerProfileMysqlTest {
                 new XMLMapperBuilder(new ByteArrayInputStream(xml),config,"CustomerProfileMapper",config.getSqlFragments()).parse();
             }
             mapper=new SqlSessionTemplate(new SqlSessionFactoryBuilder().build(config)).getMapper(CustomerProfileMapper.class);
-            var target=new CustomerProfileService(mapper,logs,json,Validation.buildDefaultValidatorFactory().getValidator());
+            var target=com.bike.server.common.CustomerScopeTestSupport.isolated(new CustomerProfileService(mapper,logs,json,Validation.buildDefaultValidatorFactory().getValidator()));
             var proxy=new org.springframework.aop.framework.ProxyFactory(target);proxy.setProxyTargetClass(true);
             proxy.addAdvice(new org.springframework.transaction.interceptor.TransactionInterceptor(new DataSourceTransactionManager(source),new org.springframework.transaction.annotation.AnnotationTransactionAttributeSource()));
             service=(CustomerProfileService)proxy.getProxy();

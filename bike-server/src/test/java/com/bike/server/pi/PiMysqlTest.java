@@ -76,8 +76,8 @@ class PiMysqlTest {
     void auditFailureRollsBackFinancialWrite() throws Exception {
         try (var f = new Fixture()) {
             long id = f.confirmed();
-            PiServiceImpl failingAudit = new PiServiceImpl(f.mapper, mock(PiDocumentService.class),
-                    mock(OperationLogMapper.class), f.json, f.validation.getValidator(), f.coordinator);
+            PiServiceImpl failingAudit = com.bike.server.common.CustomerScopeTestSupport.isolated(new PiServiceImpl(f.mapper, mock(PiDocumentService.class),
+                    mock(OperationLogMapper.class), f.json, f.validation.getValidator(), f.coordinator));
             assertThatThrownBy(() -> f.transaction(() -> failingAudit.recordPayment(id, PiServiceTest.payment("rollback", "30.00"))))
                     .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getCode()).isEqualTo("PI_AUDIT_FAILED"));
             PiView saved = f.transaction(() -> f.service.get(id));
@@ -287,7 +287,7 @@ class PiMysqlTest {
             reservations = session.getMapper(OrderReservationMapper.class);
             guard = new ProductionGuard(session.getMapper(ProductionMapper.class));
             coordinator = new OrderReservationCoordinator(guard, reservations, logs, json);
-            reservationService = new OrderReservationService(orders, reservations, coordinator, mapper);
+            reservationService = com.bike.server.common.CustomerScopeTestSupport.isolated(new OrderReservationService(orders, reservations, coordinator, mapper));
             expiryJob = new OrderReservationExpiryJob(reservations, orders, guard);
             service = service(mapper);
             try {
@@ -340,7 +340,7 @@ class PiMysqlTest {
         }
 
         PiServiceImpl service(PiMapper selectedMapper) {
-            return new PiServiceImpl(selectedMapper, mock(PiDocumentService.class), logs, json, validation.getValidator(), coordinator);
+            return com.bike.server.common.CustomerScopeTestSupport.isolated(new PiServiceImpl(selectedMapper, mock(PiDocumentService.class), logs, json, validation.getValidator(), coordinator));
         }
 
         PiCreateRequest request(Long agentId, Long orderId) {

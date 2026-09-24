@@ -204,7 +204,7 @@ class SkuCommitmentMysqlTest {
             assertThat(number(summary,"lockedQty")).isEqualTo(2);
             assertThat(number(summary,"shortageQty")).isZero();
             assertThat(f.dashboard.selectInventorySummary()).isEqualTo(summary);
-            var page=f.tx(()->new com.bike.server.module.ModuleServiceImpl(f.modules).list("inventory"));
+            var page=f.tx(()->com.bike.server.common.CustomerScopeTestSupport.isolated(new com.bike.server.module.ModuleServiceImpl(f.modules)).list("inventory"));
             assertThat(page.columns()).endsWith("车型SKU缺口（不累计）","历史车型承诺（不累计）","车型可新增上限（不累计）");
             assertThat(page.rows()).hasSize(2).allSatisfy(row->assertThat(row.subList(12,15)).containsExactly("1","1","1"));
             assertThat(f.modules.selectRows("agent-inventory",9L,false)).hasSize(2)
@@ -283,18 +283,18 @@ class SkuCommitmentMysqlTest {
             dashboard=session.getMapper(com.bike.server.dashboard.DashboardMapper.class);
             guard=new ProductionGuard(session.getMapper(ProductionMapper.class));
             var json=new ObjectMapper().findAndRegisterModules();
-            locks=new SkuLockService(session.getMapper(SkuLockMapper.class),lockMapper,inventory,reservations,orders,guard,mock(SystemConfigMapper.class),json,validation.getValidator());
-            conversion=new LockOrderService(lockMapper,orders,reservations,guard);
+            locks=com.bike.server.common.CustomerScopeTestSupport.isolated(new SkuLockService(session.getMapper(SkuLockMapper.class),lockMapper,inventory,reservations,orders,guard,mock(SystemConfigMapper.class),json,validation.getValidator()));
+            conversion=com.bike.server.common.CustomerScopeTestSupport.isolated(new LockOrderService(lockMapper,orders,reservations,guard));
             ReflectionTestUtils.setField(conversion,"skuInventory",inventory);
             var skuGuard=new SkuInventoryGuard(inventory);
             var inventoryGuard=new OrderInventoryGuard(reservations);
             ReflectionTestUtils.setField(inventoryGuard,"skuInventoryGuard",skuGuard);
-            stock=new StockServiceImpl(stockMapper,orders);
+            stock=com.bike.server.common.CustomerScopeTestSupport.isolated(new StockServiceImpl(stockMapper,orders));
             ReflectionTestUtils.setField(stock,"productionGuard",guard);
             ReflectionTestUtils.setField(stock,"inventoryGuard",inventoryGuard);
             var coordinator=new OrderReservationCoordinator(guard,reservations,session.getMapper(OperationLogMapper.class),json);
             ReflectionTestUtils.setField(coordinator,"skuInventory",inventory);
-            renew=new OrderReservationService(orders,reservations,coordinator,mock(PiMapper.class));
+            renew=com.bike.server.common.CustomerScopeTestSupport.isolated(new OrderReservationService(orders,reservations,coordinator,mock(PiMapper.class)));
             ReflectionTestUtils.setField(renew,"skuInventoryGuard",skuGuard);
             try {
                 for(String ddl:List.of(
@@ -356,20 +356,20 @@ class SkuCommitmentMysqlTest {
                     var mapper=session.getMapper(com.bike.server.pi.PiMapper.class);
                     piSeries=session.getMapper(com.bike.server.pi.PiSeriesMapper.class);
                     ReflectionTestUtils.setField(coordinator,"series",piSeries);
-                    pis=new com.bike.server.pi.PiServiceImpl(mapper,mock(com.bike.server.pi.PiDocumentService.class),session.getMapper(OperationLogMapper.class),json,validation.getValidator(),coordinator);
+                    pis=com.bike.server.common.CustomerScopeTestSupport.isolated(new com.bike.server.pi.PiServiceImpl(mapper,mock(com.bike.server.pi.PiDocumentService.class),session.getMapper(OperationLogMapper.class),json,validation.getValidator(),coordinator));
                     ReflectionTestUtils.setField(pis,"series",piSeries);ReflectionTestUtils.setField(pis,"skuInventory",inventory);
                     ReflectionTestUtils.setField(pis,"quantityRevisions",new com.bike.server.pi.PiQuantityService(piSeries,
                             session.getMapper(com.bike.server.pi.PiQuantityMapper.class),inventory,reservations,orders,session.getMapper(OperationLogMapper.class),json,mapper));
                     ReflectionTestUtils.setField(pis,"fulfillmentOrders",orders);ReflectionTestUtils.setField(pis,"orderInventoryGuard",inventoryGuard);
-                    piConversion=new com.bike.server.pi.PiConversionService(lockMapper,conversion,pis,piSeries,guard,json,validation.getValidator());
+                    piConversion=com.bike.server.common.CustomerScopeTestSupport.isolated(new com.bike.server.pi.PiConversionService(lockMapper,conversion,pis,piSeries,guard,json,validation.getValidator()));
                     var gate=new com.bike.server.pi.PiShipmentGuard(session.getMapper(com.bike.server.pi.PiShipmentMapper.class));
                     ReflectionTestUtils.setField(gate,"series",piSeries);ReflectionTestUtils.setField(stock,"piShipmentGuard",gate);
                     dispatchMapper=session.getMapper(com.bike.server.pi.PiDispatchMapper.class);
                     var recorder=new com.bike.server.pi.PiDispatchRecorder(dispatchMapper);
                     ReflectionTestUtils.setField(stock,"dispatchRecorder",recorder);
-                    dispatch=new com.bike.server.pi.PiDispatchService(dispatchMapper,piSeries,recorder,stock,orders,guard,session.getMapper(OperationLogMapper.class),validation.getValidator(),json);
+                    dispatch=com.bike.server.common.CustomerScopeTestSupport.isolated(new com.bike.server.pi.PiDispatchService(dispatchMapper,piSeries,recorder,stock,orders,guard,session.getMapper(OperationLogMapper.class),validation.getValidator(),json));
                     logisticsMapper=session.getMapper(com.bike.server.pi.PiLogisticsMapper.class);
-                    logistics=new com.bike.server.pi.PiLogisticsService(logisticsMapper,mapper,piSeries,dispatchMapper,orders,guard,session.getMapper(OperationLogMapper.class),validation.getValidator(),json);
+                    logistics=com.bike.server.common.CustomerScopeTestSupport.isolated(new com.bike.server.pi.PiLogisticsService(logisticsMapper,mapper,piSeries,dispatchMapper,orders,guard,session.getMapper(OperationLogMapper.class),validation.getValidator(),json));
                     ReflectionTestUtils.setField(stock,"logistics",logisticsMapper);
                     ReflectionTestUtils.setField(pis,"logisticsMapper",logisticsMapper);ReflectionTestUtils.setField(pis,"logisticsService",logistics);
                 }

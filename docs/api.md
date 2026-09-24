@@ -234,3 +234,11 @@ POST `/api/pis/{id}/revisions` 请求requestId/expectedRevision/reason，内部P
 PUT `/api/pis/{id}` 对关联准确SKU订单的修订草稿允许原SKU内调整quantity；保存只记录草稿，不改变有效版本的库存。确认接口重新核对实际累计已发量与当前占用，按SKU总量稳定分配各子单差额。增加同时检查SKU与车型可用量，失败全部回滚；未到期的原截止与PAID保留语义不变，不自动恢复已释放或到期占用。
 
 非零子单同步调整SKU明细、订单数量与占用头；降为零且未发的子单保留原数量和来源链接，标记关闭/取消。原转换锁的converted_qty不减少或补增，PI_QUANTITY_REVISION审计记录新的差额来源。新修订仍需再次放行，不能降低到已发数量以下。新增/移除整个SKU尚不支持；无准确SKU占用的历史车型订单只支持保持原数量的商业条款修订。
+
+## 内部客户授权（V45）
+
+- GET `/api/customer-scopes/users`、GET `/api/customer-scopes/customers`：内部`CUSTOMER_SCOPE_MANAGE`；keyword/page/pageSize，服务端分页，最大100条。仅提供授权管理所需的账号/客户标识。
+- GET `/api/users/{id}/customer-scope`：返回userId/revision/customerIds/customers；目标只能为内部WEB_ADMIN/WEB_OPERATOR。
+- PUT同路径：请求`revision`、`customerIds`（最多5000个唯一正整数）、必填`reason`（最多500字）。父用户锁、名单、版本和审计同事务；旧版返回`CUSTOMER_SCOPE_CONFLICT`（409），审计失败回滚。
+
+业务功能权限与范围叠加。`CUSTOMER_SCOPE_ALL`或SUPER_ADMIN为全范围，迁移不向既有普通岗位自动分配；`CUSTOMER_ALL`仅为可显式分配的范围角色。逐客户账号在PI/订单/锁定/客户主资料列表、选择器、直接ID、写操作、附件、导出、真实批次和相关追溯入口受限，拒绝返回`CUSTOMER_SCOPE_DENIED`（403）。全局自由文本审计对逐客户账号隐藏，售后继续使用独立公司范围。撤权对同令牌的下次请求生效；已授权业务写事务与撤权通过用户行读写锁排序。

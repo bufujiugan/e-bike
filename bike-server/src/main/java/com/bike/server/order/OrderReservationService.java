@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class OrderReservationService {
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.common.CustomerScopeAccess customerScope;
     private final OrderMapper orders;
     private final OrderReservationMapper reservations;
     private final OrderReservationCoordinator coordinator;
@@ -30,6 +31,7 @@ public class OrderReservationService {
         coordinator.lockInventory();
         SalesOrderView order = orders.selectForUpdate(id);
         if (order == null) throw new BusinessException("ORDER_NOT_FOUND", "订单不存在");
+        customerScope.requireCustomer(order.getCustomerId());
         if (java.util.Set.of("CANCELLED", "CLOSED").contains(order.getStatus())) {
             throw new BusinessException("INVALID_STATUS_TRANSITION", "已关闭订单不能重新占用或关闭");
         }

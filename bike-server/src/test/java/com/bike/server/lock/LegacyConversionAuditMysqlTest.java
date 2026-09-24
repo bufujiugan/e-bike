@@ -17,6 +17,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 /** 只读旧转换对账查询的真实 SQL 验证，使用随机前缀表并在 finally 清理。 */
 @EnabledIfEnvironmentVariable(named="BIKE_MYSQL_TEST_URL", matches=".+")
 class LegacyConversionAuditMysqlTest {
+    @org.junit.jupiter.api.BeforeEach void explicitCustomerScope() {
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(new org.springframework.security.authentication.UsernamePasswordAuthenticationToken("full-scope-reader",null,java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("PERM_CUSTOMER_SCOPE_ALL"))));
+    }
+    @org.junit.jupiter.api.AfterEach void clearCustomerScope(){org.springframework.security.core.context.SecurityContextHolder.clearContext();}
+
     @Test void listsOnlyConvertedLocksWithoutRealReservation() throws Exception {
         var source=new UnpooledDataSource("com.mysql.cj.jdbc.Driver",System.getenv("BIKE_MYSQL_TEST_URL"),System.getenv("BIKE_MYSQL_TEST_USER"),System.getenv("BIKE_MYSQL_TEST_PASSWORD"));
         var config=new Configuration(new Environment("legacy-audit",new JdbcTransactionFactory(),source));

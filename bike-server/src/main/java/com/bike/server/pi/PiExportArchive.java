@@ -18,6 +18,7 @@ public class PiExportArchive {
     private final ObjectMapper json;
     private final OperationLogMapper logs;
     @org.springframework.beans.factory.annotation.Autowired private PiTemplateMapper templates;
+    @org.springframework.beans.factory.annotation.Autowired private CustomerScopeAccess customerScope;
     public PiExportArchive(PiExportMapper mapper,PiMapper pis,ProductionFileStore files,ObjectMapper json,OperationLogMapper logs) {
         this.mapper=mapper;this.pis=pis;this.files=files;this.json=json;this.logs=logs;
     }
@@ -51,6 +52,7 @@ public class PiExportArchive {
         CurrentOperator.requireInternalWebAccess();CurrentOperator.requirePermission("PI_EXPORT");
         if(pis.lockPi(id)==null)throw new BusinessException("PI_NOT_FOUND","PI不存在");
         var pi=pis.selectById(id);var current=mapper.get(id);
+        customerScope.requireCustomer(pi.getCustomerId());
         if(!Set.of("CONFIRMED","RELEASED","SUPERSEDED").contains(pi.getStatus()))throw new BusinessException("PI_EXPORT_STATUS_INVALID","仅已发布PI可建立导出归档");
         if(current==null) {
             if(request.revision()!=0)throw conflict();

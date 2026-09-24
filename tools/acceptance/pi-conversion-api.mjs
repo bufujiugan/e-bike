@@ -10,7 +10,7 @@ assert(['127.0.0.1', 'localhost', '[::1]'].includes(new URL(base).hostname), '�
 const prefix = `PIC${Date.now().toString(36).toUpperCase()}`;
 const evidence = { prefix, startedAt: new Date().toISOString(), layer: 'HTTP', browserVerified: false, checks: [], fixtures: {}, cleanupFailures: [] };
 const accounts = [], roles = [], stations = [], locksToRelease = new Set(), ordersToCancel = new Set();
-let admin;
+let admin, scopeCustomer;
 async function req(path, body, { method = body === undefined ? 'GET' : 'POST', token = admin, code = 'SUCCESS' } = {}) {
   const response = await fetch(base + path, { method, signal: AbortSignal.timeout(30000), headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
   const result = await response.json();
@@ -24,7 +24,7 @@ async function uploadFile(path, bytes, { token = admin, requestId = randomUUID()
   const response = await fetch(base + path, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form, signal: AbortSignal.timeout(30000) });
   const result = await response.json(); assert.equal(result.code, code, `${path}: ${response.status} ${result.code} ${result.message}`); assert.equal(response.ok, code === 'SUCCESS'); return result.data;
 }
-async function account(suffix, codes, agentId = null, workstationId = null) {
+async function account(suffix, codes, agentId = null, workstationId = null, customerIds = [scopeCustomer]) {
   const permissions = await req('/api/roles/permissions');
   const role = await req('/api/roles', { roleCode: prefix + suffix, roleName: `SKU验收${suffix}` });
   roles.push(role.id);
@@ -32,6 +32,7 @@ async function account(suffix, codes, agentId = null, workstationId = null) {
   const initial = randomBytes(24).toString('hex'), password = randomBytes(24).toString('hex'), username = prefix + suffix;
   const user = await req('/api/users', { username, password: initial, displayName: 'SKU隔离验收', userType: agentId ? 'AGENT' : 'WEB_OPERATOR', agentId, workstationId });
   accounts.push({ id: user.id, username, password });
+  if (!agentId) await req(`/api/users/${user.id}/customer-scope`, { revision: 0, customerIds, reason: '隔离验收明确客户授权' }, { method: 'PUT' });
   await req(`/api/users/${user.id}/roles`, { roleIds: [role.id] }, { method: 'PUT' });
   const first = await req('/api/auth/login', { username, password: initial }, { token: null });
   await req('/api/auth/password', { currentPassword: initial, newPassword: password }, { method: 'PUT', token: first.accessToken });
@@ -50,7 +51,8 @@ try {
   assert.equal(login.mustChangePassword, false); admin = login.accessToken;
   const master = (type, suffix) => req(`/api/master/${type}`, { code: prefix + suffix, name: prefix + suffix });
   const secondModel = await master('models', 'M2');
-  const model = await master('models', 'M'), customer = await master('customers', 'C'), otherCustomer = await master('customers', 'C2'), agent = await master('agents', 'A');
+  const model = await master('models', 'M'), customer = await master('customers', 'CA'), otherCustomer = await master('customers', 'CB'), agent = await master('agents', 'A');
+  scopeCustomer = customer.id;
   const warehouse = await master('warehouses', 'W');
   const location = await req(`/api/master/warehouses/${warehouse.id}/locations`, { code: prefix + 'L', name: 'SKU验收库位' });
   const template = (await req('/api/production/templates'))[0]; assert(template);
@@ -62,12 +64,12 @@ try {
   const [red, blue] = skus; assert(red && blue);
   const imageBytes = await readFile(new URL('./fixtures/after-sales/fault.png', import.meta.url));
   const productImage = await uploadFile(`/api/production/skus/${red.id}/images`, imageBytes);
-  const sales = await account('SALES', ['PI_READ', 'PI_WRITE', 'PI_EXPORT', 'AGENT_LOCK_WRITE', 'ORDER_READ', 'ORDER_WRITE', 'INVENTORY_READ']);
+  const sales = await account('SALES', ['PI_READ', 'PI_WRITE', 'PI_EXPORT', 'AGENT_LOCK_WRITE', 'ORDER_READ', 'ORDER_WRITE', 'INVENTORY_READ', 'MASTER_READ', 'DATA_EXPORT', 'STOCK_READ', 'VEHICLE_READ', 'TRACE_READ']);
   for (const type of ['STOCK_IN', 'STOCK_OUT']) stations.push(await req('/api/workstations', { workstationCode: prefix + type, workstationName: 'SKU验收' + type, workstationType: type }));
-  const warehouseOperator = await account('WAREHOUSE', ['STOCK_OUT_OPERATE', 'ORDER_READ', 'INVENTORY_READ', 'TRACE_READ'], null, stations[1].id);
+  const warehouseOperator = await account('WAREHOUSE', ['STOCK_OUT_OPERATE', 'ORDER_READ', 'INVENTORY_READ', 'TRACE_READ', 'CUSTOMER_SCOPE_ALL'], null, stations[1].id);
   const inboundOperator = await account('INBOUND', ['STOCK_IN_OPERATE', 'INVENTORY_READ'], null, stations[0].id);
   const reader = await account('READER', ['PI_READ', 'INVENTORY_READ']);
-  const finance = await account('FINANCE', ['PI_READ', 'PI_PAYMENT_CONFIRM', 'PI_RELEASE']);
+  const finance = await account('FINANCE', ['PI_READ', 'PI_PAYMENT_CONFIRM', 'PI_RELEASE', 'CUSTOMER_SCOPE_ALL']);
   const logisticsOperator = await account('LOGISTICS', ['PI_READ', 'PI_LOGISTICS_WRITE']);
   const external = await account('AGENT', ['PI_READ', 'PI_WRITE', 'PI_EXPORT', 'PI_TEMPLATE_MANAGE', 'PI_PAYMENT_REVERSE', 'AGENT_INVENTORY_READ', 'AGENT_LOCK_WRITE', 'ORDER_WRITE', 'ORDER_READ'], agent.id);
   const paymentCorrector = await account('CORRECTOR', ['PI_READ', 'PI_PAYMENT_REVERSE']);
@@ -100,7 +102,7 @@ try {
   sourceLocks.forEach(l => locksToRelease.add(l.id));
   const choices = await req(`/api/pis/lock-options?customerId=${customer.id}&agentId=${agent.id}&keyword=${prefix}`, undefined, { token: sales });
   assert.equal(choices.total, 2);
-  assert.equal((await req(`/api/pis/lock-options?customerId=${otherCustomer.id}&agentId=${agent.id}`, undefined, { token: sales })).total, 0);
+  await req(`/api/pis/lock-options?customerId=${otherCustomer.id}&agentId=${agent.id}`, undefined, { token: sales, code: 'CUSTOMER_SCOPE_DENIED' });
   const body = { requestId: randomUUID(), sources: sourceLocks.map(l => ({ lockId: l.id, quantity: 1 })), pi: {
     customerId: customer.id, agentId: agent.id, tradeType: 'DOMESTIC', currencyCode: 'CNY', depositRequiredAmount: '50.00', shipmentRequiredAmount: '200.00',
     document: await createPiDocument(req, prefix, { sellerName: '隔离测试卖方', paymentTerms: '50元保留/200元发货', deliveryTerms: '测试仓库交付', templateCode: 'ACCEPTANCE', templateVersion: '1' }),
@@ -118,7 +120,7 @@ try {
   await req('/api/pis/from-locks', body, { token: reader, code: 'PERMISSION_DENIED' });
   await req('/api/pis/from-locks', body, { token: external, code: 'FORBIDDEN' });
   await req(`/api/pis/lock-options?customerId=${customer.id}`, undefined, { token: external, code: 'FORBIDDEN' });
-  await req('/api/pis/from-locks', { ...body, pi: { ...body.pi, customerId: otherCustomer.id } }, { token: sales, code: 'LOCK_CUSTOMER_MISMATCH' });
+  await req('/api/pis/from-locks', { ...body, pi: { ...body.pi, customerId: otherCustomer.id } }, { token: sales, code: 'CUSTOMER_SCOPE_DENIED' });
   await req('/api/pis/from-locks', { ...body, pi: { ...body.pi, depositRequiredAmount: '999.00' } }, { token: sales, code: 'AMOUNT_INVALID' });
   for (const l of sourceLocks) { const saved = await req(`/api/inventory-locks/by-no/${l.lockNo}`, undefined, { token: sales }); assert.equal(saved.convertedQty, 0); }
   pass('普通岗位按客户代理查可用锁定，权限与跨客户拒绝，后置PI金额失败全部撤回转换');
@@ -379,6 +381,86 @@ try {
   const originalLock = await req(`/api/inventory-locks/by-no/${sourceLocks[0].lockNo}`, undefined, { token: sales }); assert.equal(originalLock.convertedQty, 1);
   assert.equal((await req(`/api/pis/${addedAgain.id}`, undefined, { token: finance })).paidAmount, '200.00');
   pass('同SKU数量草稿不改变占用，确认才原子加减；库存不足整单拒绝，已发数量为下限，普通仓管按新增数量完成实际出库，来源锁定历史与收款保持');
+  const scopeB = await account('SCOPE_B', ['PI_READ','PI_WRITE','PI_EXPORT','PI_PAYMENT_CONFIRM','PI_PAYMENT_REVERSE','PI_RELEASE','PI_LOGISTICS_WRITE','ORDER_READ','ORDER_WRITE','AGENT_LOCK_WRITE','AGENT_INVENTORY_READ','MASTER_READ','CUSTOMER_PROFILE_WRITE','DATA_EXPORT','STOCK_READ','INVENTORY_READ','VEHICLE_READ','TRACE_READ','STOCK_OUT_OPERATE'], null, stations[1].id, [otherCustomer.id]);
+  const scopeAUser = accounts.find(a => a.username === prefix + 'SALES');
+  const piBBody = { ...body.pi, customerId: otherCustomer.id, agentId: null, sourceOrderId: null };
+  const piB = await req('/api/pis', piBBody, { token: scopeB });
+  for (const [token, customerId, hiddenCustomer, visiblePi, hiddenPi] of [[sales, customer.id, otherCustomer.id, addedAgain.id, piB.id], [scopeB, otherCustomer.id, customer.id, piB.id, addedAgain.id]]) {
+    const list = await req('/api/pis?pageSize=100', undefined, { token });
+    assert(list.records.length > 0 && list.records.every(p => p.customerId === customerId));
+    assert.equal((await req(`/api/pis?keyword=${encodeURIComponent(hiddenCustomer === customer.id ? customer.name : otherCustomer.name)}`, undefined, { token })).total, 0);
+    assert.equal((await req(`/api/pis/${visiblePi}`, undefined, { token })).customerId, customerId);
+    await req(`/api/pis/${hiddenPi}`, undefined, { token, code: 'CUSTOMER_SCOPE_DENIED' });
+    const options = await req('/api/pis/options', undefined, { token });assert(options.customers.every(c => c.id === customerId));
+    const masters = await req('/api/master/customers', undefined, { token });assert.deepEqual(masters.map(c => c.id), [customerId]);
+    const module = await req('/api/modules/customers?pageSize=100', undefined, { token });assert.equal(module.total, 1);
+    await req(`/api/master/customers/${hiddenCustomer}/profile`, undefined, { token, code: 'CUSTOMER_SCOPE_DENIED' });
+  }
+  assert((await req('/api/pis?pageSize=100', undefined, { token: finance })).records.some(p => p.id === piB.id));
+  pass('两名普通销售各见自己的客户、PI和选择器；列表总数与客户主档搜索隔离，显式全范围财务可跨客户');
+  const currentA = await req(`/api/pis/${addedAgain.id}`);
+  const payment = currentA.payments.find(p => p.status === 'CONFIRMED'), actualLogistics = currentA.logistics[0], actualBatch = currentA.dispatchBatches[0];
+  assert(payment && actualLogistics && actualBatch);
+  const scopeReceiptPath = `/api/pis/${payment.piId || pi.id}/payments/${payment.id}/attachments`;
+  const proof = await uploadFile(scopeReceiptPath, imageBytes, { token: finance });
+  const readBypasses = [
+    `/api/pis/${pi.id}/revisions`, `/api/pis/${pi.id}/export-task`, `/api/pis/${pi.id}/export.pdf`, `/api/pis/${pi.id}/export.xlsx`,
+    `/api/pis/${pi.id}/items/${imageItem.id}/image`, attachmentPath, `${attachmentPath}/${attachments[0].id}/download`,
+    scopeReceiptPath, `${scopeReceiptPath}/${proof.id}/download`,
+    `/api/pis/${pi.id}/logistics/${actualLogistics.id}/history`, `/api/pis/${pi.id}/logistics/${actualLogistics.id}/attachments`,
+    `/api/pis/${pi.id}/dispatch-batches/${actualBatch.id}`, `/api/pi-dispatch/batches/${actualBatch.id}`,
+    `/api/pi-dispatch/${addedAgain.id}`, `/api/orders/${reds.orderId}`, `/api/orders/by-no/${encodeURIComponent(reds.orderNo)}`,
+    `/api/inventory-locks/by-no/${encodeURIComponent(sourceLocks[0].lockNo)}`,
+    `/api/inventory-locks/${sourceLocks[0].id}/orders`, `/api/orders/stock-out-options?customerId=${customer.id}`
+  ];
+  for(const path of readBypasses)await req(path, undefined, { token: scopeB, code: 'CUSTOMER_SCOPE_DENIED' });
+  const writes = [
+    [`/api/pis/${pi.id}/confirm`, {}], [`/api/pis/${pi.id}/cancel`, { reason: '越权验收' }],
+    [`/api/pis/${pi.id}/payments`, { requestId: randomUUID(), amount: '1.00', currencyCode: 'CNY' }],
+    [`/api/pis/${pi.id}/release`, { reason: '越权验收' }],
+    [`/api/pis/${pi.id}/revisions`, { requestId: randomUUID(), expectedRevision: 1, reason: '越权验收' }],
+    [`/api/orders/${reds.orderId}/cancel?reason=越权验收`, {}],
+    [`/api/inventory-locks/${sourceLocks[0].id}/release?reason=越权验收`, {}]
+  ];
+  for(const [path, payload] of writes)await req(path, payload, { token: scopeB, code: 'CUSTOMER_SCOPE_DENIED' });
+  await uploadFile(scopeReceiptPath, imageBytes, { token: scopeB, code: 'CUSTOMER_SCOPE_DENIED' });
+  await uploadFile(attachmentPath, imageBytes, { token: scopeB, code: 'CUSTOMER_SCOPE_DENIED' });
+  assert.equal((await req(`/api/modules/orders?keyword=${encodeURIComponent(reds.orderNo)}`, undefined, { token: scopeB })).total, 0);
+  assert.equal((await req(`/api/orders?keyword=${encodeURIComponent(reds.orderNo)}`, undefined, { token: scopeB })).total, 0);
+  assert.equal((await req(`/api/modules/inventory-locks?keyword=${encodeURIComponent(sourceLocks[0].lockNo)}`, undefined, { token: scopeB })).total, 0);
+  const vehicleId = currentA.dispatchBatches.length ? (await req(`/api/pi-dispatch/batches/${actualBatch.id}`, undefined, { token: warehouseOperator })).vehicles[0].vehicleId : null;
+  await req(`/api/vehicles/${vehicleId}`, undefined, { token: scopeB, code: 'CUSTOMER_SCOPE_DENIED' });
+  const hiddenVehicle = await req(`/api/vehicles/${vehicleId}`);
+  await req(`/api/trace/frame/${encodeURIComponent(hiddenVehicle.frameSn)}`, undefined, { token: scopeB, code: 'VEHICLE_NOT_FOUND' });
+  await req(`/api/trace/qr/${encodeURIComponent(hiddenVehicle.vehicleQrCode)}`, undefined, { token: scopeB, code: 'VEHICLE_NOT_FOUND' });
+  if(hiddenVehicle.motorSn)await req(`/api/trace/part/${encodeURIComponent(hiddenVehicle.motorSn)}`, undefined, { token: scopeB, code: 'VEHICLE_NOT_FOUND' });
+  for(const module of ['vehicles','stock-out','customs','trace','logs']) {
+    const result = await req(`/api/modules/${module}?keyword=${encodeURIComponent(customer.name)}`, undefined, { token: scopeB, code: 'SUCCESS' });
+    assert.equal(result.total, 0);
+  }
+  const scopeExported = await fetch(`${base}/api/export/orders?keyword=${encodeURIComponent(reds.orderNo)}`, { headers: { Authorization: `Bearer ${scopeB}` } });
+  assert.equal(scopeExported.status, 200);assert((await scopeExported.arrayBuffer()).byteLength > 100);
+  pass('PI修订、导出文件和任务、商品图片、确认附件、收款凭证、物流历史、批次、订单与库存锁直接ID及写入口拒绝跨客户访问');
+  const scopeManager = await account('SCOPE_MANAGER', ['CUSTOMER_SCOPE_MANAGE','PI_READ'], null, null, []);
+  const scopedUsers = await req(`/api/customer-scopes/users?keyword=${encodeURIComponent(scopeAUser.username)}&pageSize=1`, undefined, { token: scopeManager });
+  assert.equal(scopedUsers.total, 1);assert.equal(scopedUsers.records[0].id, scopeAUser.id);
+  const customerOptions = await req(`/api/customer-scopes/customers?keyword=${encodeURIComponent(prefix)}&pageSize=1&page=2`, undefined, { token: scopeManager });
+  assert.equal(customerOptions.total, 2);assert.equal(customerOptions.records.length, 1);
+  await req('/api/customer-scopes/users', undefined, { token: sales, code: 'PERMISSION_DENIED' });
+  await req('/api/customer-scopes/customers', undefined, { token: sales, code: 'PERMISSION_DENIED' });
+  await req(`/api/pis/${addedAgain.id}`, undefined, { token: scopeManager, code: 'CUSTOMER_SCOPE_DENIED' });
+  const aScope = await req(`/api/users/${scopeAUser.id}/customer-scope`, undefined, { token: scopeManager });
+  assert.deepEqual(aScope.customers.map(c => c.id), [customer.id]);
+  pass('独立客户授权管理员可分页查找内部账号和客户、读取现有授权；没有获得销售业务资料的读取范围');
+  await req(`/api/users/${scopeAUser.id}/customer-scope`, { revision: aScope.revision, customerIds: [], reason: '撤权验收' }, { method: 'PUT', token: sales, code: 'PERMISSION_DENIED' });
+  await req(`/api/users/${scopeAUser.id}/customer-scope`, { revision: aScope.revision, customerIds: [], reason: '撤权验收' }, { method: 'PUT', token: scopeManager });
+  await req(`/api/users/${scopeAUser.id}/customer-scope`, { revision: aScope.revision, customerIds: [customer.id], reason: '旧版本不得覆盖' }, { method: 'PUT', token: scopeManager, code: 'CUSTOMER_SCOPE_CONFLICT' });
+  assert.equal((await req('/api/pis?pageSize=100', undefined, { token: sales })).total, 0);
+  await req(`/api/pis/${addedAgain.id}`, undefined, { token: sales, code: 'CUSTOMER_SCOPE_DENIED' });
+  assert.deepEqual(await req('/api/master/customers', undefined, { token: sales }), []);
+  assert.equal((await req(`/api/pis/${piB.id}`, undefined, { token: scopeB })).customerId, otherCustomer.id);
+  await req(`/api/pis/${piB.id}/cancel`, { reason: '结束第二客户范围验收' }, { token: scopeB });
+  pass('授权需独立管理权限，版本冲突拒绝覆盖；撤权后原令牌下次请求立即失效且另一销售不受影响');
 } catch (error) { evidence.error = error.stack || error.message; console.error(error); process.exitCode = 1; }
 finally {
   for (const id of ordersToCancel) try { await req(`/api/orders/${id}/cancel?reason=SKU验收结束清理未完成订单`, {}); } catch(error) { evidence.cleanupFailures.push({ orderId: id, error: error.message }); }
