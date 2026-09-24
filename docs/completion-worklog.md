@@ -481,3 +481,17 @@ batch36-targeted.log 17项通过；batch36-full-verify.log初版410项全量通�
 batch36-seller-http.json/.log 24组全部通过，cleanupFailures为空。普通岗位原链路、新卖方字段捕获/篡改拒绝、新模板不覆盖旧PI/归档、V2新发布拒绝均通过。API18182运行acceptance-batch36-runtime.jar，SHA256 BA0CBB098B303F1303C29B521F5BE5622468E48E6D515EAA4F0A483D5859BA43，health UP、V46应用成功。V46四镜像SHA256 2E420F805163A9E484733AA4BF390439D7DF620C0931E6011CADDE9924FFA1F5，已冻结。
 
 batch36-preview保留内外销PDF各2页、XLSX及LibreOffice打印预览各3页；中文卖方四字段、金额、表头/页码可读，无截断。Excel延续原重复表头，末页保留条款尾部，不作为正式业务样单签认。未进行普通岗位浏览器验收。本批是实施专项与回归，全项目最终两轮仍为0轮，未推送GitHub；附件格式/容量/批量、新增/移除SKU、客户转移和正式交付仍待完成。
+
+## 批次37：生产与PI附件格式、容量和逐项批量上传（2026-09-24）
+
+统一实际文件校验：JPG/PNG/WebP图片20MiB，PDF/XLSX文档50MiB；图片解码和像素边界、PDF页数/加密检查、XLSX展开容量/CRC/路径/XML结构与宏拦截。原上传流只读一次，经受限临时文件计算SHA256；对象写入后验证实际内容再关联业务。生产图片增加文件名、摘要及幂等请求，旧未知摘要保持NULL；收款凭证补摘要下载、每笔50附件上限及撤回后原请求幂等。PI商品WebP图片可进入PDF/Excel且图片接口返回正确MIME。
+
+五个业务上传入口支持每批1至20文件，每项独立事务返回结果；Web/H5队列显示每文件进度、失败原因及原请求重试。异常图片区域显示对应异常编号，并在上传期间禁止另建异常。客户授权和财务/物流/生产权限继续校验，INTERNAL文件不对客户开放。上传审计失败回滚关联并清理对象；进程中断或清理失败的持久化待核对清单仍待实现。
+
+初始专项暴露测试请求ID含非法点号、SQL注释分号被fixture误切分、测试修改了原Multipart字节，均修正测试并保留失败日志。batch37-storage-recheck.log 28项通过。batch37-full-verify.log 422项通过后复核发现PI图片接口仍以JPEG标记WebP，修复并增加MIME检查；当前依据batch37-final-full-verify.log，422项全量通过，0失败/错误/跳过，包含全新b37final空库及升级库。batch37-final-web-build.log和batch37-final-h5-build.log均类型检查/构建通过；Web主包1703.39KB体积告警保留。未启动此前被拒绝的Web/H5服务，未做浏览器验收。
+
+batch37-files-http.json/.log共28组真实HTTP全部通过，cleanupFailures为空。新增普通生产岗位WebP逐字节下载、20文件批次幂等与第21项整批拒绝、PI商品图与归档、确认/物流/凭证WebP和XLSX混合批次单项失败重试、撤回后重试，以及5MiB/20MiB合法PNG与50MiB合法PDF上传下载和超限拒绝。下载校验MIME、长度、原字节和SHA256；客户不能访问内部大文件。未执行20份50MiB文件同时上传的1GiB压力验收。
+
+API18182运行acceptance-batch37-runtime.jar，SHA256 2F9CD5163723FECBDE2BBD60ED29C9E6ADF909862D6CF9072DD97509DB09892D，health UP、bike_schema_history确认V47成功。最初查询误用默认flyway_schema_history导致表不存在，按项目配置bike_schema_history核实，不是迁移失败。V47四镜像SHA256 A997A6AC65D77B499758472F9362A3EBCC0F8C8C3F7DDAD8FF916CA3F6162934并冻结。
+
+COS私有桶短时授权、绑定失败持久化待核对、PI新增/移除SKU与客户转移、普通岗位浏览器和正式交付仍待完成或验证。本批为实施回归，全项目最终两轮仍为0轮，未推送GitHub。

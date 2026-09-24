@@ -35,4 +35,9 @@ public class PiReceiptAttachmentController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(file.fileName(), StandardCharsets.UTF_8).build().toString())
                 .contentType(MediaType.parseMediaType(file.contentType())).contentLength(file.size()).body(file.resource());
     }
+    @PostMapping(value="/batch",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<?> batch(@PathVariable long piId,@PathVariable long paymentId,@RequestParam List<String> requestIds,
+            @RequestPart("files") List<MultipartFile> files,MultipartHttpServletRequest request) {
+        return ApiResponse.success(com.bike.server.common.AttachmentBatch.upload(requestIds,files,request,(key,file)->service.upload(piId,paymentId,key,file)));
+    }
 }

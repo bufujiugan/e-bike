@@ -168,7 +168,7 @@ try {
   ]) await upload(endpoint, [invalid], { token: finance.token, code: 'ATTACHMENT_CONTENT_INVALID' });
   await upload(endpoint, [{ name: 'video.mp4', type: 'video/mp4', bytes: Buffer.from('fake video') }], { token: finance.token, code: 'ATTACHMENT_TYPE_UNSUPPORTED' });
   await upload(endpoint, [{ ...png, name: '../proof.png' }], { token: finance.token, code: 'ATTACHMENT_NAME_INVALID' });
-  await upload(endpoint, [{ ...png, name: 'large.png', bytes: Buffer.alloc(10 * 1024 * 1024 + 1, 65) }], { token: finance.token, code: 'ATTACHMENT_SIZE_INVALID' });
+  await upload(endpoint, [{ ...png, name: 'large.png', bytes: Buffer.alloc(20 * 1024 * 1024 + 1, 65) }], { token: finance.token, code: 'ATTACHMENT_SIZE_INVALID' });
   for (const part of ['file', 'extra']) await upload(endpoint, [png, { part, name: 'bad.pdf', type: 'application/pdf', bytes: Buffer.from('fake') }], { token: finance.token, code: 'INVALID_PARAMETER' });
   assert.equal((await request(endpoint, undefined, { token: finance.token })).length, 3);
   assert.deepEqual(await request(`/api/pis/${current.id}`, undefined, { token: finance.token }), current.before);

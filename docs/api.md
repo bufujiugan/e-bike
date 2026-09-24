@@ -209,7 +209,7 @@ H5 使用该接口，可搜索、翻页，翻页保留已选订单；切换客�
 
 - `GET /api/pis/{id}/items/{itemId}/image`：原PI读取范围、图片归属及哈希校验，no-store/nosniff。
 - `GET /api/pis/{id}/confirmation-attachments`：内部可见全部，客户只可见CUSTOMER，原PI公司范围仍生效。
-- `POST /api/pis/{id}/confirmation-attachments`：multipart file/requestId/visibility，内部PI_READ+PI_WRITE，仅DRAFT/CONFIRMED/RELEASED，每修订50个，每个10MB，真实JPG/PNG/PDF。幂等重复不得改变内容或可见性，元数据及审计同事务，失败清理对象。
+- `POST /api/pis/{id}/confirmation-attachments`：multipart file/requestId/visibility，内部PI_READ+PI_WRITE，仅DRAFT/CONFIRMED/RELEASED，每修订50个，图片JPG/PNG/WebP最大20MB、文档PDF/XLSX最大50MB。幂等重复不得改变内容或可见性，元数据及审计同事务，失败清理对象。批量入口见V47说明。
 - `GET /api/pis/{id}/confirmation-attachments/{attachmentId}/download`：同范围/可见性及SHA256检查，以附件下载并设置no-store/nosniff/CSP。附件只追加，新修订不复制旧确认附件。
 
 ## 客户商务资料及PI带入（V42）
@@ -232,12 +232,12 @@ H5 使用该接口，可搜索、翻页，翻页保留已选订单；切换客�
 
 GET/POST `/api/pis/{piId}/logistics/{logisticsId}/attachments` 查询/上传，GET `.../{attachmentId}/download` 下载。先验证原PI访问范围及物流记录确属该系列；上传必须内部PI_READ+PI_LOGISTICS_WRITE。客户仅可读CUSTOMER，INTERNAL仅内部可见。
 
-multipart file/requestId/visibility；真实JPG/PNG/PDF、10MB、每物流50个。物流父行锁和READ_COMMITTED保护状态、限额及幂等；同请求不同内容拒绝。PLANNED/SHIPPED允许新增，WITHDRAWN保留原附件下载且拒绝新增，原请求相同内容重试返回原记录。元数据、审计同事务，失败清理对象；下载核验SHA256，返回no-store/nosniff/CSP。
+multipart file/requestId/visibility；图片JPG/PNG/WebP最大20MB、文档PDF/XLSX最大50MB，每物流50个。物流父行锁和READ_COMMITTED保护状态、限额及幂等；同请求不同内容拒绝。PLANNED/SHIPPED允许新增，WITHDRAWN保留原附件下载且拒绝新增，原请求相同内容重试返回原记录。元数据、审计同事务，失败清理对象；下载核验SHA256，返回no-store/nosniff/CSP。批量入口见V47说明。
 ## PI商业修订生命周期（批次32）
 
 POST `/api/pis/{id}/revisions` 请求requestId/expectedRevision/reason，内部PI_READ+PI_WRITE；GET同路径读取内部版本历史，财务金额依权限隐藏。一个系列只允许一个草稿，版本分配、克隆、幂等和审计同事务；取消版本不复用。原请求在生成版本发布/取消后重试仍返回原版本，改变原因返回冲突。
 
-取消修订草稿不改变当前有效版本及订单占用。有效PI取消按系列全部历史收款检查。收款/出库后的商业金额和条款可在修订草稿编辑；当前禁止改变系列客户/代理/币种，确认亦重新校验旧草稿。关联履约SKU/数量仍固定，后续数量调整尚未完成。新修订确认不重做已发订单确认，原CONFIRMED/RELEASED转SUPERSEDED，当前版本重算系列付款状态并保持BLOCKED，须重新授权放行。归档文件及已发车辆保持原事实。
+取消修订草稿不改变当前有效版本及订单占用。有效PI取消按系列全部历史收款检查。收款/出库后的商业金额和条款可在修订草稿编辑；当前禁止改变系列客户/代理/币种，确认亦重新校验旧草稿。原SKU数量可通过修订按实际已发下限调整，保存草稿不改占用，确认时原子应用差额；新增/整行移除SKU仍待实现。新修订确认不重做已发订单确认，原CONFIRMED/RELEASED转SUPERSEDED，当前版本重算系列付款状态并保持BLOCKED，须重新授权放行。归档文件及已发车辆保持原事实。
 ## 原SKU数量修订（批次33）
 
 PUT `/api/pis/{id}` 对关联准确SKU订单的修订草稿允许原SKU内调整quantity；保存只记录草稿，不改变有效版本的库存。确认接口重新核对实际累计已发量与当前占用，按SKU总量稳定分配各子单差额。增加同时检查SKU与车型可用量，失败全部回滚；未到期的原截止与PAID保留语义不变，不自动恢复已释放或到期占用。
@@ -251,3 +251,22 @@ PUT `/api/pis/{id}` 对关联准确SKU订单的修订草稿允许原SKU内调整
 - PUT同路径：请求`revision`、`customerIds`（最多5000个唯一正整数）、必填`reason`（最多500字）。父用户锁、名单、版本和审计同事务；旧版返回`CUSTOMER_SCOPE_CONFLICT`（409），审计失败回滚。
 
 业务功能权限与范围叠加。`CUSTOMER_SCOPE_ALL`或SUPER_ADMIN为全范围，迁移不向既有普通岗位自动分配；`CUSTOMER_ALL`仅为可显式分配的范围角色。逐客户账号在PI/订单/锁定/客户主资料列表、选择器、直接ID、写操作、附件、导出、真实批次和相关追溯入口受限，拒绝返回`CUSTOMER_SCOPE_DENIED`（403）。全局自由文本审计对逐客户账号隐藏，售后继续使用独立公司范围。撤权对同令牌的下次请求生效；已授权业务写事务与撤权通过用户行读写锁排序。
+
+## 生产与PI附件格式、批量及完整性（V47）
+
+统一业务上传策略：生产SKU/异常仅图片JPG、PNG、WebP，每张20MiB；PI确认、物流、收款凭证另支持PDF和XLSX，每份50MiB。图片需实际解码且不超过4000万像素/单边12000像素；PDF须未加密且1至500页；XLSX检查ZIP容量/CRC、XML结构、工作簿关系和1至500个工作表，拒绝宏、嵌入可执行对象及XML外部实体，不计算公式、不读取外部链接。扩展名、实际格式和声明MIME不一致时拒绝。
+
+在下列单文件路径后加 `/batch` 使用批量接口：
+- `/api/production/skus/{skuId}/images`
+- `/api/production/issues/{issueId}/images`
+- `/api/pis/{piId}/confirmation-attachments`
+- `/api/pis/{piId}/logistics/{logisticsId}/attachments`
+- `/api/pis/{piId}/payments/{paymentId}/attachments`
+
+multipart字段为重复的`files`与对应顺序的`requestIds`（1至20个，标识各不相同）；确认/物流还须提供`visibility=CUSTOMER|INTERNAL`。数量或标识错误整批拒绝。合法批次返回逐项`{requestId,success,attachment,code,message}`，每项独立事务；某项失败不撤销已经成功的其他项。重试必须沿用原标识、文件名、字节、MIME和可见范围，成功项返回原记录；改变内容拒绝。每个SKU/异常、PI修订、物流记录、到账记录累计最多50个。业务状态和授权逐项重新检查。
+
+Web/H5上传队列一次选择最多20个文件，按单文件请求依次发送，显示独立进度与保存结果，失败项可用原标识重试；进度100%仅在后端确认保存后显示。生产旧单文件接口兼容未提供requestId的客户端，但该旧调用没有请求重试去重保证；新客户端应始终传入固定requestId。
+
+所有新文件先验证至临时文件，避免反复读取原上传流；对象写入后重新核对长度/SHA256，元数据和审计同事务，失败回滚并清理对象。下载先核验再返回，损坏文件拒绝发送。生产历史文件没有可信原摘要，保持NULL并只检查类型和长度；不得宣称历史字节已核验。PI商品图快照检查原上传摘要，WebP返回正确MIME且可生成PDF/Excel缩略图。
+
+收款凭证保持内部财务权限与客户范围，不对代理/PDA开放；新上传只允许CONFIRMED到账，已撤回时同请求可返回原成功文件、不能追加新文件。确认/物流的客户可见范围和撤回规则延续。HTTP默认单文件50MB、整请求1025MB，Nginx同步1025m，multipart先落临时文件；生产应为临时目录与对象目录配置容量监控、备份和请求限流。售后继续独立原有格式和限额。

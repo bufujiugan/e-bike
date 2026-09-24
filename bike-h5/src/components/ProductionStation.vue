@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue'
 import api from '../api'
+import ProductionImageUpload from './ProductionImageUpload.vue'
 import { showConfirmDialog } from 'vant'
 
 type Scan = { codeType: string; code: string; operatorName: string }
@@ -9,8 +10,9 @@ const props = defineProps<{ username: string }>()
 const skus = ref<any[]>([]), skuId = ref<number>(), batchNo = ref(''), task = ref<Task>(), taskId = ref('')
 const scanCode = ref(''), expectedType = ref(''), busy = ref(false), message = ref(''), failed = ref(false)
 const scanInput = ref<{focus:()=>void}>(), labelHtml = ref(''), labelFrame = ref<HTMLIFrameElement>()
-const reason = ref(''), issueCode = ref(''), issueReason = ref(''), issueId = ref(''), imageFile = ref<File>()
+const reason = ref(''), issueCode = ref(''), issueReason = ref(''), issueId = ref('')
 const issuePanel = ref('')
+const savedIssueCode = ref(''), imageUploading = ref(false)
 const storageKey = computed(() => `bike_production_task:${props.username}`)
 const labels: Record<string,string> = { FRAME:'车架', MOTOR:'电机', BATTERY:'电池', DISPLAY:'仪表' }
 const options = computed(()=>skus.value.filter(s=>s.enabled).map(s=>({text:`${s.skuCode} · ${s.productName}`,value:s.id})))
@@ -61,9 +63,7 @@ async function reprint() { await run(async()=>{
   const job = (await api.post(`/api/production/prints/${printId.value}/reprint`,{reason:reprintReason.value.trim()})).data.data
   printId.value=job.id; await preview(); reprintReason.value=''; message.value='补打任务已创建并选中，可以人工打印或等待自动终端领取'
 }) }
-async function reportIssue(){await run(async()=>{const result=(await api.post('/api/production/issues',{code:issueCode.value,reason:issueReason.value})).data.data;issueId.value=result.id;message.value='异常已登记，相关车辆/部件已隔离';if(imageFile.value)await uploadImage()})}
-async function uploadImage(){if(!issueId.value||!imageFile.value)return;const form=new FormData();form.append('file',imageFile.value);await api.post(`/api/production/issues/${issueId.value}/images`,form);message.value='异常和图片均已保存';imageFile.value=undefined}
-function pickImage(event:Event){imageFile.value=(event.target as HTMLInputElement).files?.[0]}
+async function reportIssue(){if(imageUploading.value)return;await run(async()=>{const code=issueCode.value;const result=(await api.post('/api/production/issues',{code,reason:issueReason.value})).data.data;issueId.value=result.id;savedIssueCode.value=code;message.value='异常已登记，相关车辆/部件已隔离'})}
 onMounted(async()=>{try{skus.value=(await api.get('/api/production/skus')).data.data;skuId.value=options.value[0]?.value;taskId.value=localStorage.getItem(storageKey.value)??'';if(taskId.value)await resume()}catch(e){error(e)}})
 </script>
 
@@ -113,9 +113,9 @@ onMounted(async()=>{try{skus.value=(await api.get('/api/production/skus')).data.
       <van-collapse-item title="登记生产异常 / 上传照片" name="issue">
         <van-field v-model="issueCode" label="异常编码" placeholder="车架或部件SN" maxlength="128" />
         <van-field v-model="issueReason" label="异常原因" type="textarea" maxlength="500" />
-        <input type="file" accept="image/jpeg,image/png" @change="pickImage" />
-        <van-button block type="danger" plain :loading="busy" @click="reportIssue">登记异常并隔离</van-button>
-        <van-button v-if="imageFile" size="small" @click="run(uploadImage)">重试图片上传</van-button>
+        <van-button block type="danger" plain :loading="busy" :disabled="imageUploading" @click="reportIssue">登记异常并隔离</van-button>
+        <p v-if="issueId">照片归属：{{ savedIssueCode }} · 异常 {{ issueId }}</p>
+        <ProductionImageUpload v-if="issueId" :key="issueId" :endpoint="`/api/production/issues/${issueId}/images`" images-only @busy="imageUploading = $event" />
       </van-collapse-item>
     </van-collapse>
     <van-notice-bar v-if="message" :text="message" wrapable :color="failed ? '#c62828' : '#16794b'" :background="failed ? '#fff0f0' : '#eaf8ef'" />

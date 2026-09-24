@@ -1,7 +1,5 @@
 package com.bike.server.pi;
 
-import com.bike.server.aftersales.AfterSalesUploadValidator;
-import com.bike.server.aftersales.AfterSalesVideoValidator;
 import com.bike.server.common.OperationLogMapper;
 import com.bike.server.production.ProductionFileStore;
 import java.io.*;
@@ -68,6 +66,26 @@ class PiReceiptAttachmentMysqlTest {
         }
     }
 
+    @Test void webpAndWorkbookRoundTripAndCorruptionFailsBeforeReturningBytes() throws Exception {
+        try (var f = new Fixture()) {
+            long piId=f.core.confirmed(),paymentId=f.receipt(piId);var service=f.service(storage(),f.mapper,f.core.logs);
+            var inputs=List.of(file("proof.webp","image/webp",com.bike.server.common.BusinessUploadValidatorTest.webp()),
+                file("proof.xlsx",com.bike.server.common.BusinessUploadValidator.XLSX_TYPE,com.bike.server.common.BusinessUploadValidatorTest.xlsx()));
+            for(var input:inputs) {
+                var saved=f.finance(()->upload(service,piId,paymentId,input.getOriginalFilename().replace(".","-"),input));
+                var download=f.finance(()->service.download(piId,paymentId,saved.id()));
+                assertThat(download.resource().getContentAsByteArray()).isEqualTo(input.getBytes());
+                var stored=f.mapper.selectStored(paymentId,saved.id());
+                byte[] damaged=input.getBytes().clone();damaged[damaged.length-1]^=1;Files.write(temp.resolve(stored.objectKey().substring(6)),damaged);
+                assertCode("PI_ATTACHMENT_INTEGRITY_FAILED",()->f.finance(()->service.download(piId,paymentId,saved.id())));
+            }
+            f.core.execute("UPDATE "+f.core.prefix+"pi_payment SET status='REVERSED' WHERE id="+paymentId);
+            assertThat(f.finance(()->upload(service,piId,paymentId,inputs.getFirst().getOriginalFilename().replace(".","-"),inputs.getFirst())).id()).isNotBlank();
+            assertCode("INVALID_STATUS_TRANSITION",()->f.finance(()->upload(service,piId,paymentId,"new",inputs.getFirst())));
+            assertThat(f.count()).isEqualTo(2);
+        }
+    }
+
     @Test void insertAuditAndOuterTransactionFailureRollbackBothObjectsAndMetadata() throws Exception {
         try (var f = new Fixture()) {
             long piId = f.core.confirmed(), paymentId = f.receipt(piId);
@@ -112,9 +130,15 @@ class PiReceiptAttachmentMysqlTest {
                 if (method.getName().equals("selectReceipt")) { started.countDown(); await(started); }
                 return result;
             });
-            var service = f.service(storage(), concurrent, f.core.logs);
+            var target = f.service(storage(), concurrent, f.core.logs);
+            var proxy = new org.springframework.aop.framework.ProxyFactory(target); proxy.setProxyTargetClass(true);
+            proxy.addAdvice(new org.springframework.transaction.interceptor.TransactionInterceptor(new org.springframework.jdbc.datasource.DataSourceTransactionManager(f.core.source),new org.springframework.transaction.annotation.AnnotationTransactionAttributeSource()));
+            var service = (PiReceiptAttachmentService)proxy.getProxy();
             var png = file("proof.png", "image/png", image());
-            Callable<PiReceiptAttachmentView> upload = () -> f.finance(() -> upload(service, piId, paymentId, "concurrent", png));
+            Callable<PiReceiptAttachmentView> upload = () -> {
+                PiServiceTest.login("PERM_PI_READ","PERM_PI_PAYMENT_CONFIRM");
+                try { return upload(service,piId,paymentId,"concurrent",png); } finally { SecurityContextHolder.clearContext(); }
+            };
             var first = executor.submit(upload); var second = executor.submit(upload);
             assertThat(first.get(15, TimeUnit.SECONDS).id()).isEqualTo(second.get(15, TimeUnit.SECONDS).id());
             assertThat(f.count()).isEqualTo(1); assertThat(f.auditCount()).isEqualTo(1); assertFiles(1);
@@ -174,10 +198,14 @@ class PiReceiptAttachmentMysqlTest {
                     var ddl = new String(input.readAllBytes(), StandardCharsets.UTF_8).replace("bike_", core.prefix);
                     for (String sql : ddl.split(";")) if (!sql.isBlank()) core.create(sql.trim());
                 }
+                try (var input = Resources.getResourceAsStream("db/migration/V47__production_attachment_integrity.sql")) {
+                    var ddl = new String(input.readAllBytes(), StandardCharsets.UTF_8).replace("bike_", core.prefix);
+                    for (String sql : ddl.split(";")) if (sql.contains("ALTER TABLE " + core.prefix + "pi_payment_attachment")) core.execute(sql.trim());
+                }
             } catch (Exception error) { core.close(); throw error; }
         }
         PiReceiptAttachmentService service(ProductionFileStore files, PiReceiptAttachmentMapper mapper, OperationLogMapper logs) {
-            var validator = new PiReceiptFileValidator(new AfterSalesUploadValidator(new AfterSalesVideoValidator(8_294_400, 600, 72000)));
+            var validator = new PiReceiptFileValidator(new com.bike.server.common.BusinessUploadValidator());
             return com.bike.server.common.CustomerScopeTestSupport.isolated(new PiReceiptAttachmentService(mapper, files, validator, logs, core.json));
         }
         long receipt(long piId) { return core.transaction(() -> core.service.recordPayment(piId, PiServiceTest.payment("receipt-" + UUID.randomUUID(), "30.00"))).getPayments().getFirst().id(); }

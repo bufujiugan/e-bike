@@ -7,7 +7,8 @@ spring:
   servlet:
     multipart:
       max-file-size: ${BIKE_UPLOAD_MAX_FILE_SIZE:50MB}
-      max-request-size: ${BIKE_UPLOAD_MAX_REQUEST_SIZE:160MB}
+      max-request-size: ${BIKE_UPLOAD_MAX_REQUEST_SIZE:1025MB}
+      file-size-threshold: 0B
   datasource:
     url: ${BIKE_DB_URL:jdbc:mysql://localhost:3306/bike?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
     username: ${BIKE_DB_USERNAME:root}

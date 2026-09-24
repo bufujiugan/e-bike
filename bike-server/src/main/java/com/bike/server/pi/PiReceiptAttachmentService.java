@@ -41,15 +41,16 @@ public class PiReceiptAttachmentService {
         requireRead(); requirePiScope(piId); requireReceipt(mapper.selectReceipt(piId, paymentId));
         var attachment = mapper.selectStored(paymentId, attachmentId);
         if (attachment == null || !Objects.equals(attachment.paymentId(), paymentId)) throw missing();
-        if (attachment.objectKey() == null || !attachment.objectKey().matches("(?:local:|cos:production/)pi-receipt-[0-9a-f-]{36}\\.(?:jpg|jpeg|png|pdf)"))
+        if (attachment.objectKey() == null || !attachment.objectKey().matches("(?:local:|cos:production/)pi-receipt-[0-9a-f-]{36}\\.(?:jpg|jpeg|png|webp|pdf|xlsx)"))
             throw new BusinessException("ATTACHMENT_STORAGE_INVALID", "凭证存储信息不合法");
-        return new Download(attachment.fileName(), attachment.contentType(), attachment.fileSize(), files.read(attachment.objectKey()));
+        byte[] bytes = BusinessUploadValidator.verifiedBytes(files.read(attachment.objectKey()), attachment.fileSize(), attachment.sha256(), attachment.contentType());
+        return new Download(attachment.fileName(), attachment.contentType(), bytes.length, new org.springframework.core.io.ByteArrayResource(bytes));
     }
 
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class, isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public PiReceiptAttachmentView upload(long piId, long paymentId, String requestId, MultipartFile upload) throws IOException {
         requireRead(); requirePiScope(piId); CurrentOperator.requirePermission("PI_PAYMENT_CONFIRM");
-        requireConfirmed(mapper.selectReceipt(piId, paymentId));
+        requireReceipt(mapper.selectReceipt(piId, paymentId));
         if (requestId == null || !requestId.matches("[A-Za-z0-9_-]{1,64}"))
             throw new BusinessException("INVALID_PARAMETER", "凭证请求标识须为1至64位字母、数字、横线或下划线");
         var keys = new ArrayList<String>();
@@ -57,7 +58,8 @@ public class PiReceiptAttachmentService {
             if (!TransactionSynchronizationManager.isActualTransactionActive()) throw new IllegalStateException("凭证上传必须在事务中执行");
             // Existing payment operations lock PI before receipt. Never acquire an inventory lock here.
             if (mapper.lockPi(piId) == null) throw missing();
-            requireConfirmed(mapper.lockReceipt(piId, paymentId));
+            var receipt = mapper.lockReceipt(piId, paymentId);
+            requireReceipt(receipt);
             var previous = mapper.selectByRequest(paymentId, requestId);
             if (previous != null) {
                 if (!Objects.equals(previous.sha256(), file.sha256()) || previous.fileSize() != file.size()
@@ -65,6 +67,8 @@ public class PiReceiptAttachmentService {
                     throw new BusinessException("IDEMPOTENCY_CONFLICT", "该凭证请求已用于其他文件，请核对到账记录后重新选择文件");
                 return previous.view();
             }
+            requireConfirmed(receipt);
+            if (mapper.count(paymentId) >= 50) throw new BusinessException("ATTACHMENT_LIMIT", "每笔到账记录最多50个凭证");
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override public void afterCompletion(int status) { if (status != STATUS_COMMITTED) cleanup(keys); }
             });
@@ -72,6 +76,7 @@ public class PiReceiptAttachmentService {
             String key = files.key("pi-receipt-" + id + "." + file.extension());
             keys.add(key); // A failed write may already have created a partial object.
             try (var input = Files.newInputStream(file.path())) { files.write(key, input, file.size(), file.contentType()); }
+            BusinessUploadValidator.verifiedBytes(files.read(key),file.size(),file.sha256(),file.contentType());
             var row = new PiReceiptAttachmentMapper.Stored(id, paymentId, requestId, key, file.fileName(),
                     file.contentType(), file.size(), file.sha256(), CurrentOperator.id(), null);
             if (mapper.insert(row) != 1) throw new BusinessException("PI_ATTACHMENT_SAVE_FAILED", "凭证记录保存失败");

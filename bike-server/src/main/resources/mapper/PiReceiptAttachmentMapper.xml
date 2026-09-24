@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.bike.server.pi.PiReceiptAttachmentMapper">
+    <select id="count" resultType="long">SELECT COUNT(*) FROM bike_pi_payment_attachment WHERE payment_id=#{paymentId}</select>
     <select id="selectReceipt" resultType="com.bike.server.pi.PiReceiptAttachmentMapper$Receipt">
         SELECT id,pi_id,status FROM bike_pi_payment WHERE pi_id=#{piId} AND id=#{paymentId}
     </select>

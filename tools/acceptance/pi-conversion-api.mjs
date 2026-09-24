@@ -19,10 +19,44 @@ async function req(path, body, { method = body === undefined ? 'GET' : 'POST', t
   return code === 'SUCCESS' ? result.data : result;
 }
 function pass(name) { evidence.checks.push({ name, passed: true }); console.log(`PASS ${name}`); }
-async function uploadFile(path, bytes, { token = admin, requestId = randomUUID(), visibility = 'CUSTOMER', code = 'SUCCESS' } = {}) {
-  const form = new FormData(); form.append('file', new Blob([bytes], { type: 'image/png' }), 'confirmation.png'); form.append('requestId', requestId); form.append('visibility', visibility);
+async function uploadFile(path, bytes, { token = admin, requestId = randomUUID(), visibility = 'CUSTOMER', code = 'SUCCESS', name = 'confirmation.png', type = 'image/png' } = {}) {
+  const form = new FormData(); form.append('file', new Blob([bytes], { type }), name); form.append('requestId', requestId); form.append('visibility', visibility);
   const response = await fetch(base + path, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form, signal: AbortSignal.timeout(30000) });
   const result = await response.json(); assert.equal(result.code, code, `${path}: ${response.status} ${result.code} ${result.message}`); assert.equal(response.ok, code === 'SUCCESS'); return result.data;
+}
+async function uploadBatch(path, items, { token, visibility = 'CUSTOMER', code = 'SUCCESS' }) {
+  const form = new FormData(); form.append('visibility', visibility);
+  for (const item of items) { form.append('files', new Blob([item.bytes], { type: item.type }), item.name); form.append('requestIds', item.requestId); }
+  const response = await fetch(base + path + '/batch', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form, signal: AbortSignal.timeout(180000) });
+  const result = await response.json(); assert.equal(result.code, code, `${path}/batch: ${response.status} ${result.code} ${result.message}`); assert.equal(response.ok, code === 'SUCCESS'); return result.data;
+}
+async function verifyDocumentBatch(path, writer, reader, webp, workbook) {
+  const entries = [
+    { requestId: randomUUID(), name: '图片.webp', type: 'image/webp', bytes: webp },
+    { requestId: randomUUID(), name: '核对.xlsx', type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', bytes: workbook },
+    { requestId: randomUUID(), name: '重试.webp', type: 'image/webp', bytes: Buffer.from('invalid') },
+  ];
+  const first = await uploadBatch(path, entries, { token: writer }); assert.deepEqual(first.map(r => r.success), [true, true, false]); assert.equal(first[2].code, 'ATTACHMENT_CONTENT_INVALID');
+  entries[2].bytes = webp;
+  const retried = await uploadBatch(path, entries, { token: writer }); assert(retried.every(r => r.success));
+  assert.equal(first[0].attachment.id, retried[0].attachment.id); assert.equal(first[1].attachment.id, retried[1].attachment.id);
+  const list = await req(path, undefined, { token: reader });
+  for (let i = 0; i < entries.length; i++) {
+    const row = retried[i].attachment; assert.equal(list.filter(item => item.id === row.id).length, 1); assert(!('objectKey' in row));
+    const response = await fetch(base + path + '/' + row.id + '/download', { headers: { Authorization: `Bearer ${reader}` } });
+    assert.equal(response.status, 200); assert.equal(response.headers.get('content-type'), entries[i].type); assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+    const bytes = Buffer.from(await response.arrayBuffer()); assert(bytes.equals(entries[i].bytes)); assert.equal(createHash('sha256').update(bytes).digest('hex'), row.sha256);
+  }
+  return { entries, rows: retried.map(r => r.attachment) };
+}
+function sizedPng(original, target) {
+  assert.equal(original.subarray(-8, -4).toString('ascii'), 'IEND');
+  const size = target - original.length - 12; assert(size >= 0);
+  const chunk = Buffer.alloc(size + 12); chunk.writeUInt32BE(size); chunk.write('biKe', 4, 'ascii');
+  let crc = 0xffffffff;
+  for (const byte of chunk.subarray(4, -4)) { crc ^= byte; for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0); }
+  chunk.writeUInt32BE((crc ^ 0xffffffff) >>> 0, chunk.length - 4);
+  return Buffer.concat([original.subarray(0, -12), chunk, original.subarray(-12)]);
 }
 async function account(suffix, codes, agentId = null, workstationId = null, customerIds = [scopeCustomer]) {
   const permissions = await req('/api/roles/permissions');
@@ -63,7 +97,18 @@ try {
   }
   const [red, blue] = skus; assert(red && blue);
   const imageBytes = await readFile(new URL('./fixtures/after-sales/fault.png', import.meta.url));
-  const productImage = await uploadFile(`/api/production/skus/${red.id}/images`, imageBytes);
+  const webpBytes = await readFile(new URL('../../bike-server/src/test/resources/attachments/valid.webp', import.meta.url));
+  const productionOperator = await account('PRODUCTION', ['PRODUCTION_MANAGE']);
+  const productImage = await uploadFile(`/api/production/skus/${red.id}/images`, webpBytes, { token: productionOperator, name: '商品.webp', type: 'image/webp' });
+  const productionImageResponse = await fetch(`${base}/api/production/images/${productImage.id}`, { headers: { Authorization: `Bearer ${productionOperator}` } }); assert.equal(productionImageResponse.status, 200); assert(Buffer.from(await productionImageResponse.arrayBuffer()).equals(webpBytes));
+  const productBatch = Array.from({ length: 20 }, (_, i) => ({ requestId: randomUUID(), name: `商品${i}.webp`, type: 'image/webp', bytes: webpBytes }));
+  const productBatchPath = `/api/production/skus/${blue.id}/images`;
+  await uploadBatch(productBatchPath, [...productBatch, { ...productBatch[0], requestId: randomUUID() }], { token: productionOperator, code: 'INVALID_PARAMETER' });
+  assert.equal((await req(productBatchPath, undefined, { token: productionOperator })).length, 0);
+  const savedBatch = await uploadBatch(productBatchPath, productBatch, { token: productionOperator }); assert.equal(savedBatch.length, 20); assert(savedBatch.every(r => r.success));
+  const retryBatch = await uploadBatch(productBatchPath, productBatch, { token: productionOperator }); assert.deepEqual(retryBatch.map(r => r.attachment.id), savedBatch.map(r => r.attachment.id));
+  assert.equal((await req(productBatchPath, undefined, { token: productionOperator })).length, 20);
+  pass('普通生产岗位真实WebP保存下载一致；批量20张成功且重复请求不新增，第21张整批拒绝且无写入');
   const sales = await account('SALES', ['PI_READ', 'PI_WRITE', 'PI_EXPORT', 'AGENT_LOCK_WRITE', 'ORDER_READ', 'ORDER_WRITE', 'INVENTORY_READ', 'MASTER_READ', 'DATA_EXPORT', 'STOCK_READ', 'VEHICLE_READ', 'TRACE_READ']);
   for (const type of ['STOCK_IN', 'STOCK_OUT']) stations.push(await req('/api/workstations', { workstationCode: prefix + type, workstationName: 'SKU验收' + type, workstationType: type }));
   const warehouseOperator = await account('WAREHOUSE', ['STOCK_OUT_OPERATE', 'ORDER_READ', 'INVENTORY_READ', 'TRACE_READ', 'CUSTOMER_SCOPE_ALL'], null, stations[1].id);
@@ -139,7 +184,7 @@ try {
   pass('新PI自动带入客户商务资料并形成快照，主资料修改不覆盖已保存PI');
   assert.equal(pi.totalAmount, '212.34'); assert.equal(pi.otherFeeAmount, '12.34'); assert(pi.items.every(i => i.unit === 'PCS'));
   const savedImage = pi.items.find(i => i.skuId === red.id); assert.equal(savedImage.imageAttachmentId, productImage.id);
-  assert.equal(savedImage.imageSha256, createHash('sha256').update(imageBytes).digest('hex'));
+  assert.equal(savedImage.imageSha256, createHash('sha256').update(webpBytes).digest('hex'));
   pi.fulfillment.forEach(line => ordersToCancel.add(line.orderId));
   evidence.fixtures.piId = pi.id; evidence.fixtures.orders = pi.fulfillment;
   await req('/api/pis/from-locks', { ...body, pi: { ...body.pi, remark: '同请求改变内容' } }, { token: sales, code: 'PI_CONVERSION_CONFLICT' });
@@ -164,7 +209,7 @@ try {
   pass('普通销售看板按客户统计待发、草稿；收款队列需独立财务权限，仓管和代理不能绕过内部看板限制');
   const imageItem = confirmed.items.find(i => i.skuId === red.id);
   const imageResponse = await fetch(`${base}/api/pis/${pi.id}/items/${imageItem.id}/image`, { headers: { Authorization: `Bearer ${external}` } });
-  assert.equal(imageResponse.status, 200); assert(Buffer.from(await imageResponse.arrayBuffer()).equals(imageBytes));
+  assert.equal(imageResponse.status, 200); assert.equal(imageResponse.headers.get('content-type'), 'image/webp'); assert(Buffer.from(await imageResponse.arrayBuffer()).equals(webpBytes));
   pass('日期缺失及倒置拒绝确认，其他费用逐分计入总额，单位和SKU图片快照保留且客户按单据范围可读');
   const attachmentPath = `/api/pis/${pi.id}/confirmation-attachments`, attachmentRequest = randomUUID();
   const attachments = await Promise.all([uploadFile(attachmentPath, imageBytes, { token: sales, requestId: attachmentRequest }), uploadFile(attachmentPath, imageBytes, { token: sales, requestId: attachmentRequest })]);
@@ -188,7 +233,7 @@ try {
   }
   assert.equal(exportTask.status, 'READY'); assert.equal(exportTask.sourceType, 'CONFIRMATION');
   for (const key of ['snapshotJson', 'claimToken', 'pdfKey', 'xlsxKey', 'leaseUntil']) assert(!(key in exportTask));
-  const exported = {};
+  const exported = {}; let exportedWorkbook, exportedPdf;
   for (const format of ['pdf', 'xlsx']) {
     const download = async token => {
       const response = await fetch(`${base}/api/pis/${pi.id}/export.${format}`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30000) });
@@ -197,9 +242,27 @@ try {
     const first = await download(sales), second = await download(external);
     assert(first.equals(second)); assert.equal(createHash('sha256').update(first).digest('hex'), exportTask[`${format}Sha256`]);
     exported[format] = exportTask[`${format}Sha256`];
+    if (format === 'xlsx') exportedWorkbook = first;
+    if (format === 'pdf') exportedPdf = first;
   }
   evidence.fixtures.exportHashes = exported;
   pass('确认自动生成两种格式，任务不暴露内部存储，普通销售与客户下载逐字节一致且匹配归档SHA256');
+  await verifyDocumentBatch(attachmentPath, sales, external, webpBytes, exportedWorkbook);
+  pass('真实WebP商品图进入PI归档；确认附件支持WebP和XLSX混合批次，逐项失败、原请求重试及客户逐字节下载通过');
+  const largePdf = Buffer.alloc(50 * 1024 * 1024, 32); exportedPdf.copy(largePdf); largePdf.write('\n%%EOF\n', largePdf.length - 7, 'ascii');
+  for (const file of [
+    { name: '5MB.png', type: 'image/png', bytes: sizedPng(imageBytes, 5 * 1024 * 1024) },
+    { name: '20MB.png', type: 'image/png', bytes: sizedPng(imageBytes, 20 * 1024 * 1024) },
+    { name: '50MB.pdf', type: 'application/pdf', bytes: largePdf },
+  ]) {
+    const row = await uploadFile(attachmentPath, file.bytes, { token: sales, visibility: 'INTERNAL', name: file.name, type: file.type });
+    assert.equal(row.fileSize, file.bytes.length); assert.equal(row.sha256, createHash('sha256').update(file.bytes).digest('hex'));
+    const response = await fetch(`${base}${attachmentPath}/${row.id}/download`, { headers: { Authorization: `Bearer ${sales}` }, signal: AbortSignal.timeout(30000) });
+    assert.equal(response.status, 200); assert(Buffer.from(await response.arrayBuffer()).equals(file.bytes));
+    await req(`${attachmentPath}/${row.id}/download`, undefined, { token: external, code: 'ATTACHMENT_NOT_FOUND' });
+  }
+  await uploadFile(attachmentPath, Buffer.alloc(20 * 1024 * 1024 + 1), { token: sales, code: 'ATTACHMENT_SIZE_INVALID' });
+  pass('真实HTTP保存并下载5MB/20MB合法PNG和50MB合法PDF，原字节与摘要一致；超限图片拒绝，内部大文件对客户隐藏');
   await req('/api/pi-templates', { ...publishRequest, templateVersion: '2', sellerCountry: 'DE', sellerContactName: '新版本联系人', sellerPhone: '+49-000-TEST', sellerEmail: 'new-seller@example.invalid' });
   const originalSeller = (await req(`/api/pis/${pi.id}`, undefined, { token: sales })).document;
   for (const field of ['sellerCountry', 'sellerContactName', 'sellerPhone', 'sellerEmail']) assert.equal(originalSeller[field], body.pi.document[field]);
@@ -301,6 +364,7 @@ try {
     const publicLogisticsFiles = await req(logisticsAttachmentsPath, undefined, { token: external }); assert.equal(publicLogisticsFiles.length, 1); assert(!('objectKey' in publicLogisticsFiles[0]));
     await req(`${logisticsAttachmentsPath}/${privateLogisticsFile.id}/download`, undefined, { token: external, code: 'ATTACHMENT_NOT_FOUND' });
     await req(`/api/pis/${pi.id}/logistics/9223372036854775807/attachments`, undefined, { token: sales, code: 'ATTACHMENT_NOT_FOUND' });
+    await verifyDocumentBatch(logisticsAttachmentsPath, logisticsOperator, external, webpBytes, exportedWorkbook);
     assert.equal(plan.linkType,'PLAN_UNLINKED'); assert.equal(plan.revision,1);
     assert.equal((await req(`/api/pis/${pi.id}/logistics`, planBody, { token: logisticsOperator })).logistics.length,1);
     await req(`/api/pis/${pi.id}/logistics`, { ...planBody, remark: '改变同一请求' }, { token: logisticsOperator, code: 'LOGISTICS_REQUEST_CONFLICT' });
@@ -318,7 +382,7 @@ try {
     const withdrawn=await req(`/api/pis/${pi.id}/logistics/${plan.id}/withdraw`,withdrawal,{token:logisticsOperator});assert.equal(withdrawn.logistics[0].revision,3);
     await uploadFile(logisticsAttachmentsPath, imageBytes, { token: logisticsOperator, code: 'INVALID_STATUS_TRANSITION' });
     const logisticsFileResponse = await fetch(`${base}${logisticsAttachmentsPath}/${logisticsFiles[0].id}/download`, { headers: { Authorization: `Bearer ${external}` } }); assert.equal(logisticsFileResponse.status, 200); assert.equal(logisticsFileResponse.headers.get('x-content-type-options'), 'nosniff'); assert(Buffer.from(await logisticsFileResponse.arrayBuffer()).equals(imageBytes));
-    assert.equal((await req(`/api/pis/${revision.id}/logistics/${plan.id}/attachments`, undefined, { token: sales })).length, 2);
+    assert.equal((await req(`/api/pis/${revision.id}/logistics/${plan.id}/attachments`, undefined, { token: sales })).length, 5);
     pass('物流附件绑定实际记录，普通物流并发上传幂等、客户只读公开文件；跨记录拒绝，撤回后保留下载并拒绝新增');
     const history=await req(`/api/pis/${pi.id}/logistics/${plan.id}/history`,undefined,{token:logisticsOperator});assert.equal(history.length,3);assert(JSON.stringify(history).includes(logisticsBase.trackingNo));
     await req(`/api/pis/${pi.id}/logistics/${plan.id}/history`,undefined,{token:external,code:'FORBIDDEN'});
@@ -338,6 +402,8 @@ try {
   await req(`/api/pis/${pi.id}/payments`, { ...extraRequest, requestId: randomUUID(), paymentMethod: 'OTHER' }, { token: finance, code: 'PAYMENT_METHOD_INVALID' });
   const receiptPath = `/api/pis/${pi.id}/payments/${receipt.id}/attachments`;
   const receiptFile = await uploadFile(receiptPath, imageBytes, { token: finance });
+  const receiptBatch = await verifyDocumentBatch(receiptPath, finance, paymentCorrector, webpBytes, exportedWorkbook);
+  pass('普通物流和财务上传WebP/XLSX，混合批次失败项单独重试、成功项幂等，公开和财务下载校验原字节及SHA256');
   const reversalPath = `/api/pis/${pi.id}/payments/${receipt.id}/reverse`, reversalBody = { requestId: randomUUID(), revision: 1, reason: '重复登记验收，保留实际出库事实' };
   await req(reversalPath, reversalBody, { token: finance, code: 'PERMISSION_DENIED' });
   await req(reversalPath, reversalBody, { token: external, code: 'FORBIDDEN' });
@@ -350,6 +416,8 @@ try {
   await req(reversalPath, { ...reversalBody, reason: '同请求改原因' }, { token: paymentCorrector, code: 'PI_PAYMENT_REVERSE_CONFLICT' });
   const downloadReceipt = await fetch(`${base}${receiptPath}/${receiptFile.id}/download`, { headers: { Authorization: `Bearer ${paymentCorrector}` } }); assert.equal(downloadReceipt.status, 200); assert(Buffer.from(await downloadReceipt.arrayBuffer()).equals(imageBytes));
   await uploadFile(receiptPath, imageBytes, { token: finance, code: 'INVALID_STATUS_TRANSITION' });
+  const reversedRetry = await uploadBatch(receiptPath, receiptBatch.entries, { token: finance }); assert(reversedRetry.every(r => r.success)); assert.deepEqual(reversedRetry.map(r => r.attachment.id), receiptBatch.rows.map(r => r.id));
+  const reversedNew = await uploadBatch(receiptPath, [{ ...receiptBatch.entries[0], requestId: randomUUID() }], { token: finance }); assert.equal(reversedNew[0].code, 'INVALID_STATUS_TRANSITION');
   const revisionAfter = await req(`/api/pis/${revision.id}`, undefined, { token: finance }); assert.equal(revisionAfter.paidAmount, '200.00'); assert.equal(revisionAfter.payments.find(p => p.id === receipt.id).piId, pi.id);
   const sameExport = await req(`/api/pis/${pi.id}/export-task`, undefined, { token: sales }); assert.equal(sameExport.pdfSha256, exported.pdf); assert.equal(sameExport.xlsxSha256, exported.xlsx);
   await expectSku(model.id, red.id, 1, 0, 0, 1); await expectSku(secondModel.id, blue.id, 1, 0, 0, 1);

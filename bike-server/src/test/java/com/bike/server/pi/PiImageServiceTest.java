@@ -11,11 +11,36 @@ import org.junit.jupiter.api.io.TempDir;
 
 class PiImageServiceTest {
     @TempDir Path directory;
+    @Test void webpSourceDigestIsVerifiedAndRenderedIntoPdfAndWorkbook()throws Exception {
+        var mapper=mock(PiMapper.class);byte[] image=com.bike.server.common.BusinessUploadValidatorTest.webp();
+        try(var store=new ProductionFileStore(directory.toString(),"local","","","","")) {
+            Files.write(directory.resolve("source.webp"),image);
+            String hash=PiExportArchive.sha256(image);
+            var row=new PiImageService.StoredImage("webp-image","local:source.webp","image/webp",image.length,1,hash);
+            when(mapper.selectSkuImage(1,"webp-image")).thenReturn(row);
+            var images=new PiImageService(mapper,store);var snapshot=images.snapshot(1,"webp-image");assertThat(snapshot.sha256()).isEqualTo(hash);
+            var pi=PiDocumentServiceTest.sample(1);pi.setDocumentRenderVersion("PI_V3");
+            var item=pi.getItems().getFirst();item.setImageAttachmentId(snapshot.attachmentId());item.setImageSha256(hash);
+            item.setId(1L);var pis=mock(PiService.class);when(pis.get(1)).thenReturn(pi);var controller=new PiController(pis);
+            org.springframework.test.util.ReflectionTestUtils.setField(controller,"images",images);
+            var response=controller.itemImage(1,1);assertThat(response.getHeaders().getContentType().toString()).isEqualTo("image/webp");assertThat(response.getBody()).isEqualTo(image);
+            var documents=new PiDocumentService();org.springframework.test.util.ReflectionTestUtils.setField(documents,"images",images);
+            try(var book=new org.apache.poi.xssf.usermodel.XSSFWorkbook(new ByteArrayInputStream(documents.excel(pi)))) {
+                assertThat(book.getAllPictures()).hasSize(1);assertThat(ImageIO.read(new ByteArrayInputStream(book.getAllPictures().getFirst().getData()))).isNotNull();
+            }
+            try(var pdf=org.apache.pdfbox.Loader.loadPDF(documents.pdf(pi))) {
+                long count=0;for(var page:pdf.getPages())for(var name:page.getResources().getXObjectNames())if(page.getResources().isImageXObject(name))count++;
+                assertThat(count).isEqualTo(1);new org.apache.pdfbox.rendering.PDFRenderer(pdf).renderImage(0).flush();
+            }
+            byte[] corrupt=image.clone();corrupt[corrupt.length-1]^=1;Files.write(directory.resolve("source.webp"),corrupt);
+            assertThatThrownBy(()->images.snapshot(1,"webp-image")).hasMessageContaining("原上传内容");
+        }
+    }
     @Test void savedImageIsBoundToSkuAndDetectsReplacement()throws Exception {
         var mapper=mock(PiMapper.class);
         try(var store=new ProductionFileStore(directory.toString(),"local","","","","")) {
             byte[] image=picture();Files.write(directory.resolve("original.png"),image);
-            var row=new PiImageService.StoredImage("image-id","local:original.png","image/png",image.length,10);
+            var row=new PiImageService.StoredImage("image-id","local:original.png","image/png",image.length,10,null);
             when(mapper.selectSkuImage(10,null)).thenReturn(row);when(mapper.selectSkuImage(10,"image-id")).thenReturn(row);
             var service=new PiImageService(mapper,store);var snapshot=service.snapshot(10,null);
             var item=new PiItemView();item.setSkuId(10L);item.setImageAttachmentId(snapshot.attachmentId());item.setImageSha256(snapshot.sha256());

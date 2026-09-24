@@ -24,7 +24,7 @@ public class PiController {
         byte[] bytes=images.bytes(item);
         if(bytes==null)throw new com.bike.server.common.BusinessException("PI_IMAGE_NOT_FOUND","PI图片不存在");
         return ResponseEntity.ok().header("X-Content-Type-Options","nosniff").header(HttpHeaders.CACHE_CONTROL,"no-store")
-                .header(HttpHeaders.CONTENT_TYPE,bytes[0]==(byte)0x89?"image/png":"image/jpeg").body(bytes);
+                .header(HttpHeaders.CONTENT_TYPE,PiImageService.contentType(bytes)).body(bytes);
     }
 
     @GetMapping("/{id}/export-task") public ApiResponse<PiExportJob> exportTask(@PathVariable long id) {

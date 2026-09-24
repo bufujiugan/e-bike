@@ -69,11 +69,16 @@
     <select id="selectIssues" resultType="map"><include refid="issueSelect"/><include refid="issueFilter"/> ORDER BY created_at DESC LIMIT #{offset},50</select>
     <select id="countIssues" resultType="int">SELECT COUNT(*) FROM bike_production_issue <include refid="issueFilter"/></select>
     <update id="updateIssueResolved">UPDATE bike_production_issue SET status='RESOLVED',resolved_by=#{operator},resolved_at=NOW(3),resolution=#{reason} WHERE id=#{id} AND status='OPEN'</update>
-    <insert id="insertAttachment">INSERT INTO bike_production_attachment(id,issue_id,object_key,content_type,file_size,created_by) VALUES(#{id},#{issueId},#{objectKey},#{contentType},#{size},#{operator})</insert>
-    <select id="selectAttachment" resultType="map">SELECT id,issue_id issueId,object_key objectKey,content_type contentType,file_size fileSize FROM bike_production_attachment WHERE id=#{id}</select>
+    <insert id="insertAttachment">INSERT INTO bike_production_attachment(id,issue_id,object_key,content_type,file_size,file_name,sha256,request_id,created_by) VALUES(#{id},#{issueId},#{objectKey},#{contentType},#{size},#{name},#{sha256},#{requestId},#{operator})</insert>
+    <select id="selectAttachment" resultType="map">SELECT id,issue_id issueId,sku_id skuId,object_key objectKey,content_type contentType,file_size fileSize,file_name fileName,sha256 FROM bike_production_attachment WHERE id=#{id}</select>
     <select id="selectAttachments" resultType="map">SELECT id,content_type contentType,file_size fileSize,created_at createdAt FROM bike_production_attachment WHERE issue_id=#{issueId}</select>
     <select id="selectSkuAttachments" resultType="map">SELECT id,content_type contentType,file_size fileSize,created_at createdAt FROM bike_production_attachment WHERE sku_id=#{skuId}</select>
-    <insert id="insertSkuAttachment">INSERT INTO bike_production_attachment(id,sku_id,object_key,content_type,file_size,created_by) VALUES(#{id},#{skuId},#{objectKey},#{contentType},#{size},#{operator})</insert>
+    <insert id="insertSkuAttachment">INSERT INTO bike_production_attachment(id,sku_id,object_key,content_type,file_size,file_name,sha256,request_id,created_by) VALUES(#{id},#{skuId},#{objectKey},#{contentType},#{size},#{name},#{sha256},#{requestId},#{operator})</insert>
+    <select id="lockAttachmentIssue" resultType="string">SELECT id FROM bike_production_issue WHERE id=#{id} FOR UPDATE</select>
+    <select id="lockAttachmentSku" resultType="long">SELECT id FROM bike_production_sku WHERE id=#{id} FOR UPDATE</select>
+    <sql id="attachmentObject"><choose><when test="skuId != null">sku_id=#{skuId}</when><otherwise>issue_id=#{issueId}</otherwise></choose></sql>
+    <select id="selectAttachmentRequest" resultType="map">SELECT id,file_name fileName,sha256,content_type contentType,file_size fileSize FROM bike_production_attachment WHERE <include refid="attachmentObject"/> AND request_id=#{requestId}</select>
+    <select id="countObjectAttachments" resultType="long">SELECT COUNT(*) FROM bike_production_attachment WHERE <include refid="attachmentObject"/></select>
     <insert id="insertPrint">INSERT INTO bike_production_print(id,vehicle_id,snapshot,reason,created_by) VALUES(#{id},#{vehicleId},#{snapshot},#{reason},#{operator})</insert>
     <sql id="printSelect">SELECT id,vehicle_id vehicleId,snapshot,status,reason,created_by createdBy,created_at createdAt,terminal,claimed_by claimedBy,claimed_at claimedAt,finished_at finishedAt,message FROM bike_production_print</sql>
     <select id="selectPrint" resultType="map"><include refid="printSelect"/> WHERE id=#{id}</select>

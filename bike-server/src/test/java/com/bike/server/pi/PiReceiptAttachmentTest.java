@@ -1,7 +1,5 @@
 package com.bike.server.pi;
 
-import com.bike.server.aftersales.AfterSalesUploadValidator;
-import com.bike.server.aftersales.AfterSalesVideoValidator;
 import com.bike.server.common.*;
 import com.bike.server.production.ProductionFileStore;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -76,9 +74,8 @@ class PiReceiptAttachmentTest {
         verifyNoInteractions(files);
     }
 
-    @Test void realImagesAndPdfUseSharedByteValidationAndNeverInvokeVideoProcessing() throws Exception {
-        var video = mock(AfterSalesVideoValidator.class);
-        var validator = new PiReceiptFileValidator(new AfterSalesUploadValidator(video));
+    @Test void realImagesAndPdfUseSharedByteValidationAndRemoveTemporaryFiles() throws Exception {
+        var validator = new PiReceiptFileValidator(new com.bike.server.common.BusinessUploadValidator());
         for (var upload : List.of(file("银行凭证.png", "image/png", image()), file("银行凭证.pdf", "application/pdf", pdf()))) {
             java.nio.file.Path path;
             try (var result = validator.prepare(upload)) {
@@ -89,12 +86,10 @@ class PiReceiptAttachmentTest {
             }
             assertThat(path).doesNotExist();
         }
-        verifyNoInteractions(video);
     }
 
     @Test void receiptAllowlistRejectsVideosSpoofedContentPathsAndOversizedStreams() throws Exception {
-        var video = mock(AfterSalesVideoValidator.class);
-        var validator = new PiReceiptFileValidator(new AfterSalesUploadValidator(video));
+        var validator = new PiReceiptFileValidator(new com.bike.server.common.BusinessUploadValidator());
         assertCode("ATTACHMENT_TYPE_UNSUPPORTED", () -> validator.prepare(file("video.mp4", "video/mp4", "fake".getBytes())));
         assertCode("ATTACHMENT_NAME_INVALID", () -> validator.prepare(file("../proof.png", "image/png", image())));
         assertCode("ATTACHMENT_CONTENT_INVALID", () -> validator.prepare(file("fake.png", "image/png", "fake".getBytes())));
@@ -103,12 +98,11 @@ class PiReceiptAttachmentTest {
         byte[] realPdf = pdf();
         assertCode("ATTACHMENT_CONTENT_INVALID", () -> validator.prepare(file("partial.pdf", "application/pdf", Arrays.copyOf(realPdf, 20))));
         assertCode("ATTACHMENT_SIZE_INVALID", () -> validator.prepare(new MockMultipartFile("file", "large.png", "image/png", new byte[1]) {
-            @Override public long getSize() { return PiReceiptFileValidator.LIMIT + 1; }
+            @Override public long getSize() { return com.bike.server.common.BusinessUploadValidator.DOCUMENT_LIMIT + 1; }
         }));
-        assertThatThrownBy(() -> validator.prepare(new MockMultipartFile("file", "large.pdf", "application/pdf", new byte[(int) PiReceiptFileValidator.LIMIT + 1]) {
+        assertThatThrownBy(() -> validator.prepare(new MockMultipartFile("file", "large.pdf", "application/pdf", new byte[(int) com.bike.server.common.BusinessUploadValidator.DOCUMENT_LIMIT + 1]) {
             @Override public long getSize() { return 1; }
         })).isInstanceOf(BusinessException.class);
-        verifyNoInteractions(video);
     }
 
     @Test void downloadForcesPrivateAttachmentHeaders() {

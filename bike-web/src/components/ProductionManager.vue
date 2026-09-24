@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, reactive, onMounted, onUnmounted } from "vue";
 import api from "../api";
+import BusinessAttachmentUpload from "./BusinessAttachmentUpload.vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 const props = defineProps<{
   username: string;
@@ -46,9 +47,9 @@ const template = reactive({
   heading: "E-BIKE",
 });
 const issue = reactive({ code: "", reason: "" }),
-  issueImage = ref<File>(),
   lastIssueId = ref(""),
   imageUrl = ref("");
+const savedIssueCode = ref(""), issueImagesBusy = ref(false);
 const quarantinedParts = ref<any[]>([]);
 const scanFailures = ref<any[]>([]);
 const inventoryRows = ref<any[]>([]),
@@ -90,8 +91,7 @@ async function importSkus() {
     await load();
   });
 }
-const skuImages = ref<any[]>([]),
-  skuImageFile = ref<File>();
+const skuImages = ref<any[]>([]);
 const galleryVisible = ref(false), galleryImages = ref<any[]>([]);
 async function viewSkuImages(id: number) {
   await perform(async () => {
@@ -105,7 +105,7 @@ async function downloadImage(id: string) {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `image-${id}.${blob.type === 'image/png' ? 'png' : 'jpg'}`;
+    anchor.download = `image-${id}.${blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : 'jpg'}`;
     anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
@@ -186,7 +186,6 @@ async function changeTab() {
 function editSku(row?: any) {
   editingId.value = row?.id;
   skuImages.value = [];
-  skuImageFile.value = undefined;
   Object.assign(
     sku,
     row
@@ -210,18 +209,7 @@ function editSku(row?: any) {
       ).data.data;
     });
 }
-async function uploadSkuImage() {
-  if (!editingId.value || !skuImageFile.value) return;
-  await perform(async () => {
-    const form = new FormData();
-    form.append("file", skuImageFile.value!);
-    await api.post(`/api/production/skus/${editingId.value}/images`, form);
-    skuImages.value = (
-      await api.get(`/api/production/skus/${editingId.value}/images`)
-    ).data.data;
-    skuImageFile.value = undefined;
-  });
-}
+function skuImageSaved(row: any) { if (!skuImages.value.some(item => item.id === row.id)) skuImages.value.push(row) }
 async function saveSku() {
   await perform(async () => {
     await api[editingId.value ? "put" : "post"](
@@ -315,23 +303,18 @@ async function reprint(row: any) {
   }
 }
 async function createIssue() {
+  if (issueImagesBusy.value) return;
   await perform(async () => {
+    const code = issue.code;
     lastIssueId.value = (
       await api.post("/api/production/issues", issue)
     ).data.data.id;
-    await upload();
+    savedIssueCode.value = code;
     issue.code = "";
     issue.reason = "";
     await load();
     ElMessage.success("异常已登记并隔离");
   });
-}
-async function upload() {
-  if (!issueImage.value || !lastIssueId.value) return;
-  const form = new FormData();
-  form.append("file", issueImage.value);
-  await api.post(`/api/production/issues/${lastIssueId.value}/images`, form);
-  issueImage.value = undefined;
 }
 async function showImage(id: string) {
   await perform(async () => {
@@ -575,18 +558,9 @@ onMounted(() =>
           ><el-input v-model="issue.code" maxlength="128" /></el-form-item
         ><el-form-item label="异常原因"
           ><el-input v-model="issue.reason" maxlength="500" /></el-form-item
-        ><el-form-item
-          ><input
-            type="file"
-            accept="image/png,image/jpeg"
-            @change="
-              issueImage = ($event.target as HTMLInputElement).files?.[0]
-            " /></el-form-item
-        ><el-button type="danger" @click="createIssue">登记并隔离</el-button
-        ><el-button v-if="lastIssueId && issueImage" @click="perform(upload)"
-          >重试上传图片</el-button
-        ></el-form
-      >
+        ><el-button type="danger" :disabled="issueImagesBusy" @click="createIssue">登记并隔离</el-button></el-form>
+      <p v-if="canReportIssue && lastIssueId">照片归属：{{ savedIssueCode }} · 异常 {{ lastIssueId }}</p>
+      <BusinessAttachmentUpload v-if="canReportIssue && lastIssueId" :key="lastIssueId" :endpoint="`/api/production/issues/${lastIssueId}/images`" images-only @saved="perform(load)" @busy="issueImagesBusy = $event" />
       <el-table :data="issues"
         ><el-table-column prop="code" label="车辆/部件编码" /><el-table-column
           prop="reason"
@@ -666,17 +640,7 @@ onMounted(() =>
       </div>
     </el-dialog>
     <el-dialog v-model="skuVisible" title="生产商品 SKU" width="550px">
-      <div v-if="editingId" class="toolbar">
-        <input
-          type="file"
-          accept="image/png,image/jpeg"
-          @change="
-            skuImageFile = ($event.target as HTMLInputElement).files?.[0]
-          "
-        /><el-button :disabled="!skuImageFile" @click="uploadSkuImage"
-          >上传图片</el-button
-        >
-      </div>
+      <BusinessAttachmentUpload v-if="editingId && skuVisible" :key="editingId" :endpoint="`/api/production/skus/${editingId}/images`" images-only @saved="skuImageSaved" />
       <el-button v-for="a in skuImages" :key="a.id" @click="showImage(a.id)"
         >查看图片</el-button
       >

@@ -89,9 +89,16 @@ public class ProductionController {
   }
 
   @PostMapping("/skus/{id}/images")
-  public ApiResponse<?> uploadSku(@PathVariable long id, @RequestPart MultipartFile file)
+  public ApiResponse<?> uploadSku(@PathVariable long id, @RequestParam(required=false) String requestId, @RequestPart MultipartFile file, org.springframework.web.multipart.MultipartHttpServletRequest request)
       throws java.io.IOException {
-    return ApiResponse.success("上传成功", attachments.uploadSku(id, file));
+    com.bike.server.common.AttachmentBatch.requireSingle(request);
+    return ApiResponse.success("上传成功", attachments.uploadSku(id, requestId == null ? java.util.UUID.randomUUID().toString() : requestId, file));
+  }
+
+  @PostMapping("/skus/{id}/images/batch")
+  public ApiResponse<?> uploadSkuBatch(@PathVariable long id, @RequestParam java.util.List<String> requestIds,
+      @RequestPart("files") java.util.List<MultipartFile> files, org.springframework.web.multipart.MultipartHttpServletRequest request) {
+    return ApiResponse.success(com.bike.server.common.AttachmentBatch.upload(requestIds,files,request,(key,file)->attachments.uploadSku(id,key,file)));
   }
 
   @PutMapping("/skus/{id}")
@@ -176,9 +183,16 @@ public class ProductionController {
   }
 
   @PostMapping("/issues/{id}/images")
-  public ApiResponse<?> upload(@PathVariable String id, @RequestPart MultipartFile file)
+  public ApiResponse<?> upload(@PathVariable String id, @RequestParam(required=false) String requestId, @RequestPart MultipartFile file, org.springframework.web.multipart.MultipartHttpServletRequest request)
       throws java.io.IOException {
-    return ApiResponse.success("上传成功", attachments.upload(id, file));
+    com.bike.server.common.AttachmentBatch.requireSingle(request);
+    return ApiResponse.success("上传成功", attachments.upload(id, requestId == null ? java.util.UUID.randomUUID().toString() : requestId, file));
+  }
+
+  @PostMapping("/issues/{id}/images/batch")
+  public ApiResponse<?> uploadIssueBatch(@PathVariable String id, @RequestParam java.util.List<String> requestIds,
+      @RequestPart("files") java.util.List<MultipartFile> files, org.springframework.web.multipart.MultipartHttpServletRequest request) {
+    return ApiResponse.success(com.bike.server.common.AttachmentBatch.upload(requestIds,files,request,(key,file)->attachments.upload(id,key,file)));
   }
 
   @GetMapping("/images/{id}")

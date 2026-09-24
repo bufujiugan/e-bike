@@ -105,6 +105,7 @@ public interface ProductionMapper {
       @Param("objectKey") String objectKey,
       @Param("contentType") String contentType,
       @Param("size") long size,
+      @Param("name") String name, @Param("sha256") String sha256, @Param("requestId") String requestId,
       @Param("operator") String operator);
 
   Map<String, Object> selectAttachment(String id);
@@ -119,7 +120,13 @@ public interface ProductionMapper {
       @Param("objectKey") String key,
       @Param("contentType") String type,
       @Param("size") long size,
+      @Param("name") String name, @Param("sha256") String sha256, @Param("requestId") String requestId,
       @Param("operator") String operator);
+
+  String lockAttachmentIssue(String id);
+  Long lockAttachmentSku(long id);
+  Map<String,Object> selectAttachmentRequest(@Param("issueId") String issueId, @Param("skuId") Long skuId, @Param("requestId") String requestId);
+  long countObjectAttachments(@Param("issueId") String issueId, @Param("skuId") Long skuId);
 
   int insertPrint(
       @Param("id") String id,

@@ -121,7 +121,7 @@
     </select>
     <select id="lockOrder" resultType="long">SELECT id FROM bike_sales_order WHERE id=#{id} FOR UPDATE</select>
     <select id="selectSkuImage" resultType="com.bike.server.pi.PiImageService$StoredImage">
-        SELECT id,object_key,content_type,file_size,sku_id FROM bike_production_attachment WHERE sku_id=#{skuId}
+        SELECT id,object_key,content_type,file_size,sku_id,sha256 FROM bike_production_attachment WHERE sku_id=#{skuId}
         <if test="imageId != null and imageId != ''">AND id=#{imageId}</if>
         ORDER BY created_at,id LIMIT 1
     </select>

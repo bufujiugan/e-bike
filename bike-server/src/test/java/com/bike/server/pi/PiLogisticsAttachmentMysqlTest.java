@@ -45,7 +45,7 @@ class PiLogisticsAttachmentMysqlTest {
             var another=pi();var otherLogistics=new PiLogisticsView();otherLogistics.setId(2L);another.setLogistics(List.of(otherLogistics));when(viewService.get(2)).thenReturn(another);
         }
         PiLogisticsAttachmentService service(com.bike.server.production.ProductionFileStore store) {
-            var target=new PiLogisticsAttachmentService(viewService,attachments,store,new AfterSalesUploadValidator(new AfterSalesVideoValidator(8_294_400,600,72000)),logs);
+            var target=new PiLogisticsAttachmentService(viewService,attachments,store,new com.bike.server.common.BusinessUploadValidator(),logs);
             var proxy=new org.springframework.aop.framework.ProxyFactory(target);proxy.setProxyTargetClass(true);
             proxy.addAdvice(new org.springframework.transaction.interceptor.TransactionInterceptor(manager,new org.springframework.transaction.annotation.AnnotationTransactionAttributeSource()));
             return (PiLogisticsAttachmentService)proxy.getProxy();

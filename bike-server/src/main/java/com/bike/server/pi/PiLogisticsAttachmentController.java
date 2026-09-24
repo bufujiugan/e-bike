@@ -27,4 +27,9 @@ public class PiLogisticsAttachmentController {
                 .header(HttpHeaders.CONTENT_DISPOSITION,ContentDisposition.attachment().filename(row.fileName(),StandardCharsets.UTF_8).build().toString())
                 .contentType(MediaType.parseMediaType(row.contentType())).contentLength(row.fileSize()).body(result.bytes());
     }
+    @PostMapping(value="/batch",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<?> batch(@PathVariable long piId,@PathVariable long logisticsId,@RequestParam List<String> requestIds,@RequestParam String visibility,
+            @RequestPart("files") List<MultipartFile> files,MultipartHttpServletRequest request) {
+        return ApiResponse.success(AttachmentBatch.upload(requestIds,files,request,(key,file)->service.upload(piId,logisticsId,key,visibility,file)));
+    }
 }

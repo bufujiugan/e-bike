@@ -3,7 +3,6 @@ package com.bike.server.pi;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
-import com.bike.server.aftersales.AfterSalesUploadValidator;
 import java.io.*;
 import java.nio.file.*;
 import java.util.concurrent.*;
@@ -21,7 +20,7 @@ class PiConfirmationMysqlTest {
     @Test void attachmentScopeIntegrityAndAuditRollbackUseTheSameBusinessTransaction()throws Exception {
         try(var f=new PiPublishingMysqlTest.Fixture();var store=f.store(directory)) {
             var view=f.pi();var pis=mock(PiService.class);when(pis.get(1)).thenReturn(view);
-            var service=new PiConfirmationService(pis,f.pis,f.confirmations,store,new AfterSalesUploadValidator(new com.bike.server.aftersales.AfterSalesVideoValidator(8_294_400,600,72000)),f.logs);
+            var service=new PiConfirmationService(pis,f.pis,f.confirmations,store,new com.bike.server.common.BusinessUploadValidator(),f.logs);
             byte[] bytes=PiImageServiceTest.picture();var upload=new MockMultipartFile("file","confirmation.png","image/png",bytes);
             PiPublishingMysqlTest.login("ROLE_WEB_OPERATOR","PERM_PI_WRITE","PERM_PI_READ");
             var a=f.tx.execute(s->{try{return service.upload(1,"customer","CUSTOMER",upload);}catch(IOException e){throw new UncheckedIOException(e);}});
@@ -52,7 +51,7 @@ class PiConfirmationMysqlTest {
             });
             // Establish a read snapshot BEFORE the parent lock, reproducing PiService.get in the real HTTP path.
             when(f.pis.lockPi(1)).thenAnswer(call->new JdbcTemplate(f.source).queryForObject("SELECT id FROM "+f.prefix+"pi_template WHERE id=1 FOR UPDATE",Long.class));
-            var target=new PiConfirmationService(pis,f.pis,f.confirmations,store,new AfterSalesUploadValidator(new com.bike.server.aftersales.AfterSalesVideoValidator(8_294_400,600,72000)),f.logs);
+            var target=new PiConfirmationService(pis,f.pis,f.confirmations,store,new com.bike.server.common.BusinessUploadValidator(),f.logs);
             var proxy=new org.springframework.aop.framework.ProxyFactory(target);proxy.setProxyTargetClass(true);
             proxy.addAdvice(new org.springframework.transaction.interceptor.TransactionInterceptor(f.manager,new org.springframework.transaction.annotation.AnnotationTransactionAttributeSource()));
             var service=(PiConfirmationService)proxy.getProxy();

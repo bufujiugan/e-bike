@@ -19,4 +19,5 @@ public interface PiReceiptAttachmentMapper {
     Stored selectByRequest(@Param("paymentId") long paymentId, @Param("requestId") String requestId);
     Stored selectStored(@Param("paymentId") long paymentId, @Param("id") String id);
     int insert(Stored row);
+    long count(long paymentId);
 }
