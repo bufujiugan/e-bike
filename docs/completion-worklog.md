@@ -469,3 +469,15 @@ PI列表支持客户编号、SKU、关联订单、实际出库单/批次及物�
 batch35-web-build.log类型检查与构建通过，主包1699.98KB告警保留。batch35-report-http.json/.log共23组真实HTTP通过且cleanupFailures为空，覆盖普通账号五队列相关权限、实际出库/撤销统计、跨字段搜索、XLSX响应及撤权后统计清零。API18182运行acceptance-batch35-runtime.jar，SHA256为2E07C005ED1C80657E4295576F456A814382970C3D195DCC67FBC913CCFF15BA，health为UP；本批无迁移变动，仍V45。
 
 新增/移除SKU、客户转移、卖方受控国家及联系方式、附件WebP/XLSX和批量容量、普通岗位浏览器及正式交付仍待完成或验证。批次35是实施回归，不是全项目最终验收；最终两轮仍为0轮，未推送GitHub。
+
+## 批次36：受控卖方资料与V3版式（2026-09-24）
+
+V46新增模板卖方国家/地区、联系人、电话、Email。新模板四项必填，Email校验格式，独立发布权限、不可覆盖版本及审计事务延续；补充联系方式可留空。Web模板发布/明细及PI只读带入已接入，后端保存和确认逐字段匹配，客户默认资料捕获保留卖方字段。历史未知资料留空，V1/V2模板只读，新建/修改/确认需选择完整V3新版本；已发布PI原快照与归档不动。
+
+归档固定PI_V3，旧V2不增加新字段输出，V1及无版本旧任务仍用历史版式。草稿预览按模板选择相应渲染器。真实MySQL覆盖历史模板迁移保留、缺失/错误Email/版式拒绝、四字段防篡改、可选补充联系方式、新旧归档和模板版本互不覆盖。
+
+batch36-targeted.log 17项通过；batch36-full-verify.log初版410项全量通过。随后统一可选补充联系方式的NULL/空字符串语义并补回归，修正预览夹具五行与总额，使1250-5+2.50+10+12.34=1269.84；batch36-final-targeted-package.log 18项通过，当前batch36-final-full-verify.log为411项，0失败/错误/跳过，包含全新b36final空库/升级库。batch36-web-build.log类型检查/构建通过，主包1699.98KB告警保留。
+
+batch36-seller-http.json/.log 24组全部通过，cleanupFailures为空。普通岗位原链路、新卖方字段捕获/篡改拒绝、新模板不覆盖旧PI/归档、V2新发布拒绝均通过。API18182运行acceptance-batch36-runtime.jar，SHA256 BA0CBB098B303F1303C29B521F5BE5622468E48E6D515EAA4F0A483D5859BA43，health UP、V46应用成功。V46四镜像SHA256 2E420F805163A9E484733AA4BF390439D7DF620C0931E6011CADDE9924FFA1F5，已冻结。
+
+batch36-preview保留内外销PDF各2页、XLSX及LibreOffice打印预览各3页；中文卖方四字段、金额、表头/页码可读，无截断。Excel延续原重复表头，末页保留条款尾部，不作为正式业务样单签认。未进行普通岗位浏览器验收。本批是实施专项与回归，全项目最终两轮仍为0轮，未推送GitHub；附件格式/容量/批量、新增/移除SKU、客户转移和正式交付仍待完成。

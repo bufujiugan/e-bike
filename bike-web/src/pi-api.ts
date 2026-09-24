@@ -17,11 +17,15 @@ export type PiDocument = {
   issueDate?: string | null; validUntil?: string | null; shippingAddress?: string | null; transportMode?: string | null
   tradeTerms?: string | null; buyerCountry?: string | null; sellerCountry?: string | null
   buyerContactName?: string | null; buyerPhone?: string | null; buyerEmail?: string | null; businessOwner?: string | null
+  sellerContactName?: string | null; sellerPhone?: string | null; sellerEmail?: string | null
 }
 export type PiTemplate = Pick<PiDocument, 'templateCode' | 'templateVersion' | 'sellerName' | 'sellerAddress' | 'sellerContact' | 'bankName' | 'bankAccount' | 'beneficiary'> & {
   id: number; tradeType: string; layoutCode: string; publishReason: string; publishedAt: string
+  sellerCountry: string | null; sellerContactName: string | null; sellerPhone: string | null; sellerEmail: string | null
 }
-export type PiTemplatePublish = Omit<PiTemplate, 'id' | 'publishedAt' | 'publishReason'> & { reason: string }
+export type PiTemplatePublish = Omit<PiTemplate, 'id' | 'publishedAt' | 'publishReason'> & {
+  reason: string; sellerCountry: string; sellerContactName: string; sellerPhone: string; sellerEmail: string
+}
 export type PiExportJob = { piId: number; sourceType: string; status: string; revision: number; attempts: number; pdfSha256?: string; pdfSize?: number; xlsxSha256?: string; xlsxSize?: number; errorCode?: string; createdAt: string; updatedAt: string }
 export type PiConfirmationAttachment = { id: string; piId: number; fileName: string; contentType: string; fileSize: number; sha256: string; visibility: 'CUSTOMER' | 'INTERNAL'; createdAt: string }
 export type PiLogisticsAttachment = Omit<PiConfirmationAttachment, 'piId'> & { logisticsId: number }

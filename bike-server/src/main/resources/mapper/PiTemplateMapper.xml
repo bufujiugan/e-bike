@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.bike.server.pi.PiTemplateMapper">
-    <sql id="fields">id,template_code,template_version,trade_type,layout_code,seller_name,seller_address,seller_contact,bank_name,bank_account,beneficiary,publish_reason,published_by,published_at</sql>
+    <sql id="fields">id,template_code,template_version,trade_type,layout_code,seller_name,seller_address,seller_contact,bank_name,bank_account,beneficiary,publish_reason,published_by,published_at,seller_country,seller_contact_name,seller_phone,seller_email</sql>
     <sql id="filter"><where><if test="tradeType != null">trade_type=#{tradeType}</if></where></sql>
     <select id="list" resultType="com.bike.server.pi.PiTemplate">SELECT <include refid="fields"/> FROM bike_pi_template <include refid="filter"/> ORDER BY id DESC LIMIT #{offset},#{limit}</select>
     <select id="count" resultType="long">SELECT COUNT(*) FROM bike_pi_template <include refid="filter"/></select>
     <select id="find" resultType="com.bike.server.pi.PiTemplate">SELECT <include refid="fields"/> FROM bike_pi_template WHERE template_code=#{code} AND template_version=#{version}</select>
     <insert id="publish">
-        INSERT INTO bike_pi_template(template_code,template_version,trade_type,layout_code,seller_name,seller_address,seller_contact,bank_name,bank_account,beneficiary,publish_reason,published_by)
-        VALUES(#{request.templateCode},#{request.templateVersion},#{request.tradeType},#{request.layoutCode},#{request.sellerName},#{request.sellerAddress},#{request.sellerContact},#{request.bankName},#{request.bankAccount},#{request.beneficiary},#{request.reason},#{operatorId})
+        INSERT INTO bike_pi_template(template_code,template_version,trade_type,layout_code,seller_name,seller_address,seller_contact,bank_name,bank_account,beneficiary,publish_reason,published_by,seller_country,seller_contact_name,seller_phone,seller_email)
+        VALUES(#{request.templateCode},#{request.templateVersion},#{request.tradeType},#{request.layoutCode},#{request.sellerName},#{request.sellerAddress},#{request.sellerContact},#{request.bankName},#{request.bankAccount},#{request.beneficiary},#{request.reason},#{operatorId},#{request.sellerCountry},#{request.sellerContactName},#{request.sellerPhone},#{request.sellerEmail})
     </insert>
 </mapper>

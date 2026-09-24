@@ -154,6 +154,12 @@ public class PiDocumentService {
             lines.add("卖方 / Seller: " + text(d.sellerName()));
             add(lines, "卖方地址: ", d.sellerAddress()); add(lines, "卖方联系方式: ", d.sellerContact());
             add(lines,"卖方国家/地区 / Seller country: ",d.sellerCountry());
+            // Saved V2 jobs retain their original output. New fields belong only to the V3 renderer.
+            if("PI_V3".equals(p.getDocumentRenderVersion())) {
+                add(lines,"卖方联系人 / Seller contact: ",d.sellerContactName());
+                add(lines,"卖方电话 / Seller phone: ",d.sellerPhone());
+                add(lines,"卖方邮箱 / Seller email: ",d.sellerEmail());
+            }
         }
         lines.add("买方 / Buyer: " + text(p.getCustomerName()) + "    " + text(p.getCustomerCode()));
         if (d != null) {

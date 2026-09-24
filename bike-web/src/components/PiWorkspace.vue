@@ -24,7 +24,7 @@ const canRead = computed(() => !isPda.value && hasPermission(props.context, 'PI_
 const canWrite = computed(() => allowed('PI_WRITE'))
 const canManageTemplates = computed(() => allowed('PI_TEMPLATE_MANAGE'))
 const templateVisible = ref(false)
-const fixedDocumentFields = ['sellerName', 'sellerAddress', 'sellerContact', 'bankName', 'bankAccount', 'beneficiary', 'templateCode', 'templateVersion']
+const fixedDocumentFields = ['sellerName', 'sellerAddress', 'sellerContact', 'sellerCountry', 'sellerContactName', 'sellerPhone', 'sellerEmail', 'bankName', 'bankAccount', 'beneficiary', 'templateCode', 'templateVersion']
 function chooseTemplate(value: PiTemplate) {
   for (const key of fixedDocumentFields as (keyof PiDocument)[]) draft.document[key] = value[key as keyof PiTemplate] as string
 }
@@ -65,6 +65,7 @@ const paymentNames: Record<string, string> = { UNPAID: '未收款', PARTIAL: '�
 const states = computed(() => isAgent.value ? ['CONFIRMED', 'RELEASED'] : ['DRAFT', 'CONFIRMED', 'RELEASED', 'CANCELLED', 'SUPERSEDED'])
 const documentLabels: [keyof PiDocument, string][] = [
   ['sellerName', '卖方名称'], ['sellerAddress', '卖方地址'], ['sellerContact', '卖方联系方式'],
+  ['sellerContactName', '卖方联系人'], ['sellerPhone', '卖方电话'], ['sellerEmail', '卖方Email'],
   ['buyerAddress', '买方地址'], ['buyerContact', '买方联系方式'], ['beneficiary', '收款人'],
   ['bankName', '收款银行'], ['bankAccount', '收款账号'], ['paymentTerms', '付款条款'],
   ['deliveryTerms', '交付条款'], ['templateCode', '模板名称 / 编码'], ['templateVersion', '模板版本'],

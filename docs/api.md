@@ -193,7 +193,7 @@ H5 使用该接口，可搜索、翻页，翻页保留已选订单；切换客�
 # PI模板发布与归档任务（V38/V39）
 
 - `GET /api/pi-templates?tradeType=DOMESTIC&page=1&pageSize=20`：内部PI_WRITE或PI_TEMPLATE_MANAGE可读，最多100条/页。
-- `POST /api/pi-templates`：仅内部PI_TEMPLATE_MANAGE；字段templateCode、templateVersion、tradeType、layoutCode、sellerName、sellerAddress、sellerContact、bankName、bankAccount、beneficiary、reason。版式仅DOMESTIC_V1/EXPORT_V1，必须匹配tradeType；版本唯一、只追加、发布与审计同事务。没有上传或执行自定义模板代码的接口。
+- `POST /api/pi-templates`：仅内部PI_TEMPLATE_MANAGE；字段templateCode、templateVersion、tradeType、layoutCode、sellerName、sellerAddress、sellerCountry、sellerContactName、sellerPhone、sellerEmail、bankName、bankAccount、beneficiary、reason必填；sellerContact为可选补充联系方式。新发布仅DOMESTIC_V3/EXPORT_V3，必须匹配tradeType，Email校验格式；版本唯一、只追加、发布与审计同事务。没有上传或执行自定义模板代码的接口。
 - PI草稿选定模板后，保存和确认都校验已发布版本、贸易类型和全部卖方/银行字段，拒绝请求改写；历史草稿必须重新选用受控模板，旧已确认快照保持原样。
 - `GET /api/pis/{id}/export-task`：PI_READ+PI_EXPORT及原公司范围。无任务返回null；否则返回状态、来源、revision、尝试次数、文件哈希和大小，不返回快照、对象键或领取token。
 - `POST /api/pis/{id}/export-task/retry`：内部、同上权限；请求`{revision,reason}`。FAILED重试需当前revision；历史已发布且无任务时revision=0。正在处理/已成功/过期请求拒绝，审计失败整体回滚。代理客户不能重新排队。
@@ -205,7 +205,7 @@ H5 使用该接口，可搜索、翻页，翻页保留已选订单；切换客�
 
 草稿document新增issueDate、validUntil、shippingAddress、transportMode、tradeTerms、buyerCountry、sellerCountry。保存拒绝倒置日期；确认要求日期、买方地址/联系方式、收货和运输，外销额外要求国家及贸易术语。otherFeeAmount参与精确总额；items新增unit（新请求未填默认台）、imageAttachmentId（未选取SKU首图），保存图片SHA256且检查SKU归属，历史无图片不回填。
 
-模板支持DOMESTIC_V2/EXPORT_V2，新发布页面默认V2；V1继续按冻结旧布局生成。归档快照固定documentRenderVersion，旧任务无字段时使用PI_V1，重试不能混用版式。
+历史DOMESTIC_V2/EXPORT_V2保留读取和原版式归档；V46后新发布采用V3，增加受控卖方国家/地区、联系人、电话和Email，保存/确认防篡改。V1/V2不能再选用于新建/修改/确认草稿，返回PI_TEMPLATE_LEGACY_READ_ONLY，需管理员发布完整资料的新版本。原已发布PI和归档不变。归档快照固定documentRenderVersion为PI_V1/PI_V2/PI_V3，旧任务无字段时使用PI_V1，重试不能混用版式；草稿预览按对应模板版本输出。
 
 - `GET /api/pis/{id}/items/{itemId}/image`：原PI读取范围、图片归属及哈希校验，no-store/nosniff。
 - `GET /api/pis/{id}/confirmation-attachments`：内部可见全部，客户只可见CUSTOMER，原PI公司范围仍生效。

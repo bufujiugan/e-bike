@@ -18,6 +18,32 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PiDocumentServiceTest {
     private final PiDocumentService service = new PiDocumentService();
 
+    @Test void v3SellerFieldsRenderInBothFormatsButNeverChangeSavedV2Output()throws Exception {
+        var pi=sample(5);pi.setDocument(PiPublishingMysqlTest.document());
+        pi.setSubtotal(new BigDecimal("1250.00"));pi.setDiscountAmount(new BigDecimal("5.00"));pi.setTaxAmount(new BigDecimal("2.50"));
+        pi.setOtherFeeAmount(new BigDecimal("12.34"));pi.setTotalAmount(new BigDecimal("1269.84"));pi.setShipmentRequiredAmount(pi.getTotalAmount());
+        for(var item:pi.getItems()){item.setUnit("PCS");item.setModelName("城市通勤型");}
+        pi.setDocumentRenderVersion("PI_V2");
+        try(var pdf=Loader.loadPDF(service.pdf(pi))){assertThat(new PDFTextStripper().getText(pdf)).doesNotContain("卖方张经理","seller@example.invalid","+86-000-TEST");}
+        try(var book=new XSSFWorkbook(new ByteArrayInputStream(service.excel(pi)))) {
+            var text=new StringBuilder();book.getSheetAt(0).forEach(r->r.forEach(c->text.append(c).append('\n')));
+            assertThat(text).doesNotContain("卖方张经理","seller@example.invalid","+86-000-TEST");
+        }
+        pi.setDocumentRenderVersion("PI_V3");
+        for(String trade:java.util.List.of("DOMESTIC","EXPORT")) {
+            pi.setTradeType(trade);byte[] bytes=service.pdf(pi);
+            try(var pdf=Loader.loadPDF(bytes)) {
+                assertThat(new PDFTextStripper().getText(pdf)).contains("卖方张经理","seller@example.invalid","+86-000-TEST","Seller country: CN");
+                String output=System.getProperty("bike.pi.preview.dir");
+                if(output!=null) {
+                    Path folder=Path.of(output);Files.createDirectories(folder);String name="pi-v3-"+trade.toLowerCase(java.util.Locale.ROOT);
+                    Files.write(folder.resolve(name+".pdf"),bytes);Files.write(folder.resolve(name+".xlsx"),service.excel(pi));
+                    var renderer=new PDFRenderer(pdf);for(int i=0;i<pdf.getNumberOfPages();i++)ImageIO.write(renderer.renderImageWithDPI(i,110),"PNG",folder.resolve(name+"-"+(i+1)+".png").toFile());
+                }
+            }
+        }
+    }
+
     @Test void v2RendersImageUnitsDatesAndOtherFeesWhileLegacyRendererStaysFrozen()throws Exception {
         var pi=sample(5);var d=pi.getDocument();
         pi.setDocument(new PiDocumentSnapshot(d.sellerName(),d.sellerAddress(),d.sellerContact(),d.buyerAddress(),d.buyerContact(),d.bankName(),d.bankAccount(),d.beneficiary(),d.paymentTerms(),d.deliveryTerms(),d.templateCode(),d.templateVersion(),

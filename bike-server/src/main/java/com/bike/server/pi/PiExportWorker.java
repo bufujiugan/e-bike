@@ -36,7 +36,7 @@ public class PiExportWorker implements AutoCloseable {
         try {
             var snapshot=json.readValue(job.snapshotJson(),PiView.class);
             if(snapshot.getDocumentRenderVersion()==null)snapshot.setDocumentRenderVersion("PI_V1");
-            if(!java.util.Set.of("PI_V1","PI_V2").contains(snapshot.getDocumentRenderVersion()))throw new IOException("Unsupported saved renderer version");
+            if(!java.util.Set.of("PI_V1","PI_V2","PI_V3").contains(snapshot.getDocumentRenderVersion()))throw new IOException("Unsupported saved renderer version");
             if(job.pdfKey()==null)save(job,"pdf",documents.pdf(snapshot));
             if(job.xlsxKey()==null)save(job,"xlsx",documents.excel(snapshot));
             mapper.ready(job.piId(),job.claimToken());

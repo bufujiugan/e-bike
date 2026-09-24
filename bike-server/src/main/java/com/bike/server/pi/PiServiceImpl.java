@@ -384,6 +384,7 @@ public class PiServiceImpl implements PiService {
     public byte[] excel(long id) {
         CurrentOperator.requirePermission("PI_EXPORT");
         var pi=get(id);
+        if(templates!=null&&"DRAFT".equals(pi.getStatus()))templates.selectRenderer(pi);
         return archives==null||"DRAFT".equals(pi.getStatus())?documents.excel(pi):archives.download(id,"xlsx");
     }
 
@@ -391,6 +392,7 @@ public class PiServiceImpl implements PiService {
     public byte[] pdf(long id) {
         CurrentOperator.requirePermission("PI_EXPORT");
         var pi=get(id);
+        if(templates!=null&&"DRAFT".equals(pi.getStatus()))templates.selectRenderer(pi);
         return archives==null||"DRAFT".equals(pi.getStatus())?documents.pdf(pi):archives.download(id,"pdf");
     }
 

@@ -27,7 +27,18 @@ public record PiDocumentSnapshot(
         @Size(max = 100) String buyerContactName,
         @Size(max = 64) String buyerPhone,
         @jakarta.validation.constraints.Email @Size(max = 254) String buyerEmail,
-        @Size(max = 150) String businessOwner) {
+        @Size(max = 150) String businessOwner,
+        @Size(max = 100) String sellerContactName,
+        @Size(max = 64) String sellerPhone,
+        @jakarta.validation.constraints.Email @Size(max = 254) String sellerEmail) {
+    public PiDocumentSnapshot(String sellerName,String sellerAddress,String sellerContact,String buyerAddress,String buyerContact,
+            String bankName,String bankAccount,String beneficiary,String paymentTerms,String deliveryTerms,String templateCode,String templateVersion,
+            LocalDate issueDate,LocalDate validUntil,String shippingAddress,String transportMode,String tradeTerms,String buyerCountry,String sellerCountry,
+            String buyerContactName,String buyerPhone,String buyerEmail,String businessOwner) {
+        this(sellerName,sellerAddress,sellerContact,buyerAddress,buyerContact,bankName,bankAccount,beneficiary,paymentTerms,deliveryTerms,
+                templateCode,templateVersion,issueDate,validUntil,shippingAddress,transportMode,tradeTerms,buyerCountry,sellerCountry,
+                buyerContactName,buyerPhone,buyerEmail,businessOwner,null,null,null);
+    }
     public PiDocumentSnapshot(String sellerName,String sellerAddress,String sellerContact,String buyerAddress,String buyerContact,
             String bankName,String bankAccount,String beneficiary,String paymentTerms,String deliveryTerms,String templateCode,String templateVersion,
             LocalDate issueDate,LocalDate validUntil,String shippingAddress,String transportMode,String tradeTerms,String buyerCountry,String sellerCountry) {

@@ -100,3 +100,11 @@ bike_pi_payment增加payment_method/payment_method_note/recorded_at/revision及r
 ## V44 PI物流记录附件
 
 新增bike_pi_logistics_attachment，实际logistics_id外键、每记录请求唯一、CUSTOMER/INTERNAL可见性及文件字节数/类型/对象键/SHA256。历史无文件不回填。四镜像SHA256：`426A33F0C93CF2E212CBF6B8D717F3270438260833C64837B993C0AD755D174C`，已执行新库/升级库及隔离API，不再修改。
+
+## V45 内部客户授权
+
+增加内部用户客户关系、范围版本和独立管理/全范围权限。普通岗位不自动获得全部客户。四镜像SHA256：`BBF677F8BED0558F0B3F2D1216D4E07F7854449C19881117784BFF81ED674B87`，已执行隔离API及全新/升级库，禁止修改。
+
+## V46 受控卖方资料
+
+bike_pi_template增加seller_country/seller_contact_name/seller_phone/seller_email。历史值允许NULL，不推断或更新旧模板内容、银行资料和发布时间；新发布完整性由V3模板服务强制。四镜像SHA256：`2E420F805163A9E484733AA4BF390439D7DF620C0931E6011CADDE9924FFA1F5`，已执行隔离API及全新/升级库，禁止修改。

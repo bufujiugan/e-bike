@@ -6,4 +6,5 @@ import java.time.LocalDateTime;
 public record PiTemplate(long id, String templateCode, String templateVersion, String tradeType,
         String layoutCode, String sellerName, String sellerAddress, String sellerContact,
         String bankName, String bankAccount, String beneficiary, String publishReason,
-        Long publishedBy, LocalDateTime publishedAt) {}
+        Long publishedBy, LocalDateTime publishedAt, String sellerCountry,
+        String sellerContactName, String sellerPhone, String sellerEmail) {}

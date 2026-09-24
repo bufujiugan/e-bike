@@ -109,14 +109,17 @@ try {
     items: skus.map(s => ({ skuId: s.id, quantity: 1, unitPrice: '100.00', unit: 'PCS' })), otherFeeAmount: '12.34',
   } };
   Object.assign(body.pi.document, { buyerAddress: '', buyerCountry: '', shippingAddress: '' });
-  const publishRequest = { ...body.pi.document, tradeType: 'DOMESTIC', layoutCode: 'DOMESTIC_V1', reason: '模板权限验证' };
+  const publishRequest = { ...body.pi.document, tradeType: 'DOMESTIC', layoutCode: 'DOMESTIC_V3', reason: '模板权限验证' };
   await req('/api/pi-templates', publishRequest, { token: sales, code: 'PERMISSION_DENIED' });
   await req('/api/pi-templates', publishRequest, { token: external, code: 'FORBIDDEN' });
   await req('/api/pi-templates', undefined, { token: external, code: 'FORBIDDEN' });
   await req('/api/pi-templates', publishRequest, { code: 'PI_TEMPLATE_EXISTS' });
   await req('/api/pis/from-locks', { ...body, pi: { ...body.pi, document: { ...body.pi.document, bankAccount: 'TAMPERED' } } }, { token: sales, code: 'PI_TEMPLATE_SNAPSHOT_MISMATCH' });
+  for (const field of ['sellerCountry', 'sellerContactName', 'sellerPhone', 'sellerEmail']) {
+    await req('/api/pis/from-locks', { ...body, pi: { ...body.pi, document: { ...body.pi.document, [field]: field === 'sellerEmail' ? 'tampered@example.invalid' : 'TAMPERED' } } }, { token: sales, code: 'PI_TEMPLATE_SNAPSHOT_MISMATCH' });
+  }
   await req('/api/pis/from-locks', { ...body, pi: { ...body.pi, document: { ...body.pi.document, templateVersion: 'UNPUBLISHED' } } }, { token: sales, code: 'PI_TEMPLATE_NOT_PUBLISHED' });
-  pass('模板发布独立权限及外部误授权拒绝，已发布版本不可覆盖，银行改写和未发布模板不能创建PI');
+  pass('模板发布独立权限及外部误授权拒绝，V3版本不可覆盖，卖方国家/联系人/电话/邮箱和银行改写不能创建PI');
   await req('/api/pis/from-locks', body, { token: reader, code: 'PERMISSION_DENIED' });
   await req('/api/pis/from-locks', body, { token: external, code: 'FORBIDDEN' });
   await req(`/api/pis/lock-options?customerId=${customer.id}`, undefined, { token: external, code: 'FORBIDDEN' });
@@ -127,6 +130,7 @@ try {
 
   const results = await Promise.all([req('/api/pis/from-locks', body, { token: sales }), req('/api/pis/from-locks', { ...body, sources: [...body.sources].reverse() }, { token: sales })]);
   const pi = results[0]; assert.equal(pi.id, results[1].id); assert.equal(pi.fulfillment.length, 2); assert(pi.seriesId);
+  for (const field of ['sellerCountry', 'sellerContactName', 'sellerPhone', 'sellerEmail']) assert.equal(pi.document[field], body.pi.document[field]);
   assert.equal(pi.document.buyerAddress, customerProfile.address); assert.equal(pi.document.shippingAddress, customerProfile.address);
   assert.equal(pi.document.buyerCountry, customerProfile.country); assert.equal(pi.document.buyerEmail, customerProfile.email); assert.equal(pi.document.businessOwner, customerProfile.businessOwner);
   await req(profilePath, { ...customerProfile, revision: 1, address: '修改后的客户商务地址', email: 'new-buyer@example.invalid' }, { method: 'PUT', token: customerManager });
@@ -196,6 +200,13 @@ try {
   }
   evidence.fixtures.exportHashes = exported;
   pass('确认自动生成两种格式，任务不暴露内部存储，普通销售与客户下载逐字节一致且匹配归档SHA256');
+  await req('/api/pi-templates', { ...publishRequest, templateVersion: '2', sellerCountry: 'DE', sellerContactName: '新版本联系人', sellerPhone: '+49-000-TEST', sellerEmail: 'new-seller@example.invalid' });
+  const originalSeller = (await req(`/api/pis/${pi.id}`, undefined, { token: sales })).document;
+  for (const field of ['sellerCountry', 'sellerContactName', 'sellerPhone', 'sellerEmail']) assert.equal(originalSeller[field], body.pi.document[field]);
+  const afterTemplateChange = await req(`/api/pis/${pi.id}/export-task`, undefined, { token: sales });
+  assert.equal(afterTemplateChange.pdfSha256, exported.pdf); assert.equal(afterTemplateChange.xlsxSha256, exported.xlsx);
+  await req('/api/pi-templates', { ...publishRequest, templateVersion: '3', layoutCode: 'DOMESTIC_V2' }, { code: 'PI_TEMPLATE_INVALID' });
+  pass('新PI完整捕获受控卖方四字段；发布不同卖方资料的新模板版本后原PI及两份归档不变，新发布不接受历史版式');
   for (const source of sourceLocks) {
     const linked = await req(`/api/inventory-locks/${source.id}/orders`, undefined, { token: sales });
     assert.equal(linked.total, 1); assert.equal(linked.records[0].reservationExpiresAt, source.expireTime);

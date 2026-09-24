@@ -42,7 +42,7 @@ public class PiExportArchive {
         try {p.setDocument(pi.getDocumentJson()==null?pi.getDocument():json.readValue(pi.getDocumentJson(),PiDocumentSnapshot.class));}
         catch(IOException error){throw new BusinessException("PI_DOCUMENT_INVALID","PI单据快照无法读取");}
         var d=p.getDocument();var template=templates==null||d==null?null:templates.find(d.templateCode(),d.templateVersion());
-        p.setDocumentRenderVersion(templates==null||template!=null&&template.layoutCode().endsWith("_V2")?"PI_V2":"PI_V1");
+        p.setDocumentRenderVersion(templates==null?"PI_V2":PiTemplateService.renderVersion(template));
         return p;
     }
     public PiExportJob status(long id){CurrentOperator.requirePermission("PI_EXPORT");return mapper.get(id);}
