@@ -36,6 +36,88 @@ class ProductionMysqlTest {
   @Configuration @EnableTransactionManagement
   static class Transactions {}
 
+  static class TaskFixture implements AutoCloseable {
+    final String prefix="tasklist_"+UUID.randomUUID().toString().replace("-","")+"_";
+    final org.apache.ibatis.session.SqlSession session;
+    final ProductionMapper mapper;
+    final Connection connection;
+    TaskFixture() throws Exception {
+      var config=new org.apache.ibatis.session.Configuration(new Environment("task-list",new SpringManagedTransactionFactory(),dataSource()));
+      for(String resource:java.util.List.of("mapper/InventoryPolicyMapper.xml","mapper/ProductionMapper.xml"))try(var stream=Resources.getResourceAsStream(resource)) {
+        var xml=new String(stream.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8).replace("bike_",prefix);
+        new XMLMapperBuilder(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)),config,resource,config.getSqlFragments()).parse();
+      }
+      session=new SqlSessionFactoryBuilder().build(config).openSession();connection=session.getConnection();mapper=session.getMapper(ProductionMapper.class);
+      execute("CREATE TABLE "+prefix+"production_sku(id BIGINT PRIMARY KEY,sku_code VARCHAR(64),product_name VARCHAR(128))");
+      execute("CREATE TABLE "+prefix+"vehicle(id BIGINT PRIMARY KEY,frame_sn VARCHAR(128),vehicle_qr_code VARCHAR(255))");
+      execute("CREATE TABLE "+prefix+"production_task(id VARCHAR(64) PRIMARY KEY,sku_id BIGINT,batch_no VARCHAR(64),status VARCHAR(20),vehicle_id BIGINT,created_by VARCHAR(64),created_at DATETIME(3),updated_at DATETIME(3))");
+      execute("CREATE TABLE "+prefix+"production_scan(task_id VARCHAR(64),code_type VARCHAR(20),code VARCHAR(128),active TINYINT,UNIQUE KEY(task_id,code_type))");
+      execute("INSERT INTO "+prefix+"production_sku VALUES(1,'SKU-TEST','商品规格测试')");
+    }
+    void execute(String sql) throws Exception {try(var statement=connection.createStatement()){statement.execute(sql);}}
+    void task(String id,String state,String updated,Long vehicle) throws Exception {
+      try(var insert=connection.prepareStatement("INSERT INTO "+prefix+"production_task VALUES(?,1,'BATCH-TEST',?,?,'tester','2026-09-01 00:00:00',?)")) {
+        insert.setString(1,id);insert.setString(2,state);insert.setObject(3,vehicle);insert.setTimestamp(4,Timestamp.valueOf(updated));insert.executeUpdate();
+      }
+    }
+    void scan(String id,String type,String code,int active) throws Exception {
+      try(var insert=connection.prepareStatement("INSERT INTO "+prefix+"production_scan VALUES(?,?,?,?)")) {
+        insert.setString(1,id);insert.setString(2,type);insert.setString(3,code);insert.setInt(4,active);insert.executeUpdate();
+      }
+    }
+    public void close() throws Exception {
+      try {for(String table:java.util.List.of("production_scan","production_task","vehicle","production_sku"))execute("DROP TABLE "+prefix+table);}
+      finally {session.close();}
+    }
+  }
+
+  @Test void taskListsSortByCompletionThenModificationAcrossPagesAndFilters() throws Exception {
+    try(var f=new TaskFixture()) {
+      for(int i=0;i<51;i++)f.task("completed-%02d".formatted(i),"COMPLETED",i==50?"2026-09-02 00:00:00":"2026-09-01 00:00:00",null);
+      f.task("open-old","OPEN","2026-09-24 00:00:00",null);
+      f.task("open-new","OPEN","2026-09-25 00:00:00",null);
+      f.task("cancelled","CANCELLED","2026-09-26 00:00:00",null);
+      var first=f.mapper.selectTasks(null,0);
+      assertThat(first).hasSize(50);
+      assertThat(first.getFirst().get("id")).isEqualTo("completed-50");
+      assertThat(first.getLast().get("id")).isEqualTo("completed-01");
+      assertThat(first).allMatch(row->"COMPLETED".equals(row.get("status")));
+      assertThat(f.mapper.selectTasks(null,50)).extracting(row->row.get("id"))
+          .containsExactly("completed-00","open-new","open-old","cancelled");
+      assertThat(f.mapper.selectTasksFiltered(null,0,null,null,null,null)).isEqualTo(first);
+      assertThat(f.mapper.selectTasksFiltered("BATCH-TEST",50,1L,null,java.time.LocalDate.of(2026,9,1),java.time.LocalDate.of(2026,9,1)))
+          .extracting(row->row.get("id")).containsExactly("completed-00","open-new","open-old","cancelled");
+      assertThat(f.mapper.selectTasksFiltered(null,0,1L,"OPEN",null,null)).extracting(row->row.get("id")).containsExactly("open-new","open-old");
+      assertThat(f.mapper.countTasks(null)).isEqualTo(54);
+      assertThat(f.mapper.countTasksFiltered(null,1L,"OPEN",null,null)).isEqualTo(2);
+      assertThat(f.mapper.selectTasksFiltered(null,0,2L,null,null,null)).isEmpty();
+      f.execute("UPDATE "+f.prefix+"production_task SET updated_at=DATE_SUB(NOW(3),INTERVAL 1 DAY) WHERE status='OPEN'");
+      assertThat(f.mapper.touchTask("open-old")).isEqualTo(1);
+      assertThat(f.mapper.selectTasksFiltered(null,0,null,"OPEN",null,null).getFirst().get("id")).isEqualTo("open-old");
+    }
+  }
+
+  @Test void taskCodesIncludePartialScansAndRetainReleasedScanHistory() throws Exception {
+    try(var f=new TaskFixture()) {
+      f.execute("INSERT INTO "+f.prefix+"vehicle VALUES(1,'FRAME-DONE','BIKE:1:AGGREGATE')");
+      f.task("done","COMPLETED","2026-09-01 00:00:00",1L);
+      for(String type:java.util.List.of("FRAME","MOTOR","BATTERY","DISPLAY"))f.scan("done",type,type+"-DONE",0);
+      f.task("partial","OPEN","2026-09-02 00:00:00",null);
+      f.scan("partial","FRAME","FRAME-PARTIAL",1);f.scan("partial","MOTOR","MOTOR-PARTIAL",1);
+      f.task("cancelled","CANCELLED","2026-09-03 00:00:00",null);
+      f.scan("cancelled","BATTERY","BATTERY-CANCELLED",0);
+      var done=f.mapper.selectTasks(null,0).getFirst();
+      assertThat(done).containsEntry("qrCode","BIKE:1:AGGREGATE").containsEntry("frameSn","FRAME-DONE")
+          .containsEntry("motorSn","MOTOR-DONE").containsEntry("batterySn","BATTERY-DONE").containsEntry("displaySn","DISPLAY-DONE");
+      var partial=f.mapper.selectTasksFiltered(null,0,null,"OPEN",null,null).getFirst();
+      assertThat(partial).containsEntry("frameSn","FRAME-PARTIAL").containsEntry("motorSn","MOTOR-PARTIAL");
+      assertThat(partial.get("qrCode")).isNull();assertThat(partial.get("batterySn")).isNull();assertThat(partial.get("displaySn")).isNull();
+      assertThat(f.mapper.selectTasks("FRAME-PARTIAL",0)).hasSize(1);
+      assertThat(f.mapper.countTasksFiltered("FRAME-PARTIAL",null,null,null,null)).isEqualTo(1);
+      assertThat(f.mapper.selectTask("cancelled")).containsEntry("batterySn","BATTERY-CANCELLED");
+    }
+  }
+
   @Test void failureAuditCommitsDespiteOuterRollback() throws Exception {
     var source=dataSource();
     String table="test_scan_failure_"+UUID.randomUUID().toString().replace("-", "");

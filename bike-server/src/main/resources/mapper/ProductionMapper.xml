@@ -21,17 +21,31 @@
     <select id="selectTemplate" resultType="map"><include refid="templateSelect"/> WHERE id=#{id}</select>
     <update id="updateTemplate">UPDATE bike_production_template SET name=#{r.name},width_mm=#{r.widthMm},height_mm=#{r.heightMm},layout=#{r.layout},heading=#{r.heading},version=version+1 WHERE id=#{id}</update>
     <insert id="insertTask">INSERT INTO bike_production_task(id,sku_id,batch_no,created_by) VALUES(#{id},#{r.skuId},#{r.batchNo},#{operator})</insert>
-    <sql id="taskSelect">SELECT t.id,t.sku_id skuId,t.batch_no batchNo,t.status,t.vehicle_id vehicleId,t.created_by createdBy,t.created_at createdAt,t.updated_at updatedAt,s.sku_code skuCode,s.product_name productName,v.frame_sn frameSn,v.vehicle_qr_code qrCode FROM bike_production_task t JOIN bike_production_sku s ON s.id=t.sku_id LEFT JOIN bike_vehicle v ON v.id=t.vehicle_id</sql>
+    <sql id="taskSelect">
+      SELECT t.id,t.sku_id skuId,t.batch_no batchNo,t.status,t.vehicle_id vehicleId,t.created_by createdBy,
+        t.created_at createdAt,t.updated_at updatedAt,s.sku_code skuCode,s.product_name productName,
+        COALESCE(fs.code,v.frame_sn) frameSn,v.vehicle_qr_code qrCode,
+        ms.code motorSn,bs.code batterySn,ds.code displaySn
+      FROM bike_production_task t JOIN bike_production_sku s ON s.id=t.sku_id
+      LEFT JOIN bike_vehicle v ON v.id=t.vehicle_id
+      LEFT JOIN bike_production_scan fs ON fs.task_id=t.id AND fs.code_type='FRAME'
+      LEFT JOIN bike_production_scan ms ON ms.task_id=t.id AND ms.code_type='MOTOR'
+      LEFT JOIN bike_production_scan bs ON bs.task_id=t.id AND bs.code_type='BATTERY'
+      LEFT JOIN bike_production_scan ds ON ds.task_id=t.id AND ds.code_type='DISPLAY'
+    </sql>
     <select id="selectTask" resultType="map"><include refid="taskSelect"/> WHERE t.id=#{id}</select>
     <sql id="taskFilter"><where><if test="keyword != null">t.id LIKE CONCAT('%',#{keyword},'%') OR t.batch_no LIKE CONCAT('%',#{keyword},'%') OR v.frame_sn LIKE CONCAT('%',#{keyword},'%') OR EXISTS(SELECT 1 FROM bike_production_scan sc WHERE sc.task_id=t.id AND sc.code=#{keyword})</if></where></sql>
-    <select id="selectTasks" resultType="map"><include refid="taskSelect"/><include refid="taskFilter"/> ORDER BY t.updated_at DESC LIMIT #{offset},50</select>
+    <sql id="taskOrder">ORDER BY CASE t.status WHEN 'COMPLETED' THEN 2 WHEN 'OPEN' THEN 1 ELSE 0 END DESC,t.updated_at DESC,t.id DESC</sql>
+    <select id="selectTasks" resultType="map"><include refid="taskSelect"/><include refid="taskFilter"/> <include refid="taskOrder"/> LIMIT #{offset},50</select>
     <select id="countTasks" resultType="int">SELECT COUNT(*) FROM bike_production_task t LEFT JOIN bike_vehicle v ON v.id=t.vehicle_id <include refid="taskFilter"/></select>
     <sql id="taskFilteredWhere"><where>
       <if test="keyword != null">AND (t.id LIKE CONCAT('%',#{keyword},'%') OR t.batch_no LIKE CONCAT('%',#{keyword},'%') OR v.frame_sn LIKE CONCAT('%',#{keyword},'%') OR EXISTS(SELECT 1 FROM bike_production_scan sc WHERE sc.task_id=t.id AND sc.code=#{keyword}))</if>
-      <if test="skuId != null">AND t.sku_id=#{skuId}</if><if test="status != null">AND t.status=#{status}</if>
-      <if test="fromDate != null">AND t.created_at &gt;= #{fromDate}</if><if test="toDate != null">AND t.created_at &lt; DATE_ADD(#{toDate},INTERVAL 1 DAY)</if>
+      <if test="skuId != null">AND t.sku_id=#{skuId}</if>
+      <if test="status != null">AND t.status=#{status}</if>
+      <if test="fromDate != null">AND t.created_at &gt;= #{fromDate}</if>
+      <if test="toDate != null">AND t.created_at &lt; DATE_ADD(#{toDate},INTERVAL 1 DAY)</if>
     </where></sql>
-    <select id="selectTasksFiltered" resultType="map"><include refid="taskSelect"/><include refid="taskFilteredWhere"/> ORDER BY t.updated_at DESC,t.id DESC LIMIT #{offset},50</select>
+    <select id="selectTasksFiltered" resultType="map"><include refid="taskSelect"/><include refid="taskFilteredWhere"/> <include refid="taskOrder"/> LIMIT #{offset},50</select>
     <select id="countTasksFiltered" resultType="int">SELECT COUNT(*) FROM bike_production_task t LEFT JOIN bike_vehicle v ON v.id=t.vehicle_id <include refid="taskFilteredWhere"/></select>
     <select id="selectProductionInventoryFiltered" resultType="map">
       SELECT COALESCE(s.sku_code,'历史未关联') skuCode,COALESCE(s.product_name,m.model_name) productName,
@@ -46,6 +60,7 @@
     <select id="selectScans" resultType="map">SELECT code_type codeType,code,operator_name operatorName,scanned_at scannedAt,active FROM bike_production_scan WHERE task_id=#{taskId} ORDER BY id</select>
     <select id="selectReservation" resultType="map">SELECT task_id taskId,code_type codeType FROM bike_production_scan WHERE active_code=#{code}</select>
     <insert id="insertScan">INSERT INTO bike_production_scan(task_id,code_type,code,operator_name) VALUES(#{taskId},#{type},#{code},#{operator})</insert>
+    <update id="touchTask">UPDATE bike_production_task SET updated_at=NOW(3) WHERE id=#{id}</update>
     <update id="deleteTaskReservations">UPDATE bike_production_scan SET active=0 WHERE task_id=#{taskId} AND active=1</update>
     <update id="updateTaskStatus">UPDATE bike_production_task SET status=#{status},vehicle_id=#{vehicleId},updated_at=NOW(3) WHERE id=#{id}</update>
     <select id="selectPart" resultType="map">SELECT id,part_sn code,part_type codeType,bind_status bindStatus,status,qc_status qcStatus FROM bike_part WHERE part_sn=#{code}</select>

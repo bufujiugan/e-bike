@@ -1,0 +1,10 @@
+{
+  "checkedAt":"2026-09-25T05:21:25.441Z",
+  "scope":"生产任务列表",
+  "database":"bike_acceptance_app_20260920",
+  "taskCount":146,
+  "statusCounts":{"COMPLETED":146,"OPEN":0,"CANCELLED":0},
+  "checks":["跨页按完成状态、修改时间、任务ID排序","任务编码与扫码明细一致","SKU和状态组合筛选","Chrome页面展示聚合码、车架码、电机码、电池码、仪表码、修改时间","页面无JavaScript错误"],
+  "screenshots":["本机outputs/project-audit-2026-09-20/production-task-list-desktop.png","本机outputs/project-audit-2026-09-20/production-task-list-open.png"],
+  "note":"验收库当前没有OPEN任务，作业中筛选显示空列表；现场扫码/PDA仍需正式环境验收。"
+}

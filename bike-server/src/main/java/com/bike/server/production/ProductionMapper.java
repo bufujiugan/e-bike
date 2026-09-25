@@ -11,6 +11,8 @@ import org.apache.ibatis.annotations.Param;
 public interface ProductionMapper {
   int selectMutexForUpdate();
 
+  int touchTask(String id);
+
   List<Map<String, Object>> selectProductionInventory(
       @Param("skuId") Long skuId, @Param("warehouseId") Long warehouseId);
   List<Map<String, Object>> selectProductionInventoryFiltered(@Param("skuId") Long skuId, @Param("warehouseId") Long warehouseId, @Param("locationId") Long locationId);

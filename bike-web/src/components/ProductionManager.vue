@@ -456,7 +456,7 @@ onMounted(() =>
     >
     <div class="toolbar">
       <template v-if="tab === 'tasks'">
-        <el-select v-model="taskSkuId" clearable placeholder="所有 SKU"><el-option v-for="s in skus" :key="s.id" :value="s.id" :label="s.skuCode" /></el-select>
+        <el-select v-model="taskSkuId" clearable placeholder="所有商品规格（SKU）"><el-option v-for="s in skus" :key="s.id" :value="s.id" :label="s.skuCode" /></el-select>
         <el-select v-model="taskStatus" clearable placeholder="所有状态"><el-option label="作业中" value="OPEN"/><el-option label="已完成" value="COMPLETED"/><el-option label="已取消" value="CANCELLED"/></el-select>
         <el-date-picker v-model="taskDates" type="daterange" value-format="YYYY-MM-DD" start-placeholder="创建开始日期" end-placeholder="创建结束日期" />
       </template>
@@ -490,28 +490,24 @@ onMounted(() =>
       <el-table-column prop="errorCode" label="失败代码" min-width="170" />
       <el-table-column prop="reason" label="原因" min-width="220" />
     </el-table>
-    <el-table v-if="tab === 'tasks'" :data="tasks"
-      ><el-table-column
-        prop="id"
-        label="任务号"
-        min-width="290"
-      /><el-table-column prop="skuCode" label="SKU" /><el-table-column
-        prop="batchNo"
-        label="批次"
-      /><el-table-column prop="frameSn" label="车架" /><el-table-column
-        label="状态"
-        ><template #default="s">{{
-          states[s.row.status]
-        }}</template></el-table-column
-      ><el-table-column prop="createdBy" label="创建人" /><el-table-column
-        label="操作"
-        ><template #default="s"
-          ><el-button link type="primary" @click="viewTask(s.row.id)"
-            >查看进度</el-button
-          ></template
-        ></el-table-column
-      ></el-table
-    >
+    <template v-if="tab === 'tasks'">
+      <p class="task-list-hint">已完成 → 作业中 → 已取消，同状态按修改时间从新到旧排列。聚合码在完成组装后生成。</p>
+      <el-table :data="tasks" row-key="id" empty-text="暂无生产任务">
+        <el-table-column prop="id" label="任务号" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="skuCode" label="商品规格（SKU）" min-width="145" show-overflow-tooltip>
+          <template #header><el-tooltip content="SKU是商品规格编号，用来区分同一车型的颜色、电池容量等配置。"><span>商品规格（SKU）</span></el-tooltip></template>
+        </el-table-column>
+        <el-table-column prop="batchNo" label="批次" min-width="110" show-overflow-tooltip />
+        <el-table-column v-for="code in [{key:'qrCode',label:'聚合码'},{key:'frameSn',label:'车架码'},{key:'motorSn',label:'电机码'},{key:'batterySn',label:'电池码'},{key:'displaySn',label:'仪表码'}]"
+          :key="code.key" :prop="code.key" :label="code.label" min-width="150" show-overflow-tooltip>
+          <template #default="{ row }">{{ row[code.key] || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="95"><template #default="{ row }">{{ states[row.status] }}</template></el-table-column>
+        <el-table-column label="修改时间" width="170"><template #default="{ row }">{{ row.updatedAt?.replace('T', ' ').slice(0, 19) || '—' }}</template></el-table-column>
+        <el-table-column prop="createdBy" label="创建人" width="90" show-overflow-tooltip />
+        <el-table-column label="操作" width="100" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="viewTask(row.id)">查看进度</el-button></template></el-table-column>
+      </el-table>
+    </template>
     <el-table v-if="tab === 'skus'" :data="skus"
       ><el-table-column prop="skuCode" label="SKU" /><el-table-column
         prop="modelName"

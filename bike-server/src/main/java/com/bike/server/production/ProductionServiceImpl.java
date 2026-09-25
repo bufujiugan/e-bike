@@ -215,6 +215,7 @@ public class ProductionServiceImpl implements ProductionService {
       if (!"PASSED".equals(part.get("qcStatus"))) fail("PART_QC_FAILED", "部件尚未质量放行");
     }
     mapper.insertScan(id, type, code, CurrentOperator.username());
+    mapper.touchTask(id);
     audit(id, "生产扫码", type + ":" + code);
     if (scans.size() == 3) return completeLocked(task);
     return getTask(id);

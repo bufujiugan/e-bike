@@ -530,3 +530,9 @@ API18182进程32724运行acceptance-batch39-runtime.jar，SHA256 EC274901BE84556
 最终batch39-resume-full-verify-r2.log完整442项、0失败/错误/跳过、BUILD SUCCESS，包含上述两项回归、9项上传核对MySQL测试和2项迁移测试。全新bike_migration_clean_b39resume及upgrade_b39resume均到V49成功。最终JAR的SHA256为014EBEC027B6954A29039A24125A17E5527B1DC4B351A31EDCF4ED168AAD20BF。Web/H5日志为batch39-resume-web-build.log和batch39-resume-h5-build.log；git diff --check及HTTP验收脚本语法检查通过。
 
 替换原API18182验收进程、另启隔离实例两次操作均在执行前被环境策略以blocked by policy拒绝；不继续尝试启动或替换进程。原API仍health UP，未将新包部署到该实例。因此32组HTTP仅为复核的上一线程证据，不能标为最终新包HTTP复跑；浏览器/COS/现场验证也未新增。脱敏摘要及原始日志哈希见[evidence/2026-09-25-upload-review-resume.json](evidence/2026-09-25-upload-review-resume.json)。本次为批次39收尾，不计全项目最终两轮，仍为0轮。
+
+## 批次40：生产任务排序与四码列表（2026-09-25）
+
+任务查询改为数据库分页前按已完成、作业中、已取消分组，再按`updated_at`和任务ID倒序；有效扫码同时更新任务修改时间，幂等重复扫码不刷新时间。列表及详情新增聚合码、车架码、电机码、电池码、仪表码，编码取该任务的扫码事实，未完成任务也展示已扫部分。SKU页面改为“商品规格（SKU）”并带解释提示。
+
+新增2项MySQL排序/编码测试、1项扫码时间单测；修复SKU+状态组合筛选条件缺少空格的原有SQL问题。定向46项后端测试全部通过，Web类型检查/构建通过；146条真实验收库任务跨页排序、状态筛选、数据库编码明细和Chrome页面七列验证通过，无页面错误。证据`production-task-list-verify-r2.log`、`production-task-list-web-build-final.log`、`production-task-list-http-browser.json`及两张页面截图。当前验收库146条均已完成，作业中筛选为空属真实数据结果。

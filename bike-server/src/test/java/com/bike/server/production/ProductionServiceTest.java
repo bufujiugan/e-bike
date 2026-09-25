@@ -96,6 +96,13 @@ class ProductionServiceTest {
     SecurityContextHolder.clearContext();
   }
 
+  @Test void successfulScanUpdatesModificationTimeButIdempotentRetryDoesNot() {
+    service.scan("task-123456789012",new ScanRequest("MOTOR-1","MOTOR"));
+    service.scan("task-123456789012",new ScanRequest("MOTOR-1","MOTOR"));
+    verify(mapper,times(1)).touchTask("task-123456789012");
+    verify(mapper,times(1)).insertScan("task-123456789012","MOTOR","MOTOR-1","tester");
+  }
+
   static Stream<List<String>> orders() {
     List<List<String>> result = new ArrayList<>();
     permutations(
