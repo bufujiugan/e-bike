@@ -278,3 +278,16 @@ Web/H5上传队列一次选择最多20个文件，按单文件请求依次发送
 所有新文件先验证至临时文件，避免反复读取原上传流；对象写入后重新核对长度/SHA256，元数据和审计同事务，失败回滚并清理对象。下载先核验再返回，损坏文件拒绝发送。生产历史文件没有可信原摘要，保持NULL并只检查类型和长度；不得宣称历史字节已核验。PI商品图快照检查原上传摘要，WebP返回正确MIME且可生成PDF/Excel缩略图。
 
 收款凭证保持内部财务权限与客户范围，不对代理/PDA开放；新上传只允许CONFIRMED到账，已撤回时同请求可返回原成功文件、不能追加新文件。确认/物流的客户可见范围和撤回规则延续。HTTP默认单文件50MB、整请求1025MB，Nginx同步1025m，multipart先落临时文件；生产应为临时目录与对象目录配置容量监控、备份和请求限流。售后继续独立原有格式和限额。
+
+## 上传绑定失败核对（V49）
+
+内部FILE_REVIEW_MANAGE独立权限，不默认授予普通岗位，代理/PDA禁用。此权限是全业务上传元数据的运维权限，不授予客户业务详情或文件内容下载权限。
+
+- `GET /api/file-reviews?state=REVIEW&page=1&pageSize=20`：分页记录；省略state默认PENDING/REVIEW/CLEANUP_PENDING，支持BOUND/CLEANED历史。单页1至100。
+- `GET /api/file-reviews/history?objectKey=...`：最近100条人工核对/清理申请历史。
+- `POST /api/file-reviews/reconcile`：`{objectKey,version,reason}`，重新检查业务引用和文件是否存在，不删除、不重新绑定。
+- `POST /api/file-reviews/cleanup`：同上请求；仅REVIEW/CLEANUP_PENDING且无业务引用可申请。原因1至500字，版本须最新。先提交申请和审计，再执行删除；失败保持CLEANUP_PENDING自动重试。
+
+写对象前独立提交上传意图，成功绑定原子标记BOUND；失败保留REVIEW，即使文件已清理。PENDING超过15分钟自动核对，行锁未释放时跳过；绝不因超时直接删除。FILE_REVIEW_CONFLICT表示版本已变化，FILE_REVIEW_BUSY表示记录不存在或正在上传/核对，FILE_ALREADY_BOUND和FILE_CLEANUP_FORBIDDEN阻止清理业务附件。详情见[file-upload-reconciliation.md](file-upload-reconciliation.md)。
+
+这些接口是增量接口，原附件上传/下载请求保持兼容。核对/清理返回更新后的上传记录，调用方后续操作须使用新version；`cleanup`返回`CLEANUP_PENDING`表示申请已保存但尚未清理成功，只有`CLEANED`表示确认对象不存在。所有状态均保留记录及历史，不自动删除发货后的业务附件；历史未登记残留需单独盘点。

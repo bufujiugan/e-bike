@@ -10,7 +10,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 /** 仅针对两个新建的专用空库，禁止清库或重复覆盖已有业务数据。 */
 @EnabledIfEnvironmentVariable(named="BIKE_MIGRATION_CLEAN_URL",matches=".+")
 class MigrationMysqlTest {
-  private static final int LATEST_VERSION = 48;
+  private static final int LATEST_VERSION = 49;
   Flyway flyway(String url,String target) {
     assertThat(url).contains("/bike_migration_");
     var config=Flyway.configure().dataSource(url,System.getenv("BIKE_MYSQL_TEST_USER"),System.getenv("BIKE_MYSQL_TEST_PASSWORD"))
@@ -129,6 +129,12 @@ class MigrationMysqlTest {
     try(var result=sql.executeQuery("SELECT COUNT(*) FROM bike_sys_role_permission rp JOIN bike_sys_permission p ON p.id=rp.permission_id WHERE p.permission_code='PRODUCTION_MANAGE'")){result.next();assertThat(result.getInt(1)).isZero();}
   }
   private void verifyAfterSalesAndPiSchema(Statement sql)throws Exception {
+    for(String table:new String[]{"bike_file_upload","bike_file_upload_review"}) {
+      try(var result=sql.executeQuery("SELECT COUNT(*) FROM "+table)){result.next();assertThat(result.getInt(1)).as("不伪造历史上传记录："+table).isZero();}
+      try(var result=sql.executeQuery("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='"+table+"' AND column_comment=''")){result.next();assertThat(result.getInt(1)).isZero();}
+    }
+    try(var result=sql.executeQuery("SELECT COUNT(*) FROM bike_sys_permission WHERE permission_code='FILE_REVIEW_MANAGE'")){result.next();assertThat(result.getInt(1)).isEqualTo(1);}
+    try(var result=sql.executeQuery("SELECT COUNT(*) FROM bike_sys_role_permission rp JOIN bike_sys_permission p ON p.id=rp.permission_id WHERE p.permission_code='FILE_REVIEW_MANAGE'")){result.next();assertThat(result.getInt(1)).as("上传核对须显式授权").isZero();}
     try(var result=sql.executeQuery("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='bike_production_attachment' AND column_name IN ('file_name','sha256','request_id') AND is_nullable='YES' AND column_comment!=''")){result.next();assertThat(result.getInt(1)).isEqualTo(3);}
     try(var result=sql.executeQuery("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='bike_pi_template' AND column_name IN ('seller_country','seller_contact_name','seller_phone','seller_email') AND is_nullable='YES' AND column_comment!=''")){result.next();assertThat(result.getInt(1)).isEqualTo(4);}
     for(String table: new String[]{"bike_pi_template","bike_pi_export","bike_pi_confirmation_attachment","bike_customer_profile","bike_pi_logistics_attachment"}) {

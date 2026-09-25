@@ -2,6 +2,8 @@ import { createPiDocument } from './pi-document-fixture.mjs';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID, createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 if (process.env.BIKE_ACCEPTANCE_WRITE !== 'isolated') throw new Error('仅允许专用验收库');
 if (!process.env.BIKE_TEST_PASSWORD) throw new Error('缺少验收管理员密码');
@@ -11,6 +13,15 @@ const prefix = `PIC${Date.now().toString(36).toUpperCase()}`;
 const evidence = { prefix, startedAt: new Date().toISOString(), layer: 'HTTP', browserVerified: false, checks: [], fixtures: {}, cleanupFailures: [] };
 const accounts = [], roles = [], stations = [], locksToRelease = new Set(), ordersToCancel = new Set();
 let admin, scopeCustomer;
+let fileFailureTrigger;
+function isolatedSql(sql) {
+  assert.equal(process.env.BIKE_ACCEPTANCE_FILE_FAILURE, 'mysql');
+  const database = process.env.BIKE_DB_URL?.match(/^jdbc:mysql:\/\/(?:127\.0\.0\.1|localhost):13326\/(bike_acceptance_app_[0-9]+)(?:\?|$)/)?.[1];
+  assert(database, '故障注入只允许已配置的本机专用验收库');
+  return execFileSync(fileURLToPath(new URL('../../../.local-tools/mysql/mysql-8.4.8-winx64/bin/mysql.exe', import.meta.url)),
+    ['--defaults-extra-file=' + fileURLToPath(new URL('../../../.local-tools/mysql-client.cnf', import.meta.url)), '--database=' + database, '--batch', '--skip-column-names'],
+    { input: sql, encoding: 'utf8', timeout: 30000, windowsHide: true });
+}
 async function req(path, body, { method = body === undefined ? 'GET' : 'POST', token = admin, code = 'SUCCESS' } = {}) {
   const response = await fetch(base + path, { method, signal: AbortSignal.timeout(30000), headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
   const result = await response.json();
@@ -222,6 +233,46 @@ try {
   const attachmentResponse = await fetch(`${base}${attachmentPath}/${attachments[0].id}/download`, { headers: { Authorization: `Bearer ${external}` } });
   assert.equal(attachmentResponse.status, 200); assert.equal(attachmentResponse.headers.get('x-content-type-options'), 'nosniff'); assert(Buffer.from(await attachmentResponse.arrayBuffer()).equals(imageBytes));
   pass('确认附件并发上传幂等，客户/只读不可上传，内部附件对客户隐藏，公开附件按范围逐字节下载');
+  const fileReviewer = await account('FILE_REVIEW', ['FILE_REVIEW_MANAGE'], null, null, []);
+  await req('/api/file-reviews', undefined, { token: sales, code: 'PERMISSION_DENIED' });
+  await req('/api/file-reviews', undefined, { token: external, code: 'FORBIDDEN' });
+  const uploads = await req('/api/file-reviews?state=BOUND&pageSize=100', undefined, { token: fileReviewer });
+  const trackedAttachment = uploads.records.find(row => row.purpose === 'PI_CONFIRMATION' && row.businessId === String(pi.id) && row.objectKey.includes(attachments[0].id));
+  assert(trackedAttachment, '确认附件未原子标记为已绑定');assert.equal(trackedAttachment.sha256, createHash('sha256').update(imageBytes).digest('hex'));
+  await req('/api/file-reviews/cleanup', { objectKey: trackedAttachment.objectKey, version: trackedAttachment.version, reason: '已绑定文件保护验收' }, { token: fileReviewer, code: 'FILE_CLEANUP_FORBIDDEN' });
+  const reviewedAttachment = await req('/api/file-reviews/reconcile', { objectKey: trackedAttachment.objectKey, version: trackedAttachment.version, reason: '核对业务引用及实际文件' }, { token: fileReviewer });
+  assert.equal(reviewedAttachment.state, 'BOUND');assert.equal(reviewedAttachment.objectState, 'PRESENT');
+  await req('/api/file-reviews/reconcile', { objectKey: trackedAttachment.objectKey, version: trackedAttachment.version, reason: '拒绝过期版本' }, { token: fileReviewer, code: 'FILE_REVIEW_CONFLICT' });
+  const reviewHistory = await req('/api/file-reviews/history?objectKey=' + encodeURIComponent(trackedAttachment.objectKey), undefined, { token: fileReviewer });
+  assert.equal(reviewHistory.length, 1);assert.equal(reviewHistory[0].reason, '核对业务引用及实际文件');
+  await req('/api/file-reviews/history?objectKey=' + encodeURIComponent(trackedAttachment.objectKey), undefined, { token: sales, code: 'PERMISSION_DENIED' });
+  const protectedDownload = await fetch(`${base}${attachmentPath}/${attachments[0].id}/download`, { headers: { Authorization: `Bearer ${external}` } });
+  assert.equal(protectedDownload.status, 200);assert(Buffer.from(await protectedDownload.arrayBuffer()).equals(imageBytes));
+  evidence.fixtures.fileReview = { attachmentId: attachments[0].id, piId: pi.id, state: reviewedAttachment.state, version: reviewedAttachment.version };
+  pass('上传记录与确认附件原子绑定；独立普通核对员可查历史，销售及代理拒绝，过期版本和已绑定文件清理被拦截');
+  if (process.env.BIKE_ACCEPTANCE_FILE_FAILURE === 'mysql') {
+    const failureRequest = prefix + '_JOURNAL_FAIL';
+    fileFailureTrigger = prefix.toLowerCase() + '_file_fail';
+    assert(/^[a-z0-9_]+$/.test(fileFailureTrigger));
+    isolatedSql(`DELIMITER $$\nCREATE TRIGGER ${fileFailureTrigger} BEFORE INSERT ON bike_pi_confirmation_attachment FOR EACH ROW BEGIN IF NEW.request_id='${failureRequest}' AND NEW.pi_id=${pi.id} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='isolated acceptance file binding failure'; END IF; END$$\nDELIMITER ;\n`);
+    const countBefore = (await req(attachmentPath, undefined, { token: sales })).length;
+    const failedForm = new FormData();failedForm.append('requestId', failureRequest);failedForm.append('visibility', 'CUSTOMER');failedForm.append('file', new Blob([imageBytes], { type: 'image/png' }), prefix + '-failed.png');
+    try {
+      const result = await fetch(base + attachmentPath, { method: 'POST', headers: { Authorization: `Bearer ${sales}` }, body: failedForm, signal: AbortSignal.timeout(30000) });
+      assert(result.status >= 400);assert.notEqual((await result.json()).code, 'SUCCESS');
+    } finally { isolatedSql(`DROP TRIGGER ${fileFailureTrigger};`);fileFailureTrigger = null; }
+    assert.equal((await req(attachmentPath, undefined, { token: sales })).length, countBefore);
+    const failedRow = (await req('/api/file-reviews?state=REVIEW&pageSize=100', undefined, { token: fileReviewer })).records.find(row => row.fileName === prefix + '-failed.png');
+    assert(failedRow, '业务绑定失败未留下持久化待核对记录');assert.equal(failedRow.errorCode, 'UPLOAD_OR_BIND_FAILED');
+    const checked = await req('/api/file-reviews/reconcile', { objectKey: failedRow.objectKey, version: failedRow.version, reason: 'HTTP绑定故障后检查自动清理' }, { token: fileReviewer });
+    assert.equal(checked.objectState, 'MISSING');assert.equal(checked.state, 'REVIEW');
+    const cleaned = await req('/api/file-reviews/cleanup', { objectKey: checked.objectKey, version: checked.version, reason: '已确认无业务引用及残留对象' }, { token: fileReviewer });
+    assert.equal(cleaned.state, 'CLEANED');assert.equal((await req('/api/file-reviews/history?objectKey=' + encodeURIComponent(cleaned.objectKey), undefined, { token: fileReviewer })).length, 2);
+    const retry = await uploadFile(attachmentPath, imageBytes, { token: sales, requestId: failureRequest, name: prefix + '-failed.png' });assert(retry.id);
+    assert.equal((await req(attachmentPath, undefined, { token: sales })).length, countBefore + 1);
+    evidence.fixtures.fileReview.failureState = cleaned.state;evidence.fixtures.fileReview.retryId = retry.id;
+    pass('限定单请求真实数据库绑定故障：HTTP失败无附件，独立记录保留；普通核对员核对和清理留双历史，同请求重试成功');
+  }
   await req(`/api/pis/${pi.id}/export-task`, undefined, { token: reader, code: 'PERMISSION_DENIED' });
   await req(`/api/pis/${pi.id}/export-task/retry`, { revision: 0, reason: '外部越权' }, { token: external, code: 'FORBIDDEN' });
   let exportTask;
@@ -654,6 +705,7 @@ try {
   pass('授权需独立管理权限，版本冲突拒绝覆盖；撤权后原令牌下次请求立即失效且另一销售不受影响');
 } catch (error) { evidence.error = error.stack || error.message; console.error(error); process.exitCode = 1; }
 finally {
+  if (fileFailureTrigger) try { isolatedSql(`DROP TRIGGER ${fileFailureTrigger};`); } catch (error) { evidence.cleanupFailures.push({ fileFailureTrigger, error: error.message }); }
   for (const id of ordersToCancel) try { await req(`/api/orders/${id}/cancel?reason=SKU验收结束清理未完成订单`, {}); } catch(error) { evidence.cleanupFailures.push({ orderId: id, error: error.message }); }
   for (const id of locksToRelease) try { await req(`/api/inventory-locks/${id}/release?reason=SKU验收结束清理锁定`, {}); } catch(error) { evidence.cleanupFailures.push({ lockId: id, error: error.message }); }
   for (const user of accounts) try {

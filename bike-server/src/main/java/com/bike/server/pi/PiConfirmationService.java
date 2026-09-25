@@ -46,9 +46,10 @@ public class PiConfirmationService {
             if(!Set.of("DRAFT","CONFIRMED","RELEASED").contains(pi.getStatus()))throw new BusinessException("INVALID_STATUS_TRANSITION","已取消或已被新修订替代的PI不能追加确认附件");
             if(mapper.count(piId)>=50)throw new BusinessException("ATTACHMENT_LIMIT","每个PI修订最多50个确认附件");
             if(!TransactionSynchronizationManager.isActualTransactionActive())throw new IllegalStateException("Confirmation upload requires transaction");
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization(){@Override public void afterCompletion(int status){if(status!=STATUS_COMMITTED)cleanup(keys);}});
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization(){@Override public void afterCompletion(int status){if(status==STATUS_ROLLED_BACK)cleanup(keys);}});
             String id=UUID.randomUUID().toString(),key=files.key("pi-confirmation-"+id+"."+file.extension());keys.add(key);
-            try(var input=Files.newInputStream(file.path())){files.write(key,input,file.size(),file.contentType());}
+            try(var input=Files.newInputStream(file.path())){files.write(key,input,file.size(),file.contentType(),
+                    new com.bike.server.files.FileUploadJournal.Context("PI_CONFIRMATION",Long.toString(piId),file.fileName(),file.sha256()));}
             BusinessUploadValidator.verifiedBytes(files.read(key),file.size(),file.sha256(),file.contentType());
             var row=new PiConfirmationAttachment(id,piId,requestId,key,file.fileName(),file.contentType(),file.size(),file.sha256(),visibility,CurrentOperator.id(),null);
             if(mapper.insert(row)!=1||logs.insert("PI",Long.toString(piId),"上传PI确认附件",CurrentOperator.id(),CurrentOperator.username(),null,

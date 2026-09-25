@@ -12,6 +12,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Component
 public class PiExportWorker implements AutoCloseable {
@@ -46,15 +48,27 @@ public class PiExportWorker implements AutoCloseable {
     private void save(PiExportJob job,String format,byte[] bytes)throws IOException {
         if(bytes.length>20*1024*1024)throw new IOException("PI export exceeds size limit");
         String key=files.key("pi-export-"+UUID.randomUUID()+"."+format);
-        boolean writeComplete=false;
         try {
-            files.write(key,new ByteArrayInputStream(bytes),bytes.length,"pdf".equals(format)?"application/pdf":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-            writeComplete=true;
-            if(mapper.saveFile(job.piId(),job.claimToken(),format,key,PiExportArchive.sha256(bytes),bytes.length)!=1)throw new IOException("PI export lease changed");
+            tx.executeWithoutResult(status->{
+              TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCompletion(int completion) {
+                    // 提交结果不明时保留对象；普通读取未发现引用不能证明事务已回滚。
+                    if(completion!=STATUS_ROLLED_BACK)return;
+                    try {files.remove(key);}
+                    catch(Exception cleanup){LoggerFactory.getLogger(getClass()).warn("PI export rollback cleanup deferred for reconciliation: {}",key);}
+                }
+              });
+              try {
+                files.write(key,new ByteArrayInputStream(bytes),bytes.length,"pdf".equals(format)?"application/pdf":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    new com.bike.server.files.FileUploadJournal.Context("PI_EXPORT",Long.toString(job.piId()),"PI-"+job.piId()+"."+format,PiExportArchive.sha256(bytes)));
+                try(var input=files.read(key).getInputStream()) {
+                    byte[] stored=input.readNBytes(bytes.length+1);
+                    if(!java.util.Arrays.equals(bytes,stored))throw new IOException("PI export integrity check failed");
+                }
+                if(mapper.saveFile(job.piId(),job.claimToken(),format,key,PiExportArchive.sha256(bytes),bytes.length)!=1)throw new IOException("PI export lease changed");
+              } catch(IOException error) { throw new UncheckedIOException(error); }
+            });
         }catch(Exception error) {
-            // On an ambiguous SQL response, read the durable pointer before deleting a potentially committed file.
-            try {var saved=mapper.get(job.piId());if(saved==null||(!key.equals(saved.pdfKey())&&!key.equals(saved.xlsxKey())))files.remove(key);}
-            catch(Exception cleanup){LoggerFactory.getLogger(getClass()).warn("PI export orphan needs reconciliation: {} (written={})",key,writeComplete);}
             if(error instanceof IOException io)throw io;
             throw new IOException("PI export storage failed",error);
         }

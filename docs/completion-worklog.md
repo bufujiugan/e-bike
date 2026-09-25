@@ -506,3 +506,27 @@ batch38-sku-targeted-r2.log早期29项通过。batch38-full-verify.log跑430项�
 batch38-sku-revision-http.json/.log共30组全部通过，cleanupFailures为空。新增普通销售来源草稿/取消/发布、缺来源/跨客户/PI单权限/代理写入拒绝、旧版快照与原收款、原截止、单次来源转换、未发移除释放、财务重新放行、普通仓管实际出库及已发移除拒绝。没有浏览器验收。
 
 API18182运行acceptance-batch38-runtime.jar，SHA256 160E89887279B10025F1F2AFF243ACAFFE920126F5EA84F304D3645DDA46E152，health UP、bike_schema_history为V48成功。V48四镜像SHA256 B311D486C7725A3AD31CF1779F1A365436F52136106716F3383793B8A7089330并冻结。客户转移、历史车型准确SKU关系、COS短时授权/绑定失败待核对、普通岗位浏览器和正式交付仍待完成或验证。本批是实施回归，不计全项目最终两轮；最终仍为0轮，未推送GitHub。
+
+## 批次39：上传绑定失败持久化核对（2026-09-24）
+
+V49新增上传记录及专门核对历史，覆盖生产异常/SKU、PI确认/收款/物流、售后与PI归档。写对象前由独立两连接池提交意图，不与外层事务共用连接或父表外键；业务事务持上传记录行锁，成功引用与BOUND同事务，失败独立保留REVIEW。提交结果不明不执行回滚删除；PENDING超过15分钟按实际引用核对，SKIP LOCKED跳过进行中的上传。引用检查覆盖七类业务表并建立索引。归档/售后补存储后字节摘要核验。
+
+内部FILE_REVIEW_MANAGE默认不授普通角色，Web管理入口支持分页、状态筛选、原因及版本核对、历史和未绑定文件清理，无内容下载或任意对象绑定。核对/清理申请须专门历史和通用审计同时成功；清理申请先提交后删除，失败持久化重试，已绑定文件保护。通用日志不泄露文件名/存储键/业务归属及原因文本；专门历史受独立权限。记录文件存在/不存在/检查失败，不伪装被清理对象仍有残留。
+
+batch39-targeted.log既有32项通过，新增7项因测试SQL按注释分号拆分及约束名未隔离而失败；修正后r2仅剩Mockito恢复抛错桩方式错误，r3七项通过。再补部分写入/自动清理失败与连接池满载，最终batch39-full-verify.log完整440项、0失败/错误/跳过、BUILD SUCCESS；含9项新增MySQL用例，全新bike_migration_clean_b39full和upgrade_b39full空库/V16升级验证。batch39-web-build.log类型检查/构建通过，主包1703.76KB告警保留。
+
+batch39-file-review-http.json/.log共32组全部通过，error=null、cleanupFailures=[]、browserVerified=false。独立普通核对员可核对已绑定文件及查历史，销售/代理拒绝、旧版本冲突、已绑定禁止清理；限定单PI/请求的临时MySQL触发器制造真实绑定失败，HTTP失败无附件、REVIEW独立保留、自动删除后显示MISSING、核对和清理双历史、同请求重试成功。故障触发器已移除。实际库54条BOUND、1条CLEANED。
+
+API18182进程32724运行acceptance-batch39-runtime.jar，SHA256 EC274901BE84556ABE31B401350BE3E9B2C69ACFD56F961C486E6216EFBC82D5，health UP、V49成功。V49四镜像SHA256 1063A4A6D7B204D3E75CD6E26C04A5304904AE3A07732A6446CB3CFD814AB1A2并冻结。旧版未登记残留须另行盘点；客户转移、历史车型SKU关系、COS短时授权、普通岗位浏览器和正式交付仍未全完成。本批不计全项目最终两轮，仍为0轮，未推送GitHub。
+
+### 批次39续接核查（2026-09-25，Asia/Shanghai）
+
+接手时实际Git仓库为e-bike-git，HEAD为297f75b；V46受控卖方资料、V47上传验证与逐项重试、V48来源SKU修订已分别提交。未提交的是V49相关29个文件（15个已跟踪修改、14个新增），未回滚或重新实现。逐项核查未发现无关的大范围格式化；四份V49 SQL是要求保留的开发/生产及资源镜像，哈希与既有证据一致。既有440项后端、32组HTTP及Web构建记录可核实。
+
+发现PI归档仍在提交异常后以普通读取未见引用为依据删除对象，不能覆盖提交结果不明的情形。改为事务明确回滚才清理，UNKNOWN保留文件供后续核对；新增两项事务结果回归测试，分别验证提交应答丢失保留原字节和已知绑定回滚删除。补齐V49数据库说明、接口版本及清理返回语义、升级回退边界与资料索引。发货后业务附件不自动删除，历史未登记残留仍须独立盘点。
+
+首次续跑batch39-resume-full-verify.log共440项，其中438项通过，2项迁移测试因新建专用库未给验证账号授权而报错；未执行迁移、两库仍为空。仅对这两个专用库补齐授权，保留失败日志。新增两项事务结果测试在batch39-resume-commit-outcome.log通过。Web/H5冻结锁文件安装、类型检查及构建通过，锁文件未变化；Web安装遇注册表重试后成功，主包1703.76KB告警仍保留。
+
+最终batch39-resume-full-verify-r2.log完整442项、0失败/错误/跳过、BUILD SUCCESS，包含上述两项回归、9项上传核对MySQL测试和2项迁移测试。全新bike_migration_clean_b39resume及upgrade_b39resume均到V49成功。最终JAR的SHA256为014EBEC027B6954A29039A24125A17E5527B1DC4B351A31EDCF4ED168AAD20BF。Web/H5日志为batch39-resume-web-build.log和batch39-resume-h5-build.log；git diff --check及HTTP验收脚本语法检查通过。
+
+替换原API18182验收进程、另启隔离实例两次操作均在执行前被环境策略以blocked by policy拒绝；不继续尝试启动或替换进程。原API仍health UP，未将新包部署到该实例。因此32组HTTP仅为复核的上一线程证据，不能标为最终新包HTTP复跑；浏览器/COS/现场验证也未新增。脱敏摘要及原始日志哈希见[evidence/2026-09-25-upload-review-resume.json](evidence/2026-09-25-upload-review-resume.json)。本次为批次39收尾，不计全项目最终两轮，仍为0轮。

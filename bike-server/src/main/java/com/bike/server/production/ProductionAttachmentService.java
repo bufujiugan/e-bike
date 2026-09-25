@@ -47,10 +47,11 @@ public class ProductionAttachmentService {
       }
       if (mapper.countObjectAttachments(issueId, skuId) >= 50) throw new BusinessException("ATTACHMENT_LIMIT", "每个SKU或生产异常最多50张图片");
       TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-        @Override public void afterCompletion(int status) { if (status != STATUS_COMMITTED) cleanup(keys); }
+        @Override public void afterCompletion(int status) { if (status == STATUS_ROLLED_BACK) cleanup(keys); }
       });
       String id = UUID.randomUUID().toString(), key = files.key(id + "." + file.extension()); keys.add(key);
-      try (var stream = Files.newInputStream(file.path())) { files.write(key, stream, file.size(), file.contentType()); }
+      try (var stream = Files.newInputStream(file.path())) { files.write(key, stream, file.size(), file.contentType(),
+          new com.bike.server.files.FileUploadJournal.Context(skuId==null?"PRODUCTION_ISSUE":"SKU_IMAGE",skuId==null?issueId:skuId.toString(),file.fileName(),file.sha256())); }
       BusinessUploadValidator.verifiedBytes(files.read(key),file.size(),file.sha256(),file.contentType());
       int inserted = skuId == null
           ? mapper.insertAttachment(id, issueId, key, file.contentType(), file.size(), file.fileName(), file.sha256(), requestId, CurrentOperator.username())

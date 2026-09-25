@@ -70,12 +70,13 @@ public class PiReceiptAttachmentService {
             requireConfirmed(receipt);
             if (mapper.count(paymentId) >= 50) throw new BusinessException("ATTACHMENT_LIMIT", "每笔到账记录最多50个凭证");
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override public void afterCompletion(int status) { if (status != STATUS_COMMITTED) cleanup(keys); }
+                @Override public void afterCompletion(int status) { if (status == STATUS_ROLLED_BACK) cleanup(keys); }
             });
             String id = UUID.randomUUID().toString();
             String key = files.key("pi-receipt-" + id + "." + file.extension());
             keys.add(key); // A failed write may already have created a partial object.
-            try (var input = Files.newInputStream(file.path())) { files.write(key, input, file.size(), file.contentType()); }
+            try (var input = Files.newInputStream(file.path())) { files.write(key, input, file.size(), file.contentType(),
+                    new com.bike.server.files.FileUploadJournal.Context("PI_RECEIPT",Long.toString(paymentId),file.fileName(),file.sha256())); }
             BusinessUploadValidator.verifiedBytes(files.read(key),file.size(),file.sha256(),file.contentType());
             var row = new PiReceiptAttachmentMapper.Stored(id, paymentId, requestId, key, file.fileName(),
                     file.contentType(), file.size(), file.sha256(), CurrentOperator.id(), null);

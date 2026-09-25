@@ -17,6 +17,7 @@ import org.springframework.stereotype.Component;
 /** 存储键携带后端前缀，切换存储后仍能读取此前保存的本地文件。 */
 @Component
 public class ProductionFileStore implements AutoCloseable {
+  @org.springframework.beans.factory.annotation.Autowired private com.bike.server.files.FileUploadJournal uploadJournal;
   private final Path root;
   private final COSClient cos;
   private final String bucket;
@@ -60,6 +61,35 @@ public class ProductionFileStore implements AutoCloseable {
       Files.createDirectories(root);
       Files.copy(input, localPath(key));
     }
+  }
+
+  /** Spring-managed writes require a durable intent; direct low-level instances are used by isolated storage tests. */
+  public void write(String key, InputStream input, long size, String type,
+      com.bike.server.files.FileUploadJournal.Context context) throws IOException {
+    if (uploadJournal != null) uploadJournal.begin(key, context, size, type);
+    write(key, input, size, type);
+  }
+
+  public boolean exists(String key) {
+    if (key.startsWith("cos:")) {
+      if (cos == null) throw new BusinessException("STORAGE_UNAVAILABLE", "原COS存储配置不可用");
+      return cos.doesObjectExist(bucket, key.substring(4));
+    }
+    return Files.isRegularFile(localPath(key));
+  }
+
+  public void verify(String key, long expectedSize, String expectedHash) throws IOException {
+    try (var input = read(key).getInputStream()) {
+      var digest = java.security.MessageDigest.getInstance("SHA-256");
+      byte[] buffer = new byte[65536]; long size = 0; int count;
+      while ((count = input.read(buffer)) != -1) {
+        size += count;
+        if (size > expectedSize) throw new IOException("Stored file size differs from upload");
+        digest.update(buffer, 0, count);
+      }
+      if (size != expectedSize || !java.util.HexFormat.of().formatHex(digest.digest()).equals(expectedHash))
+        throw new IOException("Stored file digest differs from upload");
+    } catch (java.security.NoSuchAlgorithmException impossible) { throw new IllegalStateException(impossible); }
   }
 
   public void remove(String key) throws IOException {

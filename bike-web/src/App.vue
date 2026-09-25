@@ -17,6 +17,7 @@ const PiWorkspace = defineAsyncComponent(() => import('./components/PiWorkspace.
 const AfterSalesWorkspace = defineAsyncComponent(() => import('./components/AfterSalesWorkspace.vue'))
 const CustomerScopeEditor = defineAsyncComponent(() => import('./components/CustomerScopeEditor.vue'))
 const CustomerScopeManager = defineAsyncComponent(() => import('./components/CustomerScopeManager.vue'))
+const FileReviewManager = defineAsyncComponent(() => import('./components/FileReviewManager.vue'))
 const CustomerProfiles = defineAsyncComponent(() => import('./components/CustomerProfiles.vue'))
 
 echarts.use([BarChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
@@ -91,6 +92,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     items: [
       { key: 'users', label: '用户管理', shortLabel: '用户', path: '/system/users' },
       { key: 'customer-scopes', label: '客户授权', shortLabel: '授权', path: '/system/customer-scopes' },
+      { key: 'file-reviews', label: '上传失败核对', shortLabel: '核对', path: '/system/file-reviews' },
       { key: 'roles', label: '角色权限', shortLabel: '角色', path: '/system/roles' },
       { key: 'workstations', label: '工位配置', shortLabel: '工位', path: '/system/workstations' },
       { key: 'config', label: '系统配置', shortLabel: '配置', path: '/system/config' },
@@ -109,6 +111,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
 ]
 
 const navPermissionMap: Record<string, string[]> = {
+  'file-reviews': ['FILE_REVIEW_MANAGE'],
   'customer-scopes': ['CUSTOMER_SCOPE_MANAGE'],
   pis: ['PI_READ'],
   'sku-inventory': ['INVENTORY_READ', 'AGENT_INVENTORY_READ'],
@@ -132,7 +135,7 @@ const visibleNavGroups = computed(() => {
   return navGroups.map(group => ({
     ...group,
     items: group.items.filter(item => {
-      if (item.key === 'customer-scopes' && (isAgent || hasRole(context, 'PDA_OPERATOR'))) return false
+      if (['customer-scopes', 'file-reviews'].includes(item.key) && (isAgent || hasRole(context, 'PDA_OPERATOR'))) return false
       if (isAgent && agentExcludedViews.has(item.key)) return false
       if (!isAgent && agentOnlyViews.has(item.key)) return false
       return (navPermissionMap[item.key] ?? []).some(permission => permissions.has(permission))
@@ -424,7 +427,7 @@ async function loadAuthContext() {
 }
 
 async function loadModule(module: string) {
-  if (['production', 'trace', 'pis', 'after-sales', 'sku-inventory', 'customer-scopes'].includes(module)) return
+  if (['production', 'trace', 'pis', 'after-sales', 'sku-inventory', 'customer-scopes', 'file-reviews'].includes(module)) return
   if (module === 'dashboard') return loadDashboard()
   dataLoading.value = true
   dataError.value = ''
@@ -1042,6 +1045,7 @@ async function submitPrimaryAction() {
       <SkuInventoryPanel v-else-if="activeView === 'sku-inventory' && !passwordChangeVisible" :context="authContext" @navigate="navigate" />
       <PiWorkspace v-else-if="activeView === 'pis' && !passwordChangeVisible" :context="authContext" />
       <CustomerScopeManager v-else-if="activeView === 'customer-scopes' && !passwordChangeVisible && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'CUSTOMER_SCOPE_MANAGE')" />
+      <FileReviewManager v-else-if="activeView === 'file-reviews' && !passwordChangeVisible && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'FILE_REVIEW_MANAGE')" />
       <AfterSalesWorkspace v-else-if="activeView === 'after-sales' && !passwordChangeVisible" :auth-context="authContext" />
       <div v-else class="module-content">
         <CustomerProfiles v-if="activeView === 'customers' && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR')" :can-write="hasPermission(authContext, 'CUSTOMER_PROFILE_WRITE')" />

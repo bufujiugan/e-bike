@@ -26,6 +26,8 @@
 - [架构与模块](architecture.md)：技术边界、模块定位、事务与迁移。
 - [业务规则](business-rules.md)、[权限设计](permission.md)、[数据库](database.md)、[接口清单](api.md)。
 - [部署指南](deployment.md)、[开发协作](../CONTRIBUTING.md)、[配置模板](../.env.example)。
+- [实施与验收台账](completion-worklog.md)、[当前验收矩阵](current-acceptance-matrix.md)：最新实现、验证证据与未完成事项。
+- [上传绑定失败核对](file-upload-reconciliation.md)：V49状态、权限、清理边界及历史残留盘点。
 - [开发进度](progress.md)、[测试用例](test-cases.md)：历史实施记录。
 - [生产端实施任务](生产端实施任务.md)、[生产端验收与部署](生产端验收与部署.md)：09-16 实现与历史验证。
 - [生产端需求核查报告](生产端需求核查报告_2026-09-16.md)：后续发现的页面及业务缺口，验收前必须处理。

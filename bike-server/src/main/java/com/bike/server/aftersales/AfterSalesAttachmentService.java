@@ -72,13 +72,15 @@ public class AfterSalesAttachmentService {
             }
             if (!TransactionSynchronizationManager.isActualTransactionActive()) throw new IllegalStateException("附件上传必须在事务中执行");
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override public void afterCompletion(int status) { if (status != STATUS_COMMITTED) cleanup(keys); }
+                @Override public void afterCompletion(int status) { if (status == STATUS_ROLLED_BACK) cleanup(keys); }
             });
             var results = new ArrayList<AfterSalesAttachmentView>();
             for (var file : prepared) {
                 String key = files.key("after-sales-" + UUID.randomUUID() + "." + file.extension());
                 keys.add(key); // Include partially written objects in rollback cleanup.
-                try (var input = Files.newInputStream(file.path())) { files.write(key, input, file.size(), file.contentType()); }
+                try (var input = Files.newInputStream(file.path())) { files.write(key, input, file.size(), file.contentType(),
+                        new com.bike.server.files.FileUploadJournal.Context("AFTER_SALES",Long.toString(caseId),file.fileName(),file.sha256())); }
+                files.verify(key,file.size(),file.sha256());
                 if (mapper.insertAttachment(caseId, messageId, key, file.fileName(), file.contentType(), file.size(), file.sha256(), scope, purpose, CurrentOperator.id()) != 1)
                     throw new BusinessException("AFTER_SALES_UPDATE_FAILED", "附件元数据保存失败");
                 Long id = mapper.selectInsertedId();

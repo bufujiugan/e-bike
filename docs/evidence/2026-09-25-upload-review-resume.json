@@ -1,0 +1,84 @@
+{
+  "date": "2026-09-25",
+  "timezone": "Asia/Shanghai",
+  "scope": "V49上传绑定失败核对续接收尾",
+  "baseCommit": "297f75b",
+  "initialWorkspace": {
+    "trackedModified": 15,
+    "untracked": 14,
+    "rollbackPerformed": false
+  },
+  "backend": {
+    "command": "mvn -B -f bike-server/pom.xml verify",
+    "tests": 442,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "build": "SUCCESS",
+    "log": "batch39-resume-full-verify-r2.log",
+    "logSha256": "6d3fa7f3ae1807e8591913fbbeac55bda08119fb230aa2313657171567e2464a"
+  },
+  "regression": {
+    "fileUploadMysqlTests": 9,
+    "archiveCommitOutcomeTests": 2,
+    "migrationTests": 2,
+    "cleanSchema": "bike_migration_clean_b39resume",
+    "upgradeSchema": "bike_migration_upgrade_b39resume",
+    "migrationVersion": 49
+  },
+  "initialVerificationFailure": {
+    "tests": 440,
+    "errors": 2,
+    "cause": "新建的两个专用迁移库未授予验证账号权限",
+    "resolution": "确认两库为空，仅补齐这两个库的授权后完整重跑",
+    "log": "batch39-resume-full-verify.log"
+  },
+  "frontend": [
+    {
+      "app": "web",
+      "install": "frozen-lockfile passed; lockfile unchanged",
+      "typecheck": "passed",
+      "build": "passed",
+      "log": "batch39-resume-web-build.log",
+      "logSha256": "8f9e0110bc51f60f2ad13a30b39d62ded91540e72c9a79b935c4c73e488899ea"
+    },
+    {
+      "app": "h5",
+      "install": "frozen-lockfile passed; lockfile unchanged",
+      "typecheck": "passed",
+      "build": "passed",
+      "log": "batch39-resume-h5-build.log",
+      "logSha256": "45e06bd46e1554b1ba8846f5fdc7fed7b4955330830fee20cba81599b011d2ae"
+    }
+  ],
+  "finalArtifact": {
+    "path": "bike-server/target/bike-server-0.1.0-SNAPSHOT.jar",
+    "sha256": "014ebec027b6954a29039a24125a17e5527b1dc4b351a31edcf4ed168aad20bf",
+    "httpRetested": false
+  },
+  "priorHttpEvidence": {
+    "checks": 32,
+    "allPassed": true,
+    "cleanupFailures": 0,
+    "finishedAt": "2026-09-24T23:13:42.763Z",
+    "rerunInThisThread": false,
+    "log": "batch39-file-review-http.json",
+    "sha256": "57ddba9a168f82e1fc5c02050edb9124221152d95ffb1b63e3ca92d559d9d60d",
+    "runtimeSha256": "ec274901be84556abe31b401350be3e9b2c69acfd56f961c486e6216efbc82d5"
+  },
+  "finalHttpLimitation": "自动审批/环境策略以 blocked by policy 拒绝替换原验收进程及另启隔离实例，未复跑新构建HTTP；原验收进程保持不变。",
+  "migrationSha256": "1063a4a6d7b204d3e75cd6e26c04a5304904ae3a07732a6446cb3cfd814ab1a2",
+  "browserVerified": false,
+  "cosVerified": false,
+  "projectFinalAcceptanceRounds": 0,
+  "retainedBoundaries": [
+    "发货后的业务附件不自动删除",
+    "历史未登记残留对象须独立盘点",
+    "客户转移、历史车型准确SKU关系、COS短时授权、普通岗位浏览器和现场交付仍有待办"
+  ],
+  "warnings": [
+    "Web主包1703.76KB，超过500KB构建告警阈值",
+    "Web依赖安装的注册表请求重试后成功"
+  ],
+  "rawEvidenceDirectory": "本机工作区父目录 outputs/project-audit-2026-09-20；日志、数据库和凭据不入库"
+}

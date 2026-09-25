@@ -108,3 +108,9 @@ bike_pi_payment增加payment_method/payment_method_note/recorded_at/revision及r
 ## V46 受控卖方资料
 
 bike_pi_template增加seller_country/seller_contact_name/seller_phone/seller_email。历史值允许NULL，不推断或更新旧模板内容、银行资料和发布时间；新发布完整性由V3模板服务强制。四镜像SHA256：`2E420F805163A9E484733AA4BF390439D7DF620C0931E6011CADDE9924FFA1F5`，已执行隔离API及全新/升级库，禁止修改。
+
+## V49 上传意图及绑定失败核对
+
+`bike_file_upload`以服务端对象键为主键，保存业务类型/标识快照、文件名/类型/大小/SHA256、上传人、状态、实际对象状态及并发版本。写对象前通过独立连接池提交意图，不对业务或用户父表建外键；绑定事务持记录行锁，并与业务引用同时标记BOUND。`bike_file_upload_review`保存人工核对和清理申请的原因、操作者及操作前状态/版本，并与通用审计同事务。业务附件、归档和旧付款凭证字段增加对象键索引。新增`FILE_REVIEW_MANAGE`不自动分配给普通岗位。
+
+迁移不回填历史上传记录、不删除历史对象或发货后的业务附件。四镜像SHA256：`1063A4A6D7B204D3E75CD6E26C04A5304904AE3A07732A6446CB3CFD814AB1A2`，已执行隔离API、全新库及V16升级库，禁止改写。状态与保留边界见[上传绑定失败核对](file-upload-reconciliation.md)。

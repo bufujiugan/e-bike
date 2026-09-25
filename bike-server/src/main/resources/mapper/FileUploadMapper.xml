@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.files.FileUploadMapper">
+  <sql id="fields">object_key,purpose,business_id,file_name,content_type,file_size,sha256,state,object_state,version,created_by,created_name,created_at,updated_at,checked_at,error_code,review_reason,reviewed_by</sql>
+  <insert id="insert">INSERT INTO bike_file_upload(object_key,purpose,business_id,file_name,content_type,file_size,sha256,created_by,created_name)
+    VALUES(#{key},#{context.purpose},#{context.businessId},#{context.fileName},#{type},#{size},#{context.sha256},#{user},#{name})</insert>
+  <select id="get" resultType="com.bike.server.files.FileUploadRecord">SELECT <include refid="fields"/> FROM bike_file_upload WHERE object_key=#{key}</select>
+  <select id="lock" resultType="com.bike.server.files.FileUploadRecord">SELECT <include refid="fields"/> FROM bike_file_upload WHERE object_key=#{key} FOR UPDATE SKIP LOCKED</select>
+  <!-- Every server-owned storage pointer, including the retained legacy payment pointer. Never delete a referenced object. -->
+  <select id="references" resultType="int">
+    SELECT EXISTS(SELECT 1 FROM bike_production_attachment WHERE object_key=#{key})
+      + EXISTS(SELECT 1 FROM bike_pi_confirmation_attachment WHERE object_key=#{key})
+      + EXISTS(SELECT 1 FROM bike_pi_payment_attachment WHERE object_key=#{key})
+      + EXISTS(SELECT 1 FROM bike_pi_logistics_attachment WHERE object_key=#{key})
+      + EXISTS(SELECT 1 FROM bike_after_sales_attachment WHERE object_key=#{key})
+      + EXISTS(SELECT 1 FROM bike_pi_export WHERE pdf_key=#{key} OR xlsx_key=#{key})
+      + EXISTS(SELECT 1 FROM bike_pi_payment WHERE voucher_object_key=#{key})
+  </select>
+  <update id="bound">UPDATE bike_file_upload SET state='BOUND',object_state='PRESENT',version=version+1,updated_at=NOW(3),error_code=NULL WHERE object_key=#{key} AND state='PENDING'</update>
+  <update id="failed">UPDATE bike_file_upload SET state='REVIEW',version=version+1,updated_at=NOW(3),error_code='UPLOAD_OR_BIND_FAILED' WHERE object_key=#{key} AND state='PENDING'</update>
+  <update id="checked">UPDATE bike_file_upload SET state=#{state},object_state=#{objectState},error_code=#{error},checked_at=NOW(3),updated_at=NOW(3),version=version+1 WHERE object_key=#{key}</update>
+  <update id="review">UPDATE bike_file_upload SET state=#{state},review_reason=#{reason},reviewed_by=#{user},updated_at=NOW(3),version=version+1 WHERE object_key=#{key}</update>
+  <sql id="filter"><choose><when test="state != null">WHERE state=#{state}</when><otherwise>WHERE state IN ('PENDING','REVIEW','CLEANUP_PENDING')</otherwise></choose></sql>
+  <select id="list" resultType="com.bike.server.files.FileUploadRecord">SELECT <include refid="fields"/> FROM bike_file_upload <include refid="filter"/> ORDER BY created_at DESC,object_key LIMIT #{limit} OFFSET #{offset}</select>
+  <select id="count" resultType="long">SELECT COUNT(*) FROM bike_file_upload <include refid="filter"/></select>
+  <select id="pending" resultType="string">SELECT object_key FROM bike_file_upload WHERE (state='PENDING' AND created_at &lt; DATE_SUB(NOW(3),INTERVAL 15 MINUTE)) OR (state='CLEANUP_PENDING' AND updated_at &lt; DATE_SUB(NOW(3),INTERVAL 1 MINUTE)) ORDER BY updated_at,object_key LIMIT 20</select>
+  <insert id="event">INSERT INTO bike_file_upload_review(object_key,action,before_state,after_state,before_version,reason,operator_id,operator_name)
+    VALUES(#{row.objectKey},#{action},#{row.state},#{state},#{row.version},#{reason},#{user},#{name})</insert>
+  <select id="history" resultType="map">SELECT id,action,before_state beforeState,after_state afterState,before_version beforeVersion,reason,operator_name operatorName,created_at createdAt FROM bike_file_upload_review WHERE object_key=#{key} ORDER BY id DESC LIMIT 100</select>
+</mapper>
