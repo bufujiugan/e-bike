@@ -301,7 +301,7 @@ class PiMysqlTest {
                         "production_mutex(id INT PRIMARY KEY)",
                         "inventory_lock(id BIGINT PRIMARY KEY,lock_no VARCHAR(64),product_model_id BIGINT,lock_qty INT,released_qty INT,converted_qty INT,status VARCHAR(32),expire_time DATETIME(3))",
                         "order_reservation(order_id BIGINT PRIMARY KEY,source_lock_id BIGINT,request_id VARCHAR(64),model_id BIGINT,reserved_qty INT,expires_at DATETIME(3),expiry_audited_at DATETIME(3))",
-                        "vehicle(id BIGINT PRIMARY KEY,model_id BIGINT,status INT,frame_sn VARCHAR(64))",
+                        "vehicle(id BIGINT PRIMARY KEY,model_id BIGINT,status INT,frame_sn VARCHAR(64),vehicle_qr_code VARCHAR(200))",
                         "production_issue(code VARCHAR(64),status VARCHAR(32))",
                         "vehicle_part_binding(vehicle_id BIGINT,part_sn VARCHAR(64),is_current INT)",
                         "sales_order_vehicle(order_id BIGINT,vehicle_id BIGINT,stock_out_record_id BIGINT)",
@@ -334,7 +334,7 @@ class PiMysqlTest {
                 execute("INSERT INTO " + prefix + "production_sku VALUES(10,4,'RED','红色车','红色',1),(11,4,'BLUE','蓝色车','蓝色',1)");
                 execute("INSERT INTO " + prefix + "sales_order(id,order_no,customer_id,agent_id,status) VALUES(1,'SO-1',1,NULL,'DRAFT')");
                 execute("INSERT INTO " + prefix + "sales_order_item VALUES(1,1,4,2,0)");
-                execute("INSERT INTO " + prefix + "vehicle VALUES(100,4,2,'F100'),(101,4,2,'F101')");
+                execute("INSERT INTO " + prefix + "vehicle VALUES(100,4,2,'F100','BIKE:100:test'),(101,4,2,'F101','BIKE:101:test')");
                 execute("INSERT INTO " + prefix + "production_vehicle VALUES(100,10),(101,11),(102,12),(103,10)");
             } catch (Exception error) { close(); throw error; }
         }

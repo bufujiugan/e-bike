@@ -8,7 +8,7 @@
     <select id="selectById" resultType="com.bike.server.order.SalesOrderView"><include refid="orderSelect"/> WHERE o.id=#{id}</select>
     <select id="selectByNo" resultType="com.bike.server.order.SalesOrderView"><include refid="orderSelect"/> WHERE o.order_no=#{orderNo}</select>
     <select id="selectShippedVehicles" resultType="com.bike.server.order.OrderVehicleView">
-        SELECT v.id vehicle_id, v.frame_sn, so.stock_out_no, so.operation_time stock_out_time
+        SELECT v.id vehicle_id, v.vehicle_qr_code, v.frame_sn, so.stock_out_no, so.operation_time stock_out_time
         FROM bike_sales_order_vehicle ov
         JOIN bike_vehicle v ON v.id=ov.vehicle_id
         JOIN bike_stock_out_record so ON so.id=ov.stock_out_record_id AND so.status='COMPLETED'

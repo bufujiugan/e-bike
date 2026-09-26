@@ -72,5 +72,15 @@ onBeforeUnmount(() => { generation++; emit('busy', false) })
   </section>
 </template>
 <style scoped>
-.attachment-queue{margin:12px 0;padding:12px;background:#f6f9fc}.attachment-queue p{font-size:13px}.attachment-queue input{max-width:100%}.queue-actions{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap}.queue-item{margin:12px 0;overflow-wrap:anywhere}.queue-item>span{font-size:13px}.queue-item .el-progress{margin:6px 0}
+.attachment-queue{margin:12px 0;padding:16px;background:#f6f9fc;border:1px solid #e3ecf7;border-radius:10px}
+.attachment-queue p{margin:0 0 12px;font-size:13px;line-height:1.7;color:#70849e}
+.attachment-queue input{width:100%;max-width:100%;color:#647993;font-size:13px}
+.queue-actions{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap}
+.queue-item{margin:12px 0;overflow-wrap:anywhere}
+.queue-item>span{font-size:13px}
+.queue-item .el-progress{margin:6px 0}
+.attachment-queue input::file-selector-button{margin-right:10px;padding:8px 12px;border:1px solid #cfe0f8;border-radius:7px;background:#fff;color:#1875f5;font:inherit;cursor:pointer}
+.attachment-queue input:disabled::file-selector-button{opacity:.6;cursor:not-allowed}
+.attachment-queue input:focus-visible{outline:2px solid #1875f5;outline-offset:3px;border-radius:7px}
+.queue-actions .el-button{margin-left:0}
 </style>

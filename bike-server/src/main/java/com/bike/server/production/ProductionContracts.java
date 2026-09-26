@@ -34,7 +34,7 @@ public final class ProductionContracts {
   public record ReasonRequest(@NotBlank @Size(max = 500) String reason) {}
 
   public record IssueRequest(
-      @NotBlank @Size(max = 128) String code, @NotBlank @Size(max = 500) String reason) {}
+      @NotBlank @Size(max = 200) String code, @NotBlank @Size(max = 500) String reason) {}
 
   public record PrintResultRequest(
       @NotNull @Pattern(regexp = "SUBMITTED|FAILED|UNKNOWN") String status,

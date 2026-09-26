@@ -8,6 +8,9 @@ public class StockRecordView {
     private String type;
     private Long vehicleId;
     private String frameSn;
+    private String vehicleQrCode;
+    public String getVehicleQrCode() { return vehicleQrCode; }
+    public void setVehicleQrCode(String value) { vehicleQrCode = value; }
     private Long customerId;
     private String customerName;
     private Long orderId;

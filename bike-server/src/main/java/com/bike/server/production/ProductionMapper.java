@@ -63,6 +63,7 @@ public interface ProductionMapper {
   Map<String, Object> selectPart(String code);
 
   Map<String, Object> selectFrame(String code);
+  String selectFrameByQr(String code);
 
   int insertVehicle(@Param("frameSn") String frameSn, @Param("modelId") long modelId);
 

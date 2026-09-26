@@ -13,6 +13,7 @@ public class PartView {
     private String bindStatus;
     private Long currentVehicleId;
     private String currentFrameSn;
+    private String currentVehicleQrCode;
     private String status;
     private LocalDateTime inboundTime;
     private String remark;
@@ -38,6 +39,8 @@ public class PartView {
     public Long getCurrentVehicleId() { return currentVehicleId; }
     public void setCurrentVehicleId(Long currentVehicleId) { this.currentVehicleId = currentVehicleId; }
     public String getCurrentFrameSn() { return currentFrameSn; }
+    public String getCurrentVehicleQrCode() { return currentVehicleQrCode; }
+    public void setCurrentVehicleQrCode(String value) { currentVehicleQrCode = value; }
     public void setCurrentFrameSn(String currentFrameSn) { this.currentFrameSn = currentFrameSn; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }

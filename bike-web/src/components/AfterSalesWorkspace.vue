@@ -28,7 +28,7 @@ const canMessage = computed(() => !warehouseOnly.value && (canWrite.value || can
 const canAssign = computed(() => !isAgent.value && !warehouseOnly.value && permission('AFTER_SALES_ASSIGN'))
 const companyVisible = ref(false), assignmentVisible = ref(false), assignmentOptions = ref<StaffOption[]>([]), assignee = ref<number | null>(null)
 const keyword = ref(''), status = ref(''), page = ref(1), total = ref(0)
-function blankFilters(): CaseFilters { return { companyName: '', contactName: '', frameSn: '', modelName: '', faultType: '', countryCode: '', assigneeName: '', createdFrom: null, createdTo: null, queue: '' } }
+function blankFilters(): CaseFilters { return { vehicleQrCode: '', companyName: '', contactName: '', frameSn: '', modelName: '', faultType: '', countryCode: '', assigneeName: '', createdFrom: null, createdTo: null, queue: '' } }
 const filters = reactive<CaseFilters>(blankFilters()), advanced = ref(false), dashboard = ref<CaseDashboard | null>(null)
 const dashboardCards: { key: keyof CaseDashboard; queue: CaseQueue; label: string }[] = [
   { key: 'total', queue: '', label: '全部案例' }, { key: 'pending', queue: 'PENDING', label: '待处理' },
@@ -40,7 +40,7 @@ const dashboardCards: { key: keyof CaseDashboard; queue: CaseQueue; label: strin
 const rows = ref<AfterSalesCase[]>([]), loading = ref(false), saving = ref(false), error = ref('')
 const detail = ref<AfterSalesCase | null>(null), detailVisible = ref(false), detailLoading = ref(false)
 const tab = ref('case'), draftVisible = ref(false), draftId = ref<number | null>(null), contactLoading = ref(false)
-function blankDraft(): CaseDraft { return { customerId: null, agentId: null, vehicleId: null, frameSn: '', productModelId: null, motorSn: '', batterySn: '', displaySn: '', purchaseDate: null, failureTime: null, faultType: '', faultPart: '', errorCode: '', description: '', attemptedRepair: '', warrantyStatus: 'PENDING', contact: null, endCustomerPurchaseDate: null } }
+function blankDraft(): CaseDraft { return { customerId: null, agentId: null, vehicleId: null, vehicleQrCode: '', frameSn: '', productModelId: null, motorSn: '', batterySn: '', displaySn: '', purchaseDate: null, failureTime: null, faultType: '', faultPart: '', errorCode: '', description: '', attemptedRepair: '', warrantyStatus: 'PENDING', contact: null, endCustomerPurchaseDate: null } }
 const draft = reactive<CaseDraft>(blankDraft())
 const options = ref<CaseOptions>({ customers: [], agents: [], models: [] })
 const message = reactive<{ body: string; visibility: 'CUSTOMER' | 'INTERNAL' }>({ body: '', visibility: 'CUSTOMER' })
@@ -115,8 +115,15 @@ async function editDraft() {
   if (isAgent.value) draft.warrantyStatus = 'PENDING'
   draftVisible.value = true
 }
+function changeVehicleCode() {
+  draft.vehicleId = null
+  draft.frameSn = ''; draft.motorSn = ''; draft.batterySn = ''; draft.displaySn = ''
+  draft.productModelId = null
+  if (isAgent.value) draft.customerId = null
+}
 async function saveDraft() {
   if (contactLoading.value) { ElMessage.warning('请等待公司联系资料加载完成'); return }
+  if (!draftId.value && !draft.vehicleQrCode.trim()) { ElMessage.warning('请填写车辆聚合码'); return }
   if (!draft.description.trim()) { ElMessage.warning('请填写问题描述'); return }
   if (!isAgent.value && !draft.customerId && !draft.agentId) { ElMessage.warning('请选择客户或代理商归属'); return }
   saving.value = true
@@ -135,7 +142,7 @@ async function perform(action: () => Promise<unknown>, success: string) {
 }
 async function submitCase() {
   if (!detail.value) return
-  if (!detail.value.frameSn?.trim() || !detail.value.faultType?.trim()) { ElMessage.warning('提交前请补充车架号和故障类型'); editDraft(); return }
+  if ((!detail.value.vehicleQrCode?.trim() && !detail.value.frameSn?.trim()) || !detail.value.faultType?.trim()) { ElMessage.warning('提交前请关联车辆并填写故障类型'); editDraft(); return }
   try { await ElMessageBox.confirm('提交后进入售后审核流程，资料暂时不可编辑。', '提交售后案例', { type: 'info' }); await perform(() => afterSales.submit(detail.value!.id), '案例已提交') } catch (e) { if (e !== 'cancel' && e !== 'close') ElMessage.error(afterSalesError(e)) }
 }
 async function review(action: 'START' | 'APPROVE' | 'REJECT' | 'REQUEST_INFO' | 'REVISE') {
@@ -214,18 +221,18 @@ watch(() => props.authContext?.username, () => { listVersion++; detailVersion++;
   <section class="after-sales" aria-label="售后案例工作台">
     <el-alert v-if="!canRead" title="当前账号没有售后案例访问权限" type="warning" :closable="false" />
     <template v-else>
-      <div class="section-heading"><div><h2>售后案例</h2><p>{{ isAgent ? '申报故障、补充资料，查看维修及配件发货进度。' : '审核故障、确认维修方案，跟进配件发货与问题解决。' }}</p></div><div><el-button v-if="canCompany" @click="companyVisible=true">公司联系资料</el-button><el-button v-if="canWrite" type="primary" @click="newDraft">新建案例</el-button></div></div>
+      <div class="section-heading"><div><h2>售后案例</h2><p>{{ isAgent ? '申报故障、补充资料，查看维修及配件发货进度。' : '审核故障、确认维修方案，跟进配件发货与问题解决。' }}</p></div></div>
       <div class="dashboard" aria-label="售后概况" :aria-busy="loading">
         <button v-for="card in dashboardCards" :key="card.key" type="button" class="dashboard-card" :class="{ selected: filters.queue === card.queue && !status }" :aria-pressed="filters.queue === card.queue && !status" :disabled="loading || !dashboard" @click="chooseQueue(card.queue)">
           <span>{{ card.label }}</span><strong>{{ dashboard ? dashboard[card.key] : '—' }}</strong>
         </button>
       </div>
       <p class="dashboard-help">统计限当前账号可见的公司，并随搜索条件更新；点击数字查看对应案例。待发货按实际待发配件统计；本月归档按服务器当月归档时间统计。</p>
-      <form class="filters" @submit.prevent="filter"><el-input v-model="keyword" aria-label="案例搜索" :placeholder="warehouseOnly ? '案例编号、公司或联系人' : '案例编号、车架号、问题、公司或联系人'" clearable /><el-select v-model="status" aria-label="案例状态" placeholder="全部状态" clearable @change="filters.queue = ''"><el-option v-for="(label, key) in caseStatuses" :key="key" :label="label" :value="key" /></el-select><el-button native-type="submit" :loading="loading">查询</el-button><el-button :aria-expanded="advanced" @click="advanced = !advanced">高级筛选</el-button><el-button @click="resetFilters">重置</el-button><el-button @click="load">刷新</el-button></form>
+      <form class="filters list-toolbar" @submit.prevent="filter"><el-input v-model="keyword" aria-label="案例搜索" :placeholder="warehouseOnly ? '案例编号、公司或联系人' : '案例编号、聚合码、问题、公司或联系人'" clearable /><el-select v-model="status" aria-label="案例状态" placeholder="全部状态" clearable @change="filters.queue = ''"><el-option v-for="(label, key) in caseStatuses" :key="key" :label="label" :value="key" /></el-select><el-button native-type="submit" :loading="loading">查询</el-button><el-button :aria-expanded="advanced" @click="advanced = !advanced">高级筛选</el-button><el-button @click="resetFilters">重置</el-button><el-button @click="load">刷新</el-button><el-button v-if="canCompany" @click="companyVisible=true">公司联系资料</el-button><el-button v-if="canWrite" type="primary" @click="newDraft">新建案例</el-button></form>
       <el-form v-if="advanced" class="advanced-filters form-grid" label-position="top" @submit.prevent="filter">
         <el-form-item label="客户 / 公司名称"><el-input v-model="filters.companyName" maxlength="255" clearable /></el-form-item>
         <el-form-item label="联系人"><el-input v-model="filters.contactName" maxlength="100" clearable /></el-form-item>
-        <el-form-item v-if="!warehouseOnly" label="车架号"><el-input v-model="filters.frameSn" maxlength="128" clearable /></el-form-item>
+        <el-form-item v-if="!warehouseOnly" label="聚合码"><el-input v-model="filters.vehicleQrCode" maxlength="200" clearable /></el-form-item><el-form-item v-if="!warehouseOnly" label="车架码（辅助查询）"><el-input v-model="filters.frameSn" maxlength="128" clearable /></el-form-item>
         <el-form-item v-if="!warehouseOnly" label="产品型号"><el-input v-model="filters.modelName" maxlength="100" clearable /></el-form-item>
         <el-form-item v-if="!warehouseOnly" label="故障类型"><el-select v-model="filters.faultType" filterable allow-create clearable placeholder="全部故障类型"><el-option v-for="fault in faults" :key="fault" :value="fault" :label="fault" /></el-select></el-form-item>
         <el-form-item label="国家代码"><el-input v-model="filters.countryCode" maxlength="2" placeholder="例如 GB、FR、CN" clearable /></el-form-item>
@@ -238,7 +245,7 @@ watch(() => props.authContext?.username, () => { listVersion++; detailVersion++;
       <el-table :data="rows" v-loading="loading" stripe empty-text="暂无符合条件的售后案例" @row-dblclick="(row: AfterSalesCase) => open(row.id)">
         <el-table-column prop="caseNo" label="案例编号" min-width="225"><template #default="scope"><el-button link type="primary" @click="open(scope.row.id)">{{ scope.row.caseNo }}</el-button></template></el-table-column>
         <el-table-column label="客户 / 代理商" min-width="150"><template #default="scope">{{ scope.row.customerName || scope.row.agentName || '—' }}</template></el-table-column>
-        <el-table-column v-if="!warehouseOnly" prop="frameSn" label="车架号" min-width="140" /><el-table-column v-if="!warehouseOnly" prop="modelName" label="车型" min-width="115" /><el-table-column v-if="!warehouseOnly" prop="faultType" label="故障类型" min-width="100" />
+        <el-table-column v-if="!warehouseOnly" prop="vehicleQrCode" label="聚合码" min-width="220" show-overflow-tooltip /><el-table-column v-if="!warehouseOnly" prop="frameSn" label="车架号" min-width="140" /><el-table-column v-if="!warehouseOnly" prop="modelName" label="车型" min-width="115" /><el-table-column v-if="!warehouseOnly" prop="faultType" label="故障类型" min-width="100" />
         <el-table-column label="状态" min-width="130"><template #default="scope"><el-tag :type="tone(scope.row.status)">{{ caseStatuses[scope.row.status as CaseStatus] }}</el-tag></template></el-table-column>
         <el-table-column v-if="!warehouseOnly" label="保修状态" min-width="110"><template #default="scope">{{ warrantyNames[scope.row.warrantyStatus] || scope.row.warrantyStatus }}</template></el-table-column>
         <el-table-column v-if="!warehouseOnly" prop="assigneeName" label="售后负责人" min-width="140"/>
@@ -270,7 +277,7 @@ watch(() => props.authContext?.username, () => { listVersion++; detailVersion++;
           </div>
           <el-tabs v-model="tab">
             <el-tab-pane label="联系资料" name="contact"><p class="file-help">这里保存本案例的联系资料。公司资料更新不会改变历史案例中的联系人和地址。{{detail.snapshotSource==='MIGRATED_CURRENT'?'此旧案例的基础联系信息来自升级时可确定的主数据。':''}}</p><dl class="facts"><div><dt>公司</dt><dd>{{value(detail.companyName)}}</dd></div><div v-if="!warehouseOnly"><dt>售后负责人</dt><dd>{{value(detail.assigneeName)}}</dd></div><div><dt>联系人</dt><dd>{{value(detail.contactName)}}</dd></div><div><dt>电话</dt><dd>{{value(detail.contactPhone)}}</dd></div><div v-if="!warehouseOnly"><dt>Email</dt><dd>{{value(detail.contactEmail)}}</dd></div><div><dt>国家 / 省州 / 城市</dt><dd>{{value(detail.countryCode)}} / {{value(detail.region)}} / {{value(detail.city)}}</dd></div><div><dt>详细地址</dt><dd>{{value(detail.addressLine)}}</dd></div><div><dt>邮编</dt><dd>{{value(detail.postalCode)}}</dd></div><div v-if="!warehouseOnly"><dt>最终客户购买日期</dt><dd>{{value(detail.endCustomerPurchaseDate)}}</dd></div></dl></el-tab-pane>
-            <el-tab-pane v-if="!warehouseOnly" label="工单信息" name="case"><dl class="facts"><div><dt>客户</dt><dd>{{ value(detail.customerName) }}</dd></div><div><dt>代理商</dt><dd>{{ value(detail.agentName) }}</dd></div><div><dt>车型</dt><dd>{{ value(detail.modelName) }}</dd></div><div><dt>车架号</dt><dd>{{ value(detail.frameSn) }}</dd></div><div><dt>电机序列号</dt><dd>{{ value(detail.motorSn) }}</dd></div><div><dt>电池序列号</dt><dd>{{ value(detail.batterySn) }}</dd></div><div><dt>仪表序列号</dt><dd>{{ value(detail.displaySn) }}</dd></div><div><dt>购买日期</dt><dd>{{ value(detail.purchaseDate) }}</dd></div><div><dt>故障发生时间</dt><dd>{{ time(detail.failureTime) }}</dd></div><div><dt>故障类型 / 部件</dt><dd>{{ value(detail.faultType) }} / {{ value(detail.faultPart) }}</dd></div><div><dt>故障代码</dt><dd>{{ value(detail.errorCode) }}</dd></div><div><dt>保修状态</dt><dd>{{ warrantyNames[detail.warrantyStatus] || '待确认' }}</dd></div><div class="wide"><dt>问题描述</dt><dd>{{ detail.description }}</dd></div><div class="wide"><dt>已尝试维修方法</dt><dd>{{ value(detail.attemptedRepair) }}</dd></div></dl></el-tab-pane>
+            <el-tab-pane v-if="!warehouseOnly" label="工单信息" name="case"><dl class="facts"><div><dt>客户</dt><dd>{{ value(detail.customerName) }}</dd></div><div><dt>代理商</dt><dd>{{ value(detail.agentName) }}</dd></div><div><dt>车型</dt><dd>{{ value(detail.modelName) }}</dd></div><div><dt>聚合码</dt><dd>{{ value(detail.vehicleQrCode) }}</dd></div><div><dt>车架码</dt><dd>{{ value(detail.frameSn) }}</dd></div><div><dt>电机序列号</dt><dd>{{ value(detail.motorSn) }}</dd></div><div><dt>电池序列号</dt><dd>{{ value(detail.batterySn) }}</dd></div><div><dt>仪表序列号</dt><dd>{{ value(detail.displaySn) }}</dd></div><div><dt>购买日期</dt><dd>{{ value(detail.purchaseDate) }}</dd></div><div><dt>故障发生时间</dt><dd>{{ time(detail.failureTime) }}</dd></div><div><dt>故障类型 / 部件</dt><dd>{{ value(detail.faultType) }} / {{ value(detail.faultPart) }}</dd></div><div><dt>故障代码</dt><dd>{{ value(detail.errorCode) }}</dd></div><div><dt>保修状态</dt><dd>{{ warrantyNames[detail.warrantyStatus] || '待确认' }}</dd></div><div class="wide"><dt>问题描述</dt><dd>{{ detail.description }}</dd></div><div class="wide"><dt>已尝试维修方法</dt><dd>{{ value(detail.attemptedRepair) }}</dd></div></dl></el-tab-pane>
             <el-tab-pane v-if="!warehouseOnly" label="维修方案" name="solution"><AfterSalesSolution :record="detail" :can-tech="canTech" :can-internal="canInternal" @changed="solutionChanged" /></el-tab-pane>
             <el-tab-pane label="配件与发货" name="shipments"><AfterSalesShipments :record="detail" :can-ship="canShip" :can-review="canReview" @dispatch="openDispatch" @reconcile="openReconcile" @changed="returnsChanged" />
               <el-form v-if="shippingAllowed" class="sub-form" label-position="top"><h3>登记补发配件</h3><div class="form-grid"><el-form-item label="已批准配件" required><el-select v-model="shipment.solutionItemId" placeholder="选择当前审批中的配件" @change="selectApprovedPart"><el-option v-for="part in approvedParts" :key="part.id" :value="part.id" :label="`${part.partCode} · ${part.partName}（剩余 ${part.quantity - part.allocatedQty}）`" :disabled="part.quantity <= part.allocatedQty" /></el-select></el-form-item><el-form-item label="数量" required><el-input-number v-model="shipment.quantity" :min="1" :max="Math.max(1, (selectedPart?.quantity || 0) - (selectedPart?.allocatedQty || 0))" :precision="0" /></el-form-item><el-form-item label="承运商"><el-input v-model="shipment.carrier" maxlength="128" /></el-form-item><el-form-item label="运单号（已发货时填写）"><el-input v-model="shipment.trackingNo" maxlength="128" /></el-form-item></div><AfterSalesShippingFields v-if="shipment.shipping" v-model="shipment.shipping" :dispatch="Boolean(shipment.trackingNo.trim())" /><el-checkbox v-model="shipment.oldPartReturnRequired" disabled>按审批要求退回旧件</el-checkbox><div class="actions"><el-button type="primary" :loading="saving" @click="addShipment">保存补发记录</el-button></div></el-form>
@@ -317,9 +324,9 @@ watch(() => props.authContext?.username, () => { listVersion++; detailVersion++;
     </el-dialog>
 
     <el-dialog v-model="draftVisible" :title="draftId ? '编辑案例资料' : '新建售后案例'" width="min(860px, 96vw)" :close-on-click-modal="false" destroy-on-close>
-      <el-form :model="draft" label-position="top"><template v-if="draft.contact"><h3>案例联系资料</h3><AfterSalesContactFields :model="draft.contact" :disabled="contactLoading||saving"/><el-alert v-if="contactLoading" title="正在加载公司联系资料，请稍候" type="info" :closable="false"/><p class="file-help">公司资料自动带出后，可在此纠正本次案例的联系人和地址。</p></template><div class="form-grid">
+      <el-alert v-if="draftId && !draft.vehicleQrCode" title="历史案例尚未关联聚合码，可补录后关联车辆；原始车架与故障资料保留。" type="info" :closable="false" /><el-form :model="draft" label-position="top"><template v-if="draft.contact"><h3>案例联系资料</h3><AfterSalesContactFields :model="draft.contact" :disabled="contactLoading||saving"/><el-alert v-if="contactLoading" title="正在加载公司联系资料，请稍候" type="info" :closable="false"/><p class="file-help">公司资料自动带出后，可在此纠正本次案例的联系人和地址。</p></template><div class="form-grid">
         <template v-if="!isAgent"><el-form-item label="客户"><el-select v-model="draft.customerId" filterable clearable placeholder="选择客户"><el-option v-for="item in options.customers" :key="item.id" :value="item.id" :label="item.name" /></el-select></el-form-item><el-form-item label="代理商"><el-select v-model="draft.agentId" filterable clearable placeholder="选择代理商" :disabled="Boolean(draftId)"><el-option v-for="item in options.agents" :key="item.id" :value="item.id" :label="item.name" /></el-select></el-form-item></template>
-        <el-form-item label="车架号（提交时必填）"><el-input v-model="draft.frameSn" maxlength="128" /></el-form-item>
+        <el-form-item label="聚合码" :required="!draftId"><el-input v-model="draft.vehicleQrCode" @input="changeVehicleCode" maxlength="200" placeholder="扫描或输入车辆聚合码，保存时校验归属并关联整车" /></el-form-item><el-form-item label="车架码（辅助核对）"><el-input v-model="draft.frameSn" maxlength="128" placeholder="可留空，由聚合码关联带入" /></el-form-item>
         <el-form-item label="最终客户购买日期"><el-date-picker v-model="draft.endCustomerPurchaseDate" type="date" value-format="YYYY-MM-DD"/></el-form-item>
         <el-form-item label="产品型号"><el-select v-model="draft.productModelId" filterable clearable placeholder="选择产品型号"><el-option v-for="item in options.models" :key="item.id" :value="item.id" :label="item.name" /></el-select></el-form-item><el-form-item label="购买日期"><el-date-picker v-model="draft.purchaseDate" type="date" value-format="YYYY-MM-DD" /></el-form-item>
         <el-form-item label="电机序列号"><el-input v-model="draft.motorSn" maxlength="128" /></el-form-item><el-form-item label="电池序列号"><el-input v-model="draft.batterySn" maxlength="128" /></el-form-item><el-form-item label="仪表序列号"><el-input v-model="draft.displaySn" maxlength="128" /></el-form-item><el-form-item label="故障类型（提交时必填）"><el-select v-model="draft.faultType" filterable allow-create default-first-option><el-option v-for="fault in faults" :key="fault" :label="fault" :value="fault" /></el-select></el-form-item>

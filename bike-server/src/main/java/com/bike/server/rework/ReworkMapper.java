@@ -8,6 +8,7 @@ import java.util.List;
 
 @Mapper
 public interface ReworkMapper {
+    String selectFrameByQr(@Param("qrCode") String qrCode);
     VehicleView selectVehicleForUpdate(@Param("frameSn") String frameSn);
     AssemblyPartRecord selectCurrentPartForUpdate(@Param("vehicleId") long vehicleId,@Param("partType") String partType);
     AssemblyPartRecord selectNewPartForUpdate(@Param("partSn") String partSn);

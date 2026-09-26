@@ -270,6 +270,7 @@ public class AfterSalesServiceImpl implements AfterSalesService {
     }
 
     private AfterSalesCaseCreateRequest validateRequest(AfterSalesCaseCreateRequest r, Long agentId, AfterSalesCaseView existing) {
+        r = resolveAggregateCode(r);
         if (isAgent() && r.agentId() != null && !Objects.equals(r.agentId(), requiredAgent()))
             throw new BusinessException("FORBIDDEN", "不能提交其他代理商案例");
         if (r.customerId() == null && agentId == null) throw new BusinessException("CUSTOMER_OR_AGENT_REQUIRED", "客户或代理商不能为空");
@@ -317,6 +318,19 @@ public class AfterSalesServiceImpl implements AfterSalesService {
             AfterSalesContactValidation.normalize(r.contact()), AfterSalesContactValidation.date(r.endCustomerPurchaseDate()));
     }
 
+    private AfterSalesCaseCreateRequest resolveAggregateCode(AfterSalesCaseCreateRequest r) {
+        String qr = optional(r.vehicleQrCode(), 200, "聚合码长度不能超过200");
+        if (qr == null) return r;
+        Long id = mapper.selectVehicleIdByQr(qr);
+        if (id == null) throw new BusinessException(isAgent() ? "FORBIDDEN" : "VEHICLE_NOT_FOUND", "聚合码不存在、已失效或不属于当前业务范围");
+        if (r.vehicleId() != null && !Objects.equals(r.vehicleId(), id))
+            throw new BusinessException("AFTER_SALES_VEHICLE_MISMATCH", "聚合码与关联车辆不一致");
+        return new AfterSalesCaseCreateRequest(r.customerId(), r.agentId(), id, r.frameSn(), r.productModelId(),
+            r.motorSn(), r.batterySn(), r.displaySn(), r.purchaseDate(), r.failureTime(), r.faultType(),
+            r.faultPart(), r.errorCode(), r.description(), r.attemptedRepair(), r.warrantyStatus(), r.contact(),
+            qr, r.endCustomerPurchaseDate());
+    }
+
     private AfterSalesCaseView requireCase(long id, boolean lock) {
         var c = lock ? mapper.selectForUpdate(id) : mapper.selectById(id);
         requireCaseScope(mapper, c);
@@ -334,7 +348,7 @@ public class AfterSalesServiceImpl implements AfterSalesService {
     private void redact(AfterSalesCaseView c) {
         if (!canReadInternal()) c.setInternalNote(null);
         if(warehouseOnly()) {
-            c.setVehicleId(null);c.setFrameSn(null);c.setProductModelId(null);c.setModelName(null);c.setMotorSn(null);c.setBatterySn(null);c.setDisplaySn(null);
+            c.setVehicleId(null);c.setVehicleQrCode(null);c.setFrameSn(null);c.setProductModelId(null);c.setModelName(null);c.setMotorSn(null);c.setBatterySn(null);c.setDisplaySn(null);
             c.setPurchaseDate(null);c.setEndCustomerPurchaseDate(null);c.setFailureTime(null);c.setFaultType(null);c.setFaultPart(null);c.setErrorCode(null);c.setDescription(null);c.setAttemptedRepair(null);
             c.setWarrantyStatus(null);c.setTechnicalJudgment(null);c.setSolution(null);c.setRejectionReason(null);c.setContactEmail(null);c.setAssigneeId(null);c.setAssigneeName(null);
             c.setCreatedBy(null);c.setUpdatedBy(null);c.setMessages(List.of());
@@ -345,7 +359,7 @@ public class AfterSalesServiceImpl implements AfterSalesService {
         return warehouseOnly()?history.stream().filter(h->h.action().startsWith("SHIPMENT_")||h.action().startsWith("RETURN_")).toList():history;
     }
     private static void checkWarehouseFilters(AfterSalesCaseFilter filter) {
-        if(warehouseOnly() && (filter.frameSn()!=null||filter.modelName()!=null||filter.faultType()!=null||filter.assigneeName()!=null))throw new BusinessException("PERMISSION_DENIED","仓库岗位不能按车辆、故障或售后负责人检索案例");
+        if(warehouseOnly() && (filter.vehicleQrCode()!=null||filter.frameSn()!=null||filter.modelName()!=null||filter.faultType()!=null||filter.assigneeName()!=null))throw new BusinessException("PERMISSION_DENIED","仓库岗位不能按车辆、故障或售后负责人检索案例");
     }
     private AfterSalesCaseView auditedCase(long id, String action, AfterSalesCaseView before) {
         var after = requireCase(id, false);

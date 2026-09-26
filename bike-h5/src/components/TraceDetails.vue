@@ -6,11 +6,11 @@ export type TraceData = {
   stockInRecords: Row[]; stockOutRecords: Row[]; reworkRecords: Row[];
 }
 const props = defineProps<{ data: TraceData }>()
-defineEmits<{ selectFrame: [frame: string] }>()
+defineEmits<{ selectCode: [code: string, type: 'qr' | 'frame'] }>()
 const vehicleFields = [
-  ['frameSn', '车架 SN'], ['modelName', '车型'], ['skuCode', 'SKU'], ['batchNo', '批次'],
+  ['vehicleQrCode', '聚合码'], ['frameSn', '车架码'], ['modelName', '车型'], ['skuCode', '商品规格（SKU）'], ['batchNo', '批次'],
   ['statusName', '车辆状态'], ['motorSn', '电机 SN'], ['batterySn', '电池 SN'], ['displaySn', '仪表 SN'],
-  ['vehicleQrCode', '当前聚合码'], ['assembleTime', '组装时间'], ['assembleOperatorName', '组装人员'],
+  ['assembleTime', '组装时间'], ['assembleOperatorName', '组装人员'],
   ['warehouseName', '当前仓库'], ['locationName', '当前库位'], ['customerName', '当前客户'], ['currentOrderNo', '当前订单'],
 ]
 const sections = computed(() => [
@@ -32,8 +32,8 @@ function display(value: Row[string]) { const text = value == null || value === '
     </section>
     <section v-if="data.relatedVehicles?.length" class="trace-block">
       <h2>关联车辆 <small>含部件曾经绑定的车辆</small></h2>
-      <div class="trace-related"><button v-for="vehicle in data.relatedVehicles" :key="String(vehicle.id)" type="button" @click="$emit('selectFrame', String(vehicle.frameSn))">{{ vehicle.frameSn }} · {{ vehicle.statusName }}</button></div>
-      <p class="trace-hint">部件查询的出入库与换件记录包含关联车辆。点击车架可查看该车独立的完整历史。</p>
+      <div class="trace-related"><button v-for="vehicle in data.relatedVehicles" :key="String(vehicle.id)" type="button" @click="$emit('selectCode', String(vehicle.vehicleQrCode || vehicle.frameSn), vehicle.vehicleQrCode ? 'qr' : 'frame')">{{ vehicle.vehicleQrCode || `未生成聚合码 · 车架 ${vehicle.frameSn}` }} · {{ vehicle.statusName }}</button></div>
+      <p class="trace-hint">部件查询的出入库与换件记录包含关联车辆。点击聚合码可查看该车独立的完整历史。</p>
     </section>
     <section v-for="section in sections" :key="section.title" class="trace-block">
       <h2>{{ section.title }} <small>{{ section.rows?.length ?? 0 }} 条</small></h2>

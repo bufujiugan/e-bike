@@ -24,8 +24,16 @@ public record AfterSalesCaseCreateRequest(
         @Size(max = 2000, message = "已尝试维修方法长度不能超过2000") String attemptedRepair,
         @Size(max = 32, message = "保修状态长度不能超过32") String warrantyStatus,
         AfterSalesContact contact,
+        @Size(max = 200, message = "聚合码长度不能超过200") String vehicleQrCode,
         LocalDate endCustomerPurchaseDate
 ) {
+    public AfterSalesCaseCreateRequest(Long customerId,Long agentId,Long vehicleId,String frameSn,Long productModelId,
+        String motorSn,String batterySn,String displaySn,LocalDate purchaseDate,LocalDateTime failureTime,String faultType,
+        String faultPart,String errorCode,String description,String attemptedRepair,String warrantyStatus,
+        AfterSalesContact contact,LocalDate endCustomerPurchaseDate) {
+        this(customerId,agentId,vehicleId,frameSn,productModelId,motorSn,batterySn,displaySn,purchaseDate,failureTime,faultType,
+            faultPart,errorCode,description,attemptedRepair,warrantyStatus,contact,null,endCustomerPurchaseDate);
+    }
     public AfterSalesCaseCreateRequest(Long customerId,Long agentId,Long vehicleId,String frameSn,Long productModelId,
         String motorSn,String batterySn,String displaySn,LocalDate purchaseDate,LocalDateTime failureTime,String faultType,
         String faultPart,String errorCode,String description,String attemptedRepair,String warrantyStatus) {

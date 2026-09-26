@@ -7,6 +7,8 @@ import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/compon
 import * as echarts from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import PermissionGate from './components/PermissionGate.vue'
+import AppIcon from './components/AppIcon.vue'
+import RecordDetails from './components/RecordDetails.vue'
 import ProductionManager from './components/ProductionManager.vue'
 import TraceQuery from './components/TraceQuery.vue'
 import { hasAnyPermission, hasPermission, hasRole, isSuperAdmin } from './permissions'
@@ -142,13 +144,26 @@ const visibleNavGroups = computed(() => {
     }),
   })).filter(group => group.items.length > 0)
 })
+const expandedNavGroups = ref(new Set(navGroups.map(group => group.label)))
+function isNavGroupExpanded(label: string) {
+  return expandedNavGroups.value.has(label)
+}
+function toggleNavGroup(label: string) {
+  const next = new Set(expandedNavGroups.value)
+  if (next.has(label)) next.delete(label)
+  else next.add(label)
+  expandedNavGroups.value = next
+}
 const userRoleLabel = computed(() => hasRole(authContext.value, 'WEB_AGENT') ? '代理商' : hasRole(authContext.value, 'PDA_OPERATOR') ? 'PDA操作员' : isSuperAdmin(authContext.value) ? '超级管理员' : 'Web业务员')
+const canCreateProductionTask = computed(() => !isAgentAccount.value && hasPermission(authContext.value, 'ASSEMBLY_OPERATE') &&
+  (isSuperAdmin(authContext.value) || authContext.value?.workstations.some(type => ['ASSEMBLY', 'FRAME', 'MOTOR', 'BATTERY', 'DISPLAY'].includes(type))))
 
 const routeKeyMap = new Map(navGroups.flatMap((group) => group.items).map((item) => [item.path ?? `/${item.key}`, item.key]))
 const initialPath = window.location.pathname
 const initialKey = routeKeyMap.get(initialPath) ?? initialPath.slice(1)
 if (initialKey === 'dashboard' || navGroups.some((group) => group.items.some((item) => item.key === initialKey))) activeView.value = initialKey || 'dashboard'
 
+const activeGroupLabel = computed(() => navGroups.find(group => group.items.some(item => item.key === activeView.value))?.label ?? '工作台')
 const activeNav = computed(() => navGroups.flatMap((group) => group.items).find((item) => item.key === activeView.value))
 
 const activeModule = computed(() => modulePageData.value[activeView.value] ?? {
@@ -158,16 +173,20 @@ const activeModule = computed(() => modulePageData.value[activeView.value] ?? {
   rows: [],
   action: '新增记录',
 })
+function moduleColumnWidth(column: string) {
+  if (column.includes('聚合码')) return 230
+  if (/时间|日期/.test(column)) return 165
+  if (/备注|描述|原因|权限/.test(column)) return 210
+  if (/SN|编码|编号|单号/.test(column)) return 175
+  return 130
+}
+const moduleTableWidth = computed(() => activeModule.value.columns.reduce((width, column) => width + moduleColumnWidth(column), 200))
 const moduleSearch = ref('')
 const modulePage = ref(1)
 const modulePageSize = ref(20)
 const moduleTotal = computed(() => modulePageData.value[activeView.value]?.total ?? 0)
 const modulePageCount = computed(() => Math.max(1, Math.ceil(moduleTotal.value / modulePageSize.value)))
-const filteredModuleRows = computed(() => {
-  if (!activeModule.value || !moduleSearch.value.trim()) return activeModule.value?.rows ?? []
-  const keyword = moduleSearch.value.trim().toLowerCase()
-  return activeModule.value.rows.filter((row) => row.some((cell) => cell.toLowerCase().includes(keyword)))
-})
+const filteredModuleRows = computed(() => activeModule.value.rows)
 
 const metrics = ref<{ label: string; value: string; unit: string; trend: string; tone: string }[]>([])
 const statusRows = ref<{ label: string; count: number; color: string }[]>([])
@@ -199,7 +218,7 @@ const quickActions = [
   { key: 'assembly', label: '开始组装', caption: '进入四码绑定工位', icon: '01' },
   { key: 'stock', label: '办理入库', caption: '扫描整车总二维码', icon: '02' },
   { key: 'inventory', label: '查看库存', caption: '按车型和库位筛选', icon: '03' },
-  { key: 'trace', label: '查询追溯', caption: '输入 SN 查看档案', icon: '04' },
+  { key: 'trace', label: '查询追溯', caption: '扫描聚合码查看档案', icon: '04' },
 ]
 
 const recentOperations = ref<{ time: string; action: string; target: string; operator: string; status: string }[]>([])
@@ -210,6 +229,30 @@ const actionKind = ref<ActionKind>('master')
 const editingId = ref<number | null>(null)
 const permissionOptions = ref<Array<{ id: number; permissionCode: string; permissionName: string; permissionType: string }>>([])
 const selectedPermissionIds = ref<number[]>([])
+const permissionTreeRef = ref<{ setCheckedKeys: (keys: number[], leafOnly: boolean) => void; getCheckedKeys: (leafOnly: boolean) => (string | number)[] } | null>(null)
+const permissionTreeData = computed(() => {
+  const groupNames: Record<string, string> = {
+    ASSEMBLY: '生产与库存', PRODUCTION: '生产与库存', INVENTORY: '生产与库存', STOCK: '生产与库存', VEHICLE: '生产与库存',
+    ORDER: '订单与履约', PI: '订单与履约', AFTER: '售后服务', CUSTOMER: '基础资料', MASTER: '基础资料',
+    USER: '系统管理', ROLE: '系统管理', WORKSTATION: '系统管理', SYSTEM: '系统管理', FILE: '系统管理',
+    AGENT: '代理商业务', DATA: '数据与导出', TRACE: '数据与导出', DASHBOARD: '数据与导出', PART: '基础资料', REWORK: '生产与库存', PURCHASE: '代理商业务',
+  }
+  const groups = new Map<string, { id: string; label: string; children: { id: number; label: string; permissionCode: string }[] }>()
+  for (const item of permissionOptions.value) {
+    const label = groupNames[item.permissionCode.split('_')[0]] ?? '其他权限'
+    if (!groups.has(label)) groups.set(label, { id: `permission-group-${label}`, label, children: [] })
+    groups.get(label)!.children.push({ id: item.id, label: item.permissionName, permissionCode: item.permissionCode })
+  }
+  return Array.from(groups.values()).sort((a, b) => a.label.localeCompare(b.label, 'zh-CN'))
+})
+function syncPermissionTree() {
+  nextTick(() => permissionTreeRef.value?.setCheckedKeys(selectedPermissionIds.value, true))
+}
+function handlePermissionTreeCheck() {
+  const keys = permissionTreeRef.value?.getCheckedKeys(true) ?? []
+  selectedPermissionIds.value = keys.filter((key: string | number) => typeof key === 'number') as number[]
+}
+watch([selectedPermissionIds, permissionOptions, actionDialogVisible], syncPermissionTree)
 const selectedRoleIds = ref<number[]>([])
 const agentAccessVisible = ref(false)
 const agentAccessSaving = ref(false)
@@ -395,7 +438,7 @@ async function loadSystemOptions() {
   workstationOptions.value = workstationsResponse.data.data ?? []
 }
 
-async function loadDashboard() {
+async function loadDashboard(requestVersion: number) {
   dataLoading.value = true
   dataError.value = ''
   try {
@@ -403,6 +446,7 @@ async function loadDashboard() {
       axios.get('/api/dashboard/summary', authConfig()),
       axios.get('/api/dashboard/trend?days=7', authConfig()),
     ])
+    if (requestVersion !== moduleRequestVersion || activeView.value !== 'dashboard' || !loggedIn.value) return
     const data = summaryResponse.data.data
     metrics.value = data.metrics.map((item: { label: string; value: number; unit: string; trend: string; tone: string }) => ({ ...item, value: item.value.toLocaleString() }))
     statusRows.value = data.statusRows
@@ -410,13 +454,14 @@ async function loadDashboard() {
     trendRows.value = trendResponse.data.data?.points ?? []
     lastLoadedAt.value = new Date().toLocaleString('zh-CN', {hour12:false})
   } catch (error) {
+    if (requestVersion !== moduleRequestVersion || activeView.value !== 'dashboard' || !loggedIn.value) return
     dataError.value = axios.isAxiosError(error) ? error.response?.data?.message ?? '运营总览数据加载失败' : '运营总览数据加载失败'
     metrics.value = []
     statusRows.value = []
     recentOperations.value = []
     trendRows.value = []
   } finally {
-    dataLoading.value = false
+    if (requestVersion === moduleRequestVersion) dataLoading.value = false
   }
 }
 
@@ -426,20 +471,25 @@ async function loadAuthContext() {
   username.value = response.data.data.username
 }
 
+let moduleRequestVersion = 0
 async function loadModule(module: string) {
+  const requestVersion = ++moduleRequestVersion
+  dataLoading.value = false
   if (['production', 'trace', 'pis', 'after-sales', 'sku-inventory', 'customer-scopes', 'file-reviews'].includes(module)) return
-  if (module === 'dashboard') return loadDashboard()
+  if (module === 'dashboard') return loadDashboard(requestVersion)
   dataLoading.value = true
   dataError.value = ''
   try {
     const response = await axios.get(`/api/modules/${module}`, { params: { keyword: moduleSearch.value.trim() || undefined, page: modulePage.value, pageSize: modulePageSize.value }, headers: { Authorization: `Bearer ${localStorage.getItem('bike_access_token')}` } })
+    if (requestVersion !== moduleRequestVersion || activeView.value !== module || !loggedIn.value) return
     modulePageData.value[module] = response.data.data
     lastLoadedAt.value = new Date().toLocaleString('zh-CN', {hour12:false})
   } catch (error) {
+    if (requestVersion !== moduleRequestVersion || activeView.value !== module || !loggedIn.value) return
     dataError.value = axios.isAxiosError(error) ? error.response?.data?.message ?? '业务数据加载失败' : '业务数据加载失败'
     modulePageData.value[module] = { subtitle: '数据暂不可用', stats: [], columns: [], rows: [], action: '新增记录' }
   } finally {
-    dataLoading.value = false
+    if (requestVersion === moduleRequestVersion) dataLoading.value = false
   }
 }
 
@@ -529,6 +579,8 @@ function handlePopState() {
 
 function navigate(key: string) {
   activeView.value = key
+  const group = navGroups.find(group => group.items.some(item => item.key === key))
+  if (group) expandedNavGroups.value.add(group.label)
   modulePage.value = 1
   moduleSearch.value = ''
   const item = navGroups.flatMap((group) => group.items).find((entry) => entry.key === key)
@@ -836,10 +888,15 @@ async function openRowDetail(row: string[]) {
   detailDialogVisible.value = true
   try {
     let response
-    if (module === 'vehicles' && row[1]) response = await axios.get(`/api/vehicles/by-frame/${encodeURIComponent(row[1])}`, authConfig())
+    if (module === 'vehicles' && (row[0] || row[1])) {
+      const aggregateCode = row[0] && row[0] !== '-' ? row[0] : row[1]
+      response = row[0] && row[0] !== '-'
+        ? await axios.get(`/api/vehicles/by-qr/${encodeURIComponent(aggregateCode)}`, authConfig())
+        : await axios.get(`/api/vehicles/by-frame/${encodeURIComponent(row[1])}`, authConfig())
+    }
     else if (module === 'parts' && row[0]) response = await axios.get(`/api/parts/by-sn/${encodeURIComponent(row[0])}`, authConfig())
     else if (module === 'orders' && row[0]) response = await axios.get(`/api/orders/by-no/${encodeURIComponent(row[0])}`, authConfig())
-    else if (module === 'trace' && row[1] && row[1] !== '-') response = await axios.get(`/api/trace/frame/${encodeURIComponent(row[1])}`, authConfig())
+    else if (module === 'trace' && row[1] && !['-', '未关联'].includes(row[1])) response = await axios.get(`/api/trace/qr/${encodeURIComponent(row[1])}`, authConfig())
     else {
       detailData.value = Object.fromEntries((activeModule.value?.columns ?? []).map((column, index) => [column, row[index] ?? '-']))
       return
@@ -946,7 +1003,7 @@ async function submitPrimaryAction() {
       payload = { ...(isAgentAccount.value ? {} : { agentId: Number(actionForm.agentId) }), productModelId: Number(actionForm.modelId), lockQty: Number(actionForm.lockQty), expireTime: actionForm.expireTime || null, remark: actionForm.remark || null }
     } else if (actionKind.value === 'rework') {
       endpoint = '/api/rework'
-      payload = { frameSn: actionForm.code, partType: actionForm.partType, newPartSn: actionForm.newPartSn, reason: actionForm.reason }
+      payload = { vehicleQrCode: actionForm.code, partType: actionForm.partType, newPartSn: actionForm.newPartSn, reason: actionForm.reason }
     } else if (actionKind.value === 'intent') {
       endpoint = '/api/agent/purchase-intents'
       payload = { ...(isAgentAccount.value ? {} : { agentId: Number(actionForm.agentId) }), productModelId: Number(actionForm.modelId), intentQty: Number(actionForm.orderQty), expireTime: actionForm.expireTime || null, remark: actionForm.remark || null }
@@ -979,52 +1036,39 @@ async function submitPrimaryAction() {
 
 <template>
   <main v-if="!loggedIn" class="login-shell">
+    <div class="login-art" aria-hidden="true"><div class="login-art-copy"><span class="login-kicker">E-BIKE OPERATIONS</span><h1><strong>E-BIKE</strong> 智慧管理系统</h1><p>电动自行车生产 / 库存 / 订单 / 售后一体化平台</p><div class="login-art-tags"><span><AppIcon name="production" />生产管理</span><span><AppIcon name="stock" />库存管理</span><span><AppIcon name="orders" />订单管理</span><span><AppIcon name="service" />售后服务</span></div></div></div>
     <section class="login-panel">
-      <p class="eyebrow">BIKE OPERATIONS</p>
-      <h1>生产库存管理系统</h1>
-      <p class="description">Web 管理后台</p>
+      <div class="login-brand"><span class="brand-mark">B</span><div><strong>BIKE</strong><small>OPERATIONS PLATFORM</small></div></div>
+      <p class="eyebrow">欢迎回来</p>
+      <h2>E-BIKE 智慧管理系统</h2>
+      <p class="description">使用业务账号进入生产与库存管理系统</p>
       <el-form @submit.prevent="login">
-        <el-form-item label="用户名">
-          <el-input v-model="username" autocomplete="username" />
-        </el-form-item>
-        <el-form-item label="密码">
-          <el-input v-model="password" type="password" show-password autocomplete="current-password" />
-        </el-form-item>
-        <el-button class="submit" type="primary" :loading="loading" native-type="submit">登录</el-button>
+        <el-form-item label="用户名"><el-input v-model="username" autocomplete="username" placeholder="请输入用户名" /></el-form-item>
+        <el-form-item label="密码"><el-input v-model="password" type="password" show-password autocomplete="current-password" placeholder="请输入密码" /></el-form-item>
+        <el-button class="submit" type="primary" :loading="loading" native-type="submit">登录系统</el-button>
       </el-form>
+      <p class="login-footnote">生产 · 库存 · 订单 · 售后一体化管理</p>
     </section>
   </main>
 
   <main v-else class="admin-app">
-    <header class="global-header">
-      <div class="header-brand">
-        <svg class="bike-logo" viewBox="0 0 80 48" aria-label="E-Bike">
-          <circle cx="18" cy="34" r="11" fill="none" stroke="currentColor" stroke-width="3" />
-          <circle cx="62" cy="34" r="11" fill="none" stroke="currentColor" stroke-width="3" />
-          <path d="M18 34 31 15l10 19 12-19m-22 0h18m-8 0 8 19M31 15h-7m25 0h7" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="3" />
-        </svg>
-        <div><strong>E-Bike 生产库存管理系统</strong><span>后台管理平台</span></div>
-      </div>
-      <nav class="header-nav" aria-label="主功能导航">
-        <button v-for="item in ['高效管理', '数据驱动', '全程追溯', '连接伙伴', '助力全球出行']" :key="item" @click="navigate(item === '全程追溯' ? 'trace' : 'dashboard')"><span class="header-nav-icon">{{ item === '数据驱动' ? '▦' : item === '全程追溯' ? '◉' : item === '连接伙伴' ? '↔' : item === '助力全球出行' ? '⌁' : '▥' }}</span>{{ item }}</button>
-      </nav>
-      <div class="header-slogan">让每一辆 E-Bike<br /><span>高效生产 · 全球可追溯</span></div>
-    </header>
     <div class="admin-shell">
       <aside class="sidebar">
       <div class="brand"><span class="brand-mark">B</span><span><strong>BIKE</strong><small>OPERATIONS</small></span></div>
       <div class="environment-badge"><span></span>生产库存与追溯</div>
       <nav>
-        <section v-for="group in visibleNavGroups" :key="group.label" class="nav-group">
-          <p>{{ group.label }}</p>
-          <button v-for="item in group.items" :key="item.key" class="nav-item" :class="{ active: activeView === item.key }" @click="navigate(item.key)"><span class="nav-icon">{{ item.shortLabel.slice(0, 1) }}</span>{{ item.label }}</button>
+        <section v-for="group in visibleNavGroups" :key="group.label" class="nav-group" :class="{ collapsed: !isNavGroupExpanded(group.label) }">
+          <button class="nav-group-toggle" :aria-label="group.label" :aria-expanded="isNavGroupExpanded(group.label)" @click="toggleNavGroup(group.label)"><span class="tree-chevron">⌄</span><span>{{ group.label }}</span><small>{{ group.items.length }}</small></button>
+          <div v-show="isNavGroupExpanded(group.label)" class="nav-tree-children">
+            <button v-for="item in group.items" :key="item.key" class="nav-item" :class="{ active: activeView === item.key }" :aria-label="item.label" :title="item.label" :aria-current="activeView === item.key ? 'page' : undefined" @click="navigate(item.key)"><span class="nav-tree-branch"></span><span class="nav-icon"><AppIcon :name="item.key" /></span><span class="nav-label">{{ item.label }}</span></button>
+          </div>
         </section>
       </nav>
       <div class="sidebar-footer"><div class="user-chip"><span class="avatar">A</span><span><strong>{{ username }}</strong><small>{{ userRoleLabel }}</small></span></div><button class="logout-button" @click="logout">退出登录</button></div>
       </aside>
 
     <section class="workspace">
-      <header class="topbar"><div><p class="breadcrumb">工作台 / {{ activeNav?.label }}</p><h1>{{ activeNav?.label }}</h1></div><div class="topbar-right"><span class="last-sync">列表 / 总览加载：{{ lastLoadedAt }}</span><span class="top-avatar">A</span></div></header>
+      <header class="topbar"><div><p class="breadcrumb">BIKE 工作空间 <span>/</span> {{ activeGroupLabel }}</p><h1>{{ activeNav?.label }}</h1></div><div class="topbar-right"><el-select class="navigation-search" model-value="" filterable placeholder="搜索功能页面" aria-label="搜索功能页面" @change="navigate"><template #prefix><AppIcon name="search" /></template><el-option-group v-for="group in visibleNavGroups" :key="group.label" :label="group.label"><el-option v-for="item in group.items" :key="item.key" :label="item.label" :value="item.key" /></el-option-group></el-select><span class="last-sync">最近加载 {{ lastLoadedAt }}</span><span class="top-avatar">{{ username.slice(0, 1).toUpperCase() }}</span></div></header>
 
       <div v-if="activeView === 'dashboard'" class="dashboard-content">
         <div class="page-intro"><div><h2>今日运营概览</h2><p>生产、库存和订单状态集中查看</p><p v-if="dataLoading" class="data-hint">正在从后端加载数据...</p><p v-else-if="dataError" class="data-hint error">{{ dataError }}</p></div><span class="date-chip">{{ new Date().toLocaleDateString('zh-CN') }}</span></div>
@@ -1040,7 +1084,7 @@ async function submitPrimaryAction() {
         <section class="panel operations-panel"><div class="panel-title"><div><h3>最近操作</h3><p>关键业务操作实时记录</p></div><button class="text-button" @click="navigate('trace')">查看全部</button></div><div class="table-wrap"><table><thead><tr><th>时间</th><th>操作</th><th>业务对象</th><th>操作人</th><th>状态</th></tr></thead><tbody><tr v-for="operation in recentOperations" :key="operation.time"><td class="muted">{{ operation.time }}</td><td><strong>{{ operation.action }}</strong></td><td>{{ operation.target }}</td><td>{{ operation.operator }}</td><td><span class="status-pill" :class="{ processing: operation.status === '进行中' }">{{ operation.status }}</span></td></tr></tbody></table></div></section>
       </div>
 
-      <ProductionManager v-else-if="activeView === 'production' && !passwordChangeVisible" :username="username" :can-manage="!isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'PRODUCTION_MANAGE')" :can-operate="hasPermission(authContext, 'ASSEMBLY_OPERATE')" :can-report-issue="hasAnyPermission(authContext, ['ASSEMBLY_OPERATE','REWORK_OPERATE'])" />
+      <ProductionManager v-else-if="activeView === 'production' && !passwordChangeVisible" :username="username" :can-create-task="canCreateProductionTask" @loaded="lastLoadedAt = new Date().toLocaleString()" :can-manage="!isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'PRODUCTION_MANAGE')" :can-operate="hasPermission(authContext, 'ASSEMBLY_OPERATE')" :can-report-issue="hasAnyPermission(authContext, ['ASSEMBLY_OPERATE','REWORK_OPERATE'])" />
       <TraceQuery v-else-if="activeView === 'trace' && !passwordChangeVisible" />
       <SkuInventoryPanel v-else-if="activeView === 'sku-inventory' && !passwordChangeVisible" :context="authContext" @navigate="navigate" />
       <PiWorkspace v-else-if="activeView === 'pis' && !passwordChangeVisible" :context="authContext" />
@@ -1049,9 +1093,9 @@ async function submitPrimaryAction() {
       <AfterSalesWorkspace v-else-if="activeView === 'after-sales' && !passwordChangeVisible" :auth-context="authContext" />
       <div v-else class="module-content">
         <CustomerProfiles v-if="activeView === 'customers' && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR')" :can-write="hasPermission(authContext, 'CUSTOMER_PROFILE_WRITE')" />
-        <div class="module-heading"><div><p class="eyebrow">{{ activeNav?.shortLabel.toUpperCase() }} MODULE</p><h2>{{ activeNav?.label }}</h2><p>{{ activeModule?.subtitle }}</p><p v-if="dataLoading" class="data-hint">正在从后端加载数据...</p><p v-else-if="dataError" class="data-hint error">{{ dataError }}</p></div><PermissionGate :allowed="canShowPrimaryAction"><div class="module-actions"><button v-if="canImportActiveModule" class="secondary-action" @click="chooseImport(activeView)">导入 Excel</button><button class="primary-action" @click="openPrimaryAction">＋ {{ activeModule?.action }}</button><input ref="importInput" class="hidden-file-input" type="file" accept=".xlsx,.xls" @change="importModule" /></div></PermissionGate></div>
-        <div class="module-actions"><button v-if="hasPermission(authContext, 'DATA_EXPORT') && ['vehicles','parts','inventory','stock-in','stock-out','stock','orders','rework','operation-logs'].includes(activeView)" class="secondary-action" @click="downloadModule(activeView === 'operation-logs' ? 'logs' : activeView)">导出当前查询</button><button v-if="activeView === 'parts' && canImportActiveModule" class="secondary-action" @click="downloadPartsTemplate">下载部件导入模板</button></div><section class="module-stats"><article v-for="stat in activeModule?.stats" :key="stat.label" class="module-stat" :class="stat.tone"><span>{{ stat.label }}</span><strong>{{ stat.value }}</strong></article></section>
-        <section class="panel data-panel"><div class="filter-row"><div class="search-box"><span>⌕</span><input v-model="moduleSearch" :placeholder="`搜索${activeNav?.label}...`" /><button v-if="moduleSearch" aria-label="清空搜索" @click="moduleSearch = ''">×</button></div><button class="filter-button" @click="loadModule(activeView)">筛选</button><button class="reset-button" @click="moduleSearch = ''">重置</button></div><div class="table-wrap"><table><thead><tr><th v-for="column in activeModule?.columns" :key="column">{{ column }}</th><th>操作</th></tr></thead><tbody><tr v-for="(row, index) in filteredModuleRows" :key="`${row[0]}-${index}`"><td v-for="cell in row" :key="cell">{{ cell }}</td><td><button v-if="['inventory-locks', 'agent-locks', 'agent-dashboard'].includes(activeView) && hasPermission(authContext, 'ORDER_READ')" class="row-action" @click="openLinkedOrders(row)">关联订单</button><button v-if="activeView === 'orders' && canRenewOrderReservation(row)" class="row-action" @click="manageOrderReservation(row, 'renew')">{{ ['FULFILLED', '已履约'].includes(row[9]) ? '续占用以撤销出库' : '重新占用' }}</button><button v-if="activeView === 'orders' && canWriteActiveModule && ['PARTIAL_SHIPPED', '部分出库'].includes(row[6])" class="row-action" @click="manageOrderReservation(row, 'close')">关闭剩余</button><button v-if="activeView === 'agents' && isSuperAdmin(authContext)" class="row-action" @click="editAgentAccess(row)">车型授权</button><CustomerScopeEditor v-if="activeView === 'users' && hasPermission(authContext, 'CUSTOMER_SCOPE_MANAGE') && ['WEB_ADMIN', 'WEB_OPERATOR'].includes(row[2])" :username="row[0]" /><button class="row-action" @click="openRowAction(row)">{{ activeView === 'orders' && ((row[7] && row[7] !== '-') || !['DRAFT','PENDING','草稿','待确认'].includes(row[6])) ? '查看详情' : rowActionLabel }}</button><button v-if="canWriteActiveModule && ['users', 'roles', 'workstations', 'locations'].includes(activeView)" class="row-action" @click="toggleSystemStatus(row)">{{ row[activeView === 'locations' ? 4 : 3] === '启用' ? '停用' : '启用' }}</button><button v-if="canWriteActiveModule && activeView === 'orders' && ['DRAFT', 'PENDING', '草稿', '待确认'].includes(row[6])" class="row-action" @click="changeOrderStatus(row, 'confirm')">确认</button><button v-if="canWriteActiveModule && activeView === 'orders' && !['SHIPPED', 'PARTIAL_SHIPPED', 'CANCELLED', 'CLOSED', '已完成', '部分出库', '已作废', '已关闭'].includes(row[6])" class="row-action danger-action" @click="changeOrderStatus(row, 'cancel')">作废</button><button v-if="canWriteActiveModule && ['inventory-locks', 'agent-locks'].includes(activeView) && ['锁定中', '部分转订单', 'LOCKED', 'PARTIAL_CONVERTED'].includes(row[7])" class="row-action" @click="changeInventoryLock(row, 'release')">释放</button><button v-if="canWriteActiveModule && ['inventory-locks', 'agent-locks'].includes(activeView) && ['锁定中', '部分转订单', 'LOCKED', 'PARTIAL_CONVERTED'].includes(row[7]) && canConvertLock && Number(row[3]) - Number(row[4]) - Number(row[5]) > 0" class="row-action" @click="changeInventoryLock(row, 'convert')">转订单</button><button v-if="canWriteActiveModule && ['stock-in', 'stock-out'].includes(activeView) && ['已完成', 'COMPLETED'].includes(row[6])" class="row-action danger-action" @click="cancelStockRecord(row)">撤销</button></td></tr><tr v-if="filteredModuleRows.length === 0"><td :colspan="(activeModule?.columns.length ?? 0) + 1" class="empty-cell">没有匹配的数据</td></tr></tbody></table></div><div class="table-footer"><span>共 {{ activeModule?.total ?? filteredModuleRows.length }} 条数据</span><span class="pagination"><label class="page-size-label">每页 <select v-model.number="modulePageSize" @change="modulePage = 1; loadModule(activeView)"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option></select> 条</label><button class="page-button" :disabled="modulePage <= 1" @click="changeModulePage(modulePage - 1)">上一页</button><span>第 {{ modulePage }} / {{ modulePageCount }} 页</span><button class="page-button" :disabled="modulePage >= modulePageCount" @click="changeModulePage(modulePage + 1)">下一页</button></span><span class="preview-note">数据来源：后端接口</span></div></section>
+        <div class="module-heading"><div><p class="eyebrow">{{ activeNav?.shortLabel.toUpperCase() }} MODULE</p><h2>{{ activeNav?.label }}</h2><p>{{ activeModule?.subtitle }}</p><p v-if="dataLoading" class="data-hint">正在从后端加载数据...</p><p v-else-if="dataError" class="data-hint error">{{ dataError }}</p></div></div>
+        <section class="module-stats"><article v-for="stat in activeModule?.stats" :key="stat.label" class="module-stat" :class="stat.tone"><span>{{ stat.label }}</span><strong>{{ stat.value }}</strong></article></section>
+        <section class="panel data-panel"><div class="filter-row module-list-toolbar"><div class="search-box"><span>⌕</span><input v-model="moduleSearch" :placeholder="`搜索${activeNav?.label}...`" /><button v-if="moduleSearch" aria-label="清空搜索" @click="moduleSearch = ''">×</button></div><button class="filter-button" :disabled="dataLoading" @click="loadModule(activeView)"><AppIcon name="refresh" />刷新</button><button class="reset-button" @click="moduleSearch = ''">重置</button><div class="module-actions"><button v-if="hasPermission(authContext, 'DATA_EXPORT') && ['parts','inventory','stock-in','stock-out','stock','orders','rework'].includes(activeView)" class="secondary-action" @click="downloadModule(activeView === 'operation-logs' ? 'logs' : activeView)">导出当前查询</button><button v-if="activeView === 'parts' && canImportActiveModule" class="secondary-action" @click="downloadPartsTemplate">下载部件导入模板</button></div><PermissionGate :allowed="canShowPrimaryAction"><div class="module-actions"><button v-if="canImportActiveModule" class="secondary-action" @click="chooseImport(activeView)">导入 Excel</button><button class="primary-action" @click="openPrimaryAction">＋ {{ activeModule?.action }}</button><input ref="importInput" class="hidden-file-input" type="file" accept=".xlsx,.xls" @change="importModule" /></div></PermissionGate></div><div class="table-wrap module-table-wrap" v-loading="dataLoading" :aria-busy="dataLoading"><table class="module-table" :style="{ minWidth: `${moduleTableWidth}px` }"><colgroup><col v-for="column in activeModule?.columns" :key="column" :style="{ width: `${moduleColumnWidth(column)}px` }" /><col style="width: 200px" /></colgroup><thead><tr><th v-for="column in activeModule?.columns" :key="column">{{ column }}</th><th class="module-row-actions">操作</th></tr></thead><tbody><tr v-for="(row, index) in filteredModuleRows" :key="`${row[0]}-${index}`"><td v-for="(cell, cellIndex) in row" :key="cellIndex"><span class="module-cell" :title="cell">{{ cell }}</span></td><td class="module-row-actions"><button v-if="['inventory-locks', 'agent-locks', 'agent-dashboard'].includes(activeView) && hasPermission(authContext, 'ORDER_READ')" class="row-action" @click="openLinkedOrders(row)">关联订单</button><button v-if="activeView === 'orders' && canRenewOrderReservation(row)" class="row-action" @click="manageOrderReservation(row, 'renew')">{{ ['FULFILLED', '已履约'].includes(row[9]) ? '续占用以撤销出库' : '重新占用' }}</button><button v-if="activeView === 'orders' && canWriteActiveModule && ['PARTIAL_SHIPPED', '部分出库'].includes(row[6])" class="row-action" @click="manageOrderReservation(row, 'close')">关闭剩余</button><button v-if="activeView === 'agents' && isSuperAdmin(authContext)" class="row-action" @click="editAgentAccess(row)">车型授权</button><CustomerScopeEditor v-if="activeView === 'users' && hasPermission(authContext, 'CUSTOMER_SCOPE_MANAGE') && ['WEB_ADMIN', 'WEB_OPERATOR'].includes(row[2])" :username="row[0]" /><button class="row-action" @click="openRowAction(row)">{{ activeView === 'orders' && ((row[7] && row[7] !== '-') || !['DRAFT','PENDING','草稿','待确认'].includes(row[6])) ? '查看详情' : rowActionLabel }}</button><button v-if="canWriteActiveModule && ['users', 'roles', 'workstations', 'locations'].includes(activeView)" class="row-action" @click="toggleSystemStatus(row)">{{ row[activeView === 'locations' ? 4 : 3] === '启用' ? '停用' : '启用' }}</button><button v-if="canWriteActiveModule && activeView === 'orders' && ['DRAFT', 'PENDING', '草稿', '待确认'].includes(row[6])" class="row-action" @click="changeOrderStatus(row, 'confirm')">确认</button><button v-if="canWriteActiveModule && activeView === 'orders' && !['SHIPPED', 'PARTIAL_SHIPPED', 'CANCELLED', 'CLOSED', '已完成', '部分出库', '已作废', '已关闭'].includes(row[6])" class="row-action danger-action" @click="changeOrderStatus(row, 'cancel')">作废</button><button v-if="canWriteActiveModule && ['inventory-locks', 'agent-locks'].includes(activeView) && ['锁定中', '部分转订单', 'LOCKED', 'PARTIAL_CONVERTED'].includes(row[7])" class="row-action" @click="changeInventoryLock(row, 'release')">释放</button><button v-if="canWriteActiveModule && ['inventory-locks', 'agent-locks'].includes(activeView) && ['锁定中', '部分转订单', 'LOCKED', 'PARTIAL_CONVERTED'].includes(row[7]) && canConvertLock && Number(row[3]) - Number(row[4]) - Number(row[5]) > 0" class="row-action" @click="changeInventoryLock(row, 'convert')">转订单</button><button v-if="canWriteActiveModule && ['stock-in', 'stock-out'].includes(activeView) && ['已完成', 'COMPLETED'].includes(row[6])" class="row-action danger-action" @click="cancelStockRecord(row)">撤销</button></td></tr><tr v-if="filteredModuleRows.length === 0"><td :colspan="(activeModule?.columns.length ?? 0) + 1" class="empty-cell">没有匹配的数据</td></tr></tbody></table></div><div class="table-footer"><span>共 {{ activeModule?.total ?? filteredModuleRows.length }} 条数据</span><span class="pagination"><label class="page-size-label">每页 <select v-model.number="modulePageSize" @change="modulePage = 1; loadModule(activeView)"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option></select> 条</label><button class="page-button" :disabled="modulePage <= 1" @click="changeModulePage(modulePage - 1)">上一页</button><span>第 {{ modulePage }} / {{ modulePageCount }} 页</span><button class="page-button" :disabled="modulePage >= modulePageCount" @click="changeModulePage(modulePage + 1)">下一页</button></span><span class="preview-note">数据来源：后端接口</span></div></section>
       </div>
       </section>
     </div>
@@ -1060,7 +1104,7 @@ async function submitPrimaryAction() {
         <el-table :data="importDetails.failures"><el-table-column prop="rowNumber" label="Excel 行号" width="120" /><el-table-column prop="reason" label="错误原因" /></el-table>
       </template>
     </el-dialog>
-    <el-dialog v-model="actionDialogVisible" :title="actionTitle" width="520px">
+    <el-dialog v-model="actionDialogVisible" :title="actionTitle" :width="actionKind === 'role' ? '680px' : '520px'">
       <el-form v-if="actionKind === 'part'" label-width="100px">
         <el-form-item label="零部件 SN"><el-input v-model="actionForm.partSn" :disabled="editingId !== null" /></el-form-item>
         <el-form-item label="零部件类型"><el-select v-model="actionForm.partType" :disabled="editingId !== null"><el-option label="电机" value="MOTOR" /><el-option label="电池" value="BATTERY" /><el-option label="仪表" value="DISPLAY" /></el-select></el-form-item>
@@ -1088,7 +1132,7 @@ async function submitPrimaryAction() {
       <el-form v-else-if="actionKind === 'role'" label-width="100px">
         <el-form-item label="角色编码"><el-input v-model="actionForm.roleCode" /></el-form-item>
         <el-form-item label="角色名称"><el-input v-model="actionForm.roleName" /></el-form-item>
-        <el-form-item label="功能权限"><el-checkbox-group v-model="selectedPermissionIds"><el-checkbox v-for="item in permissionOptions" :key="item.id" :value="item.id">{{ item.permissionName }}（{{ item.permissionCode }}）</el-checkbox></el-checkbox-group></el-form-item>
+        <el-form-item label="功能权限"><el-tree ref="permissionTreeRef" class="permission-tree" :data="permissionTreeData" node-key="id" show-checkbox default-expand-all :default-checked-keys="selectedPermissionIds" @check="handlePermissionTreeCheck"><template #default="{ data }"><span class="permission-tree-label"><strong>{{ data.label }}</strong><small v-if="data.permissionCode">{{ data.permissionCode }}</small></span></template></el-tree></el-form-item>
       </el-form>
       <el-form v-else-if="actionKind === 'workstation'" label-width="100px">
         <el-form-item label="工位编码"><el-input v-model="actionForm.workstationCode" /></el-form-item>
@@ -1113,7 +1157,7 @@ async function submitPrimaryAction() {
         <el-form-item label="备注"><el-input v-model="actionForm.remark" type="textarea" /></el-form-item>
       </el-form>
       <el-form v-else-if="actionKind === 'rework'" label-width="100px">
-        <el-form-item label="车架 SN"><el-input v-model="actionForm.code" /></el-form-item>
+        <el-form-item label="聚合码"><el-input v-model="actionForm.code" placeholder="扫描或输入车辆聚合码" /></el-form-item>
         <el-form-item label="更换类型"><el-select v-model="actionForm.partType"><el-option label="电机" value="MOTOR" /><el-option label="电池" value="BATTERY" /><el-option label="仪表" value="DISPLAY" /></el-select></el-form-item>
         <el-form-item label="新零部件 SN"><el-input v-model="actionForm.newPartSn" /></el-form-item>
         <el-form-item label="返工原因"><el-input v-model="actionForm.reason" type="textarea" /></el-form-item>
@@ -1164,9 +1208,7 @@ async function submitPrimaryAction() {
     </el-dialog>
     <el-dialog v-model="detailDialogVisible" :title="detailTitle" width="680px">
       <div v-loading="detailLoading" class="detail-content">
-        <el-descriptions v-if="Object.keys(detailData).length" :column="2" border>
-          <el-descriptions-item v-for="(value, key) in detailData" :key="key" :label="String(key)">{{ typeof value === 'object' ? JSON.stringify(value) : String(value ?? '-') }}</el-descriptions-item>
-        </el-descriptions>
+        <RecordDetails v-if="Object.keys(detailData).length" :value="detailData" />
         <el-empty v-else description="暂无详情数据" />
       </div>
       <template #footer>

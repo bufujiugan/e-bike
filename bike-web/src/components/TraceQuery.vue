@@ -2,7 +2,7 @@
 import { nextTick, ref, watch } from 'vue'
 import api from '../api'
 import TraceDetails, { type TraceData } from './TraceDetails.vue'
-const type = ref<'frame'|'part'|'qr'>('frame'), code = ref(''), busy = ref(false), error = ref('')
+const type = ref<'frame'|'part'|'qr'>('qr'), code = ref(''), busy = ref(false), error = ref('')
 const result = ref<TraceData | null>(null)
 let requestVersion = 0
 watch([code,type], () => { requestVersion++; result.value = null; error.value = ''; busy.value = false })
@@ -18,18 +18,18 @@ async function search() {
     if (version === requestVersion) error.value = api.isAxiosError(e) ? e.response?.data?.message ?? '追溯查询失败' : '追溯查询失败'
   } finally { if (version === requestVersion) busy.value = false }
 }
-async function selectFrame(frame: string) { type.value = 'frame'; code.value = frame; await nextTick(); await search() }
+async function selectCode(codeValue: string, codeType: 'qr' | 'frame') { type.value = codeType; code.value = codeValue; await nextTick(); await search() }
 </script>
 <template>
   <section class="trace-query">
     <h2>全链路追溯</h2><p>扫描聚合码、车架 SN 或当前/历史部件 SN，查看生产、换件与出入库记录。</p>
     <form class="trace-search" @submit.prevent="search">
-      <label>编码类型<select v-model="type"><option value="frame">车架 SN</option><option value="part">部件 SN（含历史旧件）</option><option value="qr">整车聚合码</option></select></label>
+      <label>编码类型<select v-model="type"><option value="qr">整车聚合码</option><option value="frame">车架 SN（辅助查询）</option><option value="part">部件 SN（含历史旧件）</option></select></label>
       <label class="trace-code">追溯编码<input v-model="code" placeholder="请输入或扫描编码" autocomplete="off" /></label>
       <button type="submit" :disabled="busy">{{ busy ? '查询中…' : '开始追溯查询' }}</button>
     </form>
     <p v-if="error" role="alert" class="trace-error">{{ error }}</p>
-    <TraceDetails v-if="result" :data="result" @select-frame="selectFrame" />
+    <TraceDetails v-if="result" :data="result" @select-code="selectCode" />
   </section>
 </template>
 <style scoped>

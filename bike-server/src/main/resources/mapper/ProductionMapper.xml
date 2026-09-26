@@ -34,12 +34,13 @@
       LEFT JOIN bike_production_scan ds ON ds.task_id=t.id AND ds.code_type='DISPLAY'
     </sql>
     <select id="selectTask" resultType="map"><include refid="taskSelect"/> WHERE t.id=#{id}</select>
-    <sql id="taskFilter"><where><if test="keyword != null">t.id LIKE CONCAT('%',#{keyword},'%') OR t.batch_no LIKE CONCAT('%',#{keyword},'%') OR v.frame_sn LIKE CONCAT('%',#{keyword},'%') OR EXISTS(SELECT 1 FROM bike_production_scan sc WHERE sc.task_id=t.id AND sc.code=#{keyword})</if></where></sql>
+    <sql id="taskKeyword">t.id LIKE CONCAT('%',#{keyword},'%') OR t.batch_no LIKE CONCAT('%',#{keyword},'%') OR v.vehicle_qr_code LIKE CONCAT('%',#{keyword},'%') OR v.frame_sn LIKE CONCAT('%',#{keyword},'%') OR EXISTS(SELECT 1 FROM bike_production_scan sc WHERE sc.task_id=t.id AND sc.code=#{keyword})</sql>
+    <sql id="taskFilter"><where><if test="keyword != null"><include refid="taskKeyword"/></if></where></sql>
     <sql id="taskOrder">ORDER BY CASE t.status WHEN 'COMPLETED' THEN 2 WHEN 'OPEN' THEN 1 ELSE 0 END DESC,t.updated_at DESC,t.id DESC</sql>
     <select id="selectTasks" resultType="map"><include refid="taskSelect"/><include refid="taskFilter"/> <include refid="taskOrder"/> LIMIT #{offset},50</select>
     <select id="countTasks" resultType="int">SELECT COUNT(*) FROM bike_production_task t LEFT JOIN bike_vehicle v ON v.id=t.vehicle_id <include refid="taskFilter"/></select>
     <sql id="taskFilteredWhere"><where>
-      <if test="keyword != null">AND (t.id LIKE CONCAT('%',#{keyword},'%') OR t.batch_no LIKE CONCAT('%',#{keyword},'%') OR v.frame_sn LIKE CONCAT('%',#{keyword},'%') OR EXISTS(SELECT 1 FROM bike_production_scan sc WHERE sc.task_id=t.id AND sc.code=#{keyword}))</if>
+      <if test="keyword != null">AND (<include refid="taskKeyword"/>)</if>
       <if test="skuId != null">AND t.sku_id=#{skuId}</if>
       <if test="status != null">AND t.status=#{status}</if>
       <if test="fromDate != null">AND t.created_at &gt;= #{fromDate}</if>
@@ -65,6 +66,7 @@
     <update id="updateTaskStatus">UPDATE bike_production_task SET status=#{status},vehicle_id=#{vehicleId},updated_at=NOW(3) WHERE id=#{id}</update>
     <select id="selectPart" resultType="map">SELECT id,part_sn code,part_type codeType,bind_status bindStatus,status,qc_status qcStatus FROM bike_part WHERE part_sn=#{code}</select>
     <select id="selectFrame" resultType="map">SELECT id,frame_sn code,model_id modelId,status FROM bike_vehicle WHERE frame_sn=#{code}</select>
+    <select id="selectFrameByQr" resultType="string">SELECT frame_sn FROM bike_vehicle WHERE vehicle_qr_code=#{code} OR vehicle_qr_token=#{code} FOR UPDATE</select>
     <insert id="insertVehicle">INSERT INTO bike_vehicle(frame_sn,model_id,status,qr_status) VALUES(#{frameSn},#{modelId},0,'ACTIVE')</insert>
     <insert id="insertProduct">INSERT INTO bike_production_vehicle(vehicle_id,task_id,sku_id,batch_no) VALUES(#{vehicleId},#{taskId},#{skuId},#{batchNo})</insert>
     <select id="selectProduct" resultType="map">SELECT vehicle_id vehicleId,task_id taskId,sku_id skuId,batch_no batchNo FROM bike_production_vehicle WHERE vehicle_id=#{vehicleId}</select>
@@ -78,9 +80,9 @@
     <select id="selectCurrentBindings" resultType="map">SELECT part_type codeType,part_sn code FROM bike_vehicle_part_binding WHERE vehicle_id=#{vehicleId} AND is_current=1</select>
     <select id="countVehicleOpenIssues" resultType="int">SELECT COUNT(*) FROM bike_production_issue i WHERE i.status='OPEN' AND (i.code COLLATE utf8mb4_unicode_ci=(SELECT frame_sn COLLATE utf8mb4_unicode_ci FROM bike_vehicle WHERE id=#{vehicleId}) OR EXISTS(SELECT 1 FROM bike_vehicle_part_binding b WHERE b.vehicle_id=#{vehicleId} AND b.is_current=1 AND b.part_sn COLLATE utf8mb4_unicode_ci=i.code COLLATE utf8mb4_unicode_ci))</select>
     <insert id="insertIssue">INSERT INTO bike_production_issue(id,code,reason,created_by) VALUES(#{id},#{code},#{reason},#{operator})</insert>
-    <sql id="issueSelect">SELECT id,code,reason,status,created_by createdBy,created_at createdAt,resolved_by resolvedBy,resolved_at resolvedAt,resolution FROM bike_production_issue</sql>
+    <sql id="issueSelect">SELECT id,code,(SELECT v.vehicle_qr_code FROM bike_vehicle v WHERE v.frame_sn=bike_production_issue.code) vehicleQrCode,reason,status,created_by createdBy,created_at createdAt,resolved_by resolvedBy,resolved_at resolvedAt,resolution FROM bike_production_issue</sql>
     <select id="selectIssue" resultType="map"><include refid="issueSelect"/> WHERE id=#{id}</select>
-    <sql id="issueFilter"><where><if test="keyword != null">code LIKE CONCAT('%',#{keyword},'%') OR reason LIKE CONCAT('%',#{keyword},'%')</if></where></sql>
+    <sql id="issueFilter"><where><if test="keyword != null">code LIKE CONCAT('%',#{keyword},'%') OR reason LIKE CONCAT('%',#{keyword},'%') OR EXISTS(SELECT 1 FROM bike_vehicle v WHERE v.frame_sn=bike_production_issue.code AND v.vehicle_qr_code LIKE CONCAT('%',#{keyword},'%'))</if></where></sql>
     <select id="selectIssues" resultType="map"><include refid="issueSelect"/><include refid="issueFilter"/> ORDER BY created_at DESC LIMIT #{offset},50</select>
     <select id="countIssues" resultType="int">SELECT COUNT(*) FROM bike_production_issue <include refid="issueFilter"/></select>
     <update id="updateIssueResolved">UPDATE bike_production_issue SET status='RESOLVED',resolved_by=#{operator},resolved_at=NOW(3),resolution=#{reason} WHERE id=#{id} AND status='OPEN'</update>

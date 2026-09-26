@@ -10,7 +10,13 @@ import org.springframework.format.annotation.DateTimeFormat;
 public record AfterSalesCaseFilter(String keyword, String status, String companyName, String contactName,
     String frameSn, String modelName, String faultType, String countryCode, String assigneeName,
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate createdFrom,
-    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate createdTo, String queue) {
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate createdTo, String queue, String vehicleQrCode) {
+    public AfterSalesCaseFilter(String keyword, String status, String companyName, String contactName,
+        String frameSn, String modelName, String faultType, String countryCode, String assigneeName,
+        LocalDate createdFrom, LocalDate createdTo, String queue) {
+        this(keyword, status, companyName, contactName, frameSn, modelName, faultType, countryCode,
+            assigneeName, createdFrom, createdTo, queue, null);
+    }
     private static final Set<String> STATUSES = Set.of("DRAFT", "SUBMITTED", "UNDER_REVIEW", "NEEDS_INFO",
         "APPROVED", "IN_PROGRESS", "WAITING_PARTS", "SHIPPED", "RESOLVED", "CLOSED", "REJECTED");
     private static final Set<String> QUEUES = Set.of("PENDING", "REVIEW", "WAITING_CUSTOMER", "PROCESSING",
@@ -33,12 +39,12 @@ public record AfterSalesCaseFilter(String keyword, String status, String company
         if (createdFrom != null && createdTo != null && createdFrom.isAfter(createdTo)) throw invalid("起始日期不能晚于结束日期");
         return new AfterSalesCaseFilter(text(keyword, 255), normalizedStatus, text(companyName, 255),
             text(contactName, 100), text(frameSn, 128), text(modelName, 100), text(faultType, 64), country,
-            text(assigneeName, 100), createdFrom, createdTo, normalizedQueue);
+            text(assigneeName, 100), createdFrom, createdTo, normalizedQueue, text(vehicleQrCode, 200));
     }
 
     public AfterSalesCaseFilter withoutStatusAndQueue() {
         return new AfterSalesCaseFilter(keyword, null, companyName, contactName, frameSn, modelName, faultType,
-            countryCode, assigneeName, createdFrom, createdTo, null);
+            countryCode, assigneeName, createdFrom, createdTo, null, vehicleQrCode);
     }
 
     private static String text(String value, int max) {
@@ -54,6 +60,7 @@ public record AfterSalesCaseFilter(String keyword, String status, String company
     public String companyNameLike() { return like(companyName); }
     public String contactNameLike() { return like(contactName); }
     public String frameSnLike() { return like(frameSn); }
+    public String vehicleQrCodeLike() { return like(vehicleQrCode); }
     public String modelNameLike() { return like(modelName); }
     public String assigneeNameLike() { return like(assigneeName); }
     public LocalDate createdBefore() { return createdTo == null ? null : createdTo.plusDays(1); }

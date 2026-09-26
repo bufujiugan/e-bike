@@ -297,3 +297,25 @@ Web/H5上传队列一次选择最多20个文件，按单文件请求依次发送
 写对象前独立提交上传意图，成功绑定原子标记BOUND；失败保留REVIEW，即使文件已清理。PENDING超过15分钟自动核对，行锁未释放时跳过；绝不因超时直接删除。FILE_REVIEW_CONFLICT表示版本已变化，FILE_REVIEW_BUSY表示记录不存在或正在上传/核对，FILE_ALREADY_BOUND和FILE_CLEANUP_FORBIDDEN阻止清理业务附件。详情见[file-upload-reconciliation.md](file-upload-reconciliation.md)。
 
 这些接口是增量接口，原附件上传/下载请求保持兼容。核对/清理返回更新后的上传记录，调用方后续操作须使用新version；`cleanup`返回`CLEANUP_PENDING`表示申请已保存但尚未清理成功，只有`CLEANED`表示确认对象不存在。所有状态均保留记录及历史，不自动删除发货后的业务附件；历史未登记残留需单独盘点。
+
+## 2026-09-25 整车列表聚合码展示
+
+`GET /api/modules/vehicles` 的首列由“整车编号”调整为“聚合码”，值为实际 `vehicle_qr_code`；未生成时返回 `-`。后续列顺序保持原样。通用模块查询的关键词匹配包含该列，导出使用同一模块字段定义。
+
+Web 详情优先调用已有 `GET /api/vehicles/by-qr/{qrCode}`，追溯默认调用已有 `GET /api/trace/qr/{qrCode}`，聚合码作为 URL path 参数时须编码。车架与部件追溯接口保留，用于未生成聚合码或历史记录的辅助查询。无数据库迁移，无权限接口变更。
+
+### 聚合码续接（生产中心 UI 精修之前的业务修改）
+
+- 返工请求增量支持 `vehicleQrCode`，兼容历史 `frameSn` 请求；同时提供时必须匹配。无效聚合码不回退到车架，拿到整车锁后再次校验当前聚合码，原工位和组装隔离权限保留。
+- 售后创建/更新增量支持 `vehicleQrCode`，接受当前整车完整码或 token；保存验证过的 `vehicleId`，读取时关联当前真实聚合码。部件、车架、车型及客户信息按原归属规则核对/带入。历史未关联案例不自动绑定。列表、数量与统计共用 `vehicleQrCode` 筛选；仓库岗位不返回该字段且不能按其检索。
+- 库存流水、订单出库车辆、PI 批次车辆增加 `vehicleQrCode`。生产异常接受整车聚合码，解析为原车辆关联编码后执行现有隔离；未完成组装的车架与部件扫码仍是生产事实。
+
+### 生产中心 UI 使用现有接口
+
+本轮参考图 UI 不更改后端、路由、登录、权限规则或 API 协议。Web 创建入口复用已有 `POST /api/production/tasks`，请求 `{requestId, skuId, batchNo}`，继续执行组装权限、工位和幂等校验。查询继续使用 `keyword/page/skuId/status/fromDate/toDate`，每页 50 条。未虚构可调页大小、批量选择或 More 业务。
+
+生产中心 UI 阶段没有修改搜索接口。后续聚合码目标收尾已在原 `keyword` 参数中补充 `vehicle_qr_code` 模糊匹配，完整码、token 或局部码均可查询，并与 SKU、状态及日期筛选组合；列表与总数共用条件。任务号、批次、车架及部件编码的原匹配行为保留，无新增路由或请求参数。
+
+`GET /api/parts`、`GET /api/parts/{id}`、`GET /api/parts/by-sn/{sn}` 增量返回 `currentVehicleQrCode`，通过 `current_vehicle_id` 读取当前绑定车辆的真实聚合码，无绑定时为空。原字段和数据库结构不变。Web 通用详情将原对象/数组渲染为中文字段和明细表，保留所有返回字段，聚合码优先；Web/H5 追溯关联车辆通过明确的 `qr`/`frame` 类型跳转，不根据编码前缀猜测。
+
+角色权限树为 Web 展示结构；`PUT /api/roles/{id}/permissions` 仍接收 `{permissionIds: number[]}`，仅包含权限叶子 ID，不包含前端分组节点。

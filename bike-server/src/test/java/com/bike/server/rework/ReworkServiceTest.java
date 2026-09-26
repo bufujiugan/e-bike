@@ -42,10 +42,13 @@ class ReworkServiceTest {
         Mockito.verifyNoInteractions(mapper);
     }
 
-    @Test
-    void createUnbindsOldPartBindsNewPartAndWritesThreeAuditRecords() {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void createUnbindsOldPartBindsNewPartAndWritesThreeAuditRecords(boolean aggregate) {
         ReworkMapper mapper = Mockito.mock(ReworkMapper.class);
         VehicleView vehicle = vehicle(9L, "FRAME-9", 1);
+        vehicle.setVehicleQrCode("BIKE:9:current");
+        if (aggregate) Mockito.when(mapper.selectFrameByQr("BIKE:9:current")).thenReturn("FRAME-9");
         AssemblyPartRecord oldPart = part(1L, "MOTOR-OLD", "MOTOR", "BOUND", "IN_USE");
         AssemblyPartRecord newPart = part(2L, "MOTOR-NEW", "MOTOR", "UNBOUND", "AVAILABLE");
         Mockito.when(mapper.selectVehicleForUpdate("FRAME-9")).thenReturn(vehicle);
@@ -67,7 +70,7 @@ class ReworkServiceTest {
         Mockito.when(mapper.selectById(12L)).thenReturn(result);
 
         ReworkView actual = new ReworkServiceImpl(mapper)
-                .create(new ReworkRequest(" FRAME-9 ", "motor", " MOTOR-NEW ", "更换原因"));
+                .create(aggregate ? new ReworkRequest(null, "motor", " MOTOR-NEW ", "更换原因", " BIKE:9:current ") : new ReworkRequest(" FRAME-9 ", "motor", " MOTOR-NEW ", "更换原因"));
 
         assertThat(actual.getNewPartSn()).isEqualTo("MOTOR-NEW");
         Mockito.verify(mapper).insertPartUnbindOperationLog("MOTOR-OLD", "MOTOR", "FRAME-9", null, "test-admin", "更换原因", null);
@@ -88,6 +91,51 @@ class ReworkServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("已被其他整车绑定");
         Mockito.verify(mapper, Mockito.never()).updateVehicleStatus(Mockito.anyLong(), Mockito.anyInt());
+    }
+
+    @Test
+    void invalidAggregateCodeNeverFallsBackToSuppliedFrame() {
+        ReworkMapper mapper = Mockito.mock(ReworkMapper.class);
+        assertThatThrownBy(() -> new ReworkServiceImpl(mapper).create(
+                new ReworkRequest("FRAME-9", "MOTOR", "NEW", "故障", "BIKE:9:expired")))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("聚合码不存在或已失效");
+        Mockito.verify(mapper, Mockito.never()).selectVehicleForUpdate(Mockito.anyString());
+    }
+
+    @Test
+    void aggregateAndFrameMismatchIsRejected() {
+        ReworkMapper mapper = Mockito.mock(ReworkMapper.class);
+        Mockito.when(mapper.selectFrameByQr("BIKE:9:current")).thenReturn("FRAME-9");
+        assertThatThrownBy(() -> new ReworkServiceImpl(mapper).create(
+                new ReworkRequest("FRAME-OTHER", "MOTOR", "NEW", "故障", "BIKE:9:current")))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("不属于同一辆车");
+        Mockito.verify(mapper, Mockito.never()).selectVehicleForUpdate(Mockito.anyString());
+    }
+
+    @Test
+    void qrRegeneratedBetweenResolutionAndRowLockRejectsWithoutReplacingParts() {
+        ReworkMapper mapper = Mockito.mock(ReworkMapper.class);
+        Mockito.when(mapper.selectFrameByQr("BIKE:9:old")).thenReturn("FRAME-9");
+        VehicleView current = vehicle(9L, "FRAME-9", 1);
+        current.setVehicleQrCode("BIKE:9:new");
+        Mockito.when(mapper.selectVehicleForUpdate("FRAME-9")).thenReturn(current);
+        assertThatThrownBy(() -> new ReworkServiceImpl(mapper).create(
+                new ReworkRequest(null, "MOTOR", "NEW", "故障", "BIKE:9:old")))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("请重新扫码");
+        Mockito.verify(mapper, Mockito.never()).selectCurrentPartForUpdate(Mockito.anyLong(), Mockito.anyString());
+        Mockito.verify(mapper, Mockito.never()).updateVehicleStatus(Mockito.anyLong(), Mockito.anyInt());
+    }
+
+    @Test
+    void qrLookupCannotBypassWorkstationPermission() {
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                "assembly-pda", "N/A", java.util.List.of(new SimpleGrantedAuthority("ROLE_PDA_OPERATOR"),
+                new SimpleGrantedAuthority("PERM_REWORK_OPERATE"), new SimpleGrantedAuthority("WORKSTATION_ASSEMBLY"))));
+        ReworkMapper mapper = Mockito.mock(ReworkMapper.class);
+        assertThatThrownBy(() -> new ReworkServiceImpl(mapper).create(
+                new ReworkRequest(null, "MOTOR", "NEW", "故障", "BIKE:9:current")))
+                .isInstanceOf(BusinessException.class).extracting("code").isEqualTo("WORKSTATION_FORBIDDEN");
+        Mockito.verifyNoInteractions(mapper);
     }
 
     private static VehicleView vehicle(long id, String frame, int status) {

@@ -115,6 +115,13 @@ class ProductionMysqlTest {
       assertThat(f.mapper.selectTasks("FRAME-PARTIAL",0)).hasSize(1);
       assertThat(f.mapper.countTasksFiltered("FRAME-PARTIAL",null,null,null,null)).isEqualTo(1);
       assertThat(f.mapper.selectTask("cancelled")).containsEntry("batterySn","BATTERY-CANCELLED");
+      assertThat(f.mapper.selectTasks("BIKE:1:AGGREGATE",0)).extracting(row->row.get("id")).containsExactly("done");
+      assertThat(f.mapper.countTasks("BIKE:1:AGGREGATE")).isEqualTo(1);
+      assertThat(f.mapper.selectTasksFiltered("AGGREGATE",0,1L,"COMPLETED",java.time.LocalDate.of(2026,9,1),java.time.LocalDate.of(2026,9,1)))
+          .extracting(row->row.get("id")).containsExactly("done");
+      assertThat(f.mapper.countTasksFiltered("AGGREGATE",1L,"COMPLETED",java.time.LocalDate.of(2026,9,1),java.time.LocalDate.of(2026,9,1))).isEqualTo(1);
+      assertThat(f.mapper.countTasksFiltered("BIKE:1:AGGREGATE",null,"OPEN",null,null)).isZero();
+      assertThat(f.mapper.selectTasksFiltered("BIKE:missing",0,null,null,null,null)).isEmpty();
     }
   }
 

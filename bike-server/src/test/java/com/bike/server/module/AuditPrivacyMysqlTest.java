@@ -39,7 +39,7 @@ class AuditPrivacyMysqlTest {
              var sql = session.getConnection().createStatement()) {
             for (String ddl : List.of(
                     "operation_log(id BIGINT, business_type VARCHAR(50), business_id VARCHAR(50), action VARCHAR(100), frame_sn VARCHAR(64), operator_name VARCHAR(64), remark VARCHAR(500), operation_time DATETIME(3))",
-                    "vehicle(id BIGINT, frame_sn VARCHAR(64), status INT, current_order_no VARCHAR(64), current_customer_id BIGINT)",
+                    "vehicle(id BIGINT, frame_sn VARCHAR(64), vehicle_qr_code VARCHAR(200), status INT, current_order_no VARCHAR(64), current_customer_id BIGINT)",
                     "customer(id BIGINT, customer_name VARCHAR(100))")) {
                 String table = prefix + ddl.substring(0, ddl.indexOf('('));
                 sql.execute("CREATE TABLE " + prefix + ddl);

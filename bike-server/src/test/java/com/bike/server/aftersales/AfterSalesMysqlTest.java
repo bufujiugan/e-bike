@@ -214,7 +214,7 @@ class AfterSalesMysqlTest {
                     "product_model(id BIGINT PRIMARY KEY,model_name VARCHAR(100),enabled INT)",
                     "agent_model_access(agent_id BIGINT,model_id BIGINT,enabled INT)",
                     "sales_order(id BIGINT PRIMARY KEY,order_no VARCHAR(64),customer_id BIGINT,agent_id BIGINT)",
-                    "vehicle(id BIGINT PRIMARY KEY,frame_sn VARCHAR(128),model_id BIGINT,status INT,current_customer_id BIGINT,current_order_no VARCHAR(64))",
+                    "vehicle(id BIGINT PRIMARY KEY,vehicle_qr_code VARCHAR(200),vehicle_qr_token VARCHAR(128),frame_sn VARCHAR(128),model_id BIGINT,status INT,current_customer_id BIGINT,current_order_no VARCHAR(64))",
                     "vehicle_part_binding(id BIGINT PRIMARY KEY,vehicle_id BIGINT,part_sn VARCHAR(128),part_type VARCHAR(32),is_current INT)",
                     "operation_log(id BIGINT AUTO_INCREMENT PRIMARY KEY,business_type VARCHAR(64),business_id VARCHAR(64),action VARCHAR(64),operator_id BIGINT,operator_name VARCHAR(100),before_data JSON,after_data JSON,client_ip VARCHAR(64),operation_time DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3))")) {
                     sql("CREATE TABLE " + prefix + ddl + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
@@ -261,7 +261,7 @@ class AfterSalesMysqlTest {
                 sql("INSERT INTO " + prefix + "sys_user_role VALUES(7,1),(70,2),(71,3),(72,2),(73,4),(74,4),(75,1)");
                 sql("INSERT INTO " + prefix + "product_model VALUES(4,'Model',1)");
                 sql("INSERT INTO " + prefix + "sales_order VALUES(1,'SO-A',44,8),(2,'SO-B',45,99)");
-                sql("INSERT INTO " + prefix + "vehicle VALUES(55,'F55',4,3,44,'SO-A'),(56,'F56',4,3,45,'SO-B')");
+                sql("INSERT INTO " + prefix + "vehicle VALUES(55,'BIKE:55:test','test55','F55',4,3,44,'SO-A'),(56,'BIKE:56:test','test56','F56',4,3,45,'SO-B')");
                 sql("INSERT INTO " + prefix + "vehicle_part_binding VALUES(1,55,'M55','MOTOR',1)");
             } catch (Exception error) { close(); throw error; }
         }

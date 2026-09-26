@@ -111,7 +111,7 @@ onMounted(async()=>{try{skus.value=(await api.get('/api/production/skus')).data.
     </div>
     <van-collapse v-model="issuePanel" accordion>
       <van-collapse-item title="登记生产异常 / 上传照片" name="issue">
-        <van-field v-model="issueCode" label="异常编码" placeholder="车架或部件SN" maxlength="128" />
+        <van-field v-model="issueCode" label="异常编码" placeholder="整车聚合码或部件码" maxlength="200" />
         <van-field v-model="issueReason" label="异常原因" type="textarea" maxlength="500" />
         <van-button block type="danger" plain :loading="busy" :disabled="imageUploading" @click="reportIssue">登记异常并隔离</van-button>
         <p v-if="issueId">照片归属：{{ savedIssueCode }} · 异常 {{ issueId }}</p>

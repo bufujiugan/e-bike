@@ -21,7 +21,7 @@
     </select>
     <select id="selectRecentOperations" resultType="map">
         SELECT DATE_FORMAT(operation_time, '%H:%i:%s') AS time, action,
-               COALESCE(frame_sn, business_id, '-') AS target,
+               COALESCE((SELECT v.vehicle_qr_code FROM bike_vehicle v WHERE v.frame_sn=bike_operation_log.frame_sn), frame_sn, business_id, '-') AS target,
                COALESCE(operator_name, '-') AS operator,
                '已记录' AS status
         FROM bike_operation_log WHERE 1=1

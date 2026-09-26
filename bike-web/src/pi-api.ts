@@ -107,7 +107,7 @@ export const piApi = {
     return (await api.get<{ data: { records: PiView[]; total: number } }>('/api/pis', { params })).data.data
   },
   async get(id: number) { return (await api.get<{ data: PiView }>(`/api/pis/${id}`)).data.data },
-  async batch(id: number, batchId: number) { return (await api.get<{ data: { vehicles: { stockOutId: number; stockOutNo: string; frameSn: string; skuCode: string; orderNo: string; status: string; cancelReason?: string }[] } }>(`/api/pis/${id}/dispatch-batches/${batchId}`)).data.data },
+  async batch(id: number, batchId: number) { return (await api.get<{ data: { vehicles: { stockOutId: number; stockOutNo: string; vehicleQrCode: string | null; frameSn: string; skuCode: string; orderNo: string; status: string; cancelReason?: string }[] } }>(`/api/pis/${id}/dispatch-batches/${batchId}`)).data.data },
   async options(keyword?: string) { return (await api.get<{ data: PiOptions }>('/api/pis/options', { params: { keyword: keyword || undefined } })).data.data },
   async create(body: PiCreate) { return (await api.post<{ data: PiView }>('/api/pis', body)).data.data },
   async convert(body: { requestId: string; sources: { lockId: number; quantity: number }[]; pi: PiCreate }) { return (await api.post<{ data: PiView }>('/api/pis/from-locks', body)).data.data },

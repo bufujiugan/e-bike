@@ -101,6 +101,7 @@ class ProductionAttachmentMysqlTest {
         Fixture()throws Exception {
             try {
                 create("product_model","id BIGINT PRIMARY KEY,model_name VARCHAR(40)");
+                create("vehicle","id BIGINT PRIMARY KEY,frame_sn VARCHAR(128),vehicle_qr_code VARCHAR(200)");
                 create("production_sku","id BIGINT PRIMARY KEY,model_id BIGINT,sku_code VARCHAR(40),product_name VARCHAR(40),specification VARCHAR(40),ean VARCHAR(40),upc VARCHAR(40),template_id BIGINT,enabled BOOLEAN");
                 create("operation_log","id BIGINT PRIMARY KEY AUTO_INCREMENT,business_type VARCHAR(40),business_id VARCHAR(64),action VARCHAR(100),operator_name VARCHAR(64),remark VARCHAR(300)");
                 try(var input=Resources.getResourceAsStream("mapper/ProductionSchemaMapper.xml")) {

@@ -33,6 +33,7 @@ public interface AfterSalesMapper {
     int countWarehouseCase(@Param("id") long id);
     AfterSalesCaseView selectById(@Param("id") long id);
     AfterSalesCaseView selectForUpdate(@Param("id") long id);
+    Long selectVehicleIdByQr(@Param("qrCode") String qrCode);
     AfterSalesVehicleReference selectVehicleReference(@Param("id") long id);
     int countEnabledCustomer(@Param("id") long id);
     int countEnabledAgent(@Param("id") long id);

@@ -31,12 +31,12 @@
   <select id="countUnrepresentedAllocations" resultType="long">SELECT COUNT(*) FROM bike_after_sales_shipment s JOIN bike_after_sales_solution_item old ON old.id=s.solution_item_id WHERE s.case_id=#{caseId} AND s.status!='CANCELLED' AND NOT EXISTS(SELECT 1 FROM bike_after_sales_solution_item current_item WHERE current_item.version_id=#{versionId} AND current_item.part_code=old.part_code)</select>
   <select id="countUnlinkedLegacyShipments" resultType="long">SELECT COUNT(*) FROM bike_after_sales_shipment WHERE case_id=#{caseId} AND approval_source='LEGACY_UNLINKED' AND status!='CANCELLED'</select>
   <update id="reconcileShipment">UPDATE bike_after_sales_shipment SET solution_item_id=#{itemId},approval_source='LEGACY_REVIEWED' WHERE id=#{shipmentId} AND case_id=#{caseId} AND approval_source='LEGACY_UNLINKED' AND solution_item_id IS NULL</update>
-  <sql id="base">SELECT c.id,c.case_no,c.customer_id,cu.customer_name,c.agent_id,a.agent_name,c.vehicle_id,c.frame_sn,c.product_model_id,m.model_name,c.motor_sn,c.battery_sn,c.display_sn,c.purchase_date,c.failure_time,c.fault_type,c.fault_part,c.error_code,c.description,c.attempted_repair,c.warranty_status,c.status,c.assignee_id,c.technical_judgment,c.solution,c.internal_note,c.rejection_reason,c.created_by,c.updated_by,c.submitted_at,c.closed_at,c.created_at,c.updated_at,cc.company_name,cc.contact_name,cc.contact_phone,cc.contact_email,cc.country_code,cc.region,cc.city,cc.address_line,cc.postal_code,cc.end_customer_purchase_date,cc.snapshot_source,cc.assignee_name FROM bike_after_sales_case c LEFT JOIN bike_after_sales_case_contact cc ON cc.case_id=c.id LEFT JOIN bike_customer cu ON cu.id=c.customer_id LEFT JOIN bike_agent a ON a.id=c.agent_id LEFT JOIN bike_product_model m ON m.id=c.product_model_id</sql>
+  <sql id="base">SELECT c.id,c.case_no,c.customer_id,cu.customer_name,c.agent_id,a.agent_name,c.vehicle_id,v.vehicle_qr_code,c.frame_sn,c.product_model_id,m.model_name,c.motor_sn,c.battery_sn,c.display_sn,c.purchase_date,c.failure_time,c.fault_type,c.fault_part,c.error_code,c.description,c.attempted_repair,c.warranty_status,c.status,c.assignee_id,c.technical_judgment,c.solution,c.internal_note,c.rejection_reason,c.created_by,c.updated_by,c.submitted_at,c.closed_at,c.created_at,c.updated_at,cc.company_name,cc.contact_name,cc.contact_phone,cc.contact_email,cc.country_code,cc.region,cc.city,cc.address_line,cc.postal_code,cc.end_customer_purchase_date,cc.snapshot_source,cc.assignee_name FROM bike_after_sales_case c LEFT JOIN bike_after_sales_case_contact cc ON cc.case_id=c.id LEFT JOIN bike_customer cu ON cu.id=c.customer_id LEFT JOIN bike_agent a ON a.id=c.agent_id LEFT JOIN bike_product_model m ON m.id=c.product_model_id LEFT JOIN bike_vehicle v ON v.id=c.vehicle_id</sql>
   <sql id="queryJoins">FROM bike_after_sales_case c
     LEFT JOIN bike_after_sales_case_contact cc ON cc.case_id=c.id
     LEFT JOIN bike_customer cu ON cu.id=c.customer_id
     LEFT JOIN bike_agent a ON a.id=c.agent_id
-    LEFT JOIN bike_product_model m ON m.id=c.product_model_id</sql>
+    LEFT JOIN bike_product_model m ON m.id=c.product_model_id LEFT JOIN bike_vehicle v ON v.id=c.vehicle_id</sql>
   <sql id="pendingQueue">c.status='SUBMITTED'</sql>
   <sql id="reviewQueue">c.status='UNDER_REVIEW'</sql>
   <sql id="waitingCustomerQueue">c.status='NEEDS_INFO'</sql>
@@ -55,6 +55,7 @@
     <bind name="companyPattern" value="filter.companyNameLike()"/>
     <bind name="contactPattern" value="filter.contactNameLike()"/>
     <bind name="framePattern" value="filter.frameSnLike()"/>
+    <bind name="qrPattern" value="filter.vehicleQrCodeLike()"/>
     <bind name="modelPattern" value="filter.modelNameLike()"/>
     <bind name="assigneePattern" value="filter.assigneeNameLike()"/>
     <bind name="createdBefore" value="filter.createdBefore()"/>
@@ -62,9 +63,10 @@
       <if test="warehouseOnly">AND <include refid="warehouseCaseScope"/></if>
       <if test="agentId != null">AND c.agent_id=#{agentId}</if>
       <if test="salesUserId != null">AND EXISTS(SELECT 1 FROM bike_after_sales_sales_agent scope WHERE scope.agent_id=c.agent_id AND scope.sales_user_id=#{salesUserId} AND scope.enabled=1)</if>
-      <if test="filter.keyword != null">AND (c.case_no LIKE #{keywordPattern} ESCAPE '!' <if test="!warehouseOnly">OR c.frame_sn LIKE #{keywordPattern} ESCAPE '!' OR c.description LIKE #{keywordPattern} ESCAPE '!'</if> OR cu.customer_name LIKE #{keywordPattern} ESCAPE '!' OR a.agent_name LIKE #{keywordPattern} ESCAPE '!' OR cc.company_name LIKE #{keywordPattern} ESCAPE '!' OR cc.contact_name LIKE #{keywordPattern} ESCAPE '!')</if>
+      <if test="filter.keyword != null">AND (c.case_no LIKE #{keywordPattern} ESCAPE '!' <if test="!warehouseOnly">OR v.vehicle_qr_code LIKE #{keywordPattern} ESCAPE '!' OR c.frame_sn LIKE #{keywordPattern} ESCAPE '!' OR c.description LIKE #{keywordPattern} ESCAPE '!'</if> OR cu.customer_name LIKE #{keywordPattern} ESCAPE '!' OR a.agent_name LIKE #{keywordPattern} ESCAPE '!' OR cc.company_name LIKE #{keywordPattern} ESCAPE '!' OR cc.contact_name LIKE #{keywordPattern} ESCAPE '!')</if>
       <if test="filter.companyName != null">AND (cc.company_name LIKE #{companyPattern} ESCAPE '!' OR cu.customer_name LIKE #{companyPattern} ESCAPE '!' OR a.agent_name LIKE #{companyPattern} ESCAPE '!')</if>
       <if test="filter.contactName != null">AND cc.contact_name LIKE #{contactPattern} ESCAPE '!'</if>
+      <if test="filter.vehicleQrCode != null">AND v.vehicle_qr_code LIKE #{qrPattern} ESCAPE '!'</if>
       <if test="filter.frameSn != null">AND c.frame_sn LIKE #{framePattern} ESCAPE '!'</if>
       <if test="filter.modelName != null">AND m.model_name LIKE #{modelPattern} ESCAPE '!'</if>
       <if test="filter.faultType != null">AND c.fault_type=#{filter.faultType}</if>
@@ -100,7 +102,8 @@
     <include refid="queryJoins"/><include refid="filteredWhere"/>
   </select>
   <select id="selectById" resultType="com.bike.server.aftersales.AfterSalesCaseView"><include refid="base"/> WHERE c.id=#{id}</select>
-  <select id="selectForUpdate" resultType="com.bike.server.aftersales.AfterSalesCaseView">SELECT c.*,cc.company_name,cc.contact_name,cc.contact_phone,cc.contact_email,cc.country_code,cc.region,cc.city,cc.address_line,cc.postal_code,cc.end_customer_purchase_date,cc.snapshot_source,cc.assignee_name FROM bike_after_sales_case c LEFT JOIN bike_after_sales_case_contact cc ON cc.case_id=c.id WHERE c.id=#{id} FOR UPDATE</select>
+  <select id="selectForUpdate" resultType="com.bike.server.aftersales.AfterSalesCaseView">SELECT c.*,v.vehicle_qr_code,cc.company_name,cc.contact_name,cc.contact_phone,cc.contact_email,cc.country_code,cc.region,cc.city,cc.address_line,cc.postal_code,cc.end_customer_purchase_date,cc.snapshot_source,cc.assignee_name FROM bike_after_sales_case c LEFT JOIN bike_after_sales_case_contact cc ON cc.case_id=c.id LEFT JOIN bike_vehicle v ON v.id=c.vehicle_id WHERE c.id=#{id} FOR UPDATE</select>
+  <select id="selectVehicleIdByQr" resultType="long">SELECT id FROM bike_vehicle WHERE vehicle_qr_code=#{qrCode} OR vehicle_qr_token=#{qrCode} FOR UPDATE</select>
   <select id="selectVehicleReference" resultType="com.bike.server.aftersales.AfterSalesVehicleReference">
     SELECT v.id,v.frame_sn,v.model_id,v.current_customer_id customer_id,
       CASE WHEN v.status=3 AND v.current_customer_id=o.customer_id THEN o.agent_id ELSE NULL END agent_id,

@@ -101,7 +101,7 @@ onUnmounted(() => { disposed = true; ++listVersion; ++detailVersion })
       <van-dropdown-menu :overlay="false"><van-dropdown-item v-model="orderId" :title="orderId ? undefined : '选择本次扫描SKU订单'" :options="orderOptions" :disabled="busy" /></van-dropdown-menu>
       <van-field v-model="qr" label="整车总码" placeholder="选SKU订单后连续扫码" :disabled="busy || !orderId" @keyup.enter="scan"><template #button><van-button size="small" :loading="busy" :disabled="!orderId" @click="scan">加入</van-button></template></van-field>
       <van-cell :title="`本批次已扫 ${queue.length} 台`" label="可以切换上方SKU订单继续加入另一车型，提交时一起出库。" />
-      <van-cell v-for="(item,index) in queue" :key="item.vehicleQrCode" :title="item.frameSn" :label="detail.orders.find(order => order.orderId === item.orderId)?.orderNo"><template #right-icon><van-button size="mini" :disabled="busy" @click="remove(index)">移除</van-button></template></van-cell>
+      <van-cell v-for="(item,index) in queue" :key="item.vehicleQrCode" :title="item.vehicleQrCode" :label="detail.orders.find(order => order.orderId === item.orderId)?.orderNo"><template #right-icon><van-button size="mini" :disabled="busy" @click="remove(index)">移除</van-button></template></van-cell>
       <van-button block type="primary" :disabled="!queue.length" :loading="busy" @click="submit">确认 PI 整批出库（{{ queue.length }} 台）</van-button>
     </template>
     <van-notice-bar v-if="error" :text="error" color="#c62828" background="#fff0f0" wrapable />

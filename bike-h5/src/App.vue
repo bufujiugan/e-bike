@@ -35,7 +35,7 @@ const allowedModes = computed<PdaMode[]>(() => {
 })
 type ScanFieldRef = { focus: () => void }
 const vehicleQrField = ref<ScanFieldRef | null>(null)
-const reworkFrameField = ref<ScanFieldRef | null>(null)
+const reworkQrField = ref<ScanFieldRef | null>(null)
 const reworkPartField = ref<ScanFieldRef | null>(null)
 const reworkReasonField = ref<ScanFieldRef | null>(null)
 const traceField = ref<ScanFieldRef | null>(null)
@@ -55,9 +55,9 @@ const orderPageCount = computed(() => Math.max(1, Math.ceil(orderTotal.value / o
 const warehouses = ref<Array<{ id: number; name: string; code: string; status: string }>>([])
 const locations = ref<Array<{ id: number; name: string; code: string; status: string }>>([])
 const traceKey = ref('')
-const traceType = ref<'frame' | 'part' | 'qr'>('frame')
+const traceType = ref<'frame' | 'part' | 'qr'>('qr')
 const traceData = ref<TraceData | null>(null)
-const reworkFrameSn = ref('')
+const reworkQrCode = ref('')
 const reworkPartType = ref('BATTERY')
 const reworkNewPartSn = ref('')
 const reworkReason = ref('')
@@ -213,7 +213,7 @@ async function submitStockIn() {
   busy.value = true
   try {
     const response = await axios.post('/api/stock-in', { vehicleQrCode: vehicleQrCode.value, warehouseId: warehouseId.value, locationId: locationId.value }, { headers: tokenHeaders.value })
-    resultMessage.value = `入库完成：${response.data.data.frameSn}`
+    resultMessage.value = `入库完成：${vehicleQrCode.value}`
     resultSuccess.value = true
     vehicleQrCode.value = ''
     focusField(vehicleQrField)
@@ -288,20 +288,20 @@ async function scanStockOutVehicle() {
 }
 
 async function submitRework() {
-  if (!reworkFrameSn.value.trim() || !reworkNewPartSn.value.trim() || !reworkReason.value.trim()) {
-    resultMessage.value = '请填写车架、新零部件和返工原因'
+  if (!reworkQrCode.value.trim() || !reworkNewPartSn.value.trim() || !reworkReason.value.trim()) {
+    resultMessage.value = '请填写聚合码、新零部件和返工原因'
     showFailToast(resultMessage.value)
     return
   }
   busy.value = true
   try {
-    const response = await axios.post('/api/rework', { frameSn: reworkFrameSn.value, partType: reworkPartType.value, newPartSn: reworkNewPartSn.value, reason: reworkReason.value }, { headers: tokenHeaders.value })
+    const response = await axios.post('/api/rework', { vehicleQrCode: reworkQrCode.value, partType: reworkPartType.value, newPartSn: reworkNewPartSn.value, reason: reworkReason.value }, { headers: tokenHeaders.value })
     resultMessage.value = `返工完成：${response.data.data.reworkNo}，新部件 ${response.data.data.newPartSn}`
     resultSuccess.value = true
-    reworkFrameSn.value = ''
+    reworkQrCode.value = ''
     reworkNewPartSn.value = ''
     reworkReason.value = ''
-    focusField(reworkFrameField)
+    focusField(reworkQrField)
     showSuccessToast('返工完成')
   } catch (error) {
     resultMessage.value = axios.isAxiosError(error) ? error.response?.data?.message ?? '返工失败' : '返工失败'
@@ -318,15 +318,15 @@ async function queryTrace() {
     const response = await axios.get(`/api/trace/${traceType.value}/${encodeURIComponent(traceKey.value.trim())}`, { headers: tokenHeaders.value })
     const vehicle = response.data.data.vehicle
     traceData.value = response.data.data
-    resultMessage.value = `${vehicle.frameSn} · ${vehicle.statusName} · ${vehicle.modelName ?? '-'} · 绑定历史 ${response.data.data.bindingHistory.length} 条`
+    resultMessage.value = `${vehicle.vehicleQrCode || '尚未生成聚合码'} · ${vehicle.statusName} · ${vehicle.modelName ?? '-'} · 绑定历史 ${response.data.data.bindingHistory.length} 条`
     resultSuccess.value = true
     showSuccessToast('追溯查询完成')
   } catch (error) { resultMessage.value = axios.isAxiosError(error) ? error.response?.data?.message ?? '追溯失败' : error instanceof Error ? error.message : '追溯失败'; resultSuccess.value = false; showFailToast(resultMessage.value) } finally { busy.value = false; focusField(traceField) }
 }
 
-async function traceRelatedFrame(frame: string) {
-  traceType.value = 'frame'
-  traceKey.value = frame
+async function traceRelatedCode(code: string, codeType: 'qr' | 'frame') {
+  traceType.value = codeType
+  traceKey.value = code
   await queryTrace()
 }
 
@@ -351,7 +351,7 @@ function clearSession() {
   customerId.value = null; orderId.value = null; selectedOrder.value = null; customers.value = []; orders.value = []
   orderTotal.value = 0; orderOptionsLoading.value = false; orderOptionsError.value = ''
   resultMessage.value = ''; resultSuccess.value = false; vehicleQrCode.value = ''; traceKey.value = ''
-  reworkFrameSn.value = ''; reworkNewPartSn.value = ''; reworkReason.value = ''
+  reworkQrCode.value = ''; reworkNewPartSn.value = ''; reworkReason.value = ''
   warehouseId.value = null; locationId.value = null; warehouses.value = []; locations.value = []
 }
 async function logout() {
@@ -383,7 +383,7 @@ watch(mode, (nextMode) => {
   if (loggedIn.value && !passwordChangeVisible.value) {
     void loadOptionsForMode(nextMode)
     if (nextMode === 'stockIn' || nextMode === 'stockOut') focusField(vehicleQrField)
-    if (nextMode === 'rework') focusField(reworkFrameField)
+    if (nextMode === 'rework') focusField(reworkQrField)
     if (nextMode === 'trace') focusField(traceField)
   }
 })
@@ -471,7 +471,7 @@ if (loggedIn.value) {
           <van-dropdown-item v-model="warehouseId" :options="warehouseOptions" :title="warehouseId === null ? '选择仓库' : undefined" />
           <van-dropdown-item v-model="locationId" :options="locationOptions" :title="locationId === null ? '选择库位' : undefined" />
         </van-dropdown-menu>
-        <van-field ref="vehicleQrField" v-model="vehicleQrCode" label="总二维码" placeholder="扫描整车总二维码" clearable autofocus @keyup.enter="validateStockOperation('in')" />
+        <van-field ref="vehicleQrField" v-model="vehicleQrCode" label="聚合码" placeholder="扫描整车聚合码" clearable autofocus @keyup.enter="validateStockOperation('in')" />
         <van-button block type="primary" :loading="busy" @click="submitStockIn">确认入库</van-button>
       </section>
       <section v-else-if="mode === 'stockOut'" class="form-section">
@@ -495,14 +495,14 @@ if (loggedIn.value) {
           <van-cell title="已出库数量" :value="`${orderShippedQty} 台`" />
           <van-cell title="本次剩余可出库" :value="`${orderRemainingQty} 台`" />
         </div>
-        <van-field ref="vehicleQrField" v-model="vehicleQrCode" label="总二维码" placeholder="连续扫描整车总二维码" clearable autofocus :disabled="customerId === null || orderId === null || orderRemainingQty <= 0" @keyup.enter="scanStockOutVehicle" />
+        <van-field ref="vehicleQrField" v-model="vehicleQrCode" label="聚合码" placeholder="连续扫描整车聚合码" clearable autofocus :disabled="customerId === null || orderId === null || orderRemainingQty <= 0" @keyup.enter="scanStockOutVehicle" />
         <van-cell title="已扫描数量" :value="`${scannedVehicleQrs.length} 台`" />
         <van-tag v-for="qr in scannedVehicleQrs" :key="qr" type="success" size="large" closeable @close="scannedVehicleQrs = scannedVehicleQrs.filter(item => item !== qr)">{{ qr }}</van-tag>
         <van-button block type="primary" :loading="busy" @click="submitStockOut">确认批量出库</van-button>
         </template>
       </section>
       <section v-else-if="mode === 'rework'" class="form-section">
-        <van-field ref="reworkFrameField" v-model="reworkFrameSn" label="车架 SN" placeholder="扫描车架 SN" clearable autofocus @keyup.enter="focusField(reworkPartField)" />
+        <van-field ref="reworkQrField" v-model="reworkQrCode" label="聚合码" placeholder="扫描车辆聚合码" clearable autofocus @keyup.enter="focusField(reworkPartField)" />
         <van-dropdown-menu :overlay="false"><van-dropdown-item v-model="reworkPartType" :options="[{ text: '电池', value: 'BATTERY' }, { text: '电机', value: 'MOTOR' }, { text: '仪表', value: 'DISPLAY' }]" title="更换类型" /></van-dropdown-menu>
         <van-field ref="reworkPartField" v-model="reworkNewPartSn" label="新零部件" placeholder="扫描新零部件 SN" clearable @keyup.enter="focusField(reworkReasonField)" />
         <van-field ref="reworkReasonField" v-model="reworkReason" label="返工原因" placeholder="填写返工原因" type="textarea" autosize @keyup.enter="submitRework" />
@@ -512,7 +512,7 @@ if (loggedIn.value) {
         <van-dropdown-menu :overlay="false"><van-dropdown-item v-model="traceType" :options="[{ text: '整车聚合码', value: 'qr' },{ text: '车架 SN', value: 'frame' }, { text: '零部件 SN', value: 'part' }]" title="追溯类型" /></van-dropdown-menu>
         <van-field ref="traceField" v-model="traceKey" label="追溯编码" placeholder="扫描所选类型的编码" clearable autofocus @keyup.enter="queryTrace" />
         <van-button block type="primary" :loading="busy" @click="queryTrace">查询完整链路</van-button>
-        <TraceDetails v-if="traceData" :data="traceData" @select-frame="traceRelatedFrame" />
+        <TraceDetails v-if="traceData" :data="traceData" @select-code="traceRelatedCode" />
       </section>
       <van-notice-bar v-if="resultMessage" :text="resultMessage" wrapable :color="resultSuccess ? '#16a36a' : '#ee0a24'" :background="resultSuccess ? '#edf9f1' : '#fff1f0'" />
     </section>

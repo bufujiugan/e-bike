@@ -316,7 +316,9 @@ public class ProductionServiceImpl implements ProductionService {
     ProductionAccess.read();
     CurrentOperator.requireAnyPermission("ASSEMBLY_OPERATE", "REWORK_OPERATE");
     guard.lock();
-    String code = request.code().trim().toUpperCase(Locale.ROOT);
+    String raw = request.code().trim();
+    String frame = mapper.selectFrameByQr(raw);
+    String code = frame == null ? raw.toUpperCase(Locale.ROOT) : frame;
     if (mapper.selectFrame(code) == null
         && mapper.selectPart(code) == null
         && mapper.selectReservation(code) == null) fail("CODE_NOT_FOUND", "车辆或部件编码不存在");

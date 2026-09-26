@@ -19,6 +19,19 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 class ProductionServiceTest {
+  @Test void aggregateCodeQuarantinesTheUnderlyingVehicle() {
+    when(mapper.selectFrameByQr("BIKE:10:token")).thenReturn("FRAME-10");
+    when(mapper.selectFrame("FRAME-10")).thenReturn(Map.of("id",10L));
+    service.createIssue(new IssueRequest(" BIKE:10:token ", "Brake failure"));
+    verify(mapper).insertIssue(anyString(),eq("FRAME-10"),eq("Brake failure"),eq("tester"));
+    verify(mapper,never()).selectFrame("BIKE:10:TOKEN");
+  }
+
+  @Test void unknownAggregateCodeDoesNotCreateAnIssue() {
+    assertThatThrownBy(() -> service.createIssue(new IssueRequest("BIKE:10:expired", "Brake failure")))
+        .isInstanceOf(BusinessException.class).hasMessageContaining("不存在");
+    verify(mapper,never()).insertIssue(anyString(),anyString(),anyString(),anyString());
+  }
   @Test void duplicateReprintCannotQueueTwiceForSameVehicle(){
     when(mapper.selectPrint("job")).thenReturn(Map.of("status","SUBMITTED","vehicleId",10L));
     when(mapper.countActivePrints(10L)).thenReturn(1);

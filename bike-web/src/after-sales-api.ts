@@ -5,7 +5,7 @@ export type CaseStatus = 'DRAFT' | 'SUBMITTED' | 'UNDER_REVIEW' | 'NEEDS_INFO' |
 export const caseStatuses: Record<CaseStatus, string> = { DRAFT: '待提交', SUBMITTED: '已提交', UNDER_REVIEW: '审核中', NEEDS_INFO: '等待补充资料', APPROVED: '已审批', IN_PROGRESS: '处理中', WAITING_PARTS: '待发货', SHIPPED: '已发货', RESOLVED: '已解决', CLOSED: '已归档', REJECTED: '已拒绝' }
 export const warrantyNames: Record<string, string> = { PENDING: '待确认', UNKNOWN: '未知', IN_WARRANTY: '保修期内', OUT_OF_WARRANTY: '保修期外' }
 export type CaseDraft = {
-  customerId: number | null; agentId: number | null; vehicleId: number | null; frameSn: string; productModelId: number | null;
+  customerId: number | null; agentId: number | null; vehicleId: number | null; vehicleQrCode: string; frameSn: string; productModelId: number | null;
   motorSn: string; batterySn: string; displaySn: string; purchaseDate: string | null; failureTime: string | null;
   faultType: string; faultPart: string; errorCode: string; description: string; attemptedRepair: string; warrantyStatus: string;
   contact: CompanyContact | null; endCustomerPurchaseDate: string | null;
@@ -35,7 +35,7 @@ export type ShipmentDraft = { partName: string; quantity: number; carrier: strin
 export type CaseOption = { id: number; name: string }
 export type CaseOptions = { customers: CaseOption[]; agents: CaseOption[]; models: CaseOption[] }
 export type CaseQueue = '' | 'PENDING' | 'REVIEW' | 'WAITING_CUSTOMER' | 'PROCESSING' | 'WAITING_SHIPMENT' | 'SHIPPED' | 'COMPLETED' | 'COMPLETED_MONTH'
-export type CaseFilters = { companyName: string; contactName: string; frameSn: string; modelName: string; faultType: string; countryCode: string; assigneeName: string; createdFrom: string | null; createdTo: string | null; queue: CaseQueue }
+export type CaseFilters = { vehicleQrCode: string; companyName: string; contactName: string; frameSn: string; modelName: string; faultType: string; countryCode: string; assigneeName: string; createdFrom: string | null; createdTo: string | null; queue: CaseQueue }
 export type CaseDashboard = { total: number; pending: number; review: number; waitingCustomer: number; processing: number; waitingShipment: number; shipped: number; completed: number; completedThisMonth: number }
 export type ReturnStatus = 'REQUIRED' | 'WAITING_CUSTOMER' | 'IN_TRANSIT' | 'RECEIVED' | 'INSPECTED' | 'SCRAPPED' | 'COMPLETED' | 'WAIVED' | 'CANCELLED'
 export type ReturnAction = 'REQUEST' | 'SEND' | 'RECEIVE' | 'INSPECT' | 'SCRAP' | 'COMPLETE' | 'WAIVE'

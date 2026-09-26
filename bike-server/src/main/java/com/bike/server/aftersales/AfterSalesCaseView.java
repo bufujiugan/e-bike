@@ -9,6 +9,8 @@ public class AfterSalesCaseView {
     public AfterSalesPlanView getSolutionVersion(){return solutionVersion;}
     public void setSolutionVersion(AfterSalesPlanView value){solutionVersion=value;}
     private Long id; private String caseNo; private Long customerId; private String customerName; private Long agentId; private String agentName;
+    private String vehicleQrCode;
+    public String getVehicleQrCode(){return vehicleQrCode;} public void setVehicleQrCode(String v){vehicleQrCode=v;}
     private Long vehicleId; private String frameSn; private Long productModelId; private String modelName; private String motorSn; private String batterySn; private String displaySn;
     private LocalDate purchaseDate; private LocalDateTime failureTime; private String faultType; private String faultPart; private String errorCode; private String description; private String attemptedRepair;
     private String warrantyStatus; private String status; private Long assigneeId; private String technicalJudgment; private String solution; private String internalNote; private String rejectionReason;
