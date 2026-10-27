@@ -2,19 +2,31 @@
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import axios from './api'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { BarChart } from 'echarts/charts'
-import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
-import * as echarts from 'echarts/core'
-import { CanvasRenderer } from 'echarts/renderers'
 import PermissionGate from './components/PermissionGate.vue'
 import AppIcon from './components/AppIcon.vue'
+import AppLayout from './components/layout/AppLayout.vue'
+import AccountSettingsDialog from './components/layout/AccountSettingsDialog.vue'
+import BusinessModulePage from './views/BusinessModulePage.vue'
+import DashboardPage from './views/DashboardPage.vue'
 import RecordDetails from './components/RecordDetails.vue'
 import ProductionManager from './components/ProductionManager.vue'
 import TraceQuery from './components/TraceQuery.vue'
 import { hasAnyPermission, hasPermission, hasRole, isSuperAdmin } from './permissions'
 import { reservationLabel, type ReservationStatus } from './pi-api'
+import type { NavGroup, NavItem } from './config/page-presentation'
 
 const SkuInventoryPanel = defineAsyncComponent(() => import('./components/SkuInventoryPanel.vue'))
+const BusinessWorkspace = defineAsyncComponent(() => import('./components/BusinessWorkspace.vue'))
+const OrderJourney = defineAsyncComponent(() => import('./components/OrderJourney.vue'))
+const journeyOrderNo = ref('')
+const workflowRefreshKey = ref(0)
+function continueProduction(stage: string, sku: { id: number; skuCode: string; modelId: number }) {
+  navigate('workflow')
+  const url = new URL(location.href)
+  url.searchParams.set('stage', stage); url.searchParams.set('skuId', String(sku.id)); url.searchParams.set('skuCode', sku.skuCode); url.searchParams.set('modelId', String(sku.modelId))
+  history.replaceState(null, '', url)
+}
+function refreshOrderJourney() { workflowRefreshKey.value++; void loadModule(activeView.value) }
 const PiWorkspace = defineAsyncComponent(() => import('./components/PiWorkspace.vue'))
 const AfterSalesWorkspace = defineAsyncComponent(() => import('./components/AfterSalesWorkspace.vue'))
 const CustomerScopeEditor = defineAsyncComponent(() => import('./components/CustomerScopeEditor.vue'))
@@ -22,9 +34,10 @@ const CustomerScopeManager = defineAsyncComponent(() => import('./components/Cus
 const FileReviewManager = defineAsyncComponent(() => import('./components/FileReviewManager.vue'))
 const CustomerProfiles = defineAsyncComponent(() => import('./components/CustomerProfiles.vue'))
 
-echarts.use([BarChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
 
-type NavItem = { key: string; label: string; shortLabel: string; path?: string }
+function flattenNavItems(items: NavItem[]): NavItem[] {
+  return items.flatMap(item => [item, ...flattenNavItems(item.children ?? [])])
+}
 
 const username = ref('admin')
 const password = ref('')
@@ -34,6 +47,7 @@ type AuthContext = { username: string; userType: string; agentId: number | null;
 const authContext = ref<AuthContext | null>(null)
 const isAgentAccount = computed(() => hasRole(authContext.value, 'WEB_AGENT'))
 const passwordChangeVisible = ref(false)
+const accountSettingsVisible = ref(false)
 const currentPassword = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
@@ -51,19 +65,36 @@ const importableModules = new Set(['parts', 'customers', 'agents', 'orders'])
 type ModulePage = { subtitle: string; stats: { label: string; value: string; tone: string }[]; columns: string[]; rows: string[][]; action: string; total?: number }
 const modulePageData = ref<Record<string, ModulePage>>({})
 
-const navGroups: { label: string; items: NavItem[] }[] = [
-  { label: '工作台', items: [{ key: 'dashboard', label: '运营总览', shortLabel: '总览', path: '/dashboard' }] },
+const navGroups: NavGroup[] = [
+  { label: '工作台', items: [{ key: 'workflow', label: '业务办理工作台', shortLabel: '办理', path: '/workflow', icon: 'production' }, { key: 'dashboard', label: '生产运营指挥中心', shortLabel: '总览', path: '/dashboard' }] },
   {
     label: '生产与库存',
     items: [
-      { key: 'production', label: '生产中心', shortLabel: '生产', path: '/production' },
+      {
+        key: 'production', label: '生产中心', shortLabel: '生产', path: '/production', icon: 'production',
+        children: [
+          { key: 'production-tasks', label: '生产工单', shortLabel: '工单', path: '/production/tasks', icon: 'tasks' },
+          { key: 'production-skus', label: '商品 SKU', shortLabel: 'SKU', path: '/production/skus', icon: 'inventory' },
+          { key: 'production-templates', label: '标签模板', shortLabel: '模板', path: '/production/templates', icon: 'tag' },
+          { key: 'production-issues', label: '异常隔离', shortLabel: '异常', path: '/production/issues', icon: 'warning' },
+          { key: 'production-quarantine', label: '旧件复检', shortLabel: '复检', path: '/production/quarantine', icon: 'inspect' },
+          { key: 'production-prints', label: '打印队列', shortLabel: '打印', path: '/production/prints', icon: 'printer' },
+          { key: 'production-scan-failures', label: '失败扫码', shortLabel: '失败', path: '/production/scan-failures', icon: 'trace' },
+          { key: 'production-inventory', label: '生产库存', shortLabel: '库存', path: '/production/inventory', icon: 'inventory' },
+        ],
+      },
       { key: 'assembly', label: '组装进度', shortLabel: '组装', path: '/assembly' },
       { key: 'vehicles', label: '整车档案', shortLabel: '整车', path: '/vehicles' },
-      { key: 'inventory', label: '库存管理', shortLabel: '库存', path: '/inventory' },
-      { key: 'sku-inventory', label: 'SKU 库存锁定', shortLabel: 'SKU', path: '/sku-inventory' },
-      { key: 'stock-in', label: '入库记录', shortLabel: '入库', path: '/stock-in' },
-      { key: 'stock-out', label: '出库记录', shortLabel: '出库', path: '/stock-out' },
-      { key: 'stock', label: '出入库记录', shortLabel: '出入', path: '/stock' },
+      {
+        key: 'inventory-menu', label: '库存管理', shortLabel: '库存', icon: 'inventory',
+        children: [
+          { key: 'inventory', label: '库存总览', shortLabel: '总览', path: '/inventory', icon: 'inventory' },
+          { key: 'sku-inventory', label: 'SKU 库存锁定', shortLabel: 'SKU', path: '/sku-inventory', icon: 'lock' },
+          { key: 'stock-in', label: '入库记录', shortLabel: '入库', path: '/stock-in', icon: 'stock-in' },
+          { key: 'stock-out', label: '出库记录', shortLabel: '出库', path: '/stock-out', icon: 'stock-out' },
+          { key: 'stock', label: '出入库记录', shortLabel: '出入', path: '/stock', icon: 'stock' },
+        ],
+      },
     ],
   },
   {
@@ -113,12 +144,21 @@ const navGroups: { label: string; items: NavItem[] }[] = [
 ]
 
 const navPermissionMap: Record<string, string[]> = {
+  workflow: ['PRODUCTION_MANAGE', 'ASSEMBLY_OPERATE', 'VEHICLE_READ', 'INVENTORY_READ', 'AGENT_INVENTORY_READ', 'AGENT_LOCK_WRITE', 'ORDER_READ', 'PI_READ'],
   'file-reviews': ['FILE_REVIEW_MANAGE'],
   'customer-scopes': ['CUSTOMER_SCOPE_MANAGE'],
   pis: ['PI_READ'],
   'sku-inventory': ['INVENTORY_READ', 'AGENT_INVENTORY_READ'],
   'after-sales': ['AFTER_SALES_READ'],
   production: ['ASSEMBLY_OPERATE', 'REWORK_OPERATE', 'VEHICLE_READ', 'PRODUCTION_MANAGE'],
+  'production-tasks': ['ASSEMBLY_OPERATE', 'REWORK_OPERATE', 'VEHICLE_READ', 'PRODUCTION_MANAGE'],
+  'production-skus': ['ASSEMBLY_OPERATE', 'REWORK_OPERATE', 'VEHICLE_READ', 'PRODUCTION_MANAGE'],
+  'production-templates': ['ASSEMBLY_OPERATE', 'REWORK_OPERATE', 'VEHICLE_READ', 'PRODUCTION_MANAGE'],
+  'production-issues': ['ASSEMBLY_OPERATE', 'REWORK_OPERATE', 'VEHICLE_READ', 'PRODUCTION_MANAGE'],
+  'production-quarantine': ['ASSEMBLY_OPERATE', 'REWORK_OPERATE', 'VEHICLE_READ', 'PRODUCTION_MANAGE'],
+  'production-prints': ['ASSEMBLY_OPERATE', 'REWORK_OPERATE', 'VEHICLE_READ', 'PRODUCTION_MANAGE'],
+  'production-scan-failures': ['ASSEMBLY_OPERATE', 'REWORK_OPERATE', 'VEHICLE_READ', 'PRODUCTION_MANAGE'],
+  'production-inventory': ['ASSEMBLY_OPERATE', 'REWORK_OPERATE', 'VEHICLE_READ', 'PRODUCTION_MANAGE'],
   dashboard: ['DASHBOARD_READ'], assembly: ['ASSEMBLY_OPERATE'], vehicles: ['VEHICLE_READ'], inventory: ['INVENTORY_READ'],
   'stock-in': ['STOCK_READ'], 'stock-out': ['STOCK_READ'], stock: ['STOCK_READ'], orders: ['ORDER_READ'],
   agents: ['MASTER_READ'], 'inventory-locks': ['AGENT_INVENTORY_READ', 'AGENT_LOCK_WRITE'], rework: ['REWORK_OPERATE'], trace: ['TRACE_READ'],
@@ -127,23 +167,30 @@ const navPermissionMap: Record<string, string[]> = {
   logs: ['DATA_EXPORT'], 'operation-logs': ['DATA_EXPORT'], customs: ['DATA_EXPORT'], 'agent-dashboard': ['AGENT_INVENTORY_READ'],
   'agent-inventory': ['AGENT_INVENTORY_READ'], 'agent-locks': ['AGENT_INVENTORY_READ', 'AGENT_LOCK_WRITE'], 'purchase-intents': ['AGENT_INVENTORY_READ', 'PURCHASE_INTENT_WRITE'],
 }
+const agentOnlyViews = new Set(['agent-dashboard', 'agent-inventory', 'agent-locks', 'purchase-intents'])
+const agentExcludedViews = new Set(['inventory', 'inventory-locks'])
+function filterVisibleNavItems(items: NavItem[], context: AuthContext): NavItem[] {
+  const permissions = new Set(context.permissions)
+  const isAgent = hasRole(context, 'WEB_AGENT')
+  return items.flatMap(item => {
+    const children = filterVisibleNavItems(item.children ?? [], context)
+    const excluded = (['customer-scopes', 'file-reviews'].includes(item.key) && (isAgent || hasRole(context, 'PDA_OPERATOR')))
+      || (isAgent && agentExcludedViews.has(item.key))
+      || (!isAgent && agentOnlyViews.has(item.key))
+    const allowed = !excluded && (navPermissionMap[item.key] ?? []).some(permission => permissions.has(permission))
+    return allowed || children.length ? [{ ...item, children: children.length ? children : undefined }] : []
+  })
+}
 const visibleNavGroups = computed(() => {
   const context = authContext.value
   if (!context || isSuperAdmin(context)) return navGroups
-  const permissions = new Set(context.permissions)
-  const isAgent = hasRole(context, 'WEB_AGENT')
-  const agentOnlyViews = new Set(['agent-dashboard', 'agent-inventory', 'agent-locks', 'purchase-intents'])
-  const agentExcludedViews = new Set(['inventory', 'inventory-locks'])
   return navGroups.map(group => ({
     ...group,
-    items: group.items.filter(item => {
-      if (['customer-scopes', 'file-reviews'].includes(item.key) && (isAgent || hasRole(context, 'PDA_OPERATOR'))) return false
-      if (isAgent && agentExcludedViews.has(item.key)) return false
-      if (!isAgent && agentOnlyViews.has(item.key)) return false
-      return (navPermissionMap[item.key] ?? []).some(permission => permissions.has(permission))
-    }),
+    items: filterVisibleNavItems(group.items, context),
   })).filter(group => group.items.length > 0)
 })
+const allNavItems = navGroups.flatMap(group => flattenNavItems(group.items))
+const visibleNavItems = computed(() => visibleNavGroups.value.flatMap(group => flattenNavItems(group.items)))
 const expandedNavGroups = ref(new Set(navGroups.map(group => group.label)))
 function isNavGroupExpanded(label: string) {
   return expandedNavGroups.value.has(label)
@@ -158,13 +205,24 @@ const userRoleLabel = computed(() => hasRole(authContext.value, 'WEB_AGENT') ? '
 const canCreateProductionTask = computed(() => !isAgentAccount.value && hasPermission(authContext.value, 'ASSEMBLY_OPERATE') &&
   (isSuperAdmin(authContext.value) || authContext.value?.workstations.some(type => ['ASSEMBLY', 'FRAME', 'MOTOR', 'BATTERY', 'DISPLAY'].includes(type))))
 
-const routeKeyMap = new Map(navGroups.flatMap((group) => group.items).map((item) => [item.path ?? `/${item.key}`, item.key]))
+const routeKeyMap = new Map(allNavItems.map((item) => [item.path ?? `/${item.key}`, item.key]))
 const initialPath = window.location.pathname
 const initialKey = routeKeyMap.get(initialPath) ?? initialPath.slice(1)
-if (initialKey === 'dashboard' || navGroups.some((group) => group.items.some((item) => item.key === initialKey))) activeView.value = initialKey || 'dashboard'
+if (initialKey === 'dashboard' || allNavItems.some(item => item.key === initialKey)) activeView.value = initialKey || 'dashboard'
 
-const activeGroupLabel = computed(() => navGroups.find(group => group.items.some(item => item.key === activeView.value))?.label ?? '工作台')
-const activeNav = computed(() => navGroups.flatMap((group) => group.items).find((item) => item.key === activeView.value))
+const activeGroupLabel = computed(() => navGroups.find(group => flattenNavItems(group.items).some(item => item.key === activeView.value))?.label ?? '工作台')
+const activeNav = computed(() => allNavItems.find(item => item.key === activeView.value))
+const productionViewByNavKey: Record<string, string> = {
+  production: 'overview',
+  'production-tasks': 'tasks',
+  'production-skus': 'skus',
+  'production-templates': 'templates',
+  'production-issues': 'issues',
+  'production-quarantine': 'quarantine',
+  'production-prints': 'prints',
+  'production-scan-failures': 'scan-failures',
+  'production-inventory': 'inventory',
+}
 
 const activeModule = computed(() => modulePageData.value[activeView.value] ?? {
   subtitle: '基础数据与权限配置',
@@ -190,30 +248,7 @@ const filteredModuleRows = computed(() => activeModule.value.rows)
 
 const metrics = ref<{ label: string; value: string; unit: string; trend: string; tone: string }[]>([])
 const statusRows = ref<{ label: string; count: number; color: string }[]>([])
-const vehicleTotal = computed(() => statusRows.value.reduce((total, row) => total + row.count, 0).toLocaleString())
 const trendRows = ref<{ date: string; assembled: number; stockIn: number; stockOut: number }[]>([])
-const trendChartElement = ref<HTMLElement | null>(null)
-let trendChartInstance: echarts.ECharts | null = null
-
-function renderTrendChart() {
-  if (!trendChartElement.value) return
-  trendChartInstance?.dispose()
-  trendChartInstance = echarts.init(trendChartElement.value)
-  trendChartInstance.setOption({
-    animation: false,
-    grid: { left: 36, right: 12, top: 24, bottom: 28 },
-    tooltip: { trigger: 'axis' },
-    legend: { show: false },
-    xAxis: { type: 'category', data: trendRows.value.map((row) => row.date.slice(5)), axisTick: { show: false }, axisLine: { lineStyle: { color: '#e6edf3' } }, axisLabel: { color: '#8c98a7', fontSize: 10 } },
-    yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: '#eef2f6' } }, axisLabel: { color: '#8c98a7', fontSize: 10 } },
-    series: [
-      { name: '组装', type: 'bar', barMaxWidth: 14, data: trendRows.value.map((row) => row.assembled), itemStyle: { color: '#1677c8', borderRadius: [3, 3, 0, 0] } },
-      { name: '入库', type: 'bar', barMaxWidth: 14, data: trendRows.value.map((row) => row.stockIn), itemStyle: { color: '#21af79', borderRadius: [3, 3, 0, 0] } },
-      { name: '出库', type: 'bar', barMaxWidth: 14, data: trendRows.value.map((row) => row.stockOut), itemStyle: { color: '#ef8b4c', borderRadius: [3, 3, 0, 0] } },
-    ],
-  })
-}
-
 const quickActions = [
   { key: 'assembly', label: '开始组装', caption: '进入四码绑定工位', icon: '01' },
   { key: 'stock', label: '办理入库', caption: '扫描整车总二维码', icon: '02' },
@@ -290,6 +325,10 @@ async function openLinkedOrders(row:string[]) {
     await loadLinkedOrders()
   } catch(error) {ElMessage.error(axios.isAxiosError(error)?error.response?.data?.message??'锁定加载失败':'锁定加载失败')}
 }
+function locateLinkedOrder(orderNo: string) {
+  linkedOrdersVisible.value = false
+  journeyOrderNo.value = orderNo
+}
 const lockOrderForm = reactive({ lockId: 0, lockNo: '', quantity: 1, remaining: 1, fixedCustomer: false, skuCode: '', customerId: null as number | null, plannedShipDate: '', requestId: '' })
 const canConvertLock = computed(() => Boolean(authContext.value && !authContext.value.roles.includes('WEB_AGENT') &&
   (isSuperAdmin(authContext.value) || (hasPermission(authContext.value,'ORDER_WRITE') && hasPermission(authContext.value,'AGENT_LOCK_WRITE')))))
@@ -310,6 +349,8 @@ async function submitLockOrder() {
     }, authConfig())
     lockOrderVisible.value = false
     ElMessage.success(`已创建订单 ${response.data.data.orderNo}，库存占用已保留`)
+    workflowRefreshKey.value++
+    if (hasPermission(authContext.value, 'ORDER_READ')) journeyOrderNo.value = response.data.data.orderNo
     await loadModule(activeView.value)
   } catch (error) {
     ElMessage.error(axios.isAxiosError(error) ? error.response?.data?.message ?? '转单失败，可重试当前请求' : '转单失败')
@@ -475,7 +516,7 @@ let moduleRequestVersion = 0
 async function loadModule(module: string) {
   const requestVersion = ++moduleRequestVersion
   dataLoading.value = false
-  if (['production', 'trace', 'pis', 'after-sales', 'sku-inventory', 'customer-scopes', 'file-reviews'].includes(module)) return
+  if (module.startsWith('production') || ['workflow', 'trace', 'pis', 'after-sales', 'sku-inventory', 'customer-scopes', 'file-reviews'].includes(module)) return
   if (module === 'dashboard') return loadDashboard(requestVersion)
   dataLoading.value = true
   dataError.value = ''
@@ -504,8 +545,8 @@ async function login() {
       passwordChangeVisible.value = true
       return
     }
-    if (!visibleNavGroups.value.flatMap(group => group.items).some(item => item.key === activeView.value)) {
-      activeView.value = visibleNavGroups.value.flatMap(group => group.items)[0]?.key ?? 'dashboard'
+    if (!visibleNavItems.value.some(item => item.key === activeView.value)) {
+      activeView.value = visibleNavItems.value[0]?.key ?? 'dashboard'
     }
     await loadModule(activeView.value)
     ElMessage.success('登录成功')
@@ -526,7 +567,6 @@ watch(moduleSearch, () => {
   if (loggedIn.value && activeView.value !== 'dashboard') void loadModule(activeView.value)
 })
 
-watch(trendRows, () => { void nextTick(renderTrendChart) })
 
 function changeModulePage(nextPage: number) {
   if (nextPage < 1 || nextPage > modulePageCount.value || nextPage === modulePage.value) return
@@ -538,6 +578,10 @@ function handleAuthExpired() {
   loggedIn.value = false
   authContext.value = null
   passwordChangeVisible.value = false
+  accountSettingsVisible.value = false
+  currentPassword.value = ''
+  newPassword.value = ''
+  confirmPassword.value = ''
 }
 
 onMounted(() => {
@@ -548,8 +592,8 @@ onMounted(() => {
       passwordChangeVisible.value = true
       return
     }
-    if (!visibleNavGroups.value.flatMap(group => group.items).some(item => item.key === activeView.value)) {
-      activeView.value = visibleNavGroups.value.flatMap(group => group.items)[0]?.key ?? 'dashboard'
+    if (!visibleNavItems.value.some(item => item.key === activeView.value)) {
+      activeView.value = visibleNavItems.value[0]?.key ?? 'dashboard'
     }
     return loadModule(activeView.value)
   }).catch(() => logout())
@@ -558,13 +602,11 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('bike-auth-expired', handleAuthExpired)
   window.removeEventListener('popstate', handlePopState)
-  trendChartInstance?.dispose()
-  trendChartInstance = null
 })
 
 function routeKeyForPath(path: string) {
   const key = routeKeyMap.get(path) ?? path.replace(/^\//, '')
-  return key === 'dashboard' || navGroups.some((group) => group.items.some((item) => item.key === key)) ? key : 'dashboard'
+  return key === 'dashboard' || allNavItems.some(item => item.key === key) ? key : 'dashboard'
 }
 
 function syncRouteFromLocation() {
@@ -579,11 +621,11 @@ function handlePopState() {
 
 function navigate(key: string) {
   activeView.value = key
-  const group = navGroups.find(group => group.items.some(item => item.key === key))
+  const group = navGroups.find(group => flattenNavItems(group.items).some(item => item.key === key))
   if (group) expandedNavGroups.value.add(group.label)
   modulePage.value = 1
   moduleSearch.value = ''
-  const item = navGroups.flatMap((group) => group.items).find((entry) => entry.key === key)
+  const item = allNavItems.find(entry => entry.key === key)
   const nextPath = item?.path ?? `/${key}`
   if (window.location.pathname !== nextPath) window.history.pushState(null, '', nextPath)
 }
@@ -593,6 +635,10 @@ function clearSession() {
   loggedIn.value = false
   password.value = ''
   passwordChangeVisible.value = false
+  accountSettingsVisible.value = false
+  currentPassword.value = ''
+  newPassword.value = ''
+  confirmPassword.value = ''
   authContext.value = null
 }
 
@@ -606,7 +652,20 @@ async function logout() {
   }
 }
 
+function openAccountSettings() {
+  if (passwordChangeVisible.value) return
+  currentPassword.value = ''
+  newPassword.value = ''
+  confirmPassword.value = ''
+  accountSettingsVisible.value = true
+}
+
 async function submitPasswordChange() {
+  if (passwordChanging.value) return
+  if (!currentPassword.value) {
+    ElMessage.error('请输入当前密码')
+    return
+  }
   if (newPassword.value.length < 8 || newPassword.value.length > 100) {
     ElMessage.error('新密码长度必须为 8-100')
     return
@@ -773,6 +832,11 @@ async function changeInventoryLock(row: string[], action: 'release' | 'convert')
       ElMessage.success('库存锁定已释放')
     } else {
       const remaining = Number(lock.lockQty) - Number(lock.releasedQty) - Number(lock.convertedQty)
+      if (remaining <= 0 || !['LOCKED', 'PARTIAL_CONVERTED'].includes(lock.status)) {
+        ElMessage.warning('该锁定当前没有可转数量，请查看关联订单或刷新锁定列表')
+        workflowRefreshKey.value++
+        return
+      }
       const customers = await axios.get('/api/master/customers', authConfig())
       masterOptions.customers = customers.data.data.filter((customer: {status: string}) => customer.status === 'ENABLED')
       Object.assign(lockOrderForm, { lockId: lock.id, lockNo: lock.lockNo, quantity: remaining, remaining, fixedCustomer: Boolean(lock.customerId), skuCode: lock.skuCode ?? '', customerId: lock.customerId ?? null, plannedShipDate: '', requestId: crypto.randomUUID() })
@@ -883,6 +947,7 @@ function openPrimaryAction() {
 
 async function openRowDetail(row: string[]) {
   const module = activeView.value
+  if (module === 'orders' && row[0]) { journeyOrderNo.value = row[0]; return }
   detailTitle.value = `${activeNav.value?.label ?? '记录'}详情`
   detailLoading.value = true
   detailDialogVisible.value = true
@@ -1051,54 +1116,26 @@ async function submitPrimaryAction() {
     </section>
   </main>
 
-  <main v-else class="admin-app">
-    <div class="admin-shell">
-      <aside class="sidebar">
-      <div class="brand"><span class="brand-mark">B</span><span><strong>BIKE</strong><small>OPERATIONS</small></span></div>
-      <div class="environment-badge"><span></span>生产库存与追溯</div>
-      <nav>
-        <section v-for="group in visibleNavGroups" :key="group.label" class="nav-group" :class="{ collapsed: !isNavGroupExpanded(group.label) }">
-          <button class="nav-group-toggle" :aria-label="group.label" :aria-expanded="isNavGroupExpanded(group.label)" @click="toggleNavGroup(group.label)"><span class="tree-chevron">⌄</span><span>{{ group.label }}</span><small>{{ group.items.length }}</small></button>
-          <div v-show="isNavGroupExpanded(group.label)" class="nav-tree-children">
-            <button v-for="item in group.items" :key="item.key" class="nav-item" :class="{ active: activeView === item.key }" :aria-label="item.label" :title="item.label" :aria-current="activeView === item.key ? 'page' : undefined" @click="navigate(item.key)"><span class="nav-tree-branch"></span><span class="nav-icon"><AppIcon :name="item.key" /></span><span class="nav-label">{{ item.label }}</span></button>
-          </div>
-        </section>
-      </nav>
-      <div class="sidebar-footer"><div class="user-chip"><span class="avatar">A</span><span><strong>{{ username }}</strong><small>{{ userRoleLabel }}</small></span></div><button class="logout-button" @click="logout">退出登录</button></div>
-      </aside>
+  <AppLayout v-else :groups="visibleNavGroups" :active="activeView" :title="activeNav?.label ?? '工作台'" :group="activeGroupLabel" :username="username" :role="userRoleLabel" :last-loaded="lastLoadedAt" @navigate="navigate" @settings="openAccountSettings" @logout="logout">
 
-    <section class="workspace">
-      <header class="topbar"><div><p class="breadcrumb">BIKE 工作空间 <span>/</span> {{ activeGroupLabel }}</p><h1>{{ activeNav?.label }}</h1></div><div class="topbar-right"><el-select class="navigation-search" model-value="" filterable placeholder="搜索功能页面" aria-label="搜索功能页面" @change="navigate"><template #prefix><AppIcon name="search" /></template><el-option-group v-for="group in visibleNavGroups" :key="group.label" :label="group.label"><el-option v-for="item in group.items" :key="item.key" :label="item.label" :value="item.key" /></el-option-group></el-select><span class="last-sync">最近加载 {{ lastLoadedAt }}</span><span class="top-avatar">{{ username.slice(0, 1).toUpperCase() }}</span></div></header>
+      <BusinessWorkspace v-if="activeView === 'workflow' && !passwordChangeVisible" :context="authContext" :username="username" :refresh-key="workflowRefreshKey" @navigate="navigate" @convert="changeInventoryLock([$event], 'convert')" @order="journeyOrderNo = $event" />
 
-      <div v-if="activeView === 'dashboard'" class="dashboard-content">
-        <div class="page-intro"><div><h2>今日运营概览</h2><p>生产、库存和订单状态集中查看</p><p v-if="dataLoading" class="data-hint">正在从后端加载数据...</p><p v-else-if="dataError" class="data-hint error">{{ dataError }}</p></div><span class="date-chip">{{ new Date().toLocaleDateString('zh-CN') }}</span></div>
-        <section class="metric-grid"><article v-for="metric in metrics" :key="metric.label" class="metric-card" :class="metric.tone"><div class="metric-head"><span>{{ metric.label }}</span><span class="metric-dot"></span></div><div class="metric-value">{{ metric.value }}<small>{{ metric.unit }}</small></div><div v-if="metric.trend" class="metric-foot"><span class="trend">{{ metric.trend }}</span><span>较昨日</span></div></article></section>
+      <DashboardPage v-else-if="activeView === 'dashboard'" :metrics="metrics" :status-rows="statusRows" :points="trendRows" :operations="recentOperations" :actions="quickActions" :allowed-views="visibleNavItems.map(item => item.key)" :context="authContext" :loading="dataLoading" :error="dataError" @refresh="loadModule('dashboard')" @navigate="navigate" />
 
-        <section class="panel trend-panel"><div class="panel-title"><div><h3>近 7 日业务趋势</h3><p>组装、入库与出库数量</p></div><span class="trend-legend"><i class="assembled"></i>组装 <i class="stock-in"></i>入库 <i class="stock-out"></i>出库</span></div><div ref="trendChartElement" class="trend-chart" role="img" aria-label="近 7 日业务趋势"></div></section>
-
-        <section class="content-grid">
-          <article class="panel status-panel"><div class="panel-title"><div><h3>整车状态分布</h3><p>当前整车生命周期状态</p></div><button class="text-button" @click="navigate('vehicles')">查看档案</button></div><div class="status-visual"><div class="donut"><strong>{{ vehicleTotal }}</strong><span>整车总量</span></div><div class="status-list"><div v-for="row in statusRows" :key="row.label" class="status-row"><span class="status-name"><i :style="{ background: row.color }"></i>{{ row.label }}</span><strong>{{ row.count.toLocaleString() }}</strong><div class="status-bar"><span :style="{ width: `${vehicleTotal === '0' ? 0 : Math.min(100, row.count / Math.max(1, Number(vehicleTotal.replace(',', '')) / 100))}%`, background: row.color }"></span></div></div></div></div></article>
-          <article class="panel quick-panel"><div class="panel-title"><div><h3>快捷操作</h3><p>常用业务入口</p></div></div><div class="quick-grid"><button v-for="action in quickActions" :key="action.key" class="quick-action" @click="navigate(action.key)"><span class="quick-icon">{{ action.icon }}</span><span><strong>{{ action.label }}</strong><small>{{ action.caption }}</small></span><b>›</b></button></div></article>
-        </section>
-
-        <section class="panel operations-panel"><div class="panel-title"><div><h3>最近操作</h3><p>关键业务操作实时记录</p></div><button class="text-button" @click="navigate('trace')">查看全部</button></div><div class="table-wrap"><table><thead><tr><th>时间</th><th>操作</th><th>业务对象</th><th>操作人</th><th>状态</th></tr></thead><tbody><tr v-for="operation in recentOperations" :key="operation.time"><td class="muted">{{ operation.time }}</td><td><strong>{{ operation.action }}</strong></td><td>{{ operation.target }}</td><td>{{ operation.operator }}</td><td><span class="status-pill" :class="{ processing: operation.status === '进行中' }">{{ operation.status }}</span></td></tr></tbody></table></div></section>
-      </div>
-
-      <ProductionManager v-else-if="activeView === 'production' && !passwordChangeVisible" :username="username" :can-create-task="canCreateProductionTask" @loaded="lastLoadedAt = new Date().toLocaleString()" :can-manage="!isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'PRODUCTION_MANAGE')" :can-operate="hasPermission(authContext, 'ASSEMBLY_OPERATE')" :can-report-issue="hasAnyPermission(authContext, ['ASSEMBLY_OPERATE','REWORK_OPERATE'])" />
+      <ProductionManager v-else-if="productionViewByNavKey[activeView] && !passwordChangeVisible" :key="activeView" :view="productionViewByNavKey[activeView]" :username="username" :context="authContext" @continue="continueProduction" :can-create-task="canCreateProductionTask" @loaded="lastLoadedAt = new Date().toLocaleString()" @navigate="navigate" @order="journeyOrderNo = $event" :can-manage="!isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'PRODUCTION_MANAGE')" :can-operate="hasPermission(authContext, 'ASSEMBLY_OPERATE')" :can-report-issue="hasAnyPermission(authContext, ['ASSEMBLY_OPERATE','REWORK_OPERATE'])" />
       <TraceQuery v-else-if="activeView === 'trace' && !passwordChangeVisible" />
-      <SkuInventoryPanel v-else-if="activeView === 'sku-inventory' && !passwordChangeVisible" :context="authContext" @navigate="navigate" />
-      <PiWorkspace v-else-if="activeView === 'pis' && !passwordChangeVisible" :context="authContext" />
+      <SkuInventoryPanel v-else-if="activeView === 'sku-inventory' && !passwordChangeVisible" :context="authContext" @navigate="navigate" @convert="changeInventoryLock([$event], 'convert')" />
+      <PiWorkspace v-else-if="activeView === 'pis' && !passwordChangeVisible" :context="authContext" @navigate="navigate" />
       <CustomerScopeManager v-else-if="activeView === 'customer-scopes' && !passwordChangeVisible && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'CUSTOMER_SCOPE_MANAGE')" />
       <FileReviewManager v-else-if="activeView === 'file-reviews' && !passwordChangeVisible && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'FILE_REVIEW_MANAGE')" />
       <AfterSalesWorkspace v-else-if="activeView === 'after-sales' && !passwordChangeVisible" :auth-context="authContext" />
-      <div v-else class="module-content">
-        <CustomerProfiles v-if="activeView === 'customers' && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR')" :can-write="hasPermission(authContext, 'CUSTOMER_PROFILE_WRITE')" />
-        <div class="module-heading"><div><p class="eyebrow">{{ activeNav?.shortLabel.toUpperCase() }} MODULE</p><h2>{{ activeNav?.label }}</h2><p>{{ activeModule?.subtitle }}</p><p v-if="dataLoading" class="data-hint">正在从后端加载数据...</p><p v-else-if="dataError" class="data-hint error">{{ dataError }}</p></div></div>
-        <section class="module-stats"><article v-for="stat in activeModule?.stats" :key="stat.label" class="module-stat" :class="stat.tone"><span>{{ stat.label }}</span><strong>{{ stat.value }}</strong></article></section>
-        <section class="panel data-panel"><div class="filter-row module-list-toolbar"><div class="search-box"><span>⌕</span><input v-model="moduleSearch" :placeholder="`搜索${activeNav?.label}...`" /><button v-if="moduleSearch" aria-label="清空搜索" @click="moduleSearch = ''">×</button></div><button class="filter-button" :disabled="dataLoading" @click="loadModule(activeView)"><AppIcon name="refresh" />刷新</button><button class="reset-button" @click="moduleSearch = ''">重置</button><div class="module-actions"><button v-if="hasPermission(authContext, 'DATA_EXPORT') && ['parts','inventory','stock-in','stock-out','stock','orders','rework'].includes(activeView)" class="secondary-action" @click="downloadModule(activeView === 'operation-logs' ? 'logs' : activeView)">导出当前查询</button><button v-if="activeView === 'parts' && canImportActiveModule" class="secondary-action" @click="downloadPartsTemplate">下载部件导入模板</button></div><PermissionGate :allowed="canShowPrimaryAction"><div class="module-actions"><button v-if="canImportActiveModule" class="secondary-action" @click="chooseImport(activeView)">导入 Excel</button><button class="primary-action" @click="openPrimaryAction">＋ {{ activeModule?.action }}</button><input ref="importInput" class="hidden-file-input" type="file" accept=".xlsx,.xls" @change="importModule" /></div></PermissionGate></div><div class="table-wrap module-table-wrap" v-loading="dataLoading" :aria-busy="dataLoading"><table class="module-table" :style="{ minWidth: `${moduleTableWidth}px` }"><colgroup><col v-for="column in activeModule?.columns" :key="column" :style="{ width: `${moduleColumnWidth(column)}px` }" /><col style="width: 200px" /></colgroup><thead><tr><th v-for="column in activeModule?.columns" :key="column">{{ column }}</th><th class="module-row-actions">操作</th></tr></thead><tbody><tr v-for="(row, index) in filteredModuleRows" :key="`${row[0]}-${index}`"><td v-for="(cell, cellIndex) in row" :key="cellIndex"><span class="module-cell" :title="cell">{{ cell }}</span></td><td class="module-row-actions"><button v-if="['inventory-locks', 'agent-locks', 'agent-dashboard'].includes(activeView) && hasPermission(authContext, 'ORDER_READ')" class="row-action" @click="openLinkedOrders(row)">关联订单</button><button v-if="activeView === 'orders' && canRenewOrderReservation(row)" class="row-action" @click="manageOrderReservation(row, 'renew')">{{ ['FULFILLED', '已履约'].includes(row[9]) ? '续占用以撤销出库' : '重新占用' }}</button><button v-if="activeView === 'orders' && canWriteActiveModule && ['PARTIAL_SHIPPED', '部分出库'].includes(row[6])" class="row-action" @click="manageOrderReservation(row, 'close')">关闭剩余</button><button v-if="activeView === 'agents' && isSuperAdmin(authContext)" class="row-action" @click="editAgentAccess(row)">车型授权</button><CustomerScopeEditor v-if="activeView === 'users' && hasPermission(authContext, 'CUSTOMER_SCOPE_MANAGE') && ['WEB_ADMIN', 'WEB_OPERATOR'].includes(row[2])" :username="row[0]" /><button class="row-action" @click="openRowAction(row)">{{ activeView === 'orders' && ((row[7] && row[7] !== '-') || !['DRAFT','PENDING','草稿','待确认'].includes(row[6])) ? '查看详情' : rowActionLabel }}</button><button v-if="canWriteActiveModule && ['users', 'roles', 'workstations', 'locations'].includes(activeView)" class="row-action" @click="toggleSystemStatus(row)">{{ row[activeView === 'locations' ? 4 : 3] === '启用' ? '停用' : '启用' }}</button><button v-if="canWriteActiveModule && activeView === 'orders' && ['DRAFT', 'PENDING', '草稿', '待确认'].includes(row[6])" class="row-action" @click="changeOrderStatus(row, 'confirm')">确认</button><button v-if="canWriteActiveModule && activeView === 'orders' && !['SHIPPED', 'PARTIAL_SHIPPED', 'CANCELLED', 'CLOSED', '已完成', '部分出库', '已作废', '已关闭'].includes(row[6])" class="row-action danger-action" @click="changeOrderStatus(row, 'cancel')">作废</button><button v-if="canWriteActiveModule && ['inventory-locks', 'agent-locks'].includes(activeView) && ['锁定中', '部分转订单', 'LOCKED', 'PARTIAL_CONVERTED'].includes(row[7])" class="row-action" @click="changeInventoryLock(row, 'release')">释放</button><button v-if="canWriteActiveModule && ['inventory-locks', 'agent-locks'].includes(activeView) && ['锁定中', '部分转订单', 'LOCKED', 'PARTIAL_CONVERTED'].includes(row[7]) && canConvertLock && Number(row[3]) - Number(row[4]) - Number(row[5]) > 0" class="row-action" @click="changeInventoryLock(row, 'convert')">转订单</button><button v-if="canWriteActiveModule && ['stock-in', 'stock-out'].includes(activeView) && ['已完成', 'COMPLETED'].includes(row[6])" class="row-action danger-action" @click="cancelStockRecord(row)">撤销</button></td></tr><tr v-if="filteredModuleRows.length === 0"><td :colspan="(activeModule?.columns.length ?? 0) + 1" class="empty-cell">没有匹配的数据</td></tr></tbody></table></div><div class="table-footer"><span>共 {{ activeModule?.total ?? filteredModuleRows.length }} 条数据</span><span class="pagination"><label class="page-size-label">每页 <select v-model.number="modulePageSize" @change="modulePage = 1; loadModule(activeView)"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option></select> 条</label><button class="page-button" :disabled="modulePage <= 1" @click="changeModulePage(modulePage - 1)">上一页</button><span>第 {{ modulePage }} / {{ modulePageCount }} 页</span><button class="page-button" :disabled="modulePage >= modulePageCount" @click="changeModulePage(modulePage + 1)">下一页</button></span><span class="preview-note">数据来源：后端接口</span></div></section>
-      </div>
-      </section>
-    </div>
+      <BusinessModulePage v-else :module-key="activeView" :module="activeModule" :title="activeNav?.label ?? '业务记录'" v-model:search="moduleSearch" v-model:page="modulePage" v-model:page-size="modulePageSize" :loading="dataLoading" :error="dataError" :context="authContext" :column-width="moduleColumnWidth" @refresh="loadModule(activeView)" @reset="moduleSearch = ''" @page-change="loadModule(activeView)" @size-change="modulePage = 1; loadModule(activeView)">
+        <template #before-list><CustomerProfiles v-if="activeView === 'customers' && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR')" :can-write="hasPermission(authContext, 'CUSTOMER_PROFILE_WRITE')" /></template>
+        <template #actions><div class="module-actions"><button v-if="hasPermission(authContext, 'DATA_EXPORT') && ['parts','inventory','stock-in','stock-out','stock','orders','rework'].includes(activeView)" class="secondary-action" @click="downloadModule(activeView === 'operation-logs' ? 'logs' : activeView)">导出当前查询</button><button v-if="activeView === 'parts' && canImportActiveModule" class="secondary-action" @click="downloadPartsTemplate">下载部件导入模板</button></div><PermissionGate :allowed="canShowPrimaryAction"><div class="module-actions"><button v-if="canImportActiveModule" class="secondary-action" @click="chooseImport(activeView)">导入 Excel</button><button class="primary-action" @click="openPrimaryAction">＋ {{ activeModule?.action }}</button><input ref="importInput" class="hidden-file-input" type="file" accept=".xlsx,.xls" @change="importModule" /></div></PermissionGate></template>
+        <template #row-actions="{ row }"><button v-if="activeView === 'orders'" class="row-action" @click="journeyOrderNo = row[0]">订单办理</button><button v-if="['inventory-locks', 'agent-locks', 'agent-dashboard'].includes(activeView) && hasPermission(authContext, 'ORDER_READ')" class="row-action" @click="openLinkedOrders(row)">关联订单</button><button v-if="activeView === 'orders' && canRenewOrderReservation(row)" class="row-action" @click="manageOrderReservation(row, 'renew')">{{ ['FULFILLED', '已履约'].includes(row[9]) ? '续占用以撤销出库' : '重新占用' }}</button><button v-if="activeView === 'orders' && canWriteActiveModule && ['PARTIAL_SHIPPED', '部分出库'].includes(row[6])" class="row-action" @click="manageOrderReservation(row, 'close')">关闭剩余</button><button v-if="activeView === 'agents' && isSuperAdmin(authContext)" class="row-action" @click="editAgentAccess(row)">车型授权</button><CustomerScopeEditor v-if="activeView === 'users' && hasPermission(authContext, 'CUSTOMER_SCOPE_MANAGE') && ['WEB_ADMIN', 'WEB_OPERATOR'].includes(row[2])" :username="row[0]" /><button class="row-action" @click="openRowAction(row)">{{ activeView === 'orders' && ((row[7] && row[7] !== '-') || !['DRAFT','PENDING','草稿','待确认'].includes(row[6])) ? '查看详情' : rowActionLabel }}</button><button v-if="canWriteActiveModule && ['users', 'roles', 'workstations', 'locations'].includes(activeView)" class="row-action" @click="toggleSystemStatus(row)">{{ row[activeView === 'locations' ? 4 : 3] === '启用' ? '停用' : '启用' }}</button><button v-if="canWriteActiveModule && activeView === 'orders' && ['DRAFT', 'PENDING', '草稿', '待确认'].includes(row[6])" class="row-action" @click="changeOrderStatus(row, 'confirm')">确认</button><button v-if="canWriteActiveModule && activeView === 'orders' && !['SHIPPED', 'PARTIAL_SHIPPED', 'CANCELLED', 'CLOSED', '已完成', '部分出库', '已作废', '已关闭'].includes(row[6])" class="row-action danger-action" @click="changeOrderStatus(row, 'cancel')">作废</button><button v-if="canWriteActiveModule && ['inventory-locks', 'agent-locks'].includes(activeView) && ['锁定中', '部分转订单', 'LOCKED', 'PARTIAL_CONVERTED'].includes(row[7])" class="row-action" @click="changeInventoryLock(row, 'release')">释放</button><button v-if="canWriteActiveModule && ['inventory-locks', 'agent-locks'].includes(activeView) && ['锁定中', '部分转订单', 'LOCKED', 'PARTIAL_CONVERTED'].includes(row[7]) && canConvertLock && Number(row[3]) - Number(row[4]) - Number(row[5]) > 0" class="row-action" @click="changeInventoryLock(row, 'convert')">转订单</button><button v-if="canWriteActiveModule && ['stock-in', 'stock-out'].includes(activeView) && ['已完成', 'COMPLETED'].includes(row[6])" class="row-action danger-action" @click="cancelStockRecord(row)">撤销</button></template>
+      </BusinessModulePage>
+    <template #dialogs>
+    <OrderJourney v-if="journeyOrderNo && !passwordChangeVisible" :order-no="journeyOrderNo" :context="authContext" @close="journeyOrderNo = ''" @changed="refreshOrderJourney" />
     <el-dialog v-model="importDetailsVisible" title="导入结果" width="min(720px, 95vw)">
       <template v-if="importDetails"><p>成功 {{ importDetails.successRows }} 条，失败 {{ importDetails.failureRows }} 条。请按错误行修正后重新导入。</p>
         <el-table :data="importDetails.failures"><el-table-column prop="rowNumber" label="Excel 行号" width="120" /><el-table-column prop="reason" label="错误原因" /></el-table>
@@ -1203,6 +1240,7 @@ async function submitPrimaryAction() {
         <el-table-column label="状态"><template #default="scope">{{ orderStateNames[scope.row.status] ?? scope.row.status }}</template></el-table-column>
         <el-table-column label="占用状态" min-width="185"><template #default="scope">{{ reservationLabel(scope.row.reservationStatus, isAgentAccount) }}</template></el-table-column>
         <el-table-column v-if="!isAgentAccount" label="占用截止" min-width="210"><template #default="scope">{{ scope.row.reservationStatus === 'PAID_HELD' ? '待履约或人工关闭' : ['TIMED_ACTIVE', 'EXPIRED_REQUIRES_REACQUIRE'].includes(scope.row.reservationStatus) ? scope.row.reservationExpiresAt || '—' : '—' }}</template></el-table-column>
+        <el-table-column label="操作" width="100" fixed="right"><template #default="scope"><el-button link type="primary" @click="locateLinkedOrder(scope.row.orderNo)">查看订单</el-button></template></el-table-column>
       </el-table>
       <el-pagination v-model:current-page="linkedOrdersPage" :page-size="20" :total="linkedOrdersTotal" layout="prev, pager, next, total" @current-change="loadLinkedOrders" />
     </el-dialog>
@@ -1218,6 +1256,7 @@ async function submitPrimaryAction() {
         <el-button @click="detailDialogVisible = false">关闭</el-button>
       </template>
     </el-dialog>
+    <AccountSettingsDialog v-model="accountSettingsVisible" v-model:current-password="currentPassword" v-model:new-password="newPassword" v-model:confirm-password="confirmPassword" :username="username" :role="userRoleLabel" :busy="passwordChanging" @submit="submitPasswordChange" />
     <el-dialog v-model="passwordChangeVisible" title="首次登录请修改密码" width="460px" :close-on-click-modal="false" :show-close="false">
       <el-form label-width="110px">
         <el-form-item label="当前密码"><el-input v-model="currentPassword" type="password" show-password autocomplete="current-password" /></el-form-item>
@@ -1226,5 +1265,6 @@ async function submitPrimaryAction() {
       </el-form>
       <template #footer><el-button type="primary" :loading="passwordChanging" @click="submitPasswordChange">更新密码</el-button></template>
     </el-dialog>
-  </main>
+    </template>
+  </AppLayout>
 </template>

@@ -21,7 +21,7 @@
   <update id="checked">UPDATE bike_file_upload SET state=#{state},object_state=#{objectState},error_code=#{error},checked_at=NOW(3),updated_at=NOW(3),version=version+1 WHERE object_key=#{key}</update>
   <update id="review">UPDATE bike_file_upload SET state=#{state},review_reason=#{reason},reviewed_by=#{user},updated_at=NOW(3),version=version+1 WHERE object_key=#{key}</update>
   <sql id="filter"><choose><when test="state != null">WHERE state=#{state}</when><otherwise>WHERE state IN ('PENDING','REVIEW','CLEANUP_PENDING')</otherwise></choose></sql>
-  <select id="list" resultType="com.bike.server.files.FileUploadRecord">SELECT <include refid="fields"/> FROM bike_file_upload <include refid="filter"/> ORDER BY created_at DESC,object_key LIMIT #{limit} OFFSET #{offset}</select>
+  <select id="list" resultType="com.bike.server.files.FileUploadRecord">SELECT <include refid="fields"/> FROM bike_file_upload <include refid="filter"/> ORDER BY created_at DESC,object_key DESC LIMIT #{limit} OFFSET #{offset}</select>
   <select id="count" resultType="long">SELECT COUNT(*) FROM bike_file_upload <include refid="filter"/></select>
   <select id="pending" resultType="string">SELECT object_key FROM bike_file_upload WHERE (state='PENDING' AND created_at &lt; DATE_SUB(NOW(3),INTERVAL 15 MINUTE)) OR (state='CLEANUP_PENDING' AND updated_at &lt; DATE_SUB(NOW(3),INTERVAL 1 MINUTE)) ORDER BY updated_at,object_key LIMIT 20</select>
   <insert id="event">INSERT INTO bike_file_upload_review(object_key,action,before_state,after_state,before_version,reason,operator_id,operator_name)

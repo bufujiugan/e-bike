@@ -9,6 +9,7 @@ const rows = ref<PiTemplate[]>([]), total = ref(0), page = ref(1), busy = ref(fa
 const fields = [['templateCode', '模板编码'], ['templateVersion', '版本号'], ['sellerName', '卖方名称'], ['sellerAddress', '卖方地址'], ['sellerCountry', '卖方国家/地区'], ['sellerContactName', '卖方联系人'], ['sellerPhone', '卖方电话'], ['sellerEmail', '卖方Email'], ['bankName', '收款银行'], ['bankAccount', '收款账号'], ['beneficiary', '收款单位'], ['reason', '发布原因']] as const
 const draft = reactive<PiTemplatePublish>({ templateCode: '', templateVersion: '', tradeType: 'DOMESTIC', layoutCode: 'DOMESTIC_V3', sellerName: '', sellerAddress: '', sellerContact: '', sellerCountry: '', sellerContactName: '', sellerPhone: '', sellerEmail: '', bankName: '', bankAccount: '', beneficiary: '', reason: '' })
 let version = 0
+const formatDateTime = (value?: string | null) => value ? value.replace('T', ' ').slice(0, 19) : '—'
 async function load() {
   const current = ++version; busy.value = true; error.value = ''
   try { const data = await piApi.templates(props.tradeType, page.value); if (current === version) { rows.value = data.records; total.value = data.total } }
@@ -39,6 +40,8 @@ async function publish() {
       <el-table-column label="类型" width="80"><template #default="s">{{ s.row.tradeType === 'EXPORT' ? '外销' : '内销' }}</template></el-table-column>
       <el-table-column label="版式" width="170"><template #default="s">{{ s.row.layoutCode.endsWith('_V3') ? 'V3 完整卖方资料' : '历史版式（仅供查询）' }}</template></el-table-column>
       <el-table-column prop="sellerName" label="卖方" /><el-table-column prop="bankName" label="银行" /><el-table-column prop="bankAccount" label="账号" />
+      <el-table-column label="创建时间" min-width="175"><template #default="s">{{ formatDateTime(s.row.publishedAt) }}</template></el-table-column>
+      <el-table-column label="修改时间" min-width="175"><template #default="s">{{ formatDateTime(s.row.publishedAt) }}</template></el-table-column>
       <el-table-column type="expand"><template #default="s"><el-descriptions :column="2" border><el-descriptions-item v-for="key in ['sellerAddress', 'sellerCountry', 'sellerContactName', 'sellerPhone', 'sellerEmail']" :key="key" :label="fields.find(f => f[0] === key)?.[1]">{{ s.row[key] || '历史未记录' }}</el-descriptions-item></el-descriptions></template></el-table-column>
       <el-table-column v-if="selectable" width="80"><template #default="s"><el-button link type="primary" :disabled="!s.row.layoutCode.endsWith('_V3')" @click="emit('select', s.row)">选用</el-button></template></el-table-column>
     </el-table>

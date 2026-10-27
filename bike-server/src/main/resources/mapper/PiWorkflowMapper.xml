@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.pi.PiWorkflowMapper">
+    <select id="selectSteps" resultType="com.bike.server.pi.PiWorkflowStepRecord">
+        SELECT step_order `order`,step_code code,step_name name,status,completed_by completedBy,completed_at completedAt,note,detail_json detailJson
+        FROM bike_pi_workflow_step WHERE pi_id=#{piId} ORDER BY step_order
+    </select>
+    <select id="selectStepsForUpdate" resultType="com.bike.server.pi.PiWorkflowStepRecord">
+        SELECT step_order `order`,step_code code,step_name name,status,completed_by completedBy,completed_at completedAt,note,detail_json detailJson
+        FROM bike_pi_workflow_step WHERE pi_id=#{piId} ORDER BY step_order FOR UPDATE
+    </select>
+    <insert id="initialize">
+        INSERT IGNORE INTO bike_pi_workflow_step(pi_id,step_order,step_code,step_name,status)
+        VALUES
+        (#{piId},1,'PI_CREATED','建立 PI','PENDING'),
+        (#{piId},2,'PAYMENT_CONFIRMED','等待并确认客户付款','PENDING'),
+        (#{piId},3,'DOCUMENTS_READY','建立合同、收付款、生产表','PENDING'),
+        (#{piId},4,'PRODUCTION_FOLLOW_UP','跟进工厂生产进度','PENDING'),
+        (#{piId},5,'FORWARDER_SELECTED','联系货代询价并选择货代','PENDING'),
+        (#{piId},6,'DOMESTIC_EXPRESS_BOOKED','预约工厂至货代的快递','PENDING'),
+        (#{piId},7,'TRACKING_RECORDED','填写单号并跟踪运输','PENDING'),
+        (#{piId},8,'CUSTOMER_RECEIVED','确认客户收货，完成订单','PENDING')
+    </insert>
+    <update id="inheritCompleted">
+        UPDATE bike_pi_workflow_step target
+        INNER JOIN bike_pi_workflow_step source
+            ON source.pi_id=#{previousPiId} AND source.step_order=target.step_order AND source.status='COMPLETED'
+        SET target.status='COMPLETED',target.completed_by=source.completed_by,target.completed_at=source.completed_at,
+            target.note=source.note,target.detail_json=source.detail_json
+        WHERE target.pi_id=#{piId} AND target.status='PENDING'
+    </update>
+    <update id="complete">
+        UPDATE bike_pi_workflow_step
+        SET status='COMPLETED',completed_by=#{operatorId},completed_at=CURRENT_TIMESTAMP(3),note=#{note},detail_json=#{detailJson}
+        WHERE pi_id=#{piId} AND step_order=#{stepOrder} AND status='PENDING'
+    </update>
+    <insert id="insertUpdate">
+        INSERT INTO bike_pi_workflow_update(pi_id,step_code,detail_json,note,created_by)
+        VALUES(#{piId},#{stepCode},#{detailJson},#{note},#{operatorId})
+    </insert>
+    <select id="selectUpdates" resultType="com.bike.server.pi.PiWorkflowUpdateRecord">
+        SELECT id,step_code stepCode,detail_json detailJson,note,created_by createdBy,created_at createdAt
+        FROM bike_pi_workflow_update WHERE pi_id=#{piId} ORDER BY created_at DESC,id DESC
+    </select>
+</mapper>

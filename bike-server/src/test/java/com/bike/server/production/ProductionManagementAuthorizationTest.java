@@ -7,6 +7,8 @@ import com.bike.server.master.*;
 import com.bike.server.system.UserMapper;
 import com.bike.server.validation.SnRuleService;
 import com.bike.server.vehicle.VehicleMapper;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +33,7 @@ class ProductionManagementAuthorizationTest {
     @MockitoBean VehicleMapper vehicles;
     @MockitoBean SnRuleService rules;
     @MockitoBean ScanFailureService failures;
+    @MockitoBean EanBarcodeService eanBarcodes;
     @MockitoBean ProductionLabelService labels;
     @MockitoBean ProductionAttachmentService attachments;
     @MockitoBean MasterMapper masters;
@@ -66,6 +69,47 @@ class ProductionManagementAuthorizationTest {
         mvc.perform(get("/api/production/skus/import-template").with(manager()))
             .andExpect(status().isOk()).andExpect(content().contentTypeCompatibleWith(
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
+    }
+
+    @Test void supervisorCanCreateProductionWorkOrderButCannotCreateVehicleTask() throws Exception {
+        var workOrder = new HashMap<String,Object>(Map.of(
+            "id",7L,"skuId",1L,"batchNo","BATCH-20261015","plannedQuantity",10000,
+            "workOrderNo","WO-20261015-001","status","RELEASED"));
+        when(mapper.selectSku(1L)).thenReturn(Map.of("id",1L,"modelId",27L,"enabled",1,"skuCode","SKU-1"));
+        when(vehicles.countEnabledModel(27L)).thenReturn(1);
+        when(mapper.selectWorkOrderByRequestId("work-order-request-0001")).thenReturn(null, workOrder);
+        when(mapper.selectWorkOrder(7L)).thenReturn(workOrder);
+        when(mapper.selectWorkOrderTasks(7L,0)).thenReturn(List.of());
+        when(mapper.insertAudit(anyString(), anyString(), anyString(), anyString())).thenReturn(1);
+
+        mvc.perform(post("/api/production/work-orders").with(manager()).contentType("application/json")
+            .content("{\"requestId\":\"work-order-request-0001\",\"skuId\":1,\"batchNo\":\"BATCH-20261015\",\"plannedQuantity\":10000}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.plannedQuantity").value(10000));
+        verify(mapper).insertWorkOrder(eq("work-order-request-0001"), startsWith("WO-"), any(), eq("supervisor"));
+
+        mvc.perform(post("/api/production/tasks").with(manager()).contentType("application/json")
+            .content("{\"requestId\":\"supervisor-task-001\",\"skuId\":1}"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test void supervisorCanBatchBindNamesAndGenerateEanBarcode() throws Exception {
+        when(mapper.selectSku(27L)).thenReturn(Map.of("id",27L,"skuCode","SUP-001"));
+        when(mapper.selectSkuNames(27L)).thenReturn(List.of(new HashMap<>(Map.of(
+            "id",3L,"skuId",27L,"name","TW-EMO2-L-BLACK+SILVER","ean","6979176420209","enabled",true))));
+        when(eanBarcodes.dataUrl("6979176420209")).thenReturn("data:image/png;base64,barcode");
+        when(mapper.insertAudit(anyString(), anyString(), anyString(), anyString())).thenReturn(1);
+
+        mvc.perform(get("/api/production/skus/27/names").with(manager()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data[0].name").value("TW-EMO2-L-BLACK+SILVER"))
+            .andExpect(jsonPath("$.data[0].eanBarcodeDataUrl").value("data:image/png;base64,barcode"));
+        mvc.perform(put("/api/production/skus/27/names").with(manager()).contentType("application/json")
+            .content("{\"names\":[{\"name\":\"TW-EMO2-XL-BLACK+SILVER\",\"ean\":\"6979176420209\",\"sn\":\"SN-001\",\"enabled\":true}]}"))
+            .andExpect(status().isOk());
+        verify(mapper).insertSkuName(eq(27L), argThat(name -> name.sn().equals("SN-001")));
+        mvc.perform(get("/api/production/barcodes/ean/6979176420209").with(manager()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.dataUrl").value("data:image/png;base64,barcode"));
     }
 
     @Test void supervisorCanResolveIssueWithAudit() throws Exception {

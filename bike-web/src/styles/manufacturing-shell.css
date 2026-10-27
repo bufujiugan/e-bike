@@ -1,0 +1,100 @@
+/* 所有业务页面共用图2的顶栏、完整场景Hero与卡片外观。 */
+.sm-unified .sm-workspace { background: #eef6fd; }
+.sm-unified .sm-sidebar { background: linear-gradient(154deg, #032344, #082d52 72%, #062744); }
+.sm-unified .sm-sidebar .brand { margin-bottom: 12px; }
+.sm-unified .sm-environment { border: 0; padding: 0 4px; font-size: 10px; letter-spacing: .65px; color: #7fb5e5; margin-bottom: 15px; }
+.sm-unified .sm-nav-link { font-size: 12px; }
+.sm-unified .sm-nav-link.is-active { background: linear-gradient(100deg, #1bafff, #0768ef); }
+.sm-unified .sm-nav-group { margin-bottom: 12px; }
+.sm-unified .sm-sidebar-footer { border-top: 0; margin-top: 8px; padding-top: 12px; }
+.sm-unified .sm-top-header { position: relative; inset: auto; max-width: none; min-width: 0; height: 52px; padding: 0 22px; background: #f8fbff; border-bottom: 1px solid #dceaf9; flex-direction: row; justify-content: space-between; gap: 18px; align-items: center; }
+.sm-unified .cc-header-breadcrumb { min-width: 0; flex: 1; }
+.sm-unified .cc-header-breadcrumb strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.sm-unified .sm-header-actions { flex-shrink: 0; gap: 16px; }
+.sm-unified .sm-navigation-search { width: 240px; }
+.sm-unified .sm-navigation-search .el-select__wrapper { min-height: 32px; }
+.sm-unified .sm-header-user { min-width: auto; }
+.sm-unified .sm-header-user > div { display: none; }
+.sm-unified .sm-header-divider { height: 24px; }
+.sm-unified .sm-header-user .top-avatar { width: 32px; height: 32px; }
+.sm-unified .sm-header-sync { display: none; }
+
+/* 不用 cover 撑宽图片：img 的实际尺寸按原始比例完整放入场景区。 */
+.sm-unified .sm-hero { height: 180px; min-height: 180px; padding: 0 26px; display: flex; align-items: center; justify-content: space-between; gap: 18px; background: linear-gradient(105deg, #f4faff 5%, #e3f2ff 58%, #d4eaff); isolation: isolate; overflow: hidden; }
+.sm-unified .sm-hero::after { height: 26px; background: linear-gradient(transparent, #eef6fd); z-index: 0; }
+.sm-unified .sm-hero-scene { inset: 7px 230px 7px 30%; z-index: -1; display: flex; align-items: center; justify-content: center; opacity: .96; mask-image: none; background: none; }
+.sm-unified .sm-hero-scene img { display: block; width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; flex: 0 1 auto; }
+.sm-unified .sm-hero-copy { padding: 0; width: 43%; max-width: 610px; pointer-events: auto; }
+.sm-unified .sm-page-title h1 { font-size: 29px; letter-spacing: .3px; line-height: 1.35; margin-bottom: 8px; }
+.sm-unified .sm-page-title p { max-width: 100%; font-size: 12px; line-height: 1.8; letter-spacing: .3px; color: #315d8d; }
+.sm-hero-brandline { font-size: 10px; letter-spacing: 1.6px; margin: 5px 0 0 13px; color: #6d9cd7; }
+.sm-hero-aside { position: relative; z-index: 1; flex-shrink: 0; max-width: 240px; }
+.sm-unified .sm-hero-motto { position: static; display: flex; flex-direction: column; gap: 9px; padding: 17px 19px; border: 1px solid #c0def9; border-radius: 11px; background: #f4faffd9; text-align: left; max-width: 225px; color: #2a639b; }
+.sm-unified .sm-hero-motto > span { font-size: 9px; letter-spacing: 1px; color: #7c9dbe; }
+.sm-unified .sm-hero-motto strong { font-size: 13px; font-weight: 600; line-height: 1.65; }
+.sm-unified .sm-hero-motto small { font-size: 10px; margin: 0; color: #6b92b9; }
+.sm-unified .cc-date-panel { min-width: 0; width: 220px; padding: 17px 19px; background: #0a427fcc; }
+.sm-unified .cc-date-panel > strong { font-size: 22px; white-space: nowrap; letter-spacing: .4px; }
+.sm-unified .cc-date-panel > span { font-size: 12px; }
+
+.sm-unified .sm-page { padding-left: 18px; padding-right: 18px; gap: 14px; }
+.sm-unified .sm-workspace > :is(.production-manager, .sku-workspace) { padding-left: 18px; padding-right: 18px; }
+.sm-unified .sm-card { border-color: #e4eef9; border-radius: 11px; box-shadow: 0 3px 14px #3678b603; }
+.sm-unified .sm-section-heading h2 { font-size: 18px; }
+.sm-unified .sm-metric { min-height: 104px; border-color: #e4eef9; border-radius: 11px; background: linear-gradient(115deg, #fff, #f6fbff); box-shadow: none; }
+.sm-unified .sm-metric-icon { width: 52px; height: 52px; flex-basis: 52px; color: white; border-radius: 12px; background: linear-gradient(135deg, color-mix(in srgb, var(--tone), white 30%), var(--tone)); box-shadow: 0 7px 15px color-mix(in srgb, var(--tone), transparent 84%); }
+.sm-unified .sm-metric-icon .app-icon { width: 28px; height: 28px; }
+.sm-unified .sm-metric-value strong { font-size: 27px; color: #0a2959; }
+.sm-unified .sm-metric-label { color: #2b5283; font-size: 12px; }
+.sm-unified .sm-metric-hint { font-size: 10px; }
+.sm-unified .sm-data-table .el-table { --el-table-header-bg-color: #f0f7ff; --el-table-border-color: #e8f0fa; border-color: #e5eef9; border-radius: 8px; }
+.sm-unified .sm-data-table .el-table th.el-table__cell { background: #f0f7ff; }
+.sm-unified .sm-filter-bar :is(.el-input__wrapper, .el-select__wrapper) { border-radius: 7px; }
+.sm-unified .sm-status { border-radius: 6px; }
+/* 专用业务工作区仅统一外层和已有容器，不改变内部业务布局或操作。 */
+.sm-unified .sm-workspace > :is(.pi-workspace, .after-sales, .trace-query, .data-panel) { margin-left: 18px; margin-right: 18px; }
+.sm-unified .sm-workspace > :is(.pi-workspace, .after-sales, .trace-query) { border-color: #e4eef9; border-radius: 11px; }
+.sm-unified .sm-workspace > .after-sales .dashboard-card { border-color: #e4eef9; border-radius: 10px; background: linear-gradient(115deg, #fff, #f6fbff); }
+
+@media (min-width: 1750px) {
+  .sm-unified .sm-hero-scene { left: 32%; }
+  .sm-unified .sm-page { padding-left: 22px; padding-right: 22px; }
+  .sm-unified .sm-workspace > :is(.production-manager, .sku-workspace) { padding-left: 22px; padding-right: 22px; }
+}
+@media (max-width: 1450px) {
+  .sm-unified .sm-hero { padding-left: 22px; padding-right: 22px; }
+  .sm-unified .sm-hero-scene { left: 32%; right: 190px; }
+  .sm-unified .sm-hero-copy { width: 43%; }
+  .sm-unified .sm-hero-aside { max-width: 180px; }
+  .sm-unified .sm-hero-motto { padding: 13px; }
+  .sm-unified .sm-hero-motto strong { font-size: 12px; }
+  .sm-unified .cc-date-panel { width: 180px; padding: 15px 13px; }
+  .sm-unified .cc-date-panel > strong { font-size: 19px; }
+  .sm-unified .sm-metric { gap: 12px; padding: 14px; }
+  .sm-unified .sm-metric-icon { width: 46px; height: 46px; flex-basis: 46px; }
+  .sm-unified .sm-metric-label { font-size: 11px; }
+  .sm-unified .sm-metric-value strong { font-size: 25px; }
+}
+@media (max-width: 1100px) {
+  .sm-unified .sm-hero-copy { width: 60%; }
+  .sm-unified .sm-hero-aside { display: none; }
+  .sm-unified .sm-hero-scene { left: 42%; right: 0; opacity: .55; }
+  .sm-unified .sm-hero { padding-left: 18px; padding-right: 18px; }
+  .sm-unified .sm-navigation-search { width: 210px; }
+}
+@media (max-width: 760px) {
+  .sm-unified .sm-top-header { height: 50px; padding: 0 10px; }
+  .sm-unified .sm-header-actions { width: 100%; justify-content: space-between; }
+  .sm-unified .sm-navigation-search { width: min(220px, 75%); }
+  .sm-unified .sm-hero { height: 170px; min-height: 170px; padding: 15px; }
+  .sm-unified .sm-hero-copy { width: 100%; }
+  .sm-unified .sm-hero-scene { inset: 8px 0 8px 15%; opacity: .18; }
+  .sm-unified .sm-page-title h1 { font-size: 23px; }
+  .sm-unified .sm-page-title p { font-size: 11px; }
+  .sm-hero-brandline { font-size: 8px; letter-spacing: .4px; }
+  .sm-unified .sm-page { padding-left: 10px; padding-right: 10px; gap: 10px; }
+  .sm-unified .sm-workspace > :is(.production-manager, .sku-workspace) { padding-left: 10px; padding-right: 10px; }
+  .sm-unified .sm-workspace > :is(.pi-workspace, .after-sales, .trace-query, .data-panel) { margin-left: 10px; margin-right: 10px; }
+  .sm-unified .sm-metric { padding: 11px; min-height: 96px; }
+  .sm-unified .sm-metric-label { white-space: normal; }
+}

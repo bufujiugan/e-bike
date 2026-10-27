@@ -19,6 +19,93 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 class ProductionServiceTest {
+  @Test
+  void createsOneWorkOrderForManyVehiclesWithIdempotency() {
+    var workOrder = new HashMap<String, Object>();
+    workOrder.put("id", 7L);
+    workOrder.put("skuId", 1L);
+    workOrder.put("batchNo", "BATCH-20261015");
+    workOrder.put("plannedQuantity", 10000);
+    workOrder.put("workOrderNo", "WO-20261015-001");
+    workOrder.put("status", "RELEASED");
+    when(mapper.selectWorkOrderByRequestId("work-order-request-0001"))
+        .thenReturn(null, workOrder, workOrder);
+    when(mapper.selectWorkOrder(7L)).thenReturn(workOrder);
+    when(mapper.selectWorkOrderTasks(7L, 0)).thenReturn(List.of());
+    when(mapper.selectSku(1L))
+        .thenReturn(Map.of("enabled", true, "modelId", 1L, "skuCode", "SKU-1"));
+
+    var request = new WorkOrderRequest("work-order-request-0001", 1L, " BATCH-20261015 ", 10000);
+    service.createWorkOrder(request);
+    service.createWorkOrder(request);
+
+    verify(mapper, times(1))
+        .insertWorkOrder(
+            eq("work-order-request-0001"),
+            startsWith("WO-"),
+            eq(new WorkOrderRequest("work-order-request-0001", 1L, "BATCH-20261015", 10000)),
+            eq("tester"));
+  }
+
+  @Test
+  void firstWorkOrderScanAutomaticallyCreatesOneVehicleTask() {
+    task.put("workOrderId", 7L);
+    var workOrder = new HashMap<String, Object>();
+    workOrder.put("id", 7L);
+    workOrder.put("workOrderNo", "WO-20261015-001");
+    workOrder.put("skuId", 1L);
+    workOrder.put("batchNo", "BATCH-20261015");
+    workOrder.put("plannedQuantity", 10000);
+    workOrder.put("status", "RELEASED");
+    when(mapper.selectWorkOrder(7L)).thenReturn(workOrder);
+
+    var result = service.scanWorkOrder(7L, new WorkOrderScanRequest(null, "MOTOR-1", null));
+
+    verify(mapper)
+        .insertWorkOrderTask(anyString(), eq(7L), eq(1L), eq("BATCH-20261015"), eq("tester"));
+    verify(mapper).completeWorkOrderIfPlanned(7L);
+    assertThat(result.get("workOrder")).isSameAs(workOrder);
+    assertThat(scans).hasSize(1);
+  }
+
+  @Test
+  void batchSavesNormalizedSkuNamesAndKeepsThemInTheSelectedSku() {
+    when(mapper.selectSku(1L))
+        .thenReturn(Map.of("id", 1L, "skuCode", "SKU-1", "modelId", 1L, "enabled", true));
+
+    service.saveSkuNames(
+        1L,
+        List.of(
+            new SkuNameRequest(null, " TW-EMO2-L-BLACK+SILVER ", "6979176420209", " SN-001 ", true),
+            new SkuNameRequest(null, "TW-EMO2-XL-BLACK+SILVER", null, null, true)));
+
+    verify(mapper)
+        .insertSkuName(
+            eq(1L),
+            eq(new SkuNameRequest(null, "TW-EMO2-L-BLACK+SILVER", "6979176420209", "SN-001", true)));
+    verify(mapper).insertSkuName(eq(1L), argThat(name -> name.name().contains("XL")));
+    verify(mapper).insertAudit("SKU-1", "批量维护SKU Name", "tester", "本次保存2条");
+  }
+
+  @Test
+  void rejectsDuplicateEanInsideTheSameSkuNameBatch() {
+    when(mapper.selectSku(1L))
+        .thenReturn(Map.of("id", 1L, "skuCode", "SKU-1", "modelId", 1L, "enabled", true));
+    var ean = "6979176420209";
+
+    assertThatThrownBy(
+            () ->
+                service.saveSkuNames(
+                    1L,
+                    List.of(
+                        new SkuNameRequest(null, "NAME-A", ean, null, true),
+                        new SkuNameRequest(null, "NAME-B", ean, null, true))))
+        .isInstanceOf(BusinessException.class)
+        .hasMessageContaining("EAN不能重复");
+
+    verify(mapper, never()).insertSkuName(anyLong(), any());
+  }
+
   @Test void aggregateCodeQuarantinesTheUnderlyingVehicle() {
     when(mapper.selectFrameByQr("BIKE:10:token")).thenReturn("FRAME-10");
     when(mapper.selectFrame("FRAME-10")).thenReturn(Map.of("id",10L));
@@ -60,7 +147,7 @@ class ProductionServiceTest {
             assembly,
             vehicles,
             new SnRuleServiceImpl(null),
-            new ObjectMapper(), mock(ScanFailureService.class));
+            new ObjectMapper(), mock(ScanFailureService.class), new EanBarcodeService());
     task = new HashMap<>(Map.of("id", "task-123456789012", "skuId", 1L, "status", "OPEN"));
     scans = new ArrayList<>();
     when(mapper.selectTask(anyString())).thenReturn(task);

@@ -3,14 +3,23 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '../api'
 import { hasPermission, hasRole, type PermissionContext } from '../permissions'
+import SkuInventoryOverview from './business/SkuInventoryOverview.vue'
+import SectionHeader from './common/SectionHeader.vue'
+import FilterBar from './common/FilterBar.vue'
+import AlertCard from './common/AlertCard.vue'
+import DataTable from './table/DataTable.vue'
+import Pagination from './table/Pagination.vue'
+import AppIcon from './AppIcon.vue'
 
-const props = defineProps<{ context: PermissionContext | null }>()
-const emit = defineEmits<{ navigate: [view: string] }>()
+const props = defineProps<{ context: PermissionContext | null; initialSkuId?: number; initialModelId?: number }>()
+const emit = defineEmits<{ navigate: [view: string]; convert: [lockNo: string] }>()
 type Row = { skuId: number; modelId: number; skuCode: string; productName: string; specification: string; modelName: string; physicalQty: number; quarantinedQty: number; temporaryLockedQty: number; orderReservedQty: number; availableQty: number; shortageQty: number; legacyModelCommittedQty: number; modelAvailableQty: number; maxNewLockQty: number }
 type Option = { id: number; name: string; code: string; status: string }
 type Lock = { id: number; lockNo: string; skuCode: string; lockQty: number; expireTime: string }
 const rows = ref<Row[]>([]), models = ref<Option[]>([]), customers = ref<Option[]>([]), agents = ref<Option[]>([])
-const page = ref(1), total = ref(0), modelId = ref<number>(), busy = ref(false), error = ref('')
+const page = ref(1), total = ref(0), modelId = ref<number | undefined>(Number.isFinite(props.initialModelId) ? props.initialModelId : undefined), busy = ref(false), error = ref('')
+const focusedSkuId = ref(props.initialSkuId)
+const canConvert = computed(() => canWrite.value && !hasRole(props.context, 'PDA_OPERATOR') && hasPermission(props.context, 'ORDER_WRITE'))
 const selected = ref<Array<{ skuId: number; skuCode: string; quantity: number }>>([])
 const canWrite = computed(() => !hasRole(props.context, 'WEB_AGENT') && hasPermission(props.context, 'AGENT_LOCK_WRITE'))
 const canSeeLocks = computed(() => hasPermission(props.context, 'AGENT_INVENTORY_READ') || hasPermission(props.context, 'AGENT_LOCK_WRITE'))
@@ -21,8 +30,20 @@ function message(cause: unknown, fallback: string) { return api.isAxiosError(cau
 async function load() {
   busy.value = true; error.value = ''
   try {
-    const response = await api.get('/api/inventory/skus', { params: { modelId: modelId.value, page: page.value, pageSize: 20 } })
-    rows.value = response.data.data.records; total.value = response.data.data.total
+    if (focusedSkuId.value) {
+      // 现有库存接口按车型分页，逐页寻找目标 SKU，避免把第一页当作全部库存。
+      let currentPage = 1, found: Row | undefined
+      while (true) {
+        const result = (await api.get('/api/inventory/skus', {params:{modelId:modelId.value,page:currentPage,pageSize:100}})).data.data
+        found = result.records.find((row: Row) => row.skuId === focusedSkuId.value)
+        if (found || currentPage * result.pageSize >= result.total || !result.records.length) break
+        currentPage++
+      }
+      rows.value = found ? [found] : []; total.value = rows.value.length
+    } else {
+      const response = await api.get('/api/inventory/skus', { params: { modelId: modelId.value, page: page.value, pageSize: 20 } })
+      rows.value = response.data.data.records; total.value = response.data.data.total
+    }
   } catch (cause) { error.value = message(cause, 'SKU库存加载失败'); rows.value = []; total.value = 0 }
   finally { busy.value = false }
 }
@@ -54,7 +75,7 @@ async function save() {
   } catch (cause) { saveError.value = message(cause, '锁定结果未确认，可重试当前内容') }
   finally { saving.value = false }
 }
-watch(modelId, () => { page.value = 1; void load() })
+watch(modelId, () => { focusedSkuId.value = undefined; page.value = 1; void load() })
 onMounted(async () => {
   await load()
   try { models.value = (await api.get('/api/master/models')).data.data }
@@ -63,21 +84,26 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="sku-workspace">
-    <header><div><h2>SKU 库存与锁定</h2><p>按具体规格核对库存，锁定后转单将保留所选 SKU。</p></div><el-button :loading="busy" @click="load">刷新库存</el-button></header>
+  <section class="sku-workspace sm-page">
+    <el-alert v-if="focusedSkuId" title="已定位当前商品 SKU；这里显示该 SKU 的全部仓库合计库存，不限定某张生产工单。" type="info" :closable="false" />
+    <SkuInventoryOverview :rows="rows" :loading="busy" :error="error" />
     <el-alert v-if="error" type="error" :title="error" :closable="false" show-icon />
-    <div class="toolbar"><el-select v-model="modelId" placeholder="全部车型" clearable filterable style="width:260px"><el-option v-for="model in models" :key="model.id" :value="model.id" :label="model.name" /></el-select><el-button v-if="canSeeLocks" @click="emit('navigate', hasRole(context, 'WEB_AGENT') ? 'agent-locks' : 'inventory-locks')">查看库存锁定</el-button></div>
-    <p class="note">库存为全部仓库合计。“历史车型承诺”尚未分配到具体 SKU；当前可新增锁定量同时受该 SKU 和车型剩余库存限制，各 SKU 上限不能相加作为总可售量。</p>
-    <el-table :data="rows" v-loading="busy" border>
+    <section class="sm-card">
+    <FilterBar><el-select v-model="modelId" aria-label="车型筛选" placeholder="全部车型" clearable filterable><el-option v-for="model in models" :key="model.id" :value="model.id" :label="model.name" /></el-select><template #actions><el-button :loading="busy" @click="load"><AppIcon name="refresh" />刷新库存</el-button><el-button v-if="canSeeLocks" @click="emit('navigate', hasRole(context, 'WEB_AGENT') ? 'agent-locks' : 'inventory-locks')">查看库存锁定</el-button><el-button v-if="canWrite && selected.length" type="primary" @click="begin"><AppIcon name="lock" />锁定所选 {{ selected.length }} 个 SKU</el-button></template></FilterBar>
+    <SectionHeader title="SKU 库存锁定列表" description="按具体规格核对库存与占用" />
+    <DataTable :rows="rows" :loading="busy" :error="error" empty-title="暂无 SKU 库存" row-key="skuId">
       <el-table-column prop="skuCode" label="SKU" min-width="130" /><el-table-column prop="productName" label="商品" min-width="140" /><el-table-column prop="specification" label="规格" min-width="100" /><el-table-column prop="modelName" label="车型" min-width="100" />
       <el-table-column prop="physicalQty" label="在库" width="75" /><el-table-column prop="quarantinedQty" label="隔离" width="75" /><el-table-column prop="temporaryLockedQty" label="临时锁定" width="90" /><el-table-column prop="orderReservedQty" label="订单占用" width="90" /><el-table-column prop="availableQty" label="SKU净可用" width="105" />
       <el-table-column label="缺口" width="75"><template #default="{ row }"><span :class="{ shortage: row.shortageQty > 0 }">{{ row.shortageQty }}</span></template></el-table-column>
       <el-table-column prop="legacyModelCommittedQty" label="历史车型承诺" width="120" /><el-table-column prop="maxNewLockQty" label="可新增锁定" width="110" />
       <el-table-column v-if="canWrite" label="操作" width="100" fixed="right"><template #default="{ row }"><el-button link type="primary" :disabled="row.maxNewLockQty < 1 || selected.some(item => item.skuId === row.skuId)" @click="add(row)">加入锁定</el-button></template></el-table-column>
-    </el-table>
-    <el-pagination layout="total, prev, pager, next" :total="total" :page-size="20" v-model:current-page="page" @current-change="load" />
+      <template #empty-action><el-button size="small" :disabled="busy" @click="load">刷新数据</el-button></template>
+    </DataTable>
+    <Pagination :total="total" :page-size="20" v-model:page="page" :disabled="busy" @change="load" />
+    </section>
+    <AlertCard title="锁定规则" description="库存为全部仓库合计。“历史车型承诺”尚未分配到具体 SKU；当前可新增锁定量同时受该 SKU 和车型剩余库存限制，各 SKU 上限不能相加作为总可售量。" />
     <section v-if="canWrite && selected.length" class="selection"><h3>待锁定商品（{{ selected.length }} 个 SKU）</h3><div v-for="item in selected" :key="item.skuId" class="selected-row"><strong>{{ item.skuCode }}</strong><el-input-number v-model="item.quantity" :min="1" :max="1000000" :precision="0" /><el-button link type="danger" @click="selected = selected.filter(row => row.skuId !== item.skuId)">移除</el-button></div><el-button type="primary" @click="begin">选择客户并锁定</el-button></section>
-    <section v-if="result.length" class="selection"><h3>本次锁定已保存</h3><el-table :data="result"><el-table-column prop="lockNo" label="锁定单号" min-width="180" /><el-table-column prop="skuCode" label="SKU" /><el-table-column prop="lockQty" label="数量" /><el-table-column prop="expireTime" label="截止时间" min-width="180" /></el-table><el-button @click="emit('navigate', 'inventory-locks')">进入库存锁定继续转单</el-button></section>
+    <section v-if="result.length" class="selection"><h3>本次锁定已保存 · 继续创建订单</h3><el-table :data="result"><el-table-column prop="lockNo" label="锁定单号" min-width="180" /><el-table-column prop="skuCode" label="SKU" /><el-table-column prop="lockQty" label="数量" /><el-table-column prop="expireTime" label="截止时间" min-width="180" /><el-table-column v-if="canConvert" label="下一步" width="130" fixed="right"><template #default="{row}"><el-button link type="primary" @click="emit('convert',row.lockNo)">直接转订单</el-button></template></el-table-column></el-table><el-button @click="emit('navigate', 'inventory-locks')">查看全部锁定与关联订单</el-button></section>
     <el-dialog v-model="visible" title="锁定所选 SKU" width="560px" :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving">
       <el-alert v-if="saveError" type="error" :title="saveError" :closable="false" />
       <el-form label-width="100px" :disabled="saving">

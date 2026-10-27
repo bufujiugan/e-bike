@@ -8,7 +8,7 @@
   </sql>
   <sql id="piRows">
     SELECT 'PI' recordType,p.id,p.id piId,p.pi_no referenceNo,p.customer_id customerId,p.customer_name customerName,p.status,
-      DATE_FORMAT(p.created_at,'%Y-%m-%d %H:%i:%s') createdAt,NULL expiresAt,p.currency_code currencyCode,p.total_amount totalAmount,
+      DATE_FORMAT(p.created_at,'%Y-%m-%d %H:%i:%s') createdAt,DATE_FORMAT(p.updated_at,'%Y-%m-%d %H:%i:%s') updatedAt,NULL expiresAt,p.currency_code currencyCode,p.total_amount totalAmount,
       COALESCE(pay.amount,0) paidAmount,
       COALESCE(q.orderedQty,items.quantity,0) orderedQty,COALESCE(q.shippedQty,0) shippedQty,
       COALESCE(q.remainingQty,items.quantity,0) remainingQty,
@@ -33,7 +33,7 @@
     <choose>
       <when test="queue == 'EXPIRING_LOCKS'">
         SELECT 'LOCK' recordType,l.id,NULL piId,l.lock_no referenceNo,l.customer_id customerId,c.customer_name customerName,l.status,
-          DATE_FORMAT(l.created_at,'%Y-%m-%d %H:%i:%s') createdAt,DATE_FORMAT(l.expire_time,'%Y-%m-%d %H:%i:%s') expiresAt,NULL currencyCode,NULL totalAmount,NULL paidAmount,
+          DATE_FORMAT(l.created_at,'%Y-%m-%d %H:%i:%s') createdAt,DATE_FORMAT(l.updated_at,'%Y-%m-%d %H:%i:%s') updatedAt,DATE_FORMAT(l.expire_time,'%Y-%m-%d %H:%i:%s') expiresAt,NULL currencyCode,NULL totalAmount,NULL paidAmount,
           l.lock_qty orderedQty,0 shippedQty,l.lock_qty-l.released_qty-l.converted_qty remainingQty,NULL revision,NULL businessOwner
         FROM bike_inventory_lock l LEFT JOIN bike_customer c ON c.id=l.customer_id
         WHERE l.status IN ('LOCKED','PARTIAL_CONVERTED') AND l.expire_time&gt;NOW(3)
@@ -42,7 +42,7 @@
       <when test="queue == 'MISSING_PI'">
         <include refid="piRows"/>
         UNION ALL
-        SELECT 'ORDER',o.id,NULL,o.order_no,o.customer_id,c.customer_name,o.status,DATE_FORMAT(o.created_at,'%Y-%m-%d %H:%i:%s'),NULL,NULL,NULL,NULL,
+        SELECT 'ORDER',o.id,NULL,o.order_no,o.customer_id,c.customer_name,o.status,DATE_FORMAT(o.created_at,'%Y-%m-%d %H:%i:%s'),DATE_FORMAT(o.updated_at,'%Y-%m-%d %H:%i:%s'),NULL,NULL,NULL,NULL,
           SUM(i.ordered_qty),SUM(i.shipped_qty),SUM(GREATEST(i.ordered_qty-i.shipped_qty,0)),NULL,NULL
         FROM bike_sales_order o JOIN bike_customer c ON c.id=o.customer_id JOIN bike_sales_order_item i ON i.order_id=o.id
         WHERE o.status IN ('DRAFT','PENDING','CONFIRMED','PARTIAL_SHIPPED')
@@ -63,6 +63,6 @@
       <when test="queue == 'PARTIAL_SHIPMENT'">AND r.remainingQty&gt;0 AND r.shippedQty&gt;0</when>
     </choose>
   </sql>
-  <select id="rows" resultType="map">SELECT * FROM (<include refid="queueRows"/>) r <include refid="where"/> ORDER BY r.expiresAt,r.createdAt,r.recordType,r.id LIMIT #{offset},#{limit}</select>
+  <select id="rows" resultType="map">SELECT * FROM (<include refid="queueRows"/>) r <include refid="where"/> ORDER BY r.createdAt DESC,r.id DESC,r.recordType DESC LIMIT #{offset},#{limit}</select>
   <select id="count" resultType="long">SELECT COUNT(*) FROM (<include refid="queueRows"/>) r <include refid="where"/></select>
 </mapper>

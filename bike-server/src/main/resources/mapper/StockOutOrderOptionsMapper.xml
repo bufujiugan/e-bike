@@ -15,7 +15,7 @@
     <select id="selectPage" resultType="com.bike.server.order.StockOutOrderOption">
         SELECT o.id,o.order_no,o.customer_id,m.model_name,i.ordered_qty order_qty,i.shipped_qty,o.status
         <include refid="eligibleOrders"/>
-        ORDER BY o.updated_at DESC,o.id DESC LIMIT #{offset},#{limit}
+        ORDER BY o.created_at DESC,o.id DESC LIMIT #{offset},#{limit}
     </select>
     <select id="count" resultType="long">SELECT COUNT(*) <include refid="eligibleOrders"/></select>
 </mapper>

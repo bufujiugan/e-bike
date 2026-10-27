@@ -15,6 +15,7 @@ const descriptions: Record<string, string> = {
 const counts = ref<Record<string, number | null>>({}), rows = ref<PiQueueRow[]>([]), total = ref(0), page = ref(1), keyword = ref('')
 const queue = ref(''), visible = ref(false), busy = ref(false), error = ref(''), summaryError = ref('')
 let version = 0, summaryVersion = 0
+const formatDateTime = (value?: string | null) => value ? value.replace('T', ' ').slice(0, 19) : '—'
 function message(e: unknown) { return api.isAxiosError(e) ? e.response?.data?.message || '业务看板读取失败' : '业务看板读取失败' }
 async function summary() {
   const request = ++summaryVersion; summaryError.value = ''
@@ -47,8 +48,9 @@ onMounted(summary)
         <el-table-column prop="referenceNo" label="业务编号" min-width="220"><template #default="{ row }"><el-button v-if="row.piId" link type="primary" @click="emit('openPi', row.piId)">{{ row.referenceNo }} · R{{ row.revision }}</el-button><span v-else>{{ row.referenceNo }}</span></template></el-table-column>
         <el-table-column prop="customerName" label="客户" min-width="150" /><el-table-column prop="businessOwner" label="负责人" min-width="120" />
         <el-table-column prop="shippedQty" label="已发" width="70" /><el-table-column prop="remainingQty" label="剩余" width="70" />
-        <el-table-column v-if="queue === 'EXPIRING_LOCKS'" prop="expiresAt" label="截止时间" min-width="180" />
-        <el-table-column prop="createdAt" label="创建时间" min-width="180" />
+        <el-table-column v-if="queue === 'EXPIRING_LOCKS'" label="截止时间" min-width="180"><template #default="{ row }">{{ formatDateTime(row.expiresAt) }}</template></el-table-column>
+        <el-table-column label="创建时间" min-width="180"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column>
+        <el-table-column label="修改时间" min-width="180"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column>
       </el-table>
       <el-pagination v-model:current-page="page" :page-size="20" :total="total" layout="total, prev, pager, next" @current-change="load" />
     </el-dialog>

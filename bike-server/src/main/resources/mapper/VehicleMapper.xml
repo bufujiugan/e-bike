@@ -27,7 +27,7 @@
             <if test="toDate != null">AND v.assemble_time &lt; DATE_ADD(#{toDate}, INTERVAL 1 DAY)</if>
         </where>
     </sql>
-    <select id="selectPage" resultType="com.bike.server.vehicle.VehicleView"><include refid="vehicleSelect"/><include refid="vehicleWhere"/> GROUP BY v.id ORDER BY v.updated_at DESC LIMIT #{offset}, #{limit}</select>
+    <select id="selectPage" resultType="com.bike.server.vehicle.VehicleView"><include refid="vehicleSelect"/><include refid="vehicleWhere"/> GROUP BY v.id ORDER BY v.created_at DESC,v.id DESC LIMIT #{offset}, #{limit}</select>
     <select id="count" resultType="long">SELECT COUNT(*) FROM bike_vehicle v <include refid="vehicleWhere"/></select>
     <select id="selectById" resultType="com.bike.server.vehicle.VehicleView"><include refid="vehicleSelect"/> WHERE v.id = #{id} GROUP BY v.id</select>
     <select id="selectByFrame" resultType="com.bike.server.vehicle.VehicleView"><include refid="vehicleSelect"/> WHERE v.frame_sn = #{frameSn} GROUP BY v.id</select>

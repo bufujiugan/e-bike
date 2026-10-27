@@ -8,7 +8,7 @@
     OR operator_name LIKE CONCAT('%',#{keyword},'%') OR error_code LIKE CONCAT('%',#{keyword},'%')
   </if></where></sql>
   <select id="select" resultType="map">SELECT id,task_id taskId,scanned_code code,expected_type codeType,
-    operator_name operatorName,error_code errorCode,reason,created_at createdAt FROM bike_production_scan_failure
-    <include refid="filter"/> ORDER BY id DESC LIMIT 50 OFFSET #{offset}</select>
+    operator_name operatorName,error_code errorCode,reason,created_at createdAt,updated_at updatedAt FROM bike_production_scan_failure
+    <include refid="filter"/> ORDER BY created_at DESC,id DESC LIMIT 50 OFFSET #{offset}</select>
   <select id="count" resultType="long">SELECT COUNT(*) FROM bike_production_scan_failure <include refid="filter"/></select>
 </mapper>

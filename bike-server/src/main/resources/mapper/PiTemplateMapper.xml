@@ -3,7 +3,7 @@
 <mapper namespace="com.bike.server.pi.PiTemplateMapper">
     <sql id="fields">id,template_code,template_version,trade_type,layout_code,seller_name,seller_address,seller_contact,bank_name,bank_account,beneficiary,publish_reason,published_by,published_at,seller_country,seller_contact_name,seller_phone,seller_email</sql>
     <sql id="filter"><where><if test="tradeType != null">trade_type=#{tradeType}</if></where></sql>
-    <select id="list" resultType="com.bike.server.pi.PiTemplate">SELECT <include refid="fields"/> FROM bike_pi_template <include refid="filter"/> ORDER BY id DESC LIMIT #{offset},#{limit}</select>
+    <select id="list" resultType="com.bike.server.pi.PiTemplate">SELECT <include refid="fields"/> FROM bike_pi_template <include refid="filter"/> ORDER BY published_at DESC,id DESC LIMIT #{offset},#{limit}</select>
     <select id="count" resultType="long">SELECT COUNT(*) FROM bike_pi_template <include refid="filter"/></select>
     <select id="find" resultType="com.bike.server.pi.PiTemplate">SELECT <include refid="fields"/> FROM bike_pi_template WHERE template_code=#{code} AND template_version=#{version}</select>
     <insert id="publish">

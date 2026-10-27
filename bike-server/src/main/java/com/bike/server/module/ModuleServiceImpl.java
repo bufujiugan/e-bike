@@ -5,6 +5,8 @@ import com.bike.server.common.CurrentOperator;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -12,6 +14,7 @@ import java.util.Set;
 
 @Service
 public class ModuleServiceImpl implements ModuleService {
+    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.common.CustomerScopeAccess customerScope;
     private static final Set<String> SUPPORTED_MODULES = Set.of(
             "assembly", "vehicles", "inventory", "stock", "orders", "agents", "trace",
@@ -51,7 +54,7 @@ public class ModuleServiceImpl implements ModuleService {
         long normalizedPage = Math.min(10_000_000, Math.max(1, page));
         long normalizedSize = Math.min(100, Math.max(1, pageSize));
         Long agentId = CurrentOperator.hasRole("WEB_AGENT") ? CurrentOperator.agentId() : null;
-        String sortColumn = List.of("更新时间", "操作时间", "时间", "组装时间", "开始时间", "创建时间", "入库日期", "查询时间")
+        String sortColumn = List.of("创建时间", "操作时间", "时间", "组装时间", "开始时间", "入库日期", "查询时间")
                 .stream().filter(definition.columns()::contains).findFirst().orElse(definition.columns().getFirst());
         boolean financialAudit = com.bike.server.common.FinancialAuditAccess.allowed();
         long total = moduleMapper.countRows(normalize(module), agentId, definition.columns(), normalizedKeyword, financialAudit);
@@ -112,41 +115,42 @@ public class ModuleServiceImpl implements ModuleService {
 
     private static String display(Object value) {
         if (value == null) return "-";
-        if (value instanceof java.sql.Timestamp timestamp) return timestamp.toLocalDateTime().toString().replace('T', ' ');
+        if (value instanceof java.sql.Timestamp timestamp) return DATE_TIME_FORMATTER.format(timestamp.toLocalDateTime());
+        if (value instanceof LocalDateTime dateTime) return DATE_TIME_FORMATTER.format(dateTime);
         if (value instanceof java.sql.Date date) return date.toLocalDate().toString();
         return String.valueOf(value);
     }
 
     private static Map<String, ModuleDefinition> definitions() {
         Map<String, ModuleDefinition> definitions = new LinkedHashMap<>();
-        definitions.put("assembly", definition("生产任务实际扫码进度与最近扫码工位", List.of("聚合码", "车架 SN", "当前工位", "完成进度", "操作员", "开始时间", "状态", "任务号"), "新建组装任务"));
-        definitions.put("vehicles", definition("以聚合码为主入口查看整车档案，车架与部件编码作为关联信息", List.of("聚合码", "车架 SN", "电机 SN", "电池 SN", "仪表 SN", "整车状态", "车型", "组装时间", "入库时间", "出库时间", "客户", "订单", "仓库", "库位", "SKU", "生产批次"), "导出整车档案"));
+        definitions.put("assembly", definition("生产任务实际扫码进度与最近扫码工位", List.of("聚合码", "车架 SN", "当前工位", "完成进度", "操作员", "开始时间", "状态", "任务号", "创建时间", "修改时间"), "新建组装任务"));
+        definitions.put("vehicles", definition("以聚合码为主入口查看整车档案，车架与部件编码作为关联信息", List.of("聚合码", "车架 SN", "电机 SN", "电池 SN", "仪表 SN", "整车状态", "车型", "组装时间", "入库时间", "出库时间", "客户", "订单", "仓库", "库位", "SKU", "生产批次", "创建时间", "修改时间"), "导出整车档案"));
         definitions.put("inventory", definition("库位数量为车型展示分摊；车型SKU缺口独立显示，末三列为全车型数值不可跨库位累计。具体SKU申请上限请进入SKU库存锁定", List.of("车型", "仓库", "库位", "物理库存", "锁定库存", "分摊可新增上限", "库龄", "入库日期", "隔离库存", "临时锁定", "订单占用", "库存缺口", "车型SKU缺口（不累计）", "历史车型承诺（不累计）", "车型可新增上限（不累计）"), "锁定库存"));
-        definitions.put("stock", definition("整车入库、出库及撤销记录", List.of("业务单号", "类型", "整车数量", "客户 / 仓库", "操作人", "操作时间", "状态", "聚合码"), "新建出入库单"));
-        definitions.put("stock-in", definition("整车入库记录及撤销状态", List.of("业务单号", "类型", "整车数量", "客户 / 仓库", "操作人", "操作时间", "状态", "聚合码"), "办理入库"));
-        definitions.put("stock-out", definition("整车出库记录及撤销状态", List.of("业务单号", "类型", "整车数量", "客户 / 仓库", "操作人", "操作时间", "状态", "聚合码"), "办理出库"));
-        definitions.put("orders", definition("客户订单、出库进度与车辆明细", List.of("订单号", "客户", "车型", "订单数量", "已出库", "计划发货", "状态", "来源锁定", "占用截止", "占用状态", "备注"), "新建销售订单"));
-        definitions.put("agents", definition("代理商基础资料与联系信息", List.of("代理商编号", "代理商名称", "联系人", "联系电话", "状态", "更新时间"), "新增代理商"));
-        definitions.put("trace", definition("通过聚合码查看完整链路，车架与部件编码支持辅助查询", List.of("查询对象", "聚合码", "当前状态", "最近操作", "订单号", "客户", "查询时间"), "开始追溯查询"));
-        definitions.put("parts", definition("零部件来料、质检和绑定状态", List.of("零部件 SN", "类型", "供应商", "批次", "绑定状态", "当前车架", "状态", "聚合码"), "新增零部件"));
-        definitions.put("customers", definition("销售客户和订单归属管理", List.of("客户编号", "客户名称", "联系人", "联系电话", "状态", "创建时间"), "新增客户"));
-        definitions.put("suppliers", definition("零部件供应商资料", List.of("供应商编号", "供应商名称", "联系人", "联系电话", "状态", "创建时间"), "新增供应商"));
-        definitions.put("models", definition("整车车型和锁库存业务维度", List.of("车型编码", "车型名称", "启用状态", "更新时间"), "新增车型"));
-        definitions.put("warehouses", definition("仓库与库位基础资料", List.of("仓库", "库位", "库位编码", "状态", "更新时间"), "新增仓库"));
-        definitions.put("users", definition("系统账号与登录状态", List.of("用户名", "姓名", "账号类型", "启用状态", "最近登录"), "新增用户"));
-        definitions.put("roles", definition("角色和权限配置", List.of("角色编码", "角色名称", "权限数量", "启用状态", "更新时间"), "新增角色"));
-        definitions.put("workstations", definition("PDA 工位与操作范围配置", List.of("工位编码", "工位名称", "工位类型", "启用状态", "更新时间"), "新增工位"));
-        definitions.put("logs", definition("关键业务操作审计记录", List.of("时间", "操作", "业务对象", "操作人", "业务类型", "备注"), "导出操作日志"));
-        definitions.put("customs", definition("已出库整车报关数据导出", List.of("聚合码", "车型", "车架 SN", "客户", "订单号", "出库时间", "报关状态"), "导出报关数据"));
-        definitions.put("locations", definition("仓库库位、启用状态和库存承载位置", List.of("仓库", "仓库编码", "库位", "库位编码", "状态", "更新时间"), "新增库位"));
-        definitions.put("inventory-locks", definition("代理商按车型和数量锁定的库存", List.of("锁定单号", "代理商", "车型", "锁定数量", "已释放", "已转订单", "到期时间", "状态"), "创建库存锁定"));
-        definitions.put("rework", definition("返工原因、换件记录和操作历史", List.of("返工单号", "聚合码", "车架码", "返工原因", "状态", "操作人", "操作时间"), "创建返工记录"));
+        definitions.put("stock", definition("整车入库、出库及撤销记录", List.of("业务单号", "类型", "整车数量", "客户 / 仓库", "操作人", "操作时间", "状态", "聚合码", "创建时间", "修改时间"), "新建出入库单"));
+        definitions.put("stock-in", definition("整车入库记录及撤销状态", List.of("业务单号", "类型", "整车数量", "客户 / 仓库", "操作人", "操作时间", "状态", "聚合码", "创建时间", "修改时间"), "办理入库"));
+        definitions.put("stock-out", definition("整车出库记录及撤销状态", List.of("业务单号", "类型", "整车数量", "客户 / 仓库", "操作人", "操作时间", "状态", "聚合码", "创建时间", "修改时间"), "办理出库"));
+        definitions.put("orders", definition("客户订单、出库进度与车辆明细", List.of("订单号", "客户", "车型", "订单数量", "已出库", "计划发货", "状态", "来源锁定", "占用截止", "占用状态", "备注", "创建时间", "修改时间"), "新建销售订单"));
+        definitions.put("agents", definition("代理商基础资料与联系信息", List.of("代理商编号", "代理商名称", "联系人", "联系电话", "状态", "创建时间", "修改时间"), "新增代理商"));
+        definitions.put("trace", definition("通过聚合码查看完整链路，车架与部件编码支持辅助查询", List.of("查询对象", "聚合码", "当前状态", "最近操作", "订单号", "客户", "查询时间", "创建时间", "修改时间"), "开始追溯查询"));
+        definitions.put("parts", definition("零部件来料、质检和绑定状态", List.of("零部件 SN", "类型", "供应商", "批次", "绑定状态", "当前车架", "状态", "聚合码", "创建时间", "修改时间"), "新增零部件"));
+        definitions.put("customers", definition("销售客户和订单归属管理", List.of("客户编号", "客户名称", "联系人", "联系电话", "状态", "创建时间", "修改时间"), "新增客户"));
+        definitions.put("suppliers", definition("零部件供应商资料", List.of("供应商编号", "供应商名称", "联系人", "联系电话", "状态", "创建时间", "修改时间"), "新增供应商"));
+        definitions.put("models", definition("整车车型和锁库存业务维度", List.of("车型编码", "车型名称", "启用状态", "创建时间", "修改时间"), "新增车型"));
+        definitions.put("warehouses", definition("仓库与库位基础资料", List.of("仓库", "库位", "库位编码", "状态", "创建时间", "修改时间"), "新增仓库"));
+        definitions.put("users", definition("系统账号与登录状态", List.of("用户名", "姓名", "账号类型", "启用状态", "最近登录", "创建时间", "修改时间"), "新增用户"));
+        definitions.put("roles", definition("角色和权限配置", List.of("角色编码", "角色名称", "权限数量", "启用状态", "创建时间", "修改时间"), "新增角色"));
+        definitions.put("workstations", definition("PDA 工位与操作范围配置", List.of("工位编码", "工位名称", "工位类型", "启用状态", "创建时间", "修改时间"), "新增工位"));
+        definitions.put("logs", definition("关键业务操作审计记录", List.of("时间", "操作", "业务对象", "操作人", "业务类型", "备注", "创建时间", "修改时间"), "导出操作日志"));
+        definitions.put("customs", definition("已出库整车报关数据导出", List.of("聚合码", "车型", "车架 SN", "客户", "订单号", "出库时间", "报关状态", "创建时间", "修改时间"), "导出报关数据"));
+        definitions.put("locations", definition("仓库库位、启用状态和库存承载位置", List.of("仓库", "仓库编码", "库位", "库位编码", "状态", "创建时间", "修改时间"), "新增库位"));
+        definitions.put("inventory-locks", definition("代理商按车型和数量锁定的库存", List.of("锁定单号", "代理商", "车型", "锁定数量", "已释放", "已转订单", "到期时间", "状态", "创建时间", "修改时间"), "创建库存锁定"));
+        definitions.put("rework", definition("返工原因、换件记录和操作历史", List.of("返工单号", "聚合码", "车架码", "返工原因", "状态", "操作人", "操作时间", "创建时间", "修改时间"), "创建返工记录"));
         definitions.put("operation-logs", definitions.get("logs"));
-        definitions.put("config", definition("扫码、锁库和系统运行参数", List.of("配置键", "配置值", "说明", "更新时间"), "刷新配置"));
-        definitions.put("agent-dashboard", definition("代理商锁定历史与来源订单；到期和释放记录保留，当前授权车型请查看代理商库存", List.of("代理商", "车型", "有效临时锁定", "有效期", "关联订单数", "创建人", "状态", "锁定单号"), "刷新概览"));
+        definitions.put("config", definition("扫码、锁库和系统运行参数", List.of("配置键", "配置值", "说明", "创建时间", "修改时间"), "刷新配置"));
+        definitions.put("agent-dashboard", definition("代理商锁定历史与来源订单；到期和释放记录保留，当前授权车型请查看代理商库存", List.of("代理商", "车型", "有效临时锁定", "有效期", "关联订单数", "创建人", "状态", "锁定单号", "创建时间", "修改时间"), "刷新概览"));
         definitions.put("agent-inventory", definitions.get("inventory"));
         definitions.put("agent-locks", definitions.get("inventory-locks"));
-        definitions.put("purchase-intents", definition("代理商采购意向与后续订单线索", List.of("代理商", "授权车型", "意向数量", "有效期", "状态"), "新增采购意向"));
+        definitions.put("purchase-intents", definition("代理商采购意向与后续订单线索", List.of("代理商", "授权车型", "意向数量", "有效期", "状态", "创建时间", "修改时间"), "新增采购意向"));
         return definitions;
     }
 

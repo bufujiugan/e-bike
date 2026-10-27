@@ -36,3 +36,8 @@ output/playwright/*
 !output/playwright/ebike-hifi/
 output/playwright/ebike-hifi/*
 !output/playwright/ebike-hifi/*.png
+
+# Local migration backups and generated runtime artifacts
+**/node_modules.migration-backup-*/
+/outputs/
+/tools/public-access/*.exe

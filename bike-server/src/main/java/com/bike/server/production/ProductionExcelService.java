@@ -77,7 +77,13 @@ public class ProductionExcelService {
                   values[4],
                   values[5],
                   Long.valueOf(values[6]),
-                  Boolean.parseBoolean(values[7]));
+                  Boolean.parseBoolean(values[7]),
+                  null,
+                  null,
+                  null,
+                  null,
+                  null,
+                  null);
           var errors = validator.validate(request);
           if (!errors.isEmpty()) throw new BusinessException("IMPORT_VALUE", "必填字段或长度不符合要求");
           service.saveSku(null, request);

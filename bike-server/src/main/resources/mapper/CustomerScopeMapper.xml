@@ -12,7 +12,7 @@
   <select id="customerOptions" resultType="com.bike.server.common.CustomerScopeMapper$CustomerOption">SELECT id,customer_code code,customer_name name,status FROM bike_customer WHERE 1=1 <include refid="customerSearch"/> ORDER BY customer_code,id LIMIT #{offset},#{limit}</select>
   <select id="customerCount" resultType="long">SELECT COUNT(*) FROM bike_customer WHERE 1=1 <include refid="customerSearch"/></select>
   <sql id="userSearch">WHERE user_type IN ('WEB_ADMIN','WEB_OPERATOR') <if test="keyword != null"> AND (username LIKE CONCAT('%',#{keyword},'%') OR display_name LIKE CONCAT('%',#{keyword},'%'))</if></sql>
-  <select id="users" resultType="com.bike.server.common.CustomerScopeMapper$UserOption">SELECT id,username,display_name,user_type,enabled FROM bike_sys_user <include refid="userSearch"/> ORDER BY username,id LIMIT #{offset},#{limit}</select>
+  <select id="users" resultType="com.bike.server.common.CustomerScopeMapper$UserOption">SELECT id,username,display_name,user_type,enabled,created_at,updated_at FROM bike_sys_user <include refid="userSearch"/> ORDER BY created_at DESC,id DESC LIMIT #{offset},#{limit}</select>
   <select id="userCount" resultType="long">SELECT COUNT(*) FROM bike_sys_user <include refid="userSearch"/></select>
   <select id="customer" resultType="long">SELECT id FROM bike_customer WHERE id=#{id}</select>
   <delete id="clear">DELETE FROM bike_user_customer_scope WHERE user_id=#{id}</delete>

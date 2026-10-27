@@ -10,7 +10,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 /** 仅针对两个新建的专用空库，禁止清库或重复覆盖已有业务数据。 */
 @EnabledIfEnvironmentVariable(named="BIKE_MIGRATION_CLEAN_URL",matches=".+")
 class MigrationMysqlTest {
-  private static final int LATEST_VERSION = 49;
+  private static final int LATEST_VERSION = 55;
   Flyway flyway(String url,String target) {
     assertThat(url).contains("/bike_migration_");
     var config=Flyway.configure().dataSource(url,System.getenv("BIKE_MYSQL_TEST_USER"),System.getenv("BIKE_MYSQL_TEST_PASSWORD"))
@@ -31,7 +31,7 @@ class MigrationMysqlTest {
       try(var result=sql.executeQuery("SELECT COUNT(*) FROM bike_production_scan_failure")){result.next();assertThat(result.getInt(1)).isZero();}
       try(var result=sql.executeQuery("SELECT COUNT(*) FROM bike_agent_model_access")){result.next();assertThat(result.getInt(1)).isZero();}
       try(var result=sql.executeQuery("SELECT COUNT(*) FROM bike_pi_revision_source")){result.next();assertThat(result.getInt(1)).isZero();}
-      verifyManagementPermission(sql); verifyAfterSalesAndPiSchema(sql);
+      verifyManagementPermission(sql); verifyAfterSalesAndPiSchema(sql); verifyDatabaseCollation(sql); verifyProductionWorkOrderSchema(sql); verifyListTimestampSchema(sql);
     }
     assertThat(flyway.migrate().migrationsExecuted).isZero();
   }
@@ -44,15 +44,21 @@ class MigrationMysqlTest {
       sql.executeUpdate("INSERT INTO bike_production_attachment(id,object_key,content_type,file_size,created_by) VALUES('legacy-file','local:legacy.png','image/png',100,'legacy')");
     }
     Flyway v24=flyway(url,"24");assertThat(v24.migrate().migrationsExecuted).isEqualTo(8);v24.validate();
-    try(var conn=connection(url);var sql=conn.createStatement()) { insertExpiredPaidReservation(sql); insertLegacyAfterSales(sql); }
+    try(var conn=connection(url);var sql=conn.createStatement()) {
+      insertExpiredPaidReservation(sql); insertLegacyAfterSales(sql);
+      sql.executeUpdate("INSERT INTO bike_production_task(id,sku_id,batch_no,created_by) SELECT 'migration-task-0001',id,'MIGRATION-BATCH','migration' FROM bike_production_sku ORDER BY id LIMIT 1");
+    }
     Flyway next=flyway(url,null);assertThat(next.migrate().migrationsExecuted).isEqualTo(LATEST_VERSION - 24);next.validate();
     try(var conn=connection(url);var sql=conn.createStatement();var result=sql.executeQuery("SELECT remark,qc_status FROM bike_part WHERE part_sn='MIGRATION-PRESERVE-001'")) {
       assertThat(result.next()).isTrue();assertThat(result.getString(1)).isEqualTo("升级保留验收");assertThat(result.getString(2)).isEqualTo("PASSED");
     }
     assertThat(next.migrate().migrationsExecuted).isZero();
     try(var conn=connection(url);var sql=conn.createStatement()) {
-      verifyManagementPermission(sql); verifyAfterSalesAndPiSchema(sql);
+      verifyManagementPermission(sql); verifyAfterSalesAndPiSchema(sql); verifyDatabaseCollation(sql); verifyProductionWorkOrderSchema(sql); verifyListTimestampSchema(sql);
       verifyLegacyAfterSales(sql);
+      try(var result=sql.executeQuery("SELECT w.work_order_no,w.batch_no,w.planned_quantity,t.work_order_id FROM bike_production_task t JOIN bike_production_work_order w ON w.id=t.work_order_id WHERE t.id='migration-task-0001'")) {
+        assertThat(result.next()).isTrue();assertThat(result.getString("work_order_no")).startsWith("HIST-");assertThat(result.getString("batch_no")).isEqualTo("MIGRATION-BATCH");assertThat(result.getInt("planned_quantity")).isEqualTo(1);assertThat(result.getLong("work_order_id")).isPositive();
+      }
       try(var result=sql.executeQuery("SELECT object_key,file_size,file_name,sha256,request_id FROM bike_production_attachment WHERE id='legacy-file'")) {
         assertThat(result.next()).isTrue();assertThat(result.getString(1)).isEqualTo("local:legacy.png");assertThat(result.getLong(2)).isEqualTo(100);
         for(int i=3;i<=5;i++)assertThat(result.getObject(i)).isNull();
@@ -124,9 +130,34 @@ class MigrationMysqlTest {
     }
     try(var result=sql.executeQuery("SELECT COUNT(*) FROM bike_order_reservation_item WHERE order_id=9001")){result.next();assertThat(result.getInt(1)).isZero();}
   }
+  private void verifyListTimestampSchema(Statement sql)throws Exception {
+    for(String table:new String[]{"bike_production_sku","bike_production_template","bike_production_issue","bike_production_print","bike_production_scan_failure","bike_inventory_lock","bike_system_config"}) {
+      try(var result=sql.executeQuery("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='"+table+"' AND column_name IN ('created_at','updated_at') AND data_type='datetime' AND column_comment!=''")) {
+        result.next();assertThat(result.getInt(1)).as(table+"列表时间字段").isEqualTo(2);
+      }
+    }
+  }
   private void verifyManagementPermission(Statement sql)throws Exception {
     try(var result=sql.executeQuery("SELECT COUNT(*) FROM bike_sys_permission WHERE permission_code='PRODUCTION_MANAGE'")){result.next();assertThat(result.getInt(1)).isEqualTo(1);}
     try(var result=sql.executeQuery("SELECT COUNT(*) FROM bike_sys_role_permission rp JOIN bike_sys_permission p ON p.id=rp.permission_id WHERE p.permission_code='PRODUCTION_MANAGE'")){result.next();assertThat(result.getInt(1)).isZero();}
+  }
+  private void verifyDatabaseCollation(Statement sql)throws Exception {
+    try(var result=sql.executeQuery("SELECT default_character_set_name,default_collation_name FROM information_schema.schemata WHERE schema_name=DATABASE()")) {
+      assertThat(result.next()).isTrue();
+      assertThat(result.getString(1)).isEqualTo("utf8mb4");
+      assertThat(result.getString(2)).isEqualTo("utf8mb4_unicode_ci");
+    }
+    try(var result=sql.executeQuery("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_type='BASE TABLE' AND table_collation<>'utf8mb4_unicode_ci'")) {
+      result.next();assertThat(result.getInt(1)).isZero();
+    }
+    try(var result=sql.executeQuery("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND character_set_name IS NOT NULL AND collation_name<>'utf8mb4_unicode_ci'")) {
+      result.next();assertThat(result.getInt(1)).isZero();
+    }
+  }
+  private void verifyProductionWorkOrderSchema(Statement sql)throws Exception {
+    try(var result=sql.executeQuery("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='bike_production_work_order' AND table_collation='utf8mb4_unicode_ci'")){result.next();assertThat(result.getInt(1)).isEqualTo(1);}
+    try(var result=sql.executeQuery("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='bike_production_task' AND column_name='work_order_id'")){result.next();assertThat(result.getInt(1)).isEqualTo(1);}
+    try(var result=sql.executeQuery("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='bike_production_work_order' AND column_comment=''")){result.next();assertThat(result.getInt(1)).isZero();}
   }
   private void verifyAfterSalesAndPiSchema(Statement sql)throws Exception {
     for(String table:new String[]{"bike_file_upload","bike_file_upload_review"}) {
@@ -153,7 +184,7 @@ class MigrationMysqlTest {
     }
     try(var result=sql.executeQuery("SELECT COUNT(*) FROM bike_sys_permission WHERE permission_code IN ('AFTER_SALES_READ','PI_READ')")){result.next();assertThat(result.getInt(1)).isEqualTo(2);}
     try(var result=sql.executeQuery("SELECT COUNT(*) FROM bike_sys_role_permission rp JOIN bike_sys_permission p ON p.id=rp.permission_id WHERE p.permission_code IN ('PI_PAYMENT_CONFIRM','PI_RELEASE')")){result.next();assertThat(result.getInt(1)).as("新财务权限不能自动授予普通岗位").isZero();}
-    for (String table : new String[]{"bike_after_sales_case","bike_after_sales_message","bike_after_sales_attachment","bike_after_sales_shipment","bike_pi","bike_pi_item","bike_pi_payment","bike_pi_logistics"}) {
+    for (String table : new String[]{"bike_after_sales_case","bike_after_sales_message","bike_after_sales_attachment","bike_after_sales_shipment","bike_pi","bike_pi_item","bike_pi_payment","bike_pi_logistics","bike_pi_workflow_step"}) {
       try (var result=sql.executeQuery("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='"+table+"' AND column_comment=''")){result.next();assertThat(result.getInt(1)).as(table + "字段注释").isZero();}
     }
     try(var result=sql.executeQuery("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='bike_pi' AND column_name IN ('document_snapshot','customer_name','customer_code','shipment_required_amount')")){result.next();assertThat(result.getInt(1)).isEqualTo(4);}

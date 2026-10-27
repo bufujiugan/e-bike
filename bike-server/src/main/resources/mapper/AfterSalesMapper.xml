@@ -87,7 +87,7 @@
       </choose>
     </where>
   </sql>
-  <select id="selectFilteredPage" resultType="com.bike.server.aftersales.AfterSalesCaseView"><include refid="base"/><include refid="filteredWhere"/> ORDER BY c.updated_at DESC,c.id DESC LIMIT #{offset},#{limit}</select>
+  <select id="selectFilteredPage" resultType="com.bike.server.aftersales.AfterSalesCaseView"><include refid="base"/><include refid="filteredWhere"/> ORDER BY c.created_at DESC,c.id DESC LIMIT #{offset},#{limit}</select>
   <select id="countFiltered" resultType="long">SELECT COUNT(*) <include refid="queryJoins"/><include refid="filteredWhere"/></select>
   <select id="selectDashboard" resultType="com.bike.server.aftersales.AfterSalesDashboardView">
     SELECT COUNT(*) total,

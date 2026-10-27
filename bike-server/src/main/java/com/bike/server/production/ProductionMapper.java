@@ -21,9 +21,17 @@ public interface ProductionMapper {
 
   Map<String, Object> selectSku(long id);
 
+  List<Map<String, Object>> selectSkuNames(long skuId);
+
+  Map<String, Object> selectSkuName(long id);
+
   int insertSku(@Param("r") SkuRequest request);
 
   int updateSku(@Param("id") long id, @Param("r") SkuRequest request);
+
+  int insertSkuName(@Param("skuId") long skuId, @Param("r") SkuNameRequest request);
+
+  int updateSkuName(@Param("skuId") long skuId, @Param("r") SkuNameRequest request);
 
   List<Map<String, Object>> selectTemplates();
 
@@ -33,6 +41,50 @@ public interface ProductionMapper {
 
   int insertTask(
       @Param("id") String id, @Param("r") TaskRequest request, @Param("operator") String operator);
+
+  int insertWorkOrder(
+      @Param("requestId") String requestId,
+      @Param("workOrderNo") String workOrderNo,
+      @Param("r") WorkOrderRequest request,
+      @Param("operator") String operator);
+
+  Map<String, Object> selectWorkOrderByRequestId(String requestId);
+
+  Map<String, Object> selectWorkOrder(long id);
+
+  List<Map<String, Object>> selectWorkOrders(
+      @Param("keyword") String keyword,
+      @Param("offset") long offset,
+      @Param("skuId") Long skuId,
+      @Param("status") String status,
+      @Param("fromDate") java.time.LocalDate fromDate,
+      @Param("toDate") java.time.LocalDate toDate);
+
+  int countWorkOrders(
+      @Param("keyword") String keyword,
+      @Param("skuId") Long skuId,
+      @Param("status") String status,
+      @Param("fromDate") java.time.LocalDate fromDate,
+      @Param("toDate") java.time.LocalDate toDate);
+
+  List<Map<String, Object>> selectWorkOrderTasks(
+      @Param("workOrderId") long workOrderId, @Param("offset") long offset);
+
+  int countWorkOrderTasks(long workOrderId);
+
+  int countActiveWorkOrderTasks(long workOrderId);
+
+  int insertWorkOrderTask(
+      @Param("id") String id,
+      @Param("workOrderId") long workOrderId,
+      @Param("skuId") long skuId,
+      @Param("batchNo") String batchNo,
+      @Param("operator") String operator);
+
+  int updateWorkOrderStatus(
+      @Param("id") long id, @Param("fromStatus") String fromStatus, @Param("status") String status);
+
+  int completeWorkOrderIfPlanned(long id);
 
   Map<String, Object> selectTask(String id);
 

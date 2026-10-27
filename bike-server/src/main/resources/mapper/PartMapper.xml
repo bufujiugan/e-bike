@@ -13,7 +13,7 @@
         SELECT p.id, p.part_sn, p.part_type, p.supplier_id, s.supplier_name, p.batch_no, p.qc_status, p.bind_status,
                p.current_vehicle_id, (SELECT v.vehicle_qr_code FROM bike_vehicle v WHERE v.id=p.current_vehicle_id) AS current_vehicle_qr_code, p.current_frame_sn, p.status, p.inbound_time, p.remark, p.created_at, p.updated_at
         FROM bike_part p LEFT JOIN bike_supplier s ON s.id = p.supplier_id
-        <include refid="partWhere"/> ORDER BY p.updated_at DESC LIMIT #{offset}, #{limit}
+        <include refid="partWhere"/> ORDER BY p.created_at DESC,p.id DESC LIMIT #{offset}, #{limit}
     </select>
     <select id="count" resultType="long">
         SELECT COUNT(*) FROM bike_part p <include refid="partWhere"/>

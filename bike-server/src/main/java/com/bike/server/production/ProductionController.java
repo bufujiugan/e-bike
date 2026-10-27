@@ -46,6 +46,13 @@ public class ProductionController {
           .matcher(httpRequest.getRequestURI());
       if (match.matches()) scanFailures.record(match.group(1), scan,
           new com.bike.server.common.BusinessException("INVALID_PARAMETER", reason));
+    } else if (error.getBindingResult().getTarget() instanceof WorkOrderScanRequest scan) {
+      var match = java.util.regex.Pattern.compile("^/api/production/work-orders/([^/]+)/scan$")
+          .matcher(httpRequest.getRequestURI());
+      if (match.matches()) scanFailures.record(
+          scan.taskId() == null ? "WORK-ORDER-" + match.group(1) : scan.taskId(),
+          new ScanRequest(scan.code(), scan.expectedType()),
+          new com.bike.server.common.BusinessException("INVALID_PARAMETER", reason));
     }
     return ResponseEntity.badRequest().body(ApiResponse.failure("INVALID_PARAMETER", reason));
   }
@@ -68,6 +75,23 @@ public class ProductionController {
   @GetMapping("/skus")
   public ApiResponse<?> skus() {
     return ApiResponse.success("查询成功", service.listSkus());
+  }
+
+  @GetMapping("/skus/{id}/names")
+  public ApiResponse<?> skuNames(@PathVariable long id) {
+    return ApiResponse.success("查询成功", service.listSkuNames(id));
+  }
+
+  @PutMapping("/skus/{id}/names")
+  public ApiResponse<?> saveSkuNames(
+      @PathVariable long id, @Valid @RequestBody SkuNamesRequest request) {
+    service.saveSkuNames(id, request.names());
+    return ApiResponse.success("保存成功", null);
+  }
+
+  @GetMapping("/barcodes/ean/{ean}")
+  public ApiResponse<?> eanBarcode(@PathVariable String ean) {
+    return ApiResponse.success("生成成功", service.eanBarcode(ean));
   }
 
   @GetMapping("/inventory")
@@ -116,6 +140,49 @@ public class ProductionController {
   public ApiResponse<?> template(@PathVariable long id, @Valid @RequestBody TemplateRequest r) {
     service.updateTemplate(id, r);
     return ApiResponse.success("保存成功", null);
+  }
+
+  @GetMapping("/work-orders")
+  public ApiResponse<?> workOrders(
+      @RequestParam(required = false) String keyword,
+      @RequestParam(defaultValue = "1") long page,
+      @RequestParam(required = false) Long skuId,
+      @RequestParam(required = false) String status,
+      @RequestParam(required = false) java.time.LocalDate fromDate,
+      @RequestParam(required = false) java.time.LocalDate toDate) {
+    return ApiResponse.success(
+        "查询成功", service.listWorkOrders(keyword, page, skuId, status, fromDate, toDate));
+  }
+
+  @PostMapping("/work-orders")
+  public ApiResponse<?> createWorkOrder(@Valid @RequestBody WorkOrderRequest request) {
+    return ApiResponse.success("生产工单已建立", service.createWorkOrder(request));
+  }
+
+  @GetMapping("/work-orders/{id}")
+  public ApiResponse<?> workOrder(
+      @PathVariable long id, @RequestParam(defaultValue = "1") long taskPage) {
+    return ApiResponse.success("查询成功", service.getWorkOrder(id, taskPage));
+  }
+
+  @PostMapping("/work-orders/{id}/scan")
+  public ApiResponse<?> scanWorkOrder(
+      @PathVariable long id, @Valid @RequestBody WorkOrderScanRequest request) {
+    return ApiResponse.success("扫码完成", service.scanWorkOrder(id, request));
+  }
+
+  @PostMapping("/work-orders/{id}/pause")
+  public ApiResponse<?> pauseWorkOrder(
+      @PathVariable long id, @Valid @RequestBody WorkOrderStatusRequest request) {
+    service.pauseWorkOrder(id, request.reason());
+    return ApiResponse.success("生产工单已暂停", null);
+  }
+
+  @PostMapping("/work-orders/{id}/resume")
+  public ApiResponse<?> resumeWorkOrder(
+      @PathVariable long id, @Valid @RequestBody WorkOrderStatusRequest request) {
+    service.resumeWorkOrder(id, request.reason());
+    return ApiResponse.success("生产工单已恢复", null);
   }
 
   @GetMapping("/tasks")

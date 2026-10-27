@@ -2,8 +2,9 @@
 import { onMounted, ref } from 'vue'
 import api from '../api'
 import CustomerScopeEditor from './CustomerScopeEditor.vue'
-type User = { id: number; username: string; displayName: string; userType: string; enabled: boolean }
+type User = { id: number; username: string; displayName: string; userType: string; enabled: boolean; createdAt: string; updatedAt: string }
 const users = ref<User[]>([]), keyword = ref(''), busy = ref(false), error = ref(''), page = ref(1), total = ref(0)
+const formatDateTime = (value?: string | null) => value ? value.replace('T', ' ').slice(0, 19) : '—'
 async function load(next = 1) {
   if (busy.value) return
   busy.value = true; error.value = ''
@@ -24,6 +25,8 @@ onMounted(() => load())
     <el-table :data="users" v-loading="busy" empty-text="没有匹配的内部账号">
       <el-table-column prop="username" label="账号" /><el-table-column prop="displayName" label="姓名" /><el-table-column prop="userType" label="账号类型" />
       <el-table-column label="状态"><template #default="{ row }">{{ row.enabled ? '启用' : '停用' }}</template></el-table-column>
+      <el-table-column label="创建时间" min-width="175"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column>
+      <el-table-column label="修改时间" min-width="175"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column>
       <el-table-column label="操作"><template #default="{ row }"><CustomerScopeEditor :id="row.id" :username="row.username" /></template></el-table-column>
     </el-table>
     <p>共 {{ total }} 个账号，第 {{ page }} 页</p>

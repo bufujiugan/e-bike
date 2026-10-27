@@ -2,12 +2,13 @@
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
-type Row = { objectKey: string; purpose: string; businessId: string; fileName: string; fileSize: number; state: string; objectState: string; version: number; createdName: string; createdAt: string; checkedAt: string | null; errorCode: string | null; reviewReason: string | null }
+type Row = { objectKey: string; purpose: string; businessId: string; fileName: string; fileSize: number; state: string; objectState: string; version: number; createdName: string; createdAt: string; updatedAt: string; checkedAt: string | null; errorCode: string | null; reviewReason: string | null }
 const records = ref<Row[]>([]), state = ref(''), page = ref(1), total = ref(0), busy = ref(false), error = ref('')
 const historyVisible = ref(false), history = ref<Record<string, unknown>[]>([])
 const labels: Record<string,string> = { PENDING: '待绑定', BOUND: '已绑定', REVIEW: '待核对', CLEANUP_PENDING: '待清理', CLEANED: '已清理', UNKNOWN: '尚未确认', PRESENT: '文件存在', MISSING: '文件不存在' }
 const purposes: Record<string,string> = { PRODUCTION_ISSUE: '生产异常', SKU_IMAGE: 'SKU 图片', PI_CONFIRMATION: 'PI 确认附件', PI_RECEIPT: '收款凭证', PI_LOGISTICS: '物流附件', AFTER_SALES: '售后附件', PI_EXPORT: 'PI 归档' }
 const errors: Record<string,string> = { UPLOAD_OR_BIND_FAILED: '上传或绑定未完成', UNBOUND_OBJECT: '文件存在但没有业务引用', OBJECT_MISSING: '文件已不存在，可核对后清理记录', STORAGE_CHECK_FAILED: '存储检查失败，请重试', CLEANUP_FAILED: '文件清理失败，将重试', BOUND_OBJECT_MISSING: '已有业务引用，但文件不存在，请检查存储' }
+const formatDateTime = (value?: unknown) => typeof value === 'string' && value ? value.replace('T', ' ').slice(0, 19) : '—'
 function message(e: unknown) { return api.isAxiosError(e) ? e.response?.data?.message || '操作失败，请重试' : '操作失败，请重试' }
 async function load(next = 1) {
   if (busy.value) return
@@ -46,11 +47,13 @@ onMounted(() => load())
       <el-table-column label="大小" width="100"><template #default="{ row }">{{ (row.fileSize / 1024).toFixed(1) }} KB</template></el-table-column>
       <el-table-column label="状态" min-width="110"><template #default="{ row }">{{ labels[row.state] }}<br>{{ labels[row.objectState] }}</template></el-table-column>
       <el-table-column label="核对结果" min-width="180"><template #default="{ row }">{{ errors[row.errorCode] || row.errorCode || '—' }}<br>{{ row.reviewReason || '' }}</template></el-table-column>
-      <el-table-column prop="createdName" label="上传人员" min-width="100" /><el-table-column prop="createdAt" label="登记时间" min-width="175" />
+      <el-table-column prop="createdName" label="上传人员" min-width="100" />
+      <el-table-column label="创建时间" min-width="175"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column>
+      <el-table-column label="修改时间" min-width="175"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column>
       <el-table-column label="操作" width="215"><template #default="{ row }"><el-button size="small" :disabled="busy" @click="act(row, 'reconcile')">核对</el-button><el-button v-if="['REVIEW','CLEANUP_PENDING'].includes(row.state)" size="small" type="danger" :disabled="busy" @click="act(row, 'cleanup')">清理</el-button><el-button size="small" :disabled="busy" @click="showHistory(row)">历史</el-button></template></el-table-column>
     </el-table>
     <p>共 {{ total }} 条，第 {{ page }} 页。超时未绑定记录会自动进入核对；文件清理须由授权人员明确申请。</p>
     <el-button :disabled="busy || page <= 1" @click="load(page - 1)">上一页</el-button><el-button :disabled="busy || page * 20 >= total" @click="load(page + 1)">下一页</el-button>
-    <el-dialog v-model="historyVisible" title="最近100条核对历史" width="850px"><el-table :data="history"><el-table-column label="操作"><template #default="{ row }">{{ row.action === 'RECONCILE' ? '核对' : '申请清理' }}</template></el-table-column><el-table-column prop="operatorName" label="人员" /><el-table-column prop="reason" label="原因" min-width="200" /><el-table-column prop="createdAt" label="时间" min-width="175" /></el-table></el-dialog>
+    <el-dialog v-model="historyVisible" title="最近100条核对历史" width="850px"><el-table :data="history"><el-table-column label="操作"><template #default="{ row }">{{ row.action === 'RECONCILE' ? '核对' : '申请清理' }}</template></el-table-column><el-table-column prop="operatorName" label="人员" /><el-table-column prop="reason" label="原因" min-width="200" /><el-table-column label="时间" min-width="175"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column></el-table></el-dialog>
   </section>
 </template>

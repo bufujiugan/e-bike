@@ -17,6 +17,7 @@ public class PiController {
     @org.springframework.beans.factory.annotation.Autowired private PiRevisionService revisions;
     @org.springframework.beans.factory.annotation.Autowired private PiExportArchive archives;
     @org.springframework.beans.factory.annotation.Autowired private PiImageService images;
+    @org.springframework.beans.factory.annotation.Autowired private PiWorkflowService workflow;
 
     @GetMapping("/{id}/items/{itemId}/image") public ResponseEntity<byte[]> itemImage(@PathVariable long id,@PathVariable long itemId) {
         var item=service.get(id).getItems().stream().filter(i->i.getId()==itemId).findFirst()
@@ -61,6 +62,24 @@ public class PiController {
 
     @GetMapping("/{id}")
     public ApiResponse<PiView> get(@PathVariable long id) { return ApiResponse.success("查询成功", service.get(id)); }
+
+    @GetMapping("/{id}/workflow")
+    public ApiResponse<PiWorkflowView> workflow(@PathVariable long id) {
+        return ApiResponse.success("查询成功", workflow.get(id));
+    }
+
+    @PostMapping("/{id}/workflow/{stepCode}/complete")
+    public ApiResponse<PiWorkflowView> completeWorkflow(@PathVariable long id, @PathVariable String stepCode,
+            @Valid @RequestBody(required = false) PiWorkflowRequest request) {
+        return ApiResponse.success("PI流程步骤已完成", workflow.complete(id, stepCode, request));
+    }
+
+    @PostMapping("/{id}/workflow/production-updates")
+    public ApiResponse<PiWorkflowView> recordProductionUpdate(@PathVariable long id,
+            @Valid @RequestBody PiWorkflowRequest request) {
+        return ApiResponse.success(Boolean.TRUE.equals(request.productionCompleted()) ? "生产跟进已完成" : "生产跟进已记录",
+                workflow.recordProductionUpdate(id, request));
+    }
 
     @PostMapping("/{id}/payments/{paymentId}/reverse")
     public ApiResponse<PiView> reversePayment(@PathVariable long id,@PathVariable long paymentId,@Valid @RequestBody PiPaymentReverseRequest request) {

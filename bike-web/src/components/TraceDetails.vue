@@ -21,7 +21,7 @@ const sections = computed(() => [
   { title: '返工换件', rows: props.data.reworkRecords, columns: [['reworkNo','返工单号'],['partType','部件类型'],['oldPartSn','旧件 SN'],['newPartSn','新件 SN'],['operationTime','时间'],['operatorName','操作人'],['reason','原因'],['status','状态']] },
 ])
 const labels: Record<string,string> = { MOTOR:'电机', BATTERY:'电池', DISPLAY:'仪表', FRAME:'车架', COMPLETED:'已完成', CANCELLED:'已撤销', OPEN:'处理中', SHIPPED:'已发运', PLANNED:'计划中', WITHDRAWN:'已撤回', PI_COMMAND:'PI整批出库', ORDER_COMMAND:'订单批量出库', LEGACY_SINGLE:'历史单车记录（非原合批）' }
-function display(value: Row[string]) { const text = value == null || value === '' ? '—' : String(value); return labels[text] ?? text.replace(/^(\d{4}-\d\d-\d\d)T/, '$1 ') }
+function display(value: Row[string]) { const text = value == null || value === '' ? '—' : String(value); return labels[text] ?? (/^\d{4}-\d\d-\d\d[T ]\d\d:\d\d:\d\d/.test(text) ? text.replace('T',' ').slice(0,19) : text) }
 </script>
 
 <template>

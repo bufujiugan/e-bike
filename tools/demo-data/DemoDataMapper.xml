@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 仅由本机演示数据工具执行；不是 Flyway 迁移，不加载到业务服务。 -->
+<mapper namespace="demo.SmartManufacturingDemoData">
+  <select id="selectEnvironment">SELECT DATABASE() database_name, @@port port, NOW(3) database_time</select>
+  <select id="selectOperator">SELECT id,username FROM bike_sys_user WHERE username='admin' AND enabled=1</select>
+  <select id="selectTemplate">SELECT * FROM bike_production_template ORDER BY id LIMIT 1</select>
+  <select id="countBatch">SELECT COUNT(*) FROM bike_product_model WHERE model_code LIKE #{pattern}</select>
+  <select id="acquireLock">SELECT GET_LOCK(#{lockName},10)</select>
+  <select id="releaseLock">SELECT RELEASE_LOCK(#{lockName})</select>
+  <insert id="insertModel">INSERT INTO bike_product_model(model_code,model_name) VALUES(#{code},#{name})</insert>
+  <insert id="insertCustomer">INSERT INTO bike_customer(customer_code,customer_name,contact_name) VALUES(#{code},#{name},'演示联系人')</insert>
+  <insert id="insertSupplier">INSERT INTO bike_supplier(supplier_code,supplier_name) VALUES(#{code},#{name})</insert>
+  <insert id="insertWarehouse">INSERT INTO bike_warehouse(warehouse_code,warehouse_name) VALUES(#{code},#{name})</insert>
+  <insert id="insertLocation">INSERT INTO bike_warehouse_location(warehouse_id,location_code,location_name) VALUES(#{warehouseId},#{code},#{name})</insert>
+  <insert id="insertSku">INSERT INTO bike_production_sku(model_id,sku_code,product_name,specification,template_id) VALUES(#{modelId},#{code},#{name},#{specification},#{templateId})</insert>
+  <insert id="insertOrder">INSERT INTO bike_sales_order(order_no,customer_id,planned_ship_date,status,created_by,created_at,updated_at,remark) VALUES(#{orderNo},#{customerId},#{shipDate},#{status},#{operatorId},#{createdAt},#{createdAt},#{remark})</insert>
+  <insert id="insertOrderItem">INSERT INTO bike_sales_order_item(order_id,product_model_id,ordered_qty,shipped_qty,created_at) VALUES(#{orderId},#{modelId},#{quantity},#{shipped},#{createdAt})</insert>
+  <insert id="insertLock">INSERT INTO bike_inventory_lock(lock_no,product_model_id,lock_qty,converted_qty,status,expire_time,created_by,created_at,remark,customer_id,sku_id,scope_type) VALUES(#{lockNo},#{modelId},#{quantity},#{converted},#{status},#{expiresAt},#{operatorId},#{createdAt},#{remark},#{customerId},#{skuId},'SKU')</insert>
+  <insert id="insertReservation">INSERT INTO bike_order_reservation(order_id,source_lock_id,request_id,model_id,reserved_qty,expires_at,created_at,scope_type) VALUES(#{orderId},#{lockId},#{requestId},#{modelId},#{quantity},#{expiresAt},#{createdAt},'SKU')</insert>
+  <insert id="insertReservationItem">INSERT INTO bike_order_reservation_item(order_id,sku_id,ordered_qty,shipped_qty) VALUES(#{orderId},#{skuId},#{quantity},#{shipped})</insert>
+  <insert id="insertVehicle">INSERT INTO bike_vehicle(frame_sn,model_id,status,vehicle_qr_token,qr_generated_at,assemble_operator_id,assemble_time,current_warehouse_id,current_location_id,stock_in_time,stock_out_time,current_customer_id,current_order_no,created_at,updated_at) VALUES(#{frameSn},#{modelId},#{status},#{qrToken},#{assembledAt},#{operatorId},#{assembledAt},#{warehouseId},#{locationId},#{stockInAt},#{stockOutAt},#{customerId},#{orderNo},#{createdAt},#{updatedAt})</insert>
+  <!-- 只补齐本事务刚插入的车辆二维码，不更新已有业务记录。 -->
+  <update id="setInsertedVehicleQr">UPDATE bike_vehicle SET vehicle_qr_code=#{qrCode},updated_at=#{updatedAt} WHERE id=#{vehicleId} AND frame_sn=#{frameSn} AND vehicle_qr_code IS NULL</update>
+  <insert id="insertTask">INSERT INTO bike_production_task(id,sku_id,batch_no,status,vehicle_id,created_by,created_at,updated_at) VALUES(#{taskId},#{skuId},#{batch},#{status},#{vehicleId},#{operator},#{createdAt},#{updatedAt})</insert>
+  <insert id="insertProductionVehicle">INSERT INTO bike_production_vehicle(vehicle_id,task_id,sku_id,batch_no) VALUES(#{vehicleId},#{taskId},#{skuId},#{batch})</insert>
+  <insert id="insertScan">INSERT INTO bike_production_scan(task_id,code_type,code,operator_name,scanned_at,active) VALUES(#{taskId},#{type},#{code},#{operator},#{scannedAt},#{active})</insert>
+  <insert id="insertPart">INSERT INTO bike_part(part_sn,part_type,supplier_id,batch_no,qc_status,bind_status,current_vehicle_id,current_frame_sn,status,inbound_time,remark,created_at,updated_at) VALUES(#{code},#{type},#{supplierId},#{batch},#{qcStatus},#{bindStatus},#{vehicleId},#{frameSn},#{status},#{inboundAt},#{remark},#{inboundAt},#{inboundAt})</insert>
+  <insert id="insertBinding">INSERT INTO bike_vehicle_part_binding(vehicle_id,frame_sn,part_id,part_sn,part_type,bind_time,bind_operator_id,bind_reason,created_at,updated_at) VALUES(#{vehicleId},#{frameSn},#{partId},#{code},#{type},#{boundAt},#{operatorId},#{remark},#{boundAt},#{boundAt})</insert>
+  <insert id="insertStockIn">INSERT INTO bike_stock_in_record(stock_in_no,vehicle_id,warehouse_id,location_id,operator_id,operation_time) VALUES(#{stockNo},#{vehicleId},#{warehouseId},#{locationId},#{operatorId},#{operationAt})</insert>
+  <insert id="insertStockOut">INSERT INTO bike_stock_out_record(stock_out_no,vehicle_id,customer_id,order_id,operator_id,operation_time) VALUES(#{stockNo},#{vehicleId},#{customerId},#{orderId},#{operatorId},#{operationAt})</insert>
+  <insert id="insertOrderVehicle">INSERT INTO bike_sales_order_vehicle(order_id,vehicle_id,stock_out_record_id,created_at) VALUES(#{orderId},#{vehicleId},#{recordId},#{createdAt})</insert>
+  <insert id="insertIssue">INSERT INTO bike_production_issue(id,code,reason,created_by,created_at) VALUES(#{issueId},#{code},#{reason},#{operator},#{createdAt})</insert>
+  <insert id="insertPrint">INSERT INTO bike_production_print(id,vehicle_id,snapshot,status,reason,created_by,created_at,finished_at,message) VALUES(#{printId},#{vehicleId},#{snapshot},'FAILED','演示数据：未连接打印设备',#{operator},#{createdAt},#{createdAt},'演示记录，未向任何打印机发送任务')</insert>
+  <insert id="insertFailure">INSERT INTO bike_production_scan_failure(task_id,scanned_code,expected_type,operator_name,error_code,reason,created_at) VALUES(#{taskId},#{code},'MOTOR',#{operator},'PART_NOT_FOUND','演示：电机编码尚未登记',#{createdAt})</insert>
+  <insert id="insertAudit">INSERT INTO bike_operation_log(business_type,business_id,action,frame_sn,operator_id,operator_name,operation_time,remark) VALUES(#{businessType},#{businessId},#{action},#{frameSn},#{operatorId},#{operator},#{operationAt},#{remark})</insert>
+  <select id="selectCounts">
+    SELECT 'models' name,COUNT(*) quantity FROM bike_product_model WHERE model_code LIKE #{pattern}
+    UNION ALL SELECT 'skus',COUNT(*) FROM bike_production_sku WHERE sku_code LIKE #{pattern}
+    UNION ALL SELECT 'tasks',COUNT(*) FROM bike_production_task WHERE batch_no=#{batch}
+    UNION ALL SELECT 'vehicles',COUNT(*) FROM bike_vehicle WHERE frame_sn LIKE #{pattern}
+    UNION ALL SELECT 'parts',COUNT(*) FROM bike_part WHERE batch_no=#{batch}
+    UNION ALL SELECT 'bindings',COUNT(*) FROM bike_vehicle_part_binding WHERE frame_sn LIKE #{pattern}
+    UNION ALL SELECT 'stockIn',COUNT(*) FROM bike_stock_in_record WHERE stock_in_no LIKE #{pattern}
+    UNION ALL SELECT 'stockOut',COUNT(*) FROM bike_stock_out_record WHERE stock_out_no LIKE #{pattern}
+    UNION ALL SELECT 'orders',COUNT(*) FROM bike_sales_order WHERE order_no LIKE #{pattern}
+    UNION ALL SELECT 'locks',COUNT(*) FROM bike_inventory_lock WHERE lock_no LIKE #{pattern}
+    UNION ALL SELECT 'issues',COUNT(*) FROM bike_production_issue WHERE id LIKE #{pattern}
+    UNION ALL SELECT 'prints',COUNT(*) FROM bike_production_print WHERE id LIKE #{pattern}
+    UNION ALL SELECT 'scanFailures',COUNT(*) FROM bike_production_scan_failure WHERE task_id LIKE #{pattern}
+  </select>
+  <select id="selectConsistencyViolations">
+    SELECT 'fourCodeBindings' name,COUNT(*) violations FROM bike_vehicle v WHERE v.frame_sn LIKE #{pattern}
+      AND ((SELECT COUNT(*) FROM bike_vehicle_part_binding b WHERE b.vehicle_id=v.id AND b.is_current=1) != 3
+        OR (SELECT COUNT(*) FROM bike_production_scan s JOIN bike_production_task t ON t.id=s.task_id WHERE t.vehicle_id=v.id) != 4)
+    UNION ALL SELECT 'orderShippedQuantity',COUNT(*) FROM bike_sales_order o JOIN bike_sales_order_item i ON i.order_id=o.id WHERE o.order_no LIKE #{pattern}
+      AND i.shipped_qty != (SELECT COUNT(*) FROM bike_stock_out_record r WHERE r.order_id=o.id AND r.status='COMPLETED')
+    UNION ALL SELECT 'stockHistory',COUNT(*) FROM bike_vehicle v WHERE v.frame_sn LIKE #{pattern}
+      AND ((v.status IN (2,3) AND NOT EXISTS(SELECT 1 FROM bike_stock_in_record r WHERE r.vehicle_id=v.id AND r.status='COMPLETED'))
+        OR (v.status=3 AND NOT EXISTS(SELECT 1 FROM bike_stock_out_record r WHERE r.vehicle_id=v.id AND r.status='COMPLETED'))
+        OR (v.assemble_time &gt; v.stock_in_time) OR (v.stock_in_time &gt; v.stock_out_time))
+    UNION ALL SELECT 'reservationQuantity',COUNT(*) FROM bike_order_reservation r JOIN bike_sales_order o ON o.id=r.order_id
+      JOIN bike_sales_order_item i ON i.order_id=o.id JOIN bike_order_reservation_item si ON si.order_id=o.id
+      WHERE o.order_no LIKE #{pattern} AND (r.reserved_qty!=i.ordered_qty OR si.ordered_qty!=i.ordered_qty OR si.shipped_qty!=i.shipped_qty)
+    UNION ALL SELECT 'livePrintJobs',COUNT(*) FROM bike_production_print WHERE id LIKE #{pattern} AND status IN ('PENDING','PROCESSING')
+  </select>
+</mapper>

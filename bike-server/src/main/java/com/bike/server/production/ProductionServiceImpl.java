@@ -25,6 +25,7 @@ public class ProductionServiceImpl implements ProductionService {
   private final SnRuleService snRules;
   private final ObjectMapper json;
   private final ScanFailureService scanFailures;
+  private final EanBarcodeService eanBarcodes;
 
   public ProductionServiceImpl(
       ProductionMapper mapper,
@@ -32,7 +33,9 @@ public class ProductionServiceImpl implements ProductionService {
       AssemblyService assembly,
       VehicleMapper vehicles,
       SnRuleService snRules,
-      ObjectMapper json, ScanFailureService scanFailures) {
+      ObjectMapper json,
+      ScanFailureService scanFailures,
+      EanBarcodeService eanBarcodes) {
     this.mapper = mapper;
     this.guard = guard;
     this.assembly = assembly;
@@ -40,12 +43,92 @@ public class ProductionServiceImpl implements ProductionService {
     this.snRules = snRules;
     this.json = json;
     this.scanFailures = scanFailures;
+    this.eanBarcodes = eanBarcodes;
   }
 
   @Override
   public List<Map<String, Object>> listSkus() {
     ProductionAccess.read();
-    return mapper.selectSkus();
+    var skus = mapper.selectSkus();
+    skus.forEach(
+        sku ->
+            List.of(
+                    "category",
+                    "batteryDescription",
+                    "packageQuantity",
+                    "cartonSizeCm",
+                    "grossWeightKg",
+                    "netWeightKg",
+                    "createdAt",
+                    "updatedAt")
+                .forEach(field -> sku.putIfAbsent(field, null)));
+    return skus;
+  }
+
+  @Override
+  public List<Map<String, Object>> listSkuNames(long skuId) {
+    ProductionAccess.read();
+    required(mapper.selectSku(skuId), "SKU不存在");
+    var names = mapper.selectSkuNames(skuId);
+    names.forEach(
+        name -> {
+          name.putIfAbsent("ean", null);
+          name.putIfAbsent("sn", null);
+          String ean = clean(text(name, "ean"));
+          name.put("eanBarcodeDataUrl", ean == null ? null : eanBarcodes.dataUrl(ean));
+        });
+    return names;
+  }
+
+  @Override
+  @Transactional
+  public void saveSkuNames(long skuId, List<SkuNameRequest> names) {
+    ProductionAccess.manage();
+    guard.lock();
+    var sku = required(mapper.selectSku(skuId), "SKU不存在");
+    Set<Long> ids = new HashSet<>();
+    Set<String> boundNames = new HashSet<>();
+    Set<String> eans = new HashSet<>();
+    Set<String> sns = new HashSet<>();
+    List<SkuNameRequest> normalized = new ArrayList<>();
+    for (SkuNameRequest request : names) {
+      String name = clean(request.name());
+      String ean = clean(request.ean());
+      String sn = clean(request.sn());
+      if (name == null) fail("INVALID_PARAMETER", "Name不能为空");
+      eanBarcodes.validate(ean);
+      if (request.id() != null && !ids.add(request.id()))
+        fail("INVALID_PARAMETER", "同一Name记录不能重复提交");
+      if (!boundNames.add(name.toUpperCase(Locale.ROOT)))
+        fail("INVALID_PARAMETER", "同一批次中Name不能重复");
+      if (ean != null && !eans.add(ean)) fail("INVALID_PARAMETER", "同一批次中EAN不能重复");
+      if (sn != null && !sns.add(sn.toUpperCase(Locale.ROOT)))
+        fail("INVALID_PARAMETER", "同一批次中SN不能重复");
+      normalized.add(new SkuNameRequest(request.id(), name, ean, sn, request.enabled()));
+    }
+    try {
+      for (SkuNameRequest request : normalized) {
+        if (request.id() == null) mapper.insertSkuName(skuId, request);
+        else {
+          var existing = required(mapper.selectSkuName(request.id()), "Name记录不存在");
+          if (number(existing, "skuId") != skuId)
+            fail("SKU_NAME_SCOPE_MISMATCH", "Name记录不属于当前SKU");
+          if (mapper.updateSkuName(skuId, request) != 1)
+            fail("PRODUCTION_NOT_FOUND", "Name记录不存在");
+        }
+      }
+    } catch (DuplicateKeyException error) {
+      throw new BusinessException("SKU_NAME_DUPLICATE", "Name、EAN或SN已绑定其他记录");
+    }
+    audit(text(sku, "skuCode"), "批量维护SKU Name", "本次保存" + normalized.size() + "条");
+  }
+
+  @Override
+  public Map<String, String> eanBarcode(String ean) {
+    ProductionAccess.read();
+    String normalized = clean(ean);
+    if (normalized == null) fail("BARCODE_INVALID", "EAN不能为空");
+    return Map.of("ean", normalized, "dataUrl", eanBarcodes.dataUrl(normalized));
   }
 
   @Override
@@ -74,11 +157,21 @@ public class ProductionServiceImpl implements ProductionService {
             clean(request.ean()),
             clean(request.upc()),
             request.templateId(),
-            request.enabled());
+            request.enabled(),
+            clean(request.category()),
+            clean(request.batteryDescription()),
+            request.packageQuantity(),
+            clean(request.cartonSizeCm()),
+            request.grossWeightKg(),
+            request.netWeightKg());
     if (normalized.skuCode().isEmpty() || normalized.productName().isEmpty())
       fail("INVALID_PARAMETER", "SKU编码和名称不能为空");
-    validateBarcode(normalized.ean(), 13, "EAN");
+    eanBarcodes.validate(normalized.ean());
     validateBarcode(normalized.upc(), 12, "UPC");
+    if (normalized.grossWeightKg() != null
+        && normalized.netWeightKg() != null
+        && normalized.grossWeightKg().compareTo(normalized.netWeightKg()) < 0)
+      fail("INVALID_PARAMETER", "毛重不能小于净重");
     try {
       if (id == null) mapper.insertSku(normalized);
       else {
@@ -97,7 +190,12 @@ public class ProductionServiceImpl implements ProductionService {
   @Override
   public List<Map<String, Object>> listTemplates() {
     ProductionAccess.read();
-    return mapper.selectTemplates();
+    return mapper.selectTemplates().stream().map(template -> {
+      Map<String, Object> result = new java.util.LinkedHashMap<>(template);
+      result.putIfAbsent("createdAt", null);
+      result.putIfAbsent("updatedAt", null);
+      return result;
+    }).toList();
   }
 
   @Override
@@ -108,6 +206,149 @@ public class ProductionServiceImpl implements ProductionService {
     required(mapper.selectTemplate(id), "模板不存在");
     mapper.updateTemplate(id, request);
     audit(String.valueOf(id), "发布标签模板", request.name());
+  }
+
+  @Override
+  @Transactional
+  public Map<String, Object> createWorkOrder(WorkOrderRequest request) {
+    ProductionAccess.manage();
+    guard.lock();
+    String batchNo = clean(request.batchNo());
+    var existing = mapper.selectWorkOrderByRequestId(request.requestId());
+    if (existing != null) {
+      if (number(existing, "skuId") != request.skuId()
+          || number(existing, "plannedQuantity") != request.plannedQuantity()
+          || !Objects.equals(text(existing, "batchNo"), batchNo))
+        fail("IDEMPOTENCY_CONFLICT", "同一请求标识不能用于不同生产工单");
+      return getWorkOrder(number(existing, "id"), 1);
+    }
+    var sku = required(mapper.selectSku(request.skuId()), "SKU不存在");
+    requireEnabled(sku);
+    var normalized =
+        new WorkOrderRequest(
+            request.requestId(), request.skuId(), batchNo, request.plannedQuantity());
+    String workOrderNo =
+        "WO-"
+            + java.time.LocalDateTime.now()
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+            + "-"
+            + UUID.randomUUID().toString().substring(0, 6).toUpperCase(Locale.ROOT);
+    try {
+      mapper.insertWorkOrder(
+          request.requestId(), workOrderNo, normalized, CurrentOperator.username());
+    } catch (DuplicateKeyException error) {
+      var duplicate = mapper.selectWorkOrderByRequestId(request.requestId());
+      if (duplicate == null) throw new BusinessException("WORK_ORDER_DUPLICATE", "生产工单号冲突，请重试");
+      if (number(duplicate, "skuId") != request.skuId()
+          || number(duplicate, "plannedQuantity") != request.plannedQuantity()
+          || !Objects.equals(text(duplicate, "batchNo"), batchNo))
+        fail("IDEMPOTENCY_CONFLICT", "同一请求标识不能用于不同生产工单");
+      return getWorkOrder(number(duplicate, "id"), 1);
+    }
+    var created = required(mapper.selectWorkOrderByRequestId(request.requestId()), "生产工单创建失败");
+    audit(workOrderNo, "创建生产工单", text(sku, "skuCode") + ":" + request.plannedQuantity());
+    return getWorkOrder(number(created, "id"), 1);
+  }
+
+  @Override
+  public Map<String, Object> getWorkOrder(long id, long taskPage) {
+    ProductionAccess.read();
+    long page = Math.min(10_000_000, Math.max(1, taskPage));
+    var workOrder = required(mapper.selectWorkOrder(id), "生产工单不存在");
+    workOrder.put(
+        "tasks",
+        new PageResponse<>(
+            mapper.selectWorkOrderTasks(id, (page - 1) * 50),
+            page,
+            50,
+            mapper.countWorkOrderTasks(id)));
+    return workOrder;
+  }
+
+  @Override
+  public PageResponse<Map<String, Object>> listWorkOrders(
+      String keyword,
+      long page,
+      Long skuId,
+      String status,
+      java.time.LocalDate fromDate,
+      java.time.LocalDate toDate) {
+    ProductionAccess.read();
+    String state = clean(status);
+    if (state != null && !Set.of("RELEASED", "PAUSED", "COMPLETED").contains(state))
+      fail("INVALID_PARAMETER", "工单状态无效");
+    if (fromDate != null && toDate != null && fromDate.isAfter(toDate))
+      fail("INVALID_PARAMETER", "开始日期不能晚于结束日期");
+    long currentPage = Math.min(10_000_000, Math.max(1, page));
+    String query = clean(keyword);
+    return new PageResponse<>(
+        mapper.selectWorkOrders(
+            query, (currentPage - 1) * 50, skuId, state, fromDate, toDate),
+        currentPage,
+        50,
+        mapper.countWorkOrders(query, skuId, state, fromDate, toDate));
+  }
+
+  @Override
+  @Transactional
+  public Map<String, Object> scanWorkOrder(long id, WorkOrderScanRequest request) {
+    String failureTaskId = clean(request.taskId());
+    var scanRequest = new ScanRequest(request.code(), request.expectedType());
+    try {
+      ProductionAccess.operate();
+      guard.lock();
+      var workOrder = required(mapper.selectWorkOrder(id), "生产工单不存在");
+      if (!"RELEASED".equals(text(workOrder, "status")))
+        fail("WORK_ORDER_NOT_RELEASED", "生产工单未处于可生产状态");
+      String taskId = failureTaskId;
+      if (taskId == null) {
+        if (mapper.countActiveWorkOrderTasks(id) >= number(workOrder, "plannedQuantity"))
+          fail("WORK_ORDER_QUANTITY_REACHED", "生产工单计划数量已全部占用或完成");
+        taskId = UUID.randomUUID().toString();
+        mapper.insertWorkOrderTask(
+            taskId,
+            id,
+            number(workOrder, "skuId"),
+            text(workOrder, "batchNo"),
+            CurrentOperator.username());
+        audit(taskId, "生产工单自动创建单车任务", text(workOrder, "workOrderNo"));
+      } else {
+        var task = required(mapper.selectTask(taskId), "生产任务不存在");
+        if (number(task, "workOrderId") != id)
+          fail("WORK_ORDER_TASK_MISMATCH", "生产任务不属于当前工单");
+      }
+      var result = new LinkedHashMap<>(scanLocked(taskId, scanRequest));
+      mapper.completeWorkOrderIfPlanned(id);
+      result.put("workOrder", required(mapper.selectWorkOrder(id), "生产工单不存在"));
+      return result;
+    } catch (BusinessException error) {
+      scanFailures.record(failureTaskId == null ? "WORK-ORDER-" + id : failureTaskId, scanRequest, error);
+      throw error;
+    }
+  }
+
+  @Override
+  @Transactional
+  public void pauseWorkOrder(long id, String reason) {
+    ProductionAccess.manage();
+    guard.lock();
+    var workOrder = required(mapper.selectWorkOrder(id), "生产工单不存在");
+    if ("PAUSED".equals(text(workOrder, "status"))) return;
+    if (mapper.updateWorkOrderStatus(id, "RELEASED", "PAUSED") != 1)
+      fail("INVALID_STATUS_TRANSITION", "仅已下达工单可以暂停");
+    audit(text(workOrder, "workOrderNo"), "暂停生产工单", reason.trim());
+  }
+
+  @Override
+  @Transactional
+  public void resumeWorkOrder(long id, String reason) {
+    ProductionAccess.manage();
+    guard.lock();
+    var workOrder = required(mapper.selectWorkOrder(id), "生产工单不存在");
+    if ("RELEASED".equals(text(workOrder, "status"))) return;
+    if (mapper.updateWorkOrderStatus(id, "PAUSED", "RELEASED") != 1)
+      fail("INVALID_STATUS_TRANSITION", "仅已暂停工单可以恢复");
+    audit(text(workOrder, "workOrderNo"), "恢复生产工单", reason.trim());
   }
 
   @Override

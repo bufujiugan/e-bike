@@ -107,6 +107,13 @@ export const piApi = {
     return (await api.get<{ data: { records: PiView[]; total: number } }>('/api/pis', { params })).data.data
   },
   async get(id: number) { return (await api.get<{ data: PiView }>(`/api/pis/${id}`)).data.data },
+  async workflow(id: number) { return (await api.get<{ data: PiWorkflow }>(`/api/pis/${id}/workflow`)).data.data },
+  async completeWorkflow(id: number, stepCode: string, body: PiWorkflowComplete = {}) {
+    return (await api.post<{ data: PiWorkflow }>(`/api/pis/${id}/workflow/${encodeURIComponent(stepCode)}/complete`, body)).data.data
+  },
+  async recordProductionUpdate(id: number, body: PiWorkflowComplete) {
+    return (await api.post<{ data: PiWorkflow }>(`/api/pis/${id}/workflow/production-updates`, body)).data.data
+  },
   async batch(id: number, batchId: number) { return (await api.get<{ data: { vehicles: { stockOutId: number; stockOutNo: string; vehicleQrCode: string | null; frameSn: string; skuCode: string; orderNo: string; status: string; cancelReason?: string }[] } }>(`/api/pis/${id}/dispatch-batches/${batchId}`)).data.data },
   async options(keyword?: string) { return (await api.get<{ data: PiOptions }>('/api/pis/options', { params: { keyword: keyword || undefined } })).data.data },
   async create(body: PiCreate) { return (await api.post<{ data: PiView }>('/api/pis', body)).data.data },
@@ -136,4 +143,27 @@ export const piApi = {
   async download(id: number, format: 'xlsx' | 'pdf') { return (await api.get<Blob>(`/api/pis/${id}/export.${format}`, { responseType: 'blob' })).data },
 }
 
-export type PiQueueRow = { recordType: 'PI' | 'ORDER' | 'LOCK'; id: number; piId?: number; referenceNo: string; customerName?: string; status: string; expiresAt?: string; createdAt: string; revision?: number; orderedQty: number; shippedQty: number; remainingQty: number; businessOwner?: string }
+export type PiQueueRow = { recordType: 'PI' | 'ORDER' | 'LOCK'; id: number; piId?: number; referenceNo: string; customerName?: string; status: string; expiresAt?: string; createdAt: string; updatedAt: string; revision?: number; orderedQty: number; shippedQty: number; remainingQty: number; businessOwner?: string }
+export type PiWorkflowDetails = {
+  contractNo?: string | null; contractReady?: boolean | null; paymentTableReady?: boolean | null; productionTableReady?: boolean | null
+  productionStatus?: string | null; expectedCompletionDate?: string | null; materialStatus?: string | null
+  forwarderName?: string | null; quotedAmount?: Money | null; quoteCurrency?: string | null
+  domesticCarrier?: string | null; domesticPrice?: Money | null; domesticTrackingNo?: string | null
+  receivedDate?: string | null
+}
+export type PiWorkflowComplete = PiWorkflowDetails & { note?: string | null; productionCompleted?: boolean | null }
+export type PiWorkflowStep = { order: number; code: string; name: string; status: 'PENDING' | 'COMPLETED'; completedBy?: number | null; completedAt?: string | null; note?: string | null; details?: PiWorkflowDetails | null }
+export type PiWorkflowUpdate = { id: number; stepCode: string; details: PiWorkflowDetails; note?: string | null; createdBy?: number | null; createdAt: string }
+export type PiWorkflow = { currentStage: string; currentStep: string; completedCount: number; totalCount: number; nextStep?: string | null; steps: PiWorkflowStep[]; updates: PiWorkflowUpdate[] }
+
+export const piWorkflowLabels: Record<string, string> = {
+  PI_CREATED: '建立 PI', PAYMENT_CONFIRMED: '等待并确认客户付款', DOCUMENTS_READY: '建立合同、收付款、生产表',
+  PRODUCTION_FOLLOW_UP: '跟进工厂生产进度', FORWARDER_SELECTED: '联系货代询价并选择货代',
+  DOMESTIC_EXPRESS_BOOKED: '预约工厂至货代的快递', TRACKING_RECORDED: '填写单号并跟踪运输',
+  CUSTOMER_RECEIVED: '确认客户收货，完成订单',
+}
+
+export function workflowProgress(workflow: PiWorkflow | null | undefined): number {
+  if (!workflow || workflow.totalCount === 0) return 0
+  return Math.round(workflow.completedCount * 100 / workflow.totalCount)
+}

@@ -9,6 +9,12 @@ import java.util.Map;
 public interface ProductionService {
   List<Map<String, Object>> listSkus();
 
+  List<Map<String, Object>> listSkuNames(long skuId);
+
+  void saveSkuNames(long skuId, List<SkuNameRequest> names);
+
+  Map<String, String> eanBarcode(String ean);
+
   List<Map<String, Object>> inventory(Long skuId, Long warehouseId);
   List<Map<String, Object>> inventory(Long skuId, Long warehouseId, Long locationId);
 
@@ -19,6 +25,24 @@ public interface ProductionService {
   void updateTemplate(long id, TemplateRequest request);
 
   Map<String, Object> createTask(TaskRequest request);
+
+  Map<String, Object> createWorkOrder(WorkOrderRequest request);
+
+  Map<String, Object> getWorkOrder(long id, long taskPage);
+
+  PageResponse<Map<String, Object>> listWorkOrders(
+      String keyword,
+      long page,
+      Long skuId,
+      String status,
+      java.time.LocalDate fromDate,
+      java.time.LocalDate toDate);
+
+  Map<String, Object> scanWorkOrder(long id, WorkOrderScanRequest request);
+
+  void pauseWorkOrder(long id, String reason);
+
+  void resumeWorkOrder(long id, String reason);
 
   Map<String, Object> getTask(String id);
 

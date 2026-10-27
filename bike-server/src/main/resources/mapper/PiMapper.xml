@@ -63,7 +63,7 @@
     </sql>
     <select id="selectPage" resultType="com.bike.server.pi.PiView">
         <include refid="base"/><include refid="where"/>
-        ORDER BY p.updated_at DESC,p.id DESC LIMIT #{offset},#{limit}
+        ORDER BY p.created_at DESC,p.id DESC LIMIT #{offset},#{limit}
     </select>
     <select id="count" resultType="long">SELECT COUNT(*) FROM bike_pi p <include refid="where"/></select>
     <select id="selectById" resultType="com.bike.server.pi.PiView"><include refid="base"/> WHERE p.id=#{id}</select>

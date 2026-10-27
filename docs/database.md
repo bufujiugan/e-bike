@@ -114,3 +114,19 @@ bike_pi_template增加seller_country/seller_contact_name/seller_phone/seller_ema
 `bike_file_upload`以服务端对象键为主键，保存业务类型/标识快照、文件名/类型/大小/SHA256、上传人、状态、实际对象状态及并发版本。写对象前通过独立连接池提交意图，不对业务或用户父表建外键；绑定事务持记录行锁，并与业务引用同时标记BOUND。`bike_file_upload_review`保存人工核对和清理申请的原因、操作者及操作前状态/版本，并与通用审计同事务。业务附件、归档和旧付款凭证字段增加对象键索引。新增`FILE_REVIEW_MANAGE`不自动分配给普通岗位。
 
 迁移不回填历史上传记录、不删除历史对象或发货后的业务附件。四镜像SHA256：`1063A4A6D7B204D3E75CD6E26C04A5304904AE3A07732A6446CB3CFD814AB1A2`，已执行隔离API、全新库及V16升级库，禁止改写。状态与保留边界见[上传绑定失败核对](file-upload-reconciliation.md)。
+
+## V50 SKU 标签主信息与 Name 明细
+
+`bike_production_sku` 增加 `category`、`battery_description`、`package_quantity`、`carton_size_cm`、`gross_weight_kg`、`net_weight_kg`，用于保存外箱标签亮黄色区域的一对一主信息。数量和重量必须为正数，毛重不得小于净重；历史记录保持 NULL，不根据旧规格文本推断数据。
+
+新增 `bike_production_sku_name`，每条 Name 只关联一个 SKU，保存 `name/ean/sn/enabled`。Name、非空 EAN、非空 SN 分别唯一；EAN 数据库约束为13位数字，校验位由 Service 写入口验证。批量绑定在同一业务事务内执行，不删除未提交的既有明细。原 SKU 主键、`ean/upc` 字段及所有外键保持不变，生产任务、库存锁定、PI 与历史打印不迁移。四镜像SHA256：`2343AFAC5D8049BE5DB1CC1799CA3BBD713B0385AF2602436FD1C08243A5E908`。
+
+### V54 批量生产工单
+
+新增 `bike_production_work_order`，保存工单号、SKU、批次、计划数量和 `RELEASED/PAUSED/COMPLETED` 状态；`request_id` 与 `work_order_no` 分别唯一。`bike_production_task` 增加可空外键 `work_order_id`，新量产流程在首码时生成单车任务。迁移按历史任务的 `sku_id + batch_no` 建立兼容工单并完整回填，原任务、扫码、整车、聚合码与打印记录不删除。新表及字符字段统一使用 `utf8mb4_unicode_ci`。
+
+## V51/V52 PI 履约流程
+
+V51 新增 `bike_pi_workflow_step`，按 PI 修订保存八步流程状态、完成操作人、时间和备注。V52 为步骤增加 `detail_json`，用于保存合同/三表、生产结果、货代报价、国内快递和客户收货等结构化业务事实；新增 `bike_pi_workflow_update` 逐条保存生产跟进，历史记录不覆盖。
+
+V52 不从已发布状态、普通物流计划或已发货状态猜测三张表、货代、国内快递或客户收货。四份 V52 迁移文件保持同一 SHA256；当前仅完成静态哈希和代码测试，尚未在本轮本机 MySQL 执行迁移。

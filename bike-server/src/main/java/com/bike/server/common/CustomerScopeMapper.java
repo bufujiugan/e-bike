@@ -1,6 +1,7 @@
 package com.bike.server.common;
 
 import java.util.List;
+import java.time.LocalDateTime;
 import org.apache.ibatis.annotations.*;
 
 @Mapper
@@ -21,6 +22,6 @@ public interface CustomerScopeMapper {
     int grant(@Param("userId") long userId,@Param("customerId") long customerId,@Param("operator") Long operator);
     int advance(@Param("id") long id,@Param("revision") long revision);
     record User(long id,String userType,boolean enabled,long revision) {}
-    record UserOption(long id,String username,String displayName,String userType,boolean enabled) {}
+    record UserOption(long id,String username,String displayName,String userType,boolean enabled,LocalDateTime createdAt,LocalDateTime updatedAt) {}
     record CustomerOption(long id,String code,String name,String status) {}
 }

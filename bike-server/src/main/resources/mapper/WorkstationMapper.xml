@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.bike.server.system.WorkstationMapper">
-    <select id="select" resultType="com.bike.server.system.WorkstationView">SELECT id,workstation_code,workstation_name,workstation_type,enabled,updated_at FROM bike_workstation <if test="keyword != null">WHERE workstation_code LIKE CONCAT('%',#{keyword},'%') OR workstation_name LIKE CONCAT('%',#{keyword},'%')</if> ORDER BY updated_at DESC</select>
-    <select id="selectByCode" resultType="com.bike.server.system.WorkstationView">SELECT id,workstation_code,workstation_name,workstation_type,enabled,updated_at FROM bike_workstation WHERE workstation_code=#{code}</select>
-    <select id="selectById" resultType="com.bike.server.system.WorkstationView">SELECT id,workstation_code,workstation_name,workstation_type,enabled,updated_at FROM bike_workstation WHERE id=#{id}</select>
+    <select id="select" resultType="com.bike.server.system.WorkstationView">SELECT id,workstation_code,workstation_name,workstation_type,enabled,created_at,updated_at FROM bike_workstation <if test="keyword != null">WHERE workstation_code LIKE CONCAT('%',#{keyword},'%') OR workstation_name LIKE CONCAT('%',#{keyword},'%')</if> ORDER BY created_at DESC,id DESC</select>
+    <select id="selectByCode" resultType="com.bike.server.system.WorkstationView">SELECT id,workstation_code,workstation_name,workstation_type,enabled,created_at,updated_at FROM bike_workstation WHERE workstation_code=#{code}</select>
+    <select id="selectById" resultType="com.bike.server.system.WorkstationView">SELECT id,workstation_code,workstation_name,workstation_type,enabled,created_at,updated_at FROM bike_workstation WHERE id=#{id}</select>
     <insert id="insert">INSERT INTO bike_workstation(workstation_code,workstation_name,workstation_type) VALUES(#{request.workstationCode},#{request.workstationName},#{request.workstationType})</insert>
     <update id="update">UPDATE bike_workstation SET workstation_code=#{request.workstationCode},workstation_name=#{request.workstationName},workstation_type=#{request.workstationType} WHERE id=#{id}</update>
     <update id="updateStatus">UPDATE bike_workstation SET enabled=#{enabled} WHERE id=#{id}</update>

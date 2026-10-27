@@ -252,7 +252,7 @@ watch(() => props.authContext?.username, () => { listVersion++; detailVersion++;
         <el-table-column prop="contactName" label="联系人" min-width="120"/>
         <el-table-column prop="countryCode" label="国家" width="80"/>
         <el-table-column label="创建时间" min-width="170"><template #default="scope">{{ time(scope.row.createdAt) }}</template></el-table-column>
-        <el-table-column label="更新时间" min-width="170"><template #default="scope">{{ time(scope.row.updatedAt) }}</template></el-table-column>
+        <el-table-column label="修改时间" min-width="170"><template #default="scope">{{ time(scope.row.updatedAt) }}</template></el-table-column>
       </el-table>
       <el-pagination v-model:current-page="page" :page-size="20" :total="total" layout="total, prev, pager, next" @current-change="load" />
     </template>

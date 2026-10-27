@@ -285,6 +285,26 @@ Web/H5上传队列一次选择最多20个文件，按单文件请求依次发送
 
 任务列表和详情返回聚合码`qrCode`、车架码`frameSn`，并增量提供`motorSn`、`batterySn`、`displaySn`。四码来自该任务的扫码记录，未完成任务也展示已扫编码，已释放预占的历史记录仍可查看；返工后的当前部件不覆盖生产任务的原扫码事实。聚合码取已完成整车的实际编码，尚未生成或未扫码的字段为空，页面显示“—”。有效新扫码与任务修改时间在同一事务更新；幂等重复扫码不改变排序时间。接口为兼容性增量，无数据库迁移，回退应用可恢复旧列表行为。
 
+## 批量生产工单（V54）
+
+- `POST /api/production/work-orders`：生产管理岗位一次关联 `requestId/skuId/batchNo/plannedQuantity`，建立批量生产工单；`requestId` 保证创建幂等，计划数量范围为 1 至 1000000。
+- `GET /api/production/work-orders`：按 `keyword/page/skuId/status/fromDate/toDate` 分页查询工单，状态为 `RELEASED/PAUSED/COMPLETED`，返回计划、已完成、作业中、取消及开放异常数量。
+- `GET /api/production/work-orders/{id}?taskPage=1`：返回工单信息及该工单下分页的单车生产记录。
+- `POST /api/production/work-orders/{id}/scan`：正文为 `{taskId,code,expectedType}`。首码省略 `taskId` 时自动生成单车任务并继承工单的 SKU、批次；后续扫码携带返回的 `taskId`。第四码沿用既有事务，完成整车绑定、聚合码和首打任务，并在计划全部完成时自动完成工单。
+- `POST /api/production/work-orders/{id}/pause`、`/resume`：生产管理岗位提交 `{reason}` 暂停或恢复工单。暂停期间不能新增或继续工单扫码。
+
+旧 `POST/GET /api/production/tasks`、旧组装入口和历史任务保持兼容。工单创建要求 `PRODUCTION_MANAGE`；工单扫码仍要求 `ASSEMBLY_OPERATE` 和对应工位权限。取消单车任务会释放编码占用和计划名额，不删除扫码历史。
+
+## SKU 标签主信息与 Name 明细（V50）
+
+`GET /api/production/skus` 在原字段基础上增量返回 `modelCode`、`category`、`batteryDescription`、`packageQuantity`、`cartonSizeCm`、`grossWeightKg`、`netWeightKg` 和 `nameCount`。原 `ean`、`upc`、`productName` 等字段继续保留，既有生产任务、库存、PI 和历史打印协议不变。
+
+- `GET /api/production/skus/{skuId}/names`：读取该 SKU 绑定的 Name 明细。每条包含 `id/name/ean/sn/enabled`；有效 EAN 同时返回 `eanBarcodeDataUrl` PNG 数据地址。
+- `PUT /api/production/skus/{skuId}/names`：批量新增或更新，正文为 `{"names":[{"id":null,"name":"TW-EMO2-L-BLACK+SILVER","ean":"6979176420209","sn":"EBXXTW20262C118A","enabled":true}]}`。`id` 为空时新增；有值时只能更新当前 SKU 下的记录。未提交的已有记录不会被删除。
+- `GET /api/production/barcodes/ean/{ean}`：校验 EAN-13 长度及校验位并返回 `{ean,dataUrl}`，用于用户输入完成后的即时一维码预览。
+
+Name、非空 EAN、非空 SN 均有数据库唯一约束；同一批次中的重复值在写库前拒绝。批量保存使用同一事务，任一记录冲突则整批回滚。读取沿用生产读取权限，批量保存沿用 `PRODUCTION_MANAGE`，代理商和 PDA 不能进入该管理能力。
+
 ## 上传绑定失败核对（V49）
 
 内部FILE_REVIEW_MANAGE独立权限，不默认授予普通岗位，代理/PDA禁用。此权限是全业务上传元数据的运维权限，不授予客户业务详情或文件内容下载权限。
@@ -319,3 +339,17 @@ Web 详情优先调用已有 `GET /api/vehicles/by-qr/{qrCode}`，追溯默认�
 `GET /api/parts`、`GET /api/parts/{id}`、`GET /api/parts/by-sn/{sn}` 增量返回 `currentVehicleQrCode`，通过 `current_vehicle_id` 读取当前绑定车辆的真实聚合码，无绑定时为空。原字段和数据库结构不变。Web 通用详情将原对象/数组渲染为中文字段和明细表，保留所有返回字段，聚合码优先；Web/H5 追溯关联车辆通过明确的 `qr`/`frame` 类型跳转，不根据编码前缀猜测。
 
 角色权限树为 Web 展示结构；`PUT /api/roles/{id}/permissions` 仍接收 `{permissionIds: number[]}`，仅包含权限叶子 ID，不包含前端分组节点。
+### PI 操作流程
+
+`GET /api/pis/{id}/workflow` 返回 PI 的 8 个业务步骤、当前阶段、完成数、下一步和生产跟进历史。`POST /api/pis/{id}/workflow/{stepCode}/complete` 按顺序完成当前步骤；需要业务明细的步骤必须提交对应结构化字段：
+
+- `DOCUMENTS_READY`：`contractNo`、`contractReady=true`、`paymentTableReady=true`、`productionTableReady=true`。
+- `FORWARDER_SELECTED`：`forwarderName`、`quotedAmount`、`quoteCurrency`。
+- `DOMESTIC_EXPRESS_BOOKED`：`domesticCarrier`、`domesticPrice`、`domesticTrackingNo`。
+- `CUSTOMER_RECEIVED`：`receivedDate`。
+
+生产跟进使用 `POST /api/pis/{id}/workflow/production-updates`，提交 `productionStatus`，可选 `expectedCompletionDate`、`materialStatus`、`note`。`productionCompleted=false` 只新增一次跟进记录；为 `true` 时保存记录并完成生产步骤。
+
+流程不会用近似状态代替业务事实：已发布 PI 不等于三张表已建立，任意物流计划不等于已选货代或已预约国内快递，已发货不等于客户已收货。PI 创建、实际到账和带承运商及单号的已发运记录会自动推进对应步骤。代理商流程响应不返回付款、单据、生产和货代内部进度。
+
+步骤编码为 `PI_CREATED`、`PAYMENT_CONFIRMED`、`DOCUMENTS_READY`、`PRODUCTION_FOLLOW_UP`、`FORWARDER_SELECTED`、`DOMESTIC_EXPRESS_BOOKED`、`TRACKING_RECORDED`、`CUSTOMER_RECEIVED`。请求体可传 `{ "note": "..." }`，流程推进需要 `PI_WRITE`，查询需要 `PI_READ`；所有完成动作写入 `PI_WORKFLOW` 操作日志。
