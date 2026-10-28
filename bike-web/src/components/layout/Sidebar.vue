@@ -126,9 +126,12 @@ watch([() => props.active, displayGroups], async ([key]) => {
 .sm-group-icon { width: 1.125rem; height: 1.125rem; flex-shrink: 0; color: var(--nav-icon); }
 .sm-nav-heading > .sm-nav-label { flex: 1; }
 .sm-nav-count { display: grid; place-items: center; min-width: 1.1rem; height: 1.1rem; padding: 0 .25rem; border-radius: .35rem; background: #ffffff0c; color: #9bb5d0; font-size: .6rem; font-variant-numeric: tabular-nums; }
-.sm-nav-items { padding: .4rem 0 0 .5rem; }
+.sm-nav-items { position: relative; padding: .4rem 0 0 1.15rem; }
+.sm-nav-items::before { content: ''; position: absolute; top: .35rem; bottom: 1.25rem; left: .48rem; width: 1px; background: #4f789f; }
 .sm-nav-entry + .sm-nav-entry { margin-top: .15rem; }
-.sm-nav-parent-row { display: flex; align-items: center; border: 0; border-radius: .45rem; }
+.sm-nav-parent-row { position: relative; display: flex; align-items: center; border: 0; border-radius: .45rem; }
+.sm-nav-parent-row::before { content: ''; position: absolute; top: 50%; left: -.67rem; z-index: 1; width: .32rem; height: .32rem; border-radius: 50%; background: #72a4d1; transform: translate(-50%, -50%); }
+.sm-nav-parent-row::after { content: ''; position: absolute; top: 50%; left: -.67rem; width: .67rem; height: 1px; background: #4f789f; transform: translateY(-50%); }
 .sm-nav-parent-row.has-active-child { background: #ffffff06; }
 .sm-nav-parent-row:hover { background: var(--nav-hover); }
 .sm-sidebar .sm-nav-link { display: flex; align-items: center; gap: .65rem; width: 100%; min-width: 0; min-height: 2.6rem; margin: 0; padding: .5rem .6rem; border: 0; border-radius: .45rem; background: transparent; color: var(--nav-text); font-size: .8rem; line-height: 1.4; text-align: left; box-shadow: none; transition: background-color 160ms ease, color 160ms ease; }
@@ -141,11 +144,13 @@ watch([() => props.active, displayGroups], async ([key]) => {
 .sm-nav-link > .sm-chevron-surface { margin-left: auto; }
 .sm-nav-chevron { width: .85rem; height: .85rem; transition: transform 180ms ease; }
 .sm-nav-chevron.is-expanded { transform: rotate(90deg); }
-.sm-nav-children { display: grid; gap: .15rem; margin: .3rem 0 .5rem 1.05rem; padding-left: .65rem; border-left: 1px solid #ffffff1a; }
-.sm-sidebar .sm-nav-child { min-height: 2.3rem; font-size: .75rem; }
+.sm-nav-children { display: grid; gap: .15rem; margin: .2rem 0 .55rem 1rem; padding: .05rem 0 0 .55rem; border-left: 1px solid #6892bb; }
+.sm-sidebar .sm-nav-child { position: relative; min-height: 2.3rem; font-size: .75rem; }
+.sm-sidebar .sm-nav-child::before { content: ''; position: absolute; top: 50%; left: -.55rem; width: .3rem; height: .3rem; border-radius: 50%; background: #91b9df; transform: translate(-50%, -50%); }
 .sm-nav-child > .app-icon { width: .95rem; height: .95rem; }
 .sm-sidebar .sm-nav-child:hover { background: var(--nav-hover); }
 .sm-sidebar .sm-nav-parent-row.is-active, .sm-sidebar .sm-nav-child.is-active { background: var(--nav-selected); color: #fff; box-shadow: none; }
+.sm-sidebar .sm-nav-parent-row.is-active::before, .sm-sidebar .sm-nav-parent-row.has-active-child::before { background: #d9efff; box-shadow: 0 0 0 2px #1677ff; }
 .sm-sidebar .sm-nav-parent-row.is-active > .sm-nav-link { background: transparent; color: #fff; }
 .sm-sidebar .sm-nav-link.is-active > .app-icon, .sm-nav-parent-row.is-active > .sm-submenu-toggle { color: #fff; }
 .sm-sidebar button:focus-visible { outline: 2px solid #8ac4ff; outline-offset: -2px; }
@@ -159,6 +164,7 @@ watch([() => props.active, displayGroups], async ([key]) => {
 .is-sidebar-collapsed .sm-sidebar-collapse { right: -1.4rem; background: #193e63; }
 .is-sidebar-collapsed .sm-nav-heading, .is-sidebar-collapsed .sm-nav-link, .is-sidebar-collapsed .workspace-logout { justify-content: center; padding-inline: 0; gap: 0; }
 .is-sidebar-collapsed .sm-nav-items, .is-sidebar-collapsed .sm-nav-children { margin-left: 0; padding-left: 0; border: 0; }
+.is-sidebar-collapsed .sm-nav-items::before, .is-sidebar-collapsed .sm-nav-parent-row::before, .is-sidebar-collapsed .sm-nav-parent-row::after, .is-sidebar-collapsed .sm-nav-child::before { display: none; }
 .is-sidebar-collapsed .sm-nav-parent-row { position: relative; }
 .is-sidebar-collapsed .sm-submenu-toggle { position: absolute; right: -.25rem; bottom: 0; width: .8rem; height: .9rem; background: #193e63; }
 .is-sidebar-collapsed .sm-submenu-toggle .app-icon { width: .65rem; height: .65rem; }
@@ -169,6 +175,7 @@ watch([() => props.active, displayGroups], async ([key]) => {
   .workspace-brand-copy, .sm-nav-label, .sm-nav-count, .sm-chevron-surface, .sm-sidebar-collapse { display: none; }
   .sm-nav-heading, .sm-sidebar .sm-nav-link, .workspace-logout { justify-content: center; padding-inline: 0; gap: 0; }
   .sm-nav-items, .sm-nav-children { margin-left: 0; padding-left: 0; border: 0; }
+  .sm-nav-items::before, .sm-nav-parent-row::before, .sm-nav-parent-row::after, .sm-nav-child::before { display: none; }
   .sm-nav-parent-row { position: relative; }
   .sm-submenu-toggle { position: absolute; right: -.25rem; bottom: 0; width: .8rem; height: .9rem; background: #193e63; }
   .sm-submenu-toggle .app-icon { width: .65rem; height: .65rem; }

@@ -3,7 +3,7 @@ import { createUuid } from '../utils/uuid'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '../api'
-import { hasPermission, hasRole, type PermissionContext } from '../permissions'
+import { hasPermission, hasRole, isSuperAdmin, type PermissionContext } from '../permissions'
 import SkuInventoryOverview from './business/SkuInventoryOverview.vue'
 import SectionHeader from './common/SectionHeader.vue'
 import FilterBar from './common/FilterBar.vue'
@@ -24,6 +24,7 @@ const canConvert = computed(() => canWrite.value && !hasRole(props.context, 'PDA
 const selected = ref<Array<{ skuId: number; skuCode: string; quantity: number }>>([])
 const canWrite = computed(() => !hasRole(props.context, 'WEB_AGENT') && hasPermission(props.context, 'AGENT_LOCK_WRITE'))
 const canSeeLocks = computed(() => hasPermission(props.context, 'AGENT_INVENTORY_READ') || hasPermission(props.context, 'AGENT_LOCK_WRITE'))
+const canCreateMasterData = computed(() => isSuperAdmin(props.context))
 const visible = ref(false), saving = ref(false), saveError = ref(''), result = ref<Lock[]>([])
 const form = reactive({ customerId: undefined as number | undefined, agentId: undefined as number | undefined, expiresAt: '', remark: '' })
 let retryKey = '', retryPayload = ''
@@ -50,6 +51,10 @@ async function load() {
 }
 function add(row: Row) {
   if (!selected.value.some(item => item.skuId === row.skuId)) selected.value.push({ skuId: row.skuId, skuCode: row.skuCode, quantity: 1 })
+}
+function navigateToMasterData(view: 'customers' | 'agents') {
+  visible.value = false
+  emit('navigate', view)
 }
 async function begin() {
   if (selected.value.length === 0) return
@@ -108,8 +113,14 @@ onMounted(async () => {
     <el-dialog v-model="visible" title="锁定所选 SKU" width="560px" :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving">
       <el-alert v-if="saveError" type="error" :title="saveError" :closable="false" />
       <el-form label-width="100px" :disabled="saving">
-        <el-form-item label="客户" required><el-select v-model="form.customerId" filterable placeholder="选择锁定所属客户"><el-option v-for="item in customers" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
-        <el-form-item label="代理商"><el-select v-model="form.agentId" clearable filterable placeholder="不选表示直接客户"><el-option v-for="item in agents" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
+        <el-form-item label="客户" required>
+          <el-select v-model="form.customerId" filterable placeholder="选择锁定所属客户"><el-option v-for="item in customers" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select>
+          <el-button v-if="canCreateMasterData" class="quick-create-link" link type="primary" @click="navigateToMasterData('customers')">没有需要的客户？在这里新增客户</el-button>
+        </el-form-item>
+        <el-form-item label="代理商">
+          <el-select v-model="form.agentId" clearable filterable placeholder="不选表示直接客户"><el-option v-for="item in agents" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select>
+          <el-button v-if="canCreateMasterData" class="quick-create-link" link type="primary" @click="navigateToMasterData('agents')">没有需要的代理商？在这里新增代理商</el-button>
+        </el-form-item>
         <el-form-item label="截止时间"><el-date-picker v-model="form.expiresAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="留空采用系统默认时长" /></el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" maxlength="500" /></el-form-item>
       </el-form><p class="note">本次 {{ selected.length }} 个 SKU 将一起锁定。任一库存不足时全部不保存，转单客户须与锁定客户一致。</p>
@@ -120,4 +131,5 @@ onMounted(async () => {
 
 <style scoped>
 .sku-workspace{padding:24px;background:#fff;border:1px solid #e3e9ef;border-radius:12px}.sku-workspace header,.toolbar,.selected-row{display:flex;align-items:center;justify-content:space-between;gap:16px}.sku-workspace h2{margin:0;color:#203446}.sku-workspace header p,.note{color:#6d7d89;font-size:13px;line-height:1.7}.toolbar{justify-content:flex-start;margin:20px 0 12px}.el-pagination{margin-top:18px}.selection{margin-top:22px;padding:18px;background:#f6f9fc;border-radius:8px}.selected-row{justify-content:flex-start;margin-bottom:12px}.selected-row strong{min-width:160px}.shortage{font-weight:700;color:#c1392b}.el-select{width:100%}.selection>.el-button{margin-top:12px}
+.quick-create-link{height:auto;margin-top:4px;padding:0;font-size:12px}
 </style>

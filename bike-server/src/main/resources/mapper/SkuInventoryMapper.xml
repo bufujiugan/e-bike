@@ -39,7 +39,7 @@
     LEFT JOIN sku_physical p ON p.sku_id=s.id LEFT JOIN sku_commit c ON c.sku_id=s.id
     LEFT JOIN model_physical mp ON mp.model_id=s.model_id LEFT JOIN model_commit mc ON mc.model_id=s.model_id
     LEFT JOIN model_sku_commit ms ON ms.model_id=s.model_id <include refid="skuWhere"/>
-    ORDER BY s.model_id,s.id LIMIT #{offset},#{limit}
+    ORDER BY s.model_id DESC,s.id DESC LIMIT #{offset},#{limit}
   </select>
   <select id="reservationItems" resultType="com.bike.server.stock.SkuReservationItem">SELECT sku_id,ordered_qty,shipped_qty,closed_qty FROM bike_order_reservation_item WHERE order_id=#{orderId} ORDER BY sku_id</select>
   <update id="markSkuScope">UPDATE bike_order_reservation SET scope_type='SKU' WHERE order_id=#{orderId}</update>
