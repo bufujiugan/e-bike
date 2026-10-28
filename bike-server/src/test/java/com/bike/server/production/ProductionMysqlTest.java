@@ -50,13 +50,13 @@ class ProductionMysqlTest {
       session=new SqlSessionFactoryBuilder().build(config).openSession();connection=session.getConnection();mapper=session.getMapper(ProductionMapper.class);
       execute("CREATE TABLE "+prefix+"production_sku(id BIGINT PRIMARY KEY,sku_code VARCHAR(64),product_name VARCHAR(128))");
       execute("CREATE TABLE "+prefix+"vehicle(id BIGINT PRIMARY KEY,frame_sn VARCHAR(128),vehicle_qr_code VARCHAR(255))");
-      execute("CREATE TABLE "+prefix+"production_task(id VARCHAR(64) PRIMARY KEY,sku_id BIGINT,batch_no VARCHAR(64),status VARCHAR(20),vehicle_id BIGINT,created_by VARCHAR(64),created_at DATETIME(3),updated_at DATETIME(3))");
+      execute(ProductionFixtureSql.statement("createTask", prefix));
       execute("CREATE TABLE "+prefix+"production_scan(task_id VARCHAR(64),code_type VARCHAR(20),code VARCHAR(128),active TINYINT,UNIQUE KEY(task_id,code_type))");
       execute("INSERT INTO "+prefix+"production_sku VALUES(1,'SKU-TEST','商品规格测试')");
     }
     void execute(String sql) throws Exception {try(var statement=connection.createStatement()){statement.execute(sql);}}
     void task(String id,String state,String updated,Long vehicle) throws Exception {
-      try(var insert=connection.prepareStatement("INSERT INTO "+prefix+"production_task VALUES(?,1,'BATCH-TEST',?,?,'tester','2026-09-01 00:00:00',?)")) {
+      try(var insert=connection.prepareStatement(ProductionFixtureSql.statement("insertTask", prefix))) {
         insert.setString(1,id);insert.setString(2,state);insert.setObject(3,vehicle);insert.setTimestamp(4,Timestamp.valueOf(updated));insert.executeUpdate();
       }
     }
@@ -71,7 +71,7 @@ class ProductionMysqlTest {
     }
   }
 
-  @Test void taskListsSortByCompletionThenModificationAcrossPagesAndFilters() throws Exception {
+  @Test void taskListsSortByCreationAndIdAcrossPagesAndFilters() throws Exception {
     try(var f=new TaskFixture()) {
       for(int i=0;i<51;i++)f.task("completed-%02d".formatted(i),"COMPLETED",i==50?"2026-09-02 00:00:00":"2026-09-01 00:00:00",null);
       f.task("open-old","OPEN","2026-09-24 00:00:00",null);
@@ -79,20 +79,19 @@ class ProductionMysqlTest {
       f.task("cancelled","CANCELLED","2026-09-26 00:00:00",null);
       var first=f.mapper.selectTasks(null,0);
       assertThat(first).hasSize(50);
-      assertThat(first.getFirst().get("id")).isEqualTo("completed-50");
-      assertThat(first.getLast().get("id")).isEqualTo("completed-01");
-      assertThat(first).allMatch(row->"COMPLETED".equals(row.get("status")));
+      assertThat(first.getFirst().get("id")).isEqualTo("open-old");
+      assertThat(first.getLast().get("id")).isEqualTo("completed-03");
       assertThat(f.mapper.selectTasks(null,50)).extracting(row->row.get("id"))
-          .containsExactly("completed-00","open-new","open-old","cancelled");
+          .containsExactly("completed-02","completed-01","completed-00","cancelled");
       assertThat(f.mapper.selectTasksFiltered(null,0,null,null,null,null)).isEqualTo(first);
       assertThat(f.mapper.selectTasksFiltered("BATCH-TEST",50,1L,null,java.time.LocalDate.of(2026,9,1),java.time.LocalDate.of(2026,9,1)))
-          .extracting(row->row.get("id")).containsExactly("completed-00","open-new","open-old","cancelled");
-      assertThat(f.mapper.selectTasksFiltered(null,0,1L,"OPEN",null,null)).extracting(row->row.get("id")).containsExactly("open-new","open-old");
+          .extracting(row->row.get("id")).containsExactly("completed-02","completed-01","completed-00","cancelled");
+      assertThat(f.mapper.selectTasksFiltered(null,0,1L,"OPEN",null,null)).extracting(row->row.get("id")).containsExactly("open-old","open-new");
       assertThat(f.mapper.countTasks(null)).isEqualTo(54);
       assertThat(f.mapper.countTasksFiltered(null,1L,"OPEN",null,null)).isEqualTo(2);
       assertThat(f.mapper.selectTasksFiltered(null,0,2L,null,null,null)).isEmpty();
       f.execute("UPDATE "+f.prefix+"production_task SET updated_at=DATE_SUB(NOW(3),INTERVAL 1 DAY) WHERE status='OPEN'");
-      assertThat(f.mapper.touchTask("open-old")).isEqualTo(1);
+      assertThat(f.mapper.touchTask("open-new")).isEqualTo(1);
       assertThat(f.mapper.selectTasksFiltered(null,0,null,"OPEN",null,null).getFirst().get("id")).isEqualTo("open-old");
     }
   }
@@ -106,7 +105,7 @@ class ProductionMysqlTest {
       f.scan("partial","FRAME","FRAME-PARTIAL",1);f.scan("partial","MOTOR","MOTOR-PARTIAL",1);
       f.task("cancelled","CANCELLED","2026-09-03 00:00:00",null);
       f.scan("cancelled","BATTERY","BATTERY-CANCELLED",0);
-      var done=f.mapper.selectTasks(null,0).getFirst();
+      var done=f.mapper.selectTask("done");
       assertThat(done).containsEntry("qrCode","BIKE:1:AGGREGATE").containsEntry("frameSn","FRAME-DONE")
           .containsEntry("motorSn","MOTOR-DONE").containsEntry("batterySn","BATTERY-DONE").containsEntry("displaySn","DISPLAY-DONE");
       var partial=f.mapper.selectTasksFiltered(null,0,null,"OPEN",null,null).getFirst();
@@ -136,6 +135,8 @@ class ProductionMysqlTest {
     int end=ddl.indexOf(";",start);
     try(var connection=source.getConnection();var statement=connection.createStatement()) {
       statement.execute(ddl.substring(start,end).replace("bike_production_scan_failure",table));
+      statement.execute(ProductionFixtureSql.statement("addFailureUpdatedAt", "bike_")
+          .replace("bike_production_scan_failure", table));
     }
     var config=new org.apache.ibatis.session.Configuration(new Environment("mysql-test",new SpringManagedTransactionFactory(),source));
     try(var stream=Resources.getResourceAsStream("mapper/ScanFailureMapper.xml")) {
@@ -170,9 +171,9 @@ class ProductionMysqlTest {
     try(var session=factory(source,"mapper/InventoryPolicyMapper.xml","mapper/ProductionMapper.xml").openSession()) {
       var connection=session.getConnection();
       try(var statement=connection.createStatement()) {
-        statement.execute("CREATE TEMPORARY TABLE bike_part(id BIGINT PRIMARY KEY,part_sn VARCHAR(128),part_type VARCHAR(32),qc_status VARCHAR(32),status VARCHAR(32))");
+        statement.execute(ProductionFixtureSql.statement("createQuarantinedParts", "bike_"));
       }
-      try(var insert=connection.prepareStatement("INSERT INTO bike_part VALUES(?,?,'MOTOR','FAILED','QUARANTINED')")) {
+      try(var insert=connection.prepareStatement(ProductionFixtureSql.statement("insertQuarantinedPart", "bike_"))) {
         for(int id=1;id<=551;id++){insert.setInt(1,id);insert.setString(2,"OLD-"+id);insert.addBatch();}
         insert.executeBatch();
       }

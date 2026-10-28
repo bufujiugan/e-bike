@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { createUuid } from '../utils/uuid'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { showConfirmDialog, showFailToast, showSuccessToast } from 'vant'
 import api from '../api'
@@ -64,7 +65,7 @@ async function submit() {
   const piId = detail.value.id
   const vehicles = queue.value.map(({ orderId, vehicleQrCode }) => ({ orderId, vehicleQrCode })).sort((a,b) => a.orderId - b.orderId || a.vehicleQrCode.localeCompare(b.vehicleQrCode))
   const nextFingerprint = JSON.stringify({ piId, vehicles })
-  if (fingerprint !== nextFingerprint) { fingerprint = nextFingerprint; requestId = crypto.randomUUID() }
+  if (fingerprint !== nextFingerprint) { fingerprint = nextFingerprint; requestId = createUuid() }
   remember()
   try {
     const response = await api.post(`/api/pi-dispatch/${piId}`, { requestId, vehicles })

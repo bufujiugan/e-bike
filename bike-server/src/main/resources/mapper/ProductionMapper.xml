@@ -18,6 +18,7 @@
         FROM bike_production_sku s JOIN bike_product_model m ON m.id=s.model_id</sql>
     <select id="selectSkus" resultType="map"><include refid="skuSelect"/> ORDER BY s.created_at DESC,s.id DESC</select>
     <select id="selectSku" resultType="map"><include refid="skuSelect"/> WHERE s.id=#{id}</select>
+    <select id="selectSkuByCode" resultType="map"><include refid="skuSelect"/> WHERE s.sku_code=#{skuCode}</select>
     <select id="selectSkuNames" resultType="map">SELECT id,sku_id skuId,name,ean,sn,enabled,created_at createdAt,updated_at updatedAt FROM bike_production_sku_name WHERE sku_id=#{skuId} ORDER BY created_at DESC,id DESC</select>
     <select id="selectSkuName" resultType="map">SELECT id,sku_id skuId,name,ean,sn,enabled,created_at createdAt,updated_at updatedAt FROM bike_production_sku_name WHERE id=#{id}</select>
     <insert id="insertSku">INSERT INTO bike_production_sku(model_id,sku_code,product_name,specification,ean,upc,category,battery_description,package_quantity,carton_size_cm,gross_weight_kg,net_weight_kg,template_id,enabled)
@@ -135,6 +136,17 @@
     <select id="selectAttachments" resultType="map">SELECT id,content_type contentType,file_size fileSize,created_at createdAt FROM bike_production_attachment WHERE issue_id=#{issueId}</select>
     <select id="selectSkuAttachments" resultType="map">SELECT id,content_type contentType,file_size fileSize,created_at createdAt FROM bike_production_attachment WHERE sku_id=#{skuId}</select>
     <insert id="insertSkuAttachment">INSERT INTO bike_production_attachment(id,sku_id,object_key,content_type,file_size,file_name,sha256,request_id,created_by) VALUES(#{id},#{skuId},#{objectKey},#{contentType},#{size},#{name},#{sha256},#{requestId},#{operator})</insert>
+    <insert id="insertSkuImageDraft">INSERT IGNORE INTO bike_sku_image_draft(draft_token,created_by) VALUES(#{draftToken},#{operator})</insert>
+    <select id="lockSkuImageDraft" resultType="map">SELECT draft_token draftToken,created_by createdBy,created_at createdAt,updated_at updatedAt FROM bike_sku_image_draft WHERE draft_token=#{draftToken} FOR UPDATE</select>
+    <update id="touchSkuImageDraft">UPDATE bike_sku_image_draft SET updated_at=NOW(3) WHERE draft_token=#{draftToken}</update>
+    <select id="selectDraftAttachmentRequest" resultType="map">SELECT id,file_name fileName,sha256,content_type contentType,file_size fileSize FROM bike_production_attachment WHERE draft_token=#{draftToken} AND request_id=#{requestId}</select>
+    <select id="countDraftAttachments" resultType="long">SELECT COUNT(*) FROM bike_production_attachment WHERE draft_token=#{draftToken}</select>
+    <insert id="insertDraftAttachment">INSERT INTO bike_production_attachment(id,draft_token,object_key,content_type,file_size,file_name,sha256,request_id,created_by) VALUES(#{id},#{draftToken},#{objectKey},#{contentType},#{size},#{name},#{sha256},#{requestId},#{operator})</insert>
+    <select id="selectDraftAttachments" resultType="map">SELECT id,object_key objectKey,content_type contentType,file_size fileSize,file_name fileName,sha256,created_at createdAt FROM bike_production_attachment WHERE draft_token=#{draftToken} ORDER BY created_at,id</select>
+    <update id="bindDraftAttachments">UPDATE bike_production_attachment SET sku_id=#{skuId},draft_token=NULL WHERE draft_token=#{draftToken}</update>
+    <delete id="deleteDraftAttachments">DELETE FROM bike_production_attachment WHERE draft_token=#{draftToken}</delete>
+    <delete id="deleteSkuImageDraft">DELETE FROM bike_sku_image_draft WHERE draft_token=#{draftToken}</delete>
+    <select id="selectStaleSkuImageDrafts" resultType="string">SELECT draft_token FROM bike_sku_image_draft WHERE updated_at &lt; DATE_SUB(NOW(3),INTERVAL 24 HOUR) ORDER BY updated_at,draft_token LIMIT 20</select>
     <select id="lockAttachmentIssue" resultType="string">SELECT id FROM bike_production_issue WHERE id=#{id} FOR UPDATE</select>
     <select id="lockAttachmentSku" resultType="long">SELECT id FROM bike_production_sku WHERE id=#{id} FOR UPDATE</select>
     <sql id="attachmentObject"><choose><when test="skuId != null">sku_id=#{skuId}</when><otherwise>issue_id=#{issueId}</otherwise></choose></sql>

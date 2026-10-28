@@ -6,7 +6,7 @@ export type NavItem = { key: string; label: string; shortLabel: string; path?: s
 export type NavGroup = { label: string; items: NavItem[] }
 export const pagePresentation: Record<string, { title: string; description: string; theme: string; motto: string }> = {
   production: { title: '生产中心', description: '四码聚合 · 作业交接 · 标签打印 · 质量隔离 · 全流程可追溯的智能制造平台', theme: 'production', motto: '数据驱动制造 · 让每一辆好车可追溯' },
-  'production-tasks': { title: '生产工单', description: '按 SKU、批次和计划数量组织量产，集中查看单车四码绑定与完工进度', theme: 'production', motto: '工单清晰 · 批量生产 · 单车可追溯' },
+  'production-tasks': { title: '生产单', description: '新建或打开生产单，在同一页完成四码绑定、标签打印和实物入库', theme: 'production', motto: '建单 → 扫码生产 → 标签打印 → 实物入库' },
   'production-skus': { title: '商品 SKU', description: '维护商品规格、标签主信息、Name 明细与商品图片', theme: 'production', motto: '规格统一 · 标签准确 · 数据可复用' },
   'production-templates': { title: '标签模板', description: '管理生产标签尺寸、标题和打印版式配置', theme: 'production', motto: '模板受控 · 打印一致 · 标识清晰' },
   'production-issues': { title: '异常隔离', description: '登记生产异常、隔离风险产品并记录解除过程', theme: 'production', motto: '异常闭环 · 风险隔离 · 质量优先' },

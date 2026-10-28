@@ -143,6 +143,22 @@ public class ProductionServiceImpl implements ProductionService {
 
   @Override
   @Transactional
+  public void createSku(SkuRequest request, String imageDraftToken) {
+    saveSku(null, request);
+    if (imageDraftToken == null) return;
+    if (!imageDraftToken.matches("[A-Za-z0-9_-]{1,64}")) fail("INVALID_PARAMETER", "图片草稿标识无效");
+    var draft = required(mapper.lockSkuImageDraft(imageDraftToken), "图片草稿不存在或已失效");
+    if (!CurrentOperator.username().equals(draft.get("createdBy"))) fail("PERMISSION_DENIED", "无权绑定其他账号的图片草稿");
+    long imageCount = mapper.countDraftAttachments(imageDraftToken);
+    if (imageCount < 1) fail("ATTACHMENT_DRAFT_EMPTY", "图片草稿中没有可绑定的图片");
+    var savedSku = required(mapper.selectSkuByCode(request.skuCode().trim()), "SKU保存结果不存在");
+    if (mapper.bindDraftAttachments(imageDraftToken, number(savedSku, "id")) != imageCount
+        || mapper.deleteSkuImageDraft(imageDraftToken) != 1)
+      fail("ATTACHMENT_DRAFT_BIND_FAILED", "SKU已回滚，商品图片绑定失败，请重试");
+  }
+
+  @Override
+  @Transactional
   public void saveSku(Long id, SkuRequest request) {
     ProductionAccess.manage();
     guard.lock();

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { createUuid } from './utils/uuid'
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import axios from './api'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -18,8 +19,10 @@ import type { NavGroup, NavItem } from './config/page-presentation'
 const SkuInventoryPanel = defineAsyncComponent(() => import('./components/SkuInventoryPanel.vue'))
 const BusinessWorkspace = defineAsyncComponent(() => import('./components/BusinessWorkspace.vue'))
 const OrderJourney = defineAsyncComponent(() => import('./components/OrderJourney.vue'))
+const ProductionFulfillmentGuide = defineAsyncComponent(() => import('./components/ProductionFulfillmentGuide.vue'))
 const journeyOrderNo = ref('')
 const workflowRefreshKey = ref(0)
+const operationGuideVisible = ref(false)
 function continueProduction(stage: string, sku: { id: number; skuCode: string; modelId: number }) {
   navigate('workflow')
   const url = new URL(location.href)
@@ -52,7 +55,7 @@ const currentPassword = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
 const passwordChanging = ref(false)
-const activeView = ref('dashboard')
+const activeView = ref('workflow')
 const dataLoading = ref(false)
 const dataError = ref('')
 const importInput = ref<HTMLInputElement | null>(null)
@@ -66,30 +69,34 @@ type ModulePage = { subtitle: string; stats: { label: string; value: string; ton
 const modulePageData = ref<Record<string, ModulePage>>({})
 
 const navGroups: NavGroup[] = [
-  { label: '工作台', items: [{ key: 'workflow', label: '业务办理工作台', shortLabel: '办理', path: '/workflow', icon: 'production' }, { key: 'dashboard', label: '生产运营指挥中心', shortLabel: '总览', path: '/dashboard' }] },
+  { label: '工作台', items: [{ key: 'workflow', label: '我的工作台', shortLabel: '工作台', path: '/workflow', icon: 'home' }, { key: 'dashboard', label: '运营概览', shortLabel: '总览', path: '/dashboard' }] },
   {
-    label: '生产与库存',
+    label: '生产作业',
     items: [
+      { key: 'production-tasks', label: '生产单', shortLabel: '生产单', path: '/production/tasks', icon: 'tasks' },
+      { key: 'production-skus', label: '商品与标签资料', shortLabel: '商品', path: '/production/skus', icon: 'inventory' },
       {
-        key: 'production', label: '生产中心', shortLabel: '生产', path: '/production', icon: 'production',
+        key: 'production', label: '生产总览与辅助工具', shortLabel: '总览', path: '/production', icon: 'production',
         children: [
-          { key: 'production-tasks', label: '生产工单', shortLabel: '工单', path: '/production/tasks', icon: 'tasks' },
-          { key: 'production-skus', label: '商品 SKU', shortLabel: 'SKU', path: '/production/skus', icon: 'inventory' },
           { key: 'production-templates', label: '标签模板', shortLabel: '模板', path: '/production/templates', icon: 'tag' },
           { key: 'production-issues', label: '异常隔离', shortLabel: '异常', path: '/production/issues', icon: 'warning' },
           { key: 'production-quarantine', label: '旧件复检', shortLabel: '复检', path: '/production/quarantine', icon: 'inspect' },
           { key: 'production-prints', label: '打印队列', shortLabel: '打印', path: '/production/prints', icon: 'printer' },
           { key: 'production-scan-failures', label: '失败扫码', shortLabel: '失败', path: '/production/scan-failures', icon: 'trace' },
-          { key: 'production-inventory', label: '生产库存', shortLabel: '库存', path: '/production/inventory', icon: 'inventory' },
         ],
       },
       { key: 'assembly', label: '组装进度', shortLabel: '组装', path: '/assembly' },
-      { key: 'vehicles', label: '整车档案', shortLabel: '整车', path: '/vehicles' },
+    ],
+  },
+  {
+    label: '仓储管理',
+    items: [
       {
         key: 'inventory-menu', label: '库存管理', shortLabel: '库存', icon: 'inventory',
         children: [
           { key: 'inventory', label: '库存总览', shortLabel: '总览', path: '/inventory', icon: 'inventory' },
           { key: 'sku-inventory', label: 'SKU 库存锁定', shortLabel: 'SKU', path: '/sku-inventory', icon: 'lock' },
+          { key: 'production-inventory', label: '生产物料库存', shortLabel: '物料', path: '/production/inventory', icon: 'inventory' },
           { key: 'stock-in', label: '入库记录', shortLabel: '入库', path: '/stock-in', icon: 'stock-in' },
           { key: 'stock-out', label: '出库记录', shortLabel: '出库', path: '/stock-out', icon: 'stock-out' },
           { key: 'stock', label: '出入库记录', shortLabel: '出入', path: '/stock', icon: 'stock' },
@@ -98,31 +105,32 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    label: '业务协同',
+    label: '销售与交付',
     items: [
       { key: 'orders', label: '销售订单', shortLabel: '订单', path: '/orders' },
       { key: 'pis', label: 'PI 与履约', shortLabel: 'PI', path: '/pis' },
-      { key: 'after-sales', label: '售后案例', shortLabel: '售后', path: '/after-sales' },
+      { key: 'customers', label: '客户管理', shortLabel: '客户', path: '/master/customers' },
       { key: 'agents', label: '代理商管理', shortLabel: '代理商', path: '/master/agents' },
-      { key: 'inventory-locks', label: '库存锁定', shortLabel: '锁库', path: '/inventory-locks' },
-      { key: 'rework', label: '返工换件', shortLabel: '返工', path: '/rework' },
-      { key: 'trace', label: '全链路追溯', shortLabel: '追溯', path: '/trace' },
+      { key: 'inventory-locks', label: '客户锁定记录', shortLabel: '锁库', path: '/inventory-locks' },
     ],
   },
   {
-    label: '基础资料',
+    label: '售后与追溯',
+    items: [
+      { key: 'after-sales', label: '售后案例', shortLabel: '售后', path: '/after-sales' },
+      { key: 'rework', label: '返工换件', shortLabel: '返工', path: '/rework' },
+      { key: 'trace', label: '全链路追溯', shortLabel: '追溯', path: '/trace' },
+      { key: 'vehicles', label: '整车档案', shortLabel: '整车', path: '/vehicles' },
+    ],
+  },
+  {
+    label: '资料与设置',
     items: [
       { key: 'parts', label: '零部件管理', shortLabel: '部件', path: '/parts' },
-      { key: 'customers', label: '客户管理', shortLabel: '客户', path: '/master/customers' },
       { key: 'suppliers', label: '供应商管理', shortLabel: '供应', path: '/master/suppliers' },
       { key: 'models', label: '车型管理', shortLabel: '车型', path: '/master/models' },
       { key: 'warehouses', label: '仓库与库位', shortLabel: '仓库', path: '/master/warehouses' },
       { key: 'locations', label: '库位管理', shortLabel: '库位', path: '/master/locations' },
-    ],
-  },
-  {
-    label: '系统管理',
-    items: [
       { key: 'users', label: '用户管理', shortLabel: '用户', path: '/system/users' },
       { key: 'customer-scopes', label: '客户授权', shortLabel: '授权', path: '/system/customer-scopes' },
       { key: 'file-reviews', label: '上传失败核对', shortLabel: '核对', path: '/system/file-reviews' },
@@ -144,14 +152,14 @@ const navGroups: NavGroup[] = [
 ]
 
 const navPermissionMap: Record<string, string[]> = {
-  workflow: ['PRODUCTION_MANAGE', 'ASSEMBLY_OPERATE', 'VEHICLE_READ', 'INVENTORY_READ', 'AGENT_INVENTORY_READ', 'AGENT_LOCK_WRITE', 'ORDER_READ', 'PI_READ'],
+  workflow: ['PRODUCTION_MANAGE', 'ASSEMBLY_OPERATE', 'REWORK_OPERATE', 'VEHICLE_READ', 'STOCK_IN_OPERATE', 'STOCK_OUT_OPERATE', 'INVENTORY_READ', 'AGENT_INVENTORY_READ', 'AGENT_LOCK_WRITE', 'ORDER_READ', 'PI_READ'],
   'file-reviews': ['FILE_REVIEW_MANAGE'],
   'customer-scopes': ['CUSTOMER_SCOPE_MANAGE'],
   pis: ['PI_READ'],
   'sku-inventory': ['INVENTORY_READ', 'AGENT_INVENTORY_READ'],
   'after-sales': ['AFTER_SALES_READ'],
   production: ['ASSEMBLY_OPERATE', 'REWORK_OPERATE', 'VEHICLE_READ', 'PRODUCTION_MANAGE'],
-  'production-tasks': ['ASSEMBLY_OPERATE', 'REWORK_OPERATE', 'VEHICLE_READ', 'PRODUCTION_MANAGE'],
+  'production-tasks': ['ASSEMBLY_OPERATE', 'REWORK_OPERATE', 'VEHICLE_READ', 'PRODUCTION_MANAGE', 'STOCK_IN_OPERATE', 'STOCK_OUT_OPERATE'],
   'production-skus': ['ASSEMBLY_OPERATE', 'REWORK_OPERATE', 'VEHICLE_READ', 'PRODUCTION_MANAGE'],
   'production-templates': ['ASSEMBLY_OPERATE', 'REWORK_OPERATE', 'VEHICLE_READ', 'PRODUCTION_MANAGE'],
   'production-issues': ['ASSEMBLY_OPERATE', 'REWORK_OPERATE', 'VEHICLE_READ', 'PRODUCTION_MANAGE'],
@@ -208,7 +216,29 @@ const canCreateProductionTask = computed(() => !isAgentAccount.value && hasPermi
 const routeKeyMap = new Map(allNavItems.map((item) => [item.path ?? `/${item.key}`, item.key]))
 const initialPath = window.location.pathname
 const initialKey = routeKeyMap.get(initialPath) ?? initialPath.slice(1)
-if (initialKey === 'dashboard' || allNavItems.some(item => item.key === initialKey)) activeView.value = initialKey || 'dashboard'
+if (allNavItems.some(item => item.key === initialKey)) activeView.value = initialKey
+
+function defaultViewForContext(context: AuthContext) {
+  const visibleKeys = new Set(visibleNavItems.value.map(item => item.key))
+  if (hasRole(context, 'WEB_AGENT') && visibleKeys.has('agent-dashboard')) return 'agent-dashboard'
+  if ((isSuperAdmin(context) || context.userType === 'WEB_ADMIN') && visibleKeys.has('dashboard')) return 'dashboard'
+  if (visibleKeys.has('workflow')) return 'workflow'
+  return visibleNavItems.value[0]?.key ?? 'workflow'
+}
+
+function applyAuthorizedLandingView() {
+  const context = authContext.value
+  if (!context) return
+  const requestedKey = routeKeyMap.get(window.location.pathname)
+  const nextView = requestedKey && visibleNavItems.value.some(item => item.key === requestedKey)
+    ? requestedKey
+    : defaultViewForContext(context)
+  activeView.value = nextView
+  if (requestedKey !== nextView) {
+    const item = allNavItems.find(entry => entry.key === nextView)
+    window.history.replaceState(null, '', item?.path ?? `/${nextView}`)
+  }
+}
 
 const activeGroupLabel = computed(() => navGroups.find(group => flattenNavItems(group.items).some(item => item.key === activeView.value))?.label ?? '工作台')
 const activeNav = computed(() => allNavItems.find(item => item.key === activeView.value))
@@ -545,9 +575,7 @@ async function login() {
       passwordChangeVisible.value = true
       return
     }
-    if (!visibleNavItems.value.some(item => item.key === activeView.value)) {
-      activeView.value = visibleNavItems.value[0]?.key ?? 'dashboard'
-    }
+    applyAuthorizedLandingView()
     await loadModule(activeView.value)
     ElMessage.success('登录成功')
   } catch (error) {
@@ -592,9 +620,7 @@ onMounted(() => {
       passwordChangeVisible.value = true
       return
     }
-    if (!visibleNavItems.value.some(item => item.key === activeView.value)) {
-      activeView.value = visibleNavItems.value[0]?.key ?? 'dashboard'
-    }
+    applyAuthorizedLandingView()
     return loadModule(activeView.value)
   }).catch(() => logout())
 })
@@ -606,7 +632,7 @@ onUnmounted(() => {
 
 function routeKeyForPath(path: string) {
   const key = routeKeyMap.get(path) ?? path.replace(/^\//, '')
-  return key === 'dashboard' || allNavItems.some(item => item.key === key) ? key : 'dashboard'
+  return allNavItems.some(item => item.key === key) ? key : 'workflow'
 }
 
 function syncRouteFromLocation() {
@@ -630,6 +656,15 @@ function navigate(key: string) {
   if (window.location.pathname !== nextPath) window.history.pushState(null, '', nextPath)
 }
 
+function openOperationGuideStage(stage: string) {
+  navigate('workflow')
+  const url = new URL(window.location.href)
+  url.searchParams.set('stage', stage)
+  for (const key of ['skuId', 'modelId', 'skuCode']) url.searchParams.delete(key)
+  window.history.replaceState(null, '', url)
+  window.dispatchEvent(new PopStateEvent('popstate'))
+}
+
 function clearSession() {
   localStorage.removeItem('bike_access_token')
   loggedIn.value = false
@@ -640,6 +675,9 @@ function clearSession() {
   newPassword.value = ''
   confirmPassword.value = ''
   authContext.value = null
+  operationGuideVisible.value = false
+  activeView.value = 'workflow'
+  if (window.location.pathname !== '/' || window.location.search) window.history.replaceState(null, '', '/')
 }
 
 async function logout() {
@@ -839,7 +877,7 @@ async function changeInventoryLock(row: string[], action: 'release' | 'convert')
       }
       const customers = await axios.get('/api/master/customers', authConfig())
       masterOptions.customers = customers.data.data.filter((customer: {status: string}) => customer.status === 'ENABLED')
-      Object.assign(lockOrderForm, { lockId: lock.id, lockNo: lock.lockNo, quantity: remaining, remaining, fixedCustomer: Boolean(lock.customerId), skuCode: lock.skuCode ?? '', customerId: lock.customerId ?? null, plannedShipDate: '', requestId: crypto.randomUUID() })
+      Object.assign(lockOrderForm, { lockId: lock.id, lockNo: lock.lockNo, quantity: remaining, remaining, fixedCustomer: Boolean(lock.customerId), skuCode: lock.skuCode ?? '', customerId: lock.customerId ?? null, plannedShipDate: '', requestId: createUuid() })
       lockOrderVisible.value = true
       return
     }
@@ -1116,9 +1154,9 @@ async function submitPrimaryAction() {
     </section>
   </main>
 
-  <AppLayout v-else :groups="visibleNavGroups" :active="activeView" :title="activeNav?.label ?? '工作台'" :group="activeGroupLabel" :username="username" :role="userRoleLabel" :last-loaded="lastLoadedAt" @navigate="navigate" @settings="openAccountSettings" @logout="logout">
+  <AppLayout v-else :groups="visibleNavGroups" :active="activeView" :title="activeNav?.label ?? '工作台'" :group="activeGroupLabel" :username="username" :role="userRoleLabel" :last-loaded="lastLoadedAt" @navigate="navigate" @guide="operationGuideVisible = true" @settings="openAccountSettings" @logout="logout">
 
-      <BusinessWorkspace v-if="activeView === 'workflow' && !passwordChangeVisible" :context="authContext" :username="username" :refresh-key="workflowRefreshKey" @navigate="navigate" @convert="changeInventoryLock([$event], 'convert')" @order="journeyOrderNo = $event" />
+      <BusinessWorkspace v-if="activeView === 'workflow' && !passwordChangeVisible" :context="authContext" :username="username" :refresh-key="workflowRefreshKey" @navigate="navigate" @guide="operationGuideVisible = true" @convert="changeInventoryLock([$event], 'convert')" @order="journeyOrderNo = $event" />
 
       <DashboardPage v-else-if="activeView === 'dashboard'" :metrics="metrics" :status-rows="statusRows" :points="trendRows" :operations="recentOperations" :actions="quickActions" :allowed-views="visibleNavItems.map(item => item.key)" :context="authContext" :loading="dataLoading" :error="dataError" @refresh="loadModule('dashboard')" @navigate="navigate" />
 
@@ -1136,6 +1174,7 @@ async function submitPrimaryAction() {
       </BusinessModulePage>
     <template #dialogs>
     <OrderJourney v-if="journeyOrderNo && !passwordChangeVisible" :order-no="journeyOrderNo" :context="authContext" @close="journeyOrderNo = ''" @changed="refreshOrderJourney" />
+    <ProductionFulfillmentGuide v-model="operationGuideVisible" :context="authContext" initial-view="flow" @navigate="navigate" @stage="openOperationGuideStage" />
     <el-dialog v-model="importDetailsVisible" title="导入结果" width="min(720px, 95vw)">
       <template v-if="importDetails"><p>成功 {{ importDetails.successRows }} 条，失败 {{ importDetails.failureRows }} 条。请按错误行修正后重新导入。</p>
         <el-table :data="importDetails.failures"><el-table-column prop="rowNumber" label="Excel 行号" width="120" /><el-table-column prop="reason" label="错误原因" /></el-table>

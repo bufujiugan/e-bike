@@ -21,6 +21,8 @@ public interface ProductionMapper {
 
   Map<String, Object> selectSku(long id);
 
+  Map<String, Object> selectSkuByCode(String skuCode);
+
   List<Map<String, Object>> selectSkuNames(long skuId);
 
   Map<String, Object> selectSkuName(long id);
@@ -177,6 +179,25 @@ public interface ProductionMapper {
       @Param("size") long size,
       @Param("name") String name, @Param("sha256") String sha256, @Param("requestId") String requestId,
       @Param("operator") String operator);
+
+  int insertSkuImageDraft(@Param("draftToken") String draftToken, @Param("operator") String operator);
+  Map<String,Object> lockSkuImageDraft(String draftToken);
+  int touchSkuImageDraft(String draftToken);
+  Map<String,Object> selectDraftAttachmentRequest(@Param("draftToken") String draftToken, @Param("requestId") String requestId);
+  long countDraftAttachments(String draftToken);
+  int insertDraftAttachment(
+      @Param("id") String id,
+      @Param("draftToken") String draftToken,
+      @Param("objectKey") String key,
+      @Param("contentType") String type,
+      @Param("size") long size,
+      @Param("name") String name, @Param("sha256") String sha256, @Param("requestId") String requestId,
+      @Param("operator") String operator);
+  List<Map<String,Object>> selectDraftAttachments(String draftToken);
+  int bindDraftAttachments(@Param("draftToken") String draftToken, @Param("skuId") long skuId);
+  int deleteDraftAttachments(String draftToken);
+  int deleteSkuImageDraft(String draftToken);
+  List<String> selectStaleSkuImageDrafts();
 
   String lockAttachmentIssue(String id);
   Long lockAttachmentSku(long id);

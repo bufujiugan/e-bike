@@ -102,9 +102,25 @@ public class ProductionController {
   }
 
   @PostMapping("/skus")
-  public ApiResponse<?> createSku(@Valid @RequestBody SkuRequest r) {
-    service.saveSku(null, r);
+  public ApiResponse<?> createSku(@Valid @RequestBody SkuRequest r,
+      @RequestParam(required = false) String imageDraftToken) {
+    service.createSku(r, imageDraftToken);
     return ApiResponse.success("保存成功", null);
+  }
+
+  @PostMapping("/sku-image-drafts/{draftToken}/batch")
+  public ApiResponse<?> uploadSkuDraftBatch(@PathVariable String draftToken,
+      @RequestParam java.util.List<String> requestIds,
+      @RequestPart("files") java.util.List<MultipartFile> files,
+      org.springframework.web.multipart.MultipartHttpServletRequest request) {
+    return ApiResponse.success(com.bike.server.common.AttachmentBatch.upload(
+        requestIds, files, request, (key, file) -> attachments.uploadSkuDraft(draftToken, key, file)));
+  }
+
+  @DeleteMapping("/sku-image-drafts/{draftToken}")
+  public ApiResponse<?> discardSkuDraft(@PathVariable String draftToken) {
+    attachments.discardSkuDraft(draftToken);
+    return ApiResponse.success("图片草稿已清理", null);
   }
 
   @GetMapping("/skus/{id}/images")

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { createUuid } from '../utils/uuid'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import api from '../api'
 
@@ -20,7 +21,7 @@ function select(event: Event) {
       error.value = `${file.name}：格式或大小无效。图片最大20MB${props.imagesOnly ? '' : '，PDF/XLSX最大50MB'}`
       continue
     }
-    entries.value.push({ id: crypto.randomUUID(), file, state: 'ready', progress: 0, message: '' })
+    entries.value.push({ id: createUuid(), file, state: 'ready', progress: 0, message: '' })
   }
   if (input.value) input.value.value = ''
 }

@@ -45,68 +45,70 @@ type GuideStep = {
 
 const steps: GuideStep[] = [
   {
-    title: '确认车型', owner: '生产计划员', menu: 'Web 后台 → 系统管理 → 车型管理',
+    title: '确认车型', owner: '生产计划员', menu: 'Web 后台 → 资料与设置 → 车型管理',
     actions: ['搜索并确认计划生产的车型已建立且处于启用状态。'],
     result: 'SKU 可选择对应车型。', next: '车型确认后，检查要使用的标签模板。',
     destination: { label: '打开车型管理', kind: 'module', key: 'models' },
   },
   {
-    title: '确认标签模板', owner: '生产计划员', menu: 'Web 后台 → 生产与库存 → 生产中心 → 标签模板',
+    title: '确认标签模板', owner: '生产计划员', menu: 'Web 后台 → 生产作业 → 生产总览与辅助工具 → 标签模板',
     actions: ['选择已配置好的标签尺寸、标题和打印版式；新模板先保存并启用。'],
     result: '创建 SKU 时可以关联该模板。', next: '模板准备好后，创建具体商品 SKU。',
     destination: { label: '打开标签模板', kind: 'module', key: 'production-templates' },
   },
   {
-    title: '创建 SKU', owner: '生产计划员', menu: 'Web 后台 → 工作台 → 业务办理工作台 → 商品准备',
+    title: '创建 SKU', owner: '生产计划员', menu: 'Web 后台 → 生产作业 → 商品与标签资料；或我的工作台 → 商品准备',
     actions: ['点击“新增 SKU”。', '选择车型，填写 SKU 编码、商品名称、规格等资料。', '填写 EAN/UPC 等标签信息并选择标签模板；如有多组标签 Name 明细，也在本 SKU 中逐条维护，然后保存。'],
     result: '得到后续工单、库存和订单所使用的商品规格。一个 SKU 可以对应多台车。', next: 'SKU 建好后登记每台车要绑定的三个部件 SN。',
     destination: { label: '打开商品准备', kind: 'stage', key: 'skus' },
   },
   {
-    title: '登记三个部件', owner: '仓管/来料登记人员', menu: 'Web 后台 → 系统管理 → 零部件管理',
+    title: '登记三个部件', owner: '仓管/来料登记人员', menu: 'Web 后台 → 资料与设置 → 零部件管理',
     actions: ['按实物登记电机、电池、仪表 SN。', '分别选择正确的部件类型，填写供应商、批次和质检状态。', '扫码前确认 SN 未重复占用且质检状态符合要求。'],
     result: '三个部件编码可在生产绑定时识别。车架 SN 来自实物，当前后台没有单独维护车架号的页面；新车架在 PDA 选择“车架”类型后扫描或手动录入实际号码，不能随意编写。', next: '部件准备好后，按 SKU 和批次下达一张批量生产工单。',
     destination: { label: '打开零部件管理', kind: 'module', key: 'parts' },
   },
   {
-    title: '创建生产工单', owner: '生产计划员', menu: 'Web 后台 → 工作台 → 业务办理工作台 → 生产办理',
-    actions: ['点击“创建工单”。', '选择 SKU，填写本批次编号和计划数量，例如 100 台。', '确认后点击“创建工单”。'],
+    title: '创建生产单', owner: '生产计划员', menu: 'Web 后台 → 生产作业 → 生产单；或我的工作台 → 生产办理',
+    actions: ['点击“新建生产单”。', '选择商品 SKU，填写本批次编号和计划数量，例如 100 台；没有所需商品时可在建单窗口内新增。', '确认后点击“创建并开始生产”，直接进入本单办理页。'],
     result: '创建一张关联 SKU、批次和计划数量的工单；不需要按每台车分别建单。计划生产 100 台不代表已有 100 台库存。', next: '把工单号或 SKU/批次告知 PDA 操作人员。',
-    destination: { label: '打开生产办理', kind: 'stage', key: 'tasks' },
+    destination: { label: '打开生产单', kind: 'stage', key: 'tasks' },
   },
   {
-    title: 'PDA 扫描四码', owner: '组装工位操作员', menu: 'PDA/H5 → 组装',
-    actions: ['在“查找工单”输入工单号、SKU 或批次，点击“搜索 / 刷新”，再选择工单。', '依次扫描车架、电机、电池、仪表，顺序不限。新车架无法自动识别时，将“编码类型”选为“车架”。', '扫错时点击“取消当前单车并释放占用”，填写原因后重新扫描。'],
-    result: '首码自动建立单车记录；第四码完成后系统绑定四码、生成总码、创建首次打印任务并清空当前单车。', next: '四码完成后核对打印任务和实物标签。',
+    title: '扫描绑定四码', owner: '组装工位操作员', menu: 'Web 后台 → 生产作业 → 生产单 → 扫码生产；或 PDA/H5 → 组装',
+    actions: ['Web 可打开生产单后直接开始新车；PDA 可输入工单号、SKU 或批次搜索并选择生产单。', '依次扫描车架、电机、电池、仪表，顺序不限。新车架无法自动识别时，明确选择“车架”类型。', '同一台车完成前不要混入下一台的部件；扫码结果不确定时先刷新本单车辆核对，禁止直接重复首码。'],
+    result: '首码自动建立单车记录；第四码完成后系统绑定四码、生成总码并创建首次打印任务。Web 保留当前车辆继续办理，PDA 进入下一台扫码准备。', next: '四码完成后核对打印任务和实物标签。',
+    destination: { label: '打开生产单', kind: 'stage', key: 'tasks' },
     pdaLink: true,
   },
   {
-    title: '打印并核对标签', owner: '打印工位操作员', menu: 'PDA/H5 → 组装 → 上一台已完成；或 Web → 业务办理工作台 → 打印队列',
-    actions: ['在 PDA“上一台已完成”查看打印任务，刷新并预览标签后人工打印；或由自动打印终端领取。', '核对实物标签上的总码和条码。提交到打印队列不代表标签已经实际出纸。'],
+    title: '打印并核对标签', owner: '打印工位操作员', menu: 'Web 后台 → 生产单 → 标签打印；或 PDA/H5 → 组装 → 上一台已完成',
+    actions: ['在当前生产单选择已完成四码的车辆，进入“标签打印”预览并提交打印；也可由 PDA 或自动打印终端领取。', '核对实物标签上的总码和条码。提交到打印队列不代表标签已经实际出纸，必须以实物和打印回报为准。'],
     result: '车辆标签可用于后续仓储扫码。', next: '打印核对后，扫描整车总码办理入库。',
     destination: { label: '打开打印队列', kind: 'stage', key: 'prints' },
     pdaLink: true,
   },
   {
-    title: '办理入库', owner: '入库仓管员', menu: 'PDA/H5 → 入库',
-    actions: ['选择实际收货的仓库和库位。', '扫描整车总码，核对车辆后点击“确认入库”。'],
-    result: '入库成功后车辆进入可用库存；Web 可在“生产与库存 → 库存管理 → 入库记录”查询。', next: '按要承诺给客户的 SKU 数量创建库存锁定。',
+    title: '办理入库', owner: '入库仓管员', menu: 'Web 后台 → 生产单 → 办理入库；或 PDA/H5 → 入库',
+    actions: ['选择实际收货的仓库和库位。', '再次扫描实物标签上的整车总码，与当前车辆核对一致后点击“确认本车入库”。'],
+    result: '入库成功后车辆进入可用库存；Web 可在“仓储管理 → 库存管理 → 入库记录”查询。', next: '按要承诺给客户的 SKU 数量创建库存锁定。',
+    destination: { label: '打开生产单', kind: 'stage', key: 'tasks' },
     pdaLink: true,
   },
   {
-    title: '锁定 SKU 库存', owner: '销售/库存管理员', menu: 'Web 后台 → 工作台 → 业务办理工作台 → 库存与锁定',
+    title: '锁定 SKU 库存', owner: '销售/库存管理员', menu: 'Web 后台 → 我的工作台 → 库存与锁定',
     actions: ['按 SKU 核对“可新增锁定”数量，将目标 SKU 加入锁定，在“待锁定商品”中填写数量。', '点击“选择客户并锁定”或“锁定所选 SKU”，选择客户、可选代理商和有效期，再点击“确认锁定”。'],
     result: '只占用指定数量，不锁整个 SKU，也不指定车架 SN。若可用 100 台且无其他限制，A 锁 30 台后，B 仍可锁 30 台，余量为 40 台；同时须满足 SKU 和车型剩余库存上限。', next: '在锁定转订单环节将锁定数量转成销售订单。',
     destination: { label: '打开库存与锁定', kind: 'stage', key: 'inventory' },
   },
   {
-    title: '锁定转销售订单', owner: '销售/订单管理员', menu: 'Web 后台 → 工作台 → 业务办理工作台 → 锁定转订单',
+    title: '锁定转销售订单', owner: '销售/订单管理员', menu: 'Web 后台 → 我的工作台 → 锁定转订单',
     actions: ['找到锁定记录，点击“转订单”。', '核对固定 SKU、客户、转换数量和计划出库日，点击“创建订单”。'],
     result: '生成销售订单并保留对应库存占用；页面会直接打开新订单办理。', next: '进入订单办理确认销售订单；如有关联 PI，先完成 PI 放行。',
     destination: { label: '打开锁定转订单', kind: 'stage', key: 'locks' },
   },
   {
-    title: '确认订单与 PI 放行', owner: '销售/订单管理员', menu: 'Web 后台 → 工作台 → 业务办理工作台 → 订单与出库',
+    title: '确认订单与 PI 放行', owner: '销售/订单管理员', menu: 'Web 后台 → 我的工作台 → 订单与出库',
     actions: ['打开目标订单，核对客户、数量、库存占用和计划出库日。', '点击“确认订单，继续出库”。', '若订单关联 PI，在订单办理中打开“本单 PI 与发货放行”，完成 PI 确认、到账登记和发货放行。'],
     result: '订单进入待出库状态；PI 订单还需满足发货放行条件。', next: 'PDA 按客户和订单扫描实际要发出的整车总码。',
     destination: { label: '打开订单与出库', kind: 'stage', key: 'orders' },
@@ -137,7 +139,7 @@ function canOpen(step: GuideStep) {
     return !hasRole(props.context, 'WEB_AGENT') && hasAnyPermission(props.context, ['ASSEMBLY_OPERATE','REWORK_OPERATE','VEHICLE_READ','PRODUCTION_MANAGE'])
   }
   if (['skus', 'tasks', 'prints'].includes(destination.key)) {
-    return !hasRole(props.context, 'WEB_AGENT') && hasAnyPermission(props.context, ['ASSEMBLY_OPERATE','REWORK_OPERATE','VEHICLE_READ','PRODUCTION_MANAGE'])
+    return !hasRole(props.context, 'WEB_AGENT') && hasAnyPermission(props.context, ['ASSEMBLY_OPERATE','REWORK_OPERATE','VEHICLE_READ','PRODUCTION_MANAGE','STOCK_IN_OPERATE'])
   }
   if (destination.key === 'inventory') {
     return !hasRole(props.context, 'PDA_OPERATOR') && hasAnyPermission(props.context, ['INVENTORY_READ','AGENT_INVENTORY_READ'])
@@ -165,8 +167,8 @@ function close() { emit('update:modelValue', false) }
       <el-button :type="activeView === 'steps' ? 'primary' : 'default'" :aria-pressed="activeView === 'steps'" @click="selectedStep = null; activeView = 'steps'">逐步操作</el-button>
     </div>
     <div ref="guideBody" class="guide-body">
-      <div v-if="activeView !== 'sequence'" class="guide-intro"><strong>从车型准备到订单出库，按顺序逐步办理</strong><span>Web 后台负责资料、工单、库存和订单；PDA/H5 负责扫码组装、入库和出库。</span></div>
-      <div v-if="activeView !== 'sequence'" class="guide-entry"><span>当前 Web：工作台 → 业务办理工作台。正式环境请使用已配置的 PDA/H5 地址；本机联调地址：<a v-if="pdaUrl" :href="pdaUrl" target="_blank" rel="noopener noreferrer">{{ pdaUrl }}</a><span v-else>请联系管理员获取</span></span></div>
+      <div v-if="activeView !== 'sequence'" class="guide-intro"><strong>从车型准备到订单出库，按顺序逐步办理</strong><span>Web 后台负责资料、生产单、扫码打印、库存和订单；PDA/H5 提供面向现场的组装、入库和出库操作。</span></div>
+      <div v-if="activeView !== 'sequence'" class="guide-entry"><span>当前 Web：工作台 → 我的工作台；页面右上角可随时重新打开本说明。正式环境请使用已配置的 PDA/H5 地址；本机联调地址：<a v-if="pdaUrl" :href="pdaUrl" target="_blank" rel="noopener noreferrer">{{ pdaUrl }}</a><span v-else>请联系管理员获取</span></span></div>
       <ProductionFulfillmentDiagrams v-if="activeView !== 'steps'" :mode="activeView" @select="showStep" />
       <ol v-else class="guide-steps">
         <li v-for="(step, index) in steps" :key="step.title" class="guide-step" :class="{ 'is-selected': selectedStep === index }" :data-guide-step="index" tabindex="-1">
@@ -180,7 +182,7 @@ function close() { emit('update:modelValue', false) }
         </li>
       </ol>
       <el-alert title="边界提醒" type="warning" :closable="false" show-icon>
-        建工单不会逐车建单；PDA 首码自动建立单车记录。第四码自动生成总码和打印任务，但打印核对、入库、锁定转订单、订单确认和 PDA 出库都必须由对应岗位实际操作。
+        建生产单不会逐车建单；Web 或 PDA 的首码会自动建立单车记录。第四码自动生成总码和打印任务，但打印核对、入库、锁定转订单、订单确认和 PDA 出库都必须由对应岗位实际操作。
       </el-alert>
     </div>
     <template #footer><el-button @click="close">关闭说明</el-button></template>

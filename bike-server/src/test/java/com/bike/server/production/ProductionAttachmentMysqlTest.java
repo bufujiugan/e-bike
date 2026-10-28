@@ -29,7 +29,8 @@ import static org.assertj.core.api.Assertions.*;
 class ProductionAttachmentMysqlTest {
     @TempDir Path directory;
     @AfterEach void logout(){SecurityContextHolder.clearContext();}
-    static void login(String... rights){SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken("images",null,Arrays.stream(rights).map(SimpleGrantedAuthority::new).toList()));}
+    static void login(String... rights){loginAs("images",rights);}
+    static void loginAs(String username,String... rights){SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(username,null,Arrays.stream(rights).map(SimpleGrantedAuthority::new).toList()));}
     @Test void validatedSourceReadOnceStoredDigestAndOwnershipArePreserved()throws Exception {
         try(var f=new Fixture();var store=f.store(directory)) {
             login("PERM_PRODUCTION_MANAGE");var service=f.service(store,f.mapper);byte[] bytes=BusinessUploadValidatorTest.webp();
@@ -91,6 +92,22 @@ class ProductionAttachmentMysqlTest {
             assertThat(saved).extracting(AttachmentBatch.Item::success).containsExactly(true,true);assertThat(f.count()).isEqualTo(2);assertThat(f.auditCount()).isEqualTo(2);assertFiles(2);
         }
     }
+    @Test void skuDraftUploadIsIdempotentOwnerScopedAndBindable()throws Exception {
+        try(var f=new Fixture();var store=f.store(directory)) {
+            login("PERM_PRODUCTION_MANAGE");var service=f.service(store,f.mapper);byte[] bytes=BusinessUploadValidatorTest.webp();
+            var first=service.uploadSkuDraft("draft-session","image-one",new MockMultipartFile("file","商品.webp","image/webp",bytes));
+            assertThat(service.uploadSkuDraft("draft-session","image-one",new MockMultipartFile("file","商品.webp","image/webp",bytes)).get("id"))
+                .isEqualTo(first.get("id"));
+            assertThat(f.countDraft("draft-session")).isEqualTo(1);
+            loginAs("other-user","PERM_PRODUCTION_MANAGE");
+            assertThatThrownBy(()->service.uploadSkuDraft("draft-session","image-two",new MockMultipartFile("file","其他.webp","image/webp",bytes)))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("其他账号");
+            login("PERM_PRODUCTION_MANAGE");
+            assertThat(f.mapper.bindDraftAttachments("draft-session",1)).isEqualTo(1);
+            assertThat(f.mapper.deleteSkuImageDraft("draft-session")).isEqualTo(1);
+            assertThat(f.mapper.selectSkuAttachments(1)).extracting(row->row.get("id")).containsExactly(first.get("id"));
+        }
+    }
     private void assertFiles(long n)throws IOException{try(var stream=Files.list(directory)){assertThat(stream.count()).isEqualTo(n);}}
     @FunctionalInterface interface Invocation{Object invoke(Method method,Object[] args)throws Throwable;}
     static final class Fixture implements AutoCloseable {
@@ -115,7 +132,16 @@ class ProductionAttachmentMysqlTest {
                     String ddl=new String(input.readAllBytes(),StandardCharsets.UTF_8);
                     jdbc.execute(ddl.substring(ddl.indexOf("ALTER TABLE bike_production_attachment"),ddl.indexOf("ALTER TABLE bike_pi_payment_attachment")).trim().replace("bike_",prefix));
                 }
+                try(var input=Resources.getResourceAsStream("db/migration/V56__sku_image_upload_drafts.sql")) {
+                    String ddl=new String(input.readAllBytes(),StandardCharsets.UTF_8).replace("bike_",prefix);
+                    for(String statement:ddl.split(";"))if(!statement.isBlank())jdbc.execute(statement.trim());
+                    created.add(prefix+"sku_image_draft");
+                }
                 jdbc.update("INSERT INTO "+prefix+"product_model VALUES(1,'model')");jdbc.update("INSERT INTO "+prefix+"production_sku(id,model_id,sku_code,product_name,enabled) VALUES(1,1,'sku','测试图片',1)");jdbc.update("INSERT INTO "+prefix+"production_issue(id,code,reason,created_by) VALUES('issue-1','frame','problem','test')");
+                for(String statement:List.of("addModelCode","addSkuFields","createSkuNames","addIssueUpdatedAt")) {
+                    jdbc.execute(ProductionFixtureSql.statement(statement,prefix));
+                    if(statement.equals("createSkuNames"))created.add(prefix+"production_sku_name");
+                }
                 var config=new Configuration(new Environment("production-images",new SpringManagedTransactionFactory(),source));
                 for(String name:List.of("InventoryPolicyMapper","ProductionMapper"))try(var input=Resources.getResourceAsStream("mapper/"+name+".xml")) {String xml=new String(input.readAllBytes(),StandardCharsets.UTF_8).replace("bike_",prefix);new XMLMapperBuilder(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)),config,name,config.getSqlFragments()).parse();}
                 mapper=new SqlSessionTemplate(new SqlSessionFactoryBuilder().build(config)).getMapper(ProductionMapper.class);
@@ -124,12 +150,13 @@ class ProductionAttachmentMysqlTest {
         void create(String name,String ddl){jdbc.execute("CREATE TABLE "+prefix+name+"("+ddl+") ENGINE=InnoDB");created.add(prefix+name);}
         ProductionFileStore store(Path path){return new ProductionFileStore(path.toString(),"local","","","","");}
         ProductionAttachmentService service(ProductionFileStore files,ProductionMapper mapper){
-            var proxy=new org.springframework.aop.framework.ProxyFactory(new ProductionAttachmentService(mapper,files,new BusinessUploadValidator()));proxy.setProxyTargetClass(true);
+            var proxy=new org.springframework.aop.framework.ProxyFactory(new ProductionAttachmentService(mapper,files,new BusinessUploadValidator(),null));proxy.setProxyTargetClass(true);
             proxy.addAdvice(new org.springframework.transaction.interceptor.TransactionInterceptor(manager,new org.springframework.transaction.annotation.AnnotationTransactionAttributeSource()));return (ProductionAttachmentService)proxy.getProxy();
         }
         Object invoke(Method method,Object[] args)throws Throwable{try{return method.invoke(mapper,args);}catch(InvocationTargetException e){throw e.getCause();}}
         ProductionMapper wrap(Invocation call){return (ProductionMapper)Proxy.newProxyInstance(ProductionMapper.class.getClassLoader(),new Class<?>[]{ProductionMapper.class},(proxy,method,args)->call.invoke(method,args));}
         long count(){return jdbc.queryForObject("SELECT COUNT(*) FROM "+prefix+"production_attachment",Long.class);}
+        long countDraft(String draftToken){return jdbc.queryForObject("SELECT COUNT(*) FROM "+prefix+"production_attachment WHERE draft_token=?",Long.class,draftToken);}
         long auditCount(){return jdbc.queryForObject("SELECT COUNT(*) FROM "+prefix+"operation_log",Long.class);}
         @Override public void close(){for(String table:created.reversed())jdbc.execute("DROP TABLE "+table);}
     }

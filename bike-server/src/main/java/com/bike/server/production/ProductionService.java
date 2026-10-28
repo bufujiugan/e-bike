@@ -20,6 +20,8 @@ public interface ProductionService {
 
   void saveSku(Long id, SkuRequest request);
 
+  void createSku(SkuRequest request, String imageDraftToken);
+
   List<Map<String, Object>> listTemplates();
 
   void updateTemplate(long id, TemplateRequest request);

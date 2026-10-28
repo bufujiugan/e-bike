@@ -1,6 +1,7 @@
 package com.bike.server.production;
 
 import com.bike.server.common.*;
+import com.bike.server.files.FileUploadMapper;
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
@@ -16,50 +17,101 @@ public class ProductionAttachmentService {
   private final ProductionMapper mapper;
   private final ProductionFileStore files;
   private final BusinessUploadValidator validator;
-  public ProductionAttachmentService(ProductionMapper mapper, ProductionFileStore files, BusinessUploadValidator validator) {
-    this.mapper = mapper; this.files = files; this.validator = validator;
+  private final FileUploadMapper uploadFiles;
+  public ProductionAttachmentService(ProductionMapper mapper, ProductionFileStore files, BusinessUploadValidator validator,
+      FileUploadMapper uploadFiles) {
+    this.mapper = mapper; this.files = files; this.validator = validator; this.uploadFiles = uploadFiles;
   }
   @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
   public Map<String,Object> upload(String issueId, String requestId, MultipartFile file) throws IOException {
     ProductionAccess.read(); CurrentOperator.requireAnyPermission("ASSEMBLY_OPERATE", "REWORK_OPERATE");
     ProductionServiceImpl.required(mapper.selectIssue(issueId), "异常不存在");
-    return store(issueId, null, requestId, file);
+    return store(issueId, null, null, requestId, file);
   }
   public List<Map<String,Object>> skuImages(long skuId) { ProductionAccess.read(); return mapper.selectSkuAttachments(skuId); }
   @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
   public Map<String,Object> uploadSku(long skuId, String requestId, MultipartFile file) throws IOException {
     ProductionAccess.manage(); ProductionServiceImpl.required(mapper.selectSku(skuId), "SKU不存在");
-    return store(null, skuId, requestId, file);
+    return store(null, skuId, null, requestId, file);
   }
-  private Map<String,Object> store(String issueId, Long skuId, String requestId, MultipartFile upload) throws IOException {
+  @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
+  public Map<String,Object> uploadSkuDraft(String draftToken, String requestId, MultipartFile file) throws IOException {
+    ProductionAccess.manage(); validateDraftToken(draftToken);
+    return store(null, null, draftToken, requestId, file);
+  }
+  private Map<String,Object> store(String issueId, Long skuId, String draftToken, String requestId, MultipartFile upload) throws IOException {
     if (requestId == null || !requestId.matches("[A-Za-z0-9_-]{1,64}")) throw new BusinessException("INVALID_PARAMETER", "图片请求标识无效");
     var keys = new ArrayList<String>();
     try (var file = validator.prepareImage(upload)) {
       if (!TransactionSynchronizationManager.isActualTransactionActive()) throw new IllegalStateException("图片保存必须在事务中执行");
-      Object parent = skuId == null ? mapper.lockAttachmentIssue(issueId) : mapper.lockAttachmentSku(skuId);
-      if (parent == null) throw new BusinessException("ATTACHMENT_NOT_FOUND", "图片归属对象不存在");
-      var previous = mapper.selectAttachmentRequest(issueId, skuId, requestId);
+      Map<String,Object> draft = null;
+      if (draftToken != null) {
+        mapper.insertSkuImageDraft(draftToken, CurrentOperator.username());
+        draft = mapper.lockSkuImageDraft(draftToken);
+        if (draft == null || !CurrentOperator.username().equals(draft.get("createdBy")))
+          throw new BusinessException("PERMISSION_DENIED", "无权使用其他账号的图片草稿");
+      } else {
+        Object parent = skuId == null ? mapper.lockAttachmentIssue(issueId) : mapper.lockAttachmentSku(skuId);
+        if (parent == null) throw new BusinessException("ATTACHMENT_NOT_FOUND", "图片归属对象不存在");
+      }
+      var previous = draftToken == null
+          ? mapper.selectAttachmentRequest(issueId, skuId, requestId)
+          : mapper.selectDraftAttachmentRequest(draftToken, requestId);
       if (previous != null) {
         if (!Objects.equals(previous.get("sha256"), file.sha256()) || !Objects.equals(previous.get("fileName"), file.fileName())
             || !Objects.equals(previous.get("contentType"), file.contentType()) || ((Number)previous.get("fileSize")).longValue() != file.size())
           throw new BusinessException("IDEMPOTENCY_CONFLICT", "该请求已用于其他生产图片");
         return previous;
       }
-      if (mapper.countObjectAttachments(issueId, skuId) >= 50) throw new BusinessException("ATTACHMENT_LIMIT", "每个SKU或生产异常最多50张图片");
+      long attachmentCount = draftToken == null
+          ? mapper.countObjectAttachments(issueId, skuId)
+          : mapper.countDraftAttachments(draftToken);
+      if (attachmentCount >= 50) throw new BusinessException("ATTACHMENT_LIMIT", "每个SKU或生产异常最多50张图片");
       TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
         @Override public void afterCompletion(int status) { if (status == STATUS_ROLLED_BACK) cleanup(keys); }
       });
       String id = UUID.randomUUID().toString(), key = files.key(id + "." + file.extension()); keys.add(key);
       try (var stream = Files.newInputStream(file.path())) { files.write(key, stream, file.size(), file.contentType(),
-          new com.bike.server.files.FileUploadJournal.Context(skuId==null?"PRODUCTION_ISSUE":"SKU_IMAGE",skuId==null?issueId:skuId.toString(),file.fileName(),file.sha256())); }
+          new com.bike.server.files.FileUploadJournal.Context(
+              draftToken != null || skuId != null ? "SKU_IMAGE" : "PRODUCTION_ISSUE",
+              draftToken != null ? draftToken : skuId == null ? issueId : skuId.toString(), file.fileName(), file.sha256())); }
       BusinessUploadValidator.verifiedBytes(files.read(key),file.size(),file.sha256(),file.contentType());
-      int inserted = skuId == null
-          ? mapper.insertAttachment(id, issueId, key, file.contentType(), file.size(), file.fileName(), file.sha256(), requestId, CurrentOperator.username())
-          : mapper.insertSkuAttachment(id, skuId, key, file.contentType(), file.size(), file.fileName(), file.sha256(), requestId, CurrentOperator.username());
-      if (inserted != 1 || mapper.insertAudit(skuId == null ? issueId : String.valueOf(skuId), "上传生产图片", CurrentOperator.username(), id) != 1)
+      int inserted = draftToken != null
+          ? mapper.insertDraftAttachment(id, draftToken, key, file.contentType(), file.size(), file.fileName(), file.sha256(), requestId, CurrentOperator.username())
+          : skuId == null
+              ? mapper.insertAttachment(id, issueId, key, file.contentType(), file.size(), file.fileName(), file.sha256(), requestId, CurrentOperator.username())
+              : mapper.insertSkuAttachment(id, skuId, key, file.contentType(), file.size(), file.fileName(), file.sha256(), requestId, CurrentOperator.username());
+      if (draftToken != null) mapper.touchSkuImageDraft(draftToken);
+      String businessId = draftToken != null ? draftToken : skuId == null ? issueId : String.valueOf(skuId);
+      if (inserted != 1 || mapper.insertAudit(businessId, "上传生产图片", CurrentOperator.username(), id) != 1)
         throw new BusinessException("ATTACHMENT_SAVE_FAILED", "生产图片或审计保存失败");
       return Map.of("id",id,"contentType",file.contentType(),"fileSize",file.size(),"fileName",file.fileName(),"sha256",file.sha256());
     } catch (IOException | RuntimeException error) { cleanup(keys); throw error; }
+  }
+  @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
+  public void discardSkuDraft(String draftToken) {
+    ProductionAccess.manage(); discardSkuDraft(draftToken, CurrentOperator.username());
+  }
+  @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
+  public void cleanupStaleSkuDraft(String draftToken) { discardSkuDraft(draftToken, null); }
+  private void discardSkuDraft(String draftToken, String requiredOwner) {
+    validateDraftToken(draftToken);
+    var draft = mapper.lockSkuImageDraft(draftToken);
+    if (draft == null) return;
+    if (requiredOwner != null && !requiredOwner.equals(draft.get("createdBy")))
+      throw new BusinessException("PERMISSION_DENIED", "无权清理其他账号的图片草稿");
+    var attachments = mapper.selectDraftAttachments(draftToken);
+    if (mapper.deleteDraftAttachments(draftToken) != attachments.size() || mapper.deleteSkuImageDraft(draftToken) != 1)
+      throw new BusinessException("ATTACHMENT_DRAFT_CLEANUP_FAILED", "图片草稿清理失败，请稍后重试");
+    for (var attachment : attachments) {
+      String key = String.valueOf(attachment.get("objectKey"));
+      if (uploadFiles.checked(key, "CLEANUP_PENDING", "PRESENT", null) != 1)
+        throw new BusinessException("ATTACHMENT_DRAFT_CLEANUP_FAILED", "图片清理任务登记失败，请稍后重试");
+    }
+  }
+  private static void validateDraftToken(String draftToken) {
+    if (draftToken == null || !draftToken.matches("[A-Za-z0-9_-]{1,64}"))
+      throw new BusinessException("INVALID_PARAMETER", "图片草稿标识无效");
   }
   public Resource content(String id) {
     ProductionAccess.read();

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { createUuid } from '../utils/uuid'
 import { computed, ref, reactive, watch, onMounted, onUnmounted } from "vue";
 import api from "../api";
 import BusinessAttachmentUpload from "./BusinessAttachmentUpload.vue";
@@ -6,6 +7,7 @@ import AppIcon from "./AppIcon.vue";
 import SkuImportDialog from "./SkuImportDialog.vue";
 import "../production.css";
 import ProductionOverview from './business/ProductionOverview.vue';
+import ProductionOrderWorkbench from './ProductionOrderWorkbench.vue';
 import SectionHeader from './common/SectionHeader.vue';
 import AlertCard from './common/AlertCard.vue';
 import DataTable from './table/DataTable.vue';
@@ -63,6 +65,16 @@ const isOverview = props.view === 'overview';
 const moduleTableMaxHeight = 'max(240px, calc(100dvh - 480px))';
 const formatDateTime = (value?: string | null) => value ? value.replace('T', ' ').slice(0, 19) : '—';
 const createTaskVisible = ref(false);
+const printRefreshKey = ref(0);
+async function prepareWorkOrderSku() {
+  await perform(async () => {
+    models.value = (await api.get('/api/master/models')).data.data;
+    templates.value = (await api.get('/api/production/templates')).data.data;
+    editSku();
+    if (templates.value.length) sku.templateId = templates.value[0].id;
+  });
+}
+function refreshWorkOrderList() { void perform(load); }
 function scrollToTaskList() {
   emit('navigate', 'production-tasks');
 }
@@ -82,7 +94,7 @@ async function saveTask() {
   if (!taskDraft.batchNo.trim()) { ElMessage.warning('请填写生产批次'); return; }
   if (!Number.isInteger(taskDraft.plannedQuantity) || taskDraft.plannedQuantity < 1) { ElMessage.warning('计划数量必须大于0'); return; }
   await perform(async () => {
-    pendingTask.value ??= { requestId: crypto.randomUUID(), skuId: taskDraft.skuId!, batchNo: taskDraft.batchNo.trim(), plannedQuantity: taskDraft.plannedQuantity };
+    pendingTask.value ??= { requestId: createUuid(), skuId: taskDraft.skuId!, batchNo: taskDraft.batchNo.trim(), plannedQuantity: taskDraft.plannedQuantity };
     let created;
     try { created = (await api.post('/api/production/work-orders', pendingTask.value)).data.data; }
     catch (error) {
@@ -90,7 +102,7 @@ async function saveTask() {
       throw error;
     }
     pendingTask.value = undefined; createTaskVisible.value = false;
-    detail.value = created; detailTaskPage.value = 1; ElMessage.success('生产工单已下达，手持设备可以开始扫码');
+    detail.value = created; detailTaskPage.value = 1; ElMessage.success('生产单已创建，可在当前页面开始扫码');
     page.value = 1; await load();
   });
 }
@@ -155,7 +167,7 @@ type SkuNameDraft = {
 const skuNamesVisible = ref(false), skuNamesBusy = ref(false), selectedSku = ref<any>();
 const skuNames = ref<SkuNameDraft[]>([]);
 function emptySkuName(): SkuNameDraft {
-  return { clientKey: crypto.randomUUID(), name: "", ean: "", sn: "", enabled: true };
+  return { clientKey: createUuid(), name: "", ean: "", sn: "", enabled: true };
 }
 function addSkuName() { skuNames.value.push(emptySkuName()); }
 function removeUnsavedSkuName(row: SkuNameDraft) {
@@ -231,22 +243,16 @@ async function warehouseChanged() {
 const skuImages = ref<any[]>([]);
 const skuImagesBusy = ref(false);
 const skuBusy = computed(() => loading.value || skuImagesBusy.value);
-const galleryVisible = ref(false), galleryImages = ref<any[]>([]);
+type SkuImageUploadControl = { hasPending: () => boolean };
+const skuImageUpload = ref<SkuImageUploadControl>();
+const skuEditorSessionKey = ref(0);
+const skuImageDraftToken = ref('');
+const createdSkuCodePending = ref('');
 async function viewSkuImages(id: number) {
   await perform(async () => {
-    galleryImages.value = (await api.get(`/api/production/skus/${id}/images`)).data.data;
-    galleryVisible.value = true;
-  });
-}
-async function downloadImage(id: string) {
-  await perform(async () => {
-    const blob = (await api.get(`/api/production/images/${id}`, {responseType: 'blob'})).data;
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `image-${id}.${blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : 'jpg'}`;
-    anchor.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const images = (await api.get(`/api/production/skus/${id}/images`)).data.data;
+    if (!images.length) { ElMessage.info('该 SKU 暂无商品图片'); return; }
+    await loadImage(images[0].id);
   });
 }
 const states: Record<string, string> = {
@@ -345,7 +351,10 @@ async function loadData() {
 }
 function editSku(row?: any) {
   editingId.value = row?.id;
+  createdSkuCodePending.value = '';
   skuImages.value = [];
+  skuImageDraftToken.value = row ? '' : createUuid();
+  skuEditorSessionKey.value++;
   Object.assign(
     sku,
     row
@@ -376,16 +385,40 @@ function editSku(row?: any) {
     });
 }
 function skuImageSaved(row: any) { if (!skuImages.value.some(item => item.id === row.id)) skuImages.value.push(row) }
+async function discardSkuImageDraft() {
+  const draftToken = skuImageDraftToken.value;
+  skuImageDraftToken.value = '';
+  if (!draftToken) return;
+  try { await api.delete(`/api/production/sku-image-drafts/${draftToken}`); }
+  catch { /* 未保存草稿由服务端定时清理，关闭弹窗不阻塞用户。 */ }
+}
 async function saveSku() {
   if (skuImagesBusy.value) return;
+  if (skuImageUpload.value?.hasPending()) { ElMessage.warning('商品图片尚未上传成功，请重试后再保存'); return; }
   await perform(async () => {
-    await api[editingId.value ? "put" : "post"](
-      `/api/production/skus${editingId.value ? "/" + editingId.value : ""}`,
-      sku,
-    );
+    const creating = !editingId.value;
+    const createdNow = creating && !createdSkuCodePending.value;
+    if (editingId.value) await api.put(`/api/production/skus/${editingId.value}`, sku);
+    else if (createdNow) {
+      await api.post('/api/production/skus', sku, {
+        params: { imageDraftToken: skuImages.value.length ? skuImageDraftToken.value : undefined },
+      });
+      skuImageDraftToken.value = '';
+      createdSkuCodePending.value = sku.skuCode.trim();
+    }
+    let savedSkuId = editingId.value;
+    if (creating) {
+      skus.value = (await api.get('/api/production/skus')).data.data;
+      savedSkuId = skus.value.find(item => item.skuCode === createdSkuCodePending.value)?.id;
+      if (!savedSkuId) throw new Error('SKU已创建，但未能确认新记录，请刷新列表后重试图片上传');
+      editingId.value = savedSkuId;
+      createdSkuCodePending.value = '';
+      if (!createdNow) await api.put(`/api/production/skus/${savedSkuId}`, sku);
+    }
+    if (createTaskVisible.value) taskDraft.skuId = savedSkuId;
     skuVisible.value = false;
     await load();
-    ElMessage.success("SKU已保存");
+    ElMessage.success(skuImages.value.length ? "SKU和商品图片已保存" : "SKU已保存");
   });
 }
 function editTemplate(row: any) {
@@ -507,19 +540,20 @@ function closeImage() {
   imageUrl.value = '';
 }
 async function showImage(id: string) {
-  await perform(async () => {
-    const requestVersion = ++imageRequestVersion;
-    let response;
-    try {
-      response = await api.get(`/api/production/images/${id}`, { responseType: "blob" });
-    } catch (error) {
-      if (requestVersion === imageRequestVersion) throw error;
-      return;
-    }
-    if (requestVersion !== imageRequestVersion) return;
-    if (imageUrl.value) URL.revokeObjectURL(imageUrl.value);
-    imageUrl.value = URL.createObjectURL(response.data);
-  });
+  await perform(() => loadImage(id));
+}
+async function loadImage(id: string) {
+  const requestVersion = ++imageRequestVersion;
+  let response;
+  try {
+    response = await api.get(`/api/production/images/${id}`, { responseType: "blob" });
+  } catch (error) {
+    if (requestVersion === imageRequestVersion) throw error;
+    return;
+  }
+  if (requestVersion !== imageRequestVersion) return;
+  if (imageUrl.value) URL.revokeObjectURL(imageUrl.value);
+  imageUrl.value = URL.createObjectURL(response.data);
 }
 async function releasePart(row: any) {
   try {
@@ -552,12 +586,14 @@ onMounted(() =>
 
 <template>
   <section class="production-manager sm-page sm-production" :class="{ 'is-overview': isOverview, 'is-module': !isOverview }">
+    <ProductionOrderWorkbench v-if="detail" :key="detail.id" :work-order-id="Number(detail.id)" :context="context ?? null" :print-refresh-key="printRefreshKey" @close="detail = undefined" @changed="refreshWorkOrderList" @preview="preview" @inspect="openVehicleJourney" />
+    <div v-show="!detail" class="production-list-view">
     <template v-if="isOverview">
       <ProductionOverview :tasks="tasks" :total="total" :loading="loading" :error="readError" :can-create="canManage" @detail="viewTask" @create="openCreateTask" @refresh="queryTasks" @more="scrollToTaskList" @issues="showIssueRecords" />
       <AlertCard v-if="readError" tone="error" title="生产数据加载失败" :description="readError"><template #action><el-button size="small" @click="queryTasks">重试</el-button></template></AlertCard>
     </template>
     <div v-else class="production-data-card">
-    <SectionHeader :title="tab === 'tasks' ? '生产工单列表' : productionTabs.find(item => item.name === tab)?.label ?? '业务列表'" />
+    <SectionHeader :title="tab === 'tasks' ? '生产单列表' : productionTabs.find(item => item.name === tab)?.label ?? '业务列表'" />
     <div v-if="tab === 'tasks'" class="toolbar production-toolbar task-toolbar">
       <div class="task-filters">
         <el-select v-model="taskSkuId" class="task-sku-filter" clearable aria-label="商品规格筛选" placeholder="所有商品规格（SKU）" @change="queryTasks"><template #prefix><AppIcon name="inventory" /></template><el-option v-for="s in skus" :key="s.id" :value="s.id" :label="s.skuCode" /></el-select>
@@ -568,7 +604,7 @@ onMounted(() =>
       <div class="task-actions">
         <el-button @click="taskSkuId = undefined; taskStatus = ''; taskDates = []; keyword = ''; queryTasks()">重置筛选</el-button>
         <el-button class="production-refresh" @click="queryTasks"><AppIcon name="refresh" />刷新</el-button>
-        <el-button v-if="canManage" type="primary" class="create-task-button" @click="openCreateTask"><AppIcon name="plus" />创建工单</el-button>
+        <el-button v-if="canManage" type="primary" class="create-task-button" @click="openCreateTask"><AppIcon name="plus" />新建生产单</el-button>
       </div>
     </div>
     <div v-else class="toolbar production-toolbar" :class="{ 'sku-toolbar': tab === 'skus', 'inventory-toolbar': tab === 'inventory' }">
@@ -645,7 +681,7 @@ onMounted(() =>
       <el-table-column prop="reason" label="原因" min-width="220" />
     </DataTable>
     <template v-if="tab === 'tasks'">
-      <p class="task-list-hint"><AppIcon name="info" />一个工单关联一个 SKU、一个批次和多台车；手持设备首次扫码时自动创建单车生产记录。</p>
+      <p class="task-list-hint"><AppIcon name="info" />一个工单关联一个 SKU、一个批次和多台车；首次扫码时自动创建单车记录，进入工单即可连续扫码、打印和入库。</p>
       <DataTable :loading="loading" :error="readError" :rows="tasks" class="production-task-table" scrollbar-always-on stripe :max-height="moduleTableMaxHeight" row-key="id" empty-title="暂无生产工单">
         <el-table-column prop="workOrderNo" label="工单号" min-width="150" show-overflow-tooltip />
         <el-table-column prop="skuCode" label="商品规格（SKU）" min-width="100" show-overflow-tooltip>
@@ -773,33 +809,28 @@ onMounted(() =>
     >
     <Pagination v-if="['tasks', 'issues', 'prints', 'quarantine', 'scan-failures'].includes(tab)" v-model:page="page" :total="total" :page-size="50" :disabled="loading" jumper @change="perform(load)" />
     </div>
+    </div>
     <SkuImportDialog v-if="canManage" v-model="skuImportVisible" @imported="refreshSkusAfterImport" />
-    <el-dialog v-model="createTaskVisible" title="创建生产工单" width="520px" :close-on-click-modal="false" :close-on-press-escape="!loading" :show-close="!loading">
+    <el-dialog v-model="createTaskVisible" title="创建生产单" width="520px" :close-on-click-modal="false" :close-on-press-escape="!loading" :show-close="!loading">
       <p class="production-dialog-help">一个工单只关联一次商品规格、批次和计划数量。现场每台车在首次扫码时自动生成单车记录。</p>
       <el-alert v-if="pendingTask" title="上次请求未确认，请重试原工单，系统会防止重复创建。" type="info" :closable="false" />
       <el-form label-position="top" @submit.prevent="saveTask">
-        <el-form-item label="商品规格（SKU）" required><el-select v-model="taskDraft.skuId" :disabled="loading || !!pendingTask" filterable placeholder="请选择商品规格"><el-option v-for="s in skus.filter(item => item.enabled)" :key="s.id" :value="s.id" :label="s.skuCode + ' · ' + s.productName" /></el-select></el-form-item>
+        <el-form-item label="商品规格（SKU）" required><el-select v-model="taskDraft.skuId" :disabled="loading || !!pendingTask" filterable placeholder="请选择商品规格"><el-option v-for="s in skus.filter(item => item.enabled)" :key="s.id" :value="s.id" :label="s.skuCode + ' · ' + s.productName" /></el-select><el-button link type="primary" :disabled="loading || !!pendingTask" @click="prepareWorkOrderSku">没有需要的规格？在这里新增商品</el-button></el-form-item>
         <el-form-item label="生产批次" required><el-input v-model="taskDraft.batchNo" :disabled="loading || !!pendingTask" maxlength="64" placeholder="同一批量生产使用统一批次" /></el-form-item>
         <el-form-item label="计划数量" required><el-input-number v-model="taskDraft.plannedQuantity" :disabled="loading || !!pendingTask" :min="1" :max="1000000" controls-position="right" /></el-form-item>
       </el-form>
-      <template #footer><el-button :disabled="loading" @click="createTaskVisible = false">取消</el-button><el-button type="primary" :loading="loading" @click="saveTask">{{ pendingTask ? '重试创建' : '创建工单' }}</el-button></template>
+      <template #footer><el-button :disabled="loading" @click="createTaskVisible = false">取消</el-button><el-button type="primary" :loading="loading" @click="saveTask">{{ pendingTask ? '重试创建' : '创建并开始生产' }}</el-button></template>
     </el-dialog>
-    <el-dialog v-model="galleryVisible" title="商品图片" width="550px">
-      <el-empty v-if="!galleryImages.length" description="暂无商品图片" />
-      <div v-for="(a, index) in galleryImages" :key="a.id" class="toolbar">
-        <span>图片 {{ index + 1 }}</span><el-button @click="showImage(a.id)">查看</el-button><el-button @click="downloadImage(a.id)">下载</el-button>
-      </div>
-    </el-dialog>
-    <el-dialog v-model="skuVisible" :title="editingId ? '编辑商品 SKU' : '新增商品 SKU'" width="820px" class="sku-editor-dialog" :close-on-click-modal="false" :close-on-press-escape="!skuBusy" :show-close="!skuBusy">
+    <el-dialog v-model="skuVisible" :title="editingId ? '编辑商品 SKU' : '新增商品 SKU'" width="820px" class="sku-editor-dialog" :close-on-click-modal="false" :close-on-press-escape="!skuBusy" :show-close="!skuBusy" @closed="discardSkuImageDraft">
       <p class="sku-editor-intro">这里维护标签亮黄色区域的主信息；一个 SKU 可在 Name 列表中绑定多条 Name 明细。</p>
       <el-form class="sku-editor-form" label-position="top" :disabled="loading">
         <el-form-item label="车型" required>
-          <el-select v-model="sku.modelId" :disabled="!!editingId" filterable placeholder="请选择车型">
+          <el-select v-model="sku.modelId" :disabled="!!editingId || !!createdSkuCodePending" filterable placeholder="请选择车型">
             <el-option v-for="m in models" :key="m.id" :label="m.name" :value="m.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="SKU 编码" required>
-          <el-input v-model="sku.skuCode" :disabled="!!editingId" maxlength="64" placeholder="填写唯一的商品规格编号" />
+          <el-input v-model="sku.skuCode" :disabled="!!editingId || !!createdSkuCodePending" maxlength="64" placeholder="填写唯一的商品规格编号" />
         </el-form-item>
         <el-form-item label="标签标题" required><el-input v-model="sku.productName" maxlength="100" placeholder="如 TEEWING Flux One A" /></el-form-item>
         <el-form-item label="规格"><el-input v-model="sku.specification" maxlength="100" placeholder="如颜色、电池容量等" /></el-form-item>
@@ -816,14 +847,10 @@ onMounted(() =>
       </el-form>
       <section class="sku-editor-images" aria-label="商品图片管理">
         <h3>商品图片</h3>
-        <template v-if="editingId">
-          <div v-if="skuImages.length" class="sku-image-links">
-            <el-button v-for="(a, index) in skuImages" :key="a.id" :disabled="skuBusy" @click="showImage(a.id)">查看图片 {{ index + 1 }}</el-button>
-          </div>
-          <p v-else class="sku-editor-intro">暂无商品图片，可在下方选择并上传。</p>
-          <BusinessAttachmentUpload v-if="skuVisible" :key="editingId" :endpoint="`/api/production/skus/${editingId}/images`" images-only :disabled="loading" @saved="skuImageSaved" @busy="skuImagesBusy = $event" />
-        </template>
-        <p v-else class="sku-editor-intro">保存商品后可上传产品图片。</p>
+        <div v-if="skuImages.length" class="sku-image-links">
+          <el-button v-for="(a, index) in skuImages" :key="a.id" :disabled="skuBusy" @click="showImage(a.id)">查看图片 {{ index + 1 }}</el-button>
+        </div>
+        <BusinessAttachmentUpload ref="skuImageUpload" v-if="skuVisible" :key="skuEditorSessionKey" :endpoint="editingId ? `/api/production/skus/${editingId}/images` : `/api/production/sku-image-drafts/${skuImageDraftToken}`" images-only auto-upload :disabled="loading || (!!createdSkuCodePending && !editingId)" @saved="skuImageSaved" @busy="skuImagesBusy = $event" />
       </section>
       <template #footer>
         <el-button :disabled="skuBusy" @click="skuVisible = false">取消</el-button>
@@ -887,47 +914,18 @@ onMounted(() =>
         ></template
       ></el-dialog
     >
-    <el-dialog
-      :model-value="!!detail"
-      title="工单办理 · 四码、打印与入库"
-      width="min(1180px, 96vw)"
-      @close="detail = undefined; detailTaskPage = 1"
-      ><template v-if="detail"
-        ><p>工单号：{{ detail.workOrderNo }} · 批次：{{ detail.batchNo }}</p>
-        <p>
-          {{ detail.skuCode }} · {{ detail.productName }} ·
-          {{ states[detail.status] }} · 计划 {{ detail.plannedQuantity }} 台 · 已完成 {{ detail.completedQuantity }} 台 · 作业中 {{ detail.inProgressQuantity }} 台
-        </p>
-        <el-alert title="四码完成后生成总码和打印任务；实物入库仍需 PDA 扫总码办理。点击单车的「打印与流转」可原地查看关联记录。" type="info" :closable="false" />
-        <div style="display:flex;gap:12px;flex-wrap:wrap;margin:16px 0"><el-button @click="viewTask(detail.id, detailTaskPage)">刷新工单进度</el-button><el-button v-if="hasPermission(context,'INVENTORY_READ') || hasPermission(context,'AGENT_INVENTORY_READ')" type="primary" @click="continueWithSku('inventory', detail)">查看该 SKU 库存，继续锁定</el-button></div>
-        <p v-if="detail.status === 'RELEASED'">PDA 组装：搜索工单 {{ detail.workOrderNo }}，选中后扫码。该工单计划 {{ detail.plannedQuantity }} 台，不需要逐车创建任务。</p>
-        <DataTable :loading="loading" :error="readError" :rows="detail.tasks?.records ?? []" empty-title="尚无单车生产记录"
-          ><el-table-column prop="id" label="单车任务号" min-width="180" show-overflow-tooltip />
-          <el-table-column prop="frameSn" label="车架码" min-width="130"><template #default="{ row }">{{ row.frameSn || '—' }}</template></el-table-column>
-          <el-table-column prop="motorSn" label="电机码" min-width="130"><template #default="{ row }">{{ row.motorSn || '—' }}</template></el-table-column>
-          <el-table-column prop="batterySn" label="电池码" min-width="130"><template #default="{ row }">{{ row.batterySn || '—' }}</template></el-table-column>
-          <el-table-column prop="displaySn" label="仪表码" min-width="130"><template #default="{ row }">{{ row.displaySn || '—' }}</template></el-table-column>
-          <el-table-column prop="qrCode" label="总码" min-width="150"><template #default="{ row }">{{ row.qrCode || '—' }}</template></el-table-column>
-          <el-table-column label="状态" width="90"><template #default="{ row }">{{ states[row.status] ?? row.status }}</template></el-table-column>
-          <el-table-column label="创建时间 ↓" min-width="165"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column>
-          <el-table-column label="修改时间" min-width="165"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column>
-          <el-table-column label="继续办理" width="125" fixed="right"><template #default="{row}"><el-button link type="primary" @click="openVehicleJourney(row)">打印与流转</el-button></template></el-table-column>
-        </DataTable>
-        <Pagination v-model:page="detailTaskPage" :total="detail.tasks?.total ?? 0" :page-size="50" :disabled="loading" jumper @change="viewTask(detail.id, detailTaskPage)" /></template
-      ></el-dialog
-    >
     <el-dialog :model-value="!!vehicleJourney" title="单车办理 · 打印与库存流转" width="min(1080px,96vw)" @close="vehicleJourney = undefined; journeyVersion++">
       <div v-loading="journeyBusy" v-if="vehicleJourney">
         <p>车架：{{ vehicleJourney.frameSn || '—' }} · 总码：{{ vehicleJourney.qrCode || '四码未完成' }}</p>
         <el-alert v-if="journeyError" type="error" :title="journeyError" :closable="false" /><el-button v-if="journeyError" @click="openVehicleJourney(vehicleJourney)">重试关联记录</el-button>
         <h3>本车打印记录</h3><el-table :data="vehiclePrints" empty-text="暂无打印任务；四码完成后自动生成首次打印任务"><el-table-column prop="id" label="任务号" min-width="180" /><el-table-column label="状态" min-width="100"><template #default="{row}">{{ states[row.status] ?? row.status }}</template></el-table-column><el-table-column label="创建时间 ↓" min-width="165"><template #default="{row}">{{ formatDateTime(row.createdAt) }}</template></el-table-column><el-table-column label="修改时间" min-width="165"><template #default="{row}">{{ formatDateTime(row.updatedAt) }}</template></el-table-column><el-table-column label="操作" width="130"><template #default="{row}"><el-button link type="primary" @click="preview(row.id)">预览 / 打印</el-button></template></el-table-column></el-table>
-        <p>打印提交后请核对实物标签；入库人员在 PDA「入库」选择仓库和库位，再扫描本车总码。</p>
+        <p>打印提交后请核对实物标签；返回生产单的「办理入库」即可继续，也可由入库人员使用 PDA 扫码办理。</p>
         <el-button v-if="vehicleTrace?.vehicle.currentOrderNo && hasPermission(context,'ORDER_READ')" type="primary" @click="emit('order',String(vehicleTrace.vehicle.currentOrderNo))">打开本车关联订单 {{ vehicleTrace.vehicle.currentOrderNo }}</el-button>
         <TraceDetails v-if="vehicleTrace" :data="vehicleTrace" />
         <p v-else-if="vehicleJourney.qrCode && !hasPermission(context,'TRACE_READ')">当前账号没有追溯权限，库存及出入库履历请由有权限的人员查看。</p>
       </div>
     </el-dialog>
-    <el-dialog v-model="previewVisible" title="外箱标签预览"
+    <el-dialog v-model="previewVisible" title="外箱标签预览" @closed="printRefreshKey++"
       ><p v-if="previewJob">{{ states[previewJob.status] }} · {{ previewJob.message || previewJob.reason }}</p><iframe
         ref="labelFrame"
         @load="labelReady = true"
@@ -950,6 +948,7 @@ onMounted(() =>
   </section>
 </template>
 <style scoped>
+.production-list-view { display: grid; gap: 18px; min-width: 0; }
 .toolbar {
   display: flex;
   gap: 10px;

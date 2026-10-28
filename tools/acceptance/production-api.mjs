@@ -66,7 +66,7 @@ try {
   assert.equal(productionStock.length,1); assert.equal(productionStock[0].physicalQty,1); assert.equal(productionStock[0].quarantinedQty,1);
   const inventoryModule=await request(`/api/modules/inventory?keyword=${prefix}`);
   assert.equal(inventoryModule.total,1);
-  const availableIndex=inventoryModule.columns.indexOf('可用库存'), quarantineIndex=inventoryModule.columns.indexOf('隔离库存');
+  const availableIndex=inventoryModule.columns.indexOf('分摊可新增上限'), quarantineIndex=inventoryModule.columns.indexOf('隔离库存');
   assert(availableIndex>=0 && quarantineIndex>=0); assert.equal(String(inventoryModule.rows[0][availableIndex]),'0'); assert.equal(String(inventoryModule.rows[0][quarantineIndex]),'1');
   await request('/api/dashboard/summary');
   await request(`/api/production/issues/${inventoryIssue.id}/resolve`,{reason:'库存口径验收结束'}); check('在库隔离统一生产库存及通用库存可用量');

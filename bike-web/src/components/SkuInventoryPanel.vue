@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { createUuid } from '../utils/uuid'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '../api'
@@ -65,7 +66,7 @@ async function save() {
   const body = { customerId: form.customerId, agentId: form.agentId ?? null, expiresAt: form.expiresAt || null, remark: form.remark || null,
     items: selected.value.map(({ skuId, quantity }) => ({ skuId, quantity })).sort((a, b) => a.skuId - b.skuId) }
   const fingerprint = JSON.stringify(body)
-  if (fingerprint !== retryPayload) { retryPayload = fingerprint; retryKey = crypto.randomUUID() }
+  if (fingerprint !== retryPayload) { retryPayload = fingerprint; retryKey = createUuid() }
   saving.value = true; saveError.value = ''
   try {
     result.value = (await api.post('/api/sku-locks', { requestId: retryKey, ...body })).data.data

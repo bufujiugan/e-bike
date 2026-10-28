@@ -1,0 +1,185 @@
+{
+  "date": "2026-10-27",
+  "timezone": "Asia/Shanghai",
+  "status": "passed",
+  "deployed": false,
+  "database": "isolated MySQL 8.4.6, V1-V55",
+  "uuidTests": {
+    "passed": 6,
+    "failed": 0
+  },
+  "backendDefault": {
+    "skipped": 193,
+    "passed": 282,
+    "failed": 0,
+    "tests": 475
+  },
+  "productionDatabaseTests": {
+    "skipped": 0,
+    "passed": 94,
+    "failed": 0,
+    "tests": 94
+  },
+  "build": {
+    "server": "passed",
+    "pda": "passed",
+    "web": "passed"
+  },
+  "workOrdersApi": [
+    {
+      "name": "创建多车工单、重试幂等、请求内容冲突和数量校验",
+      "passed": true
+    },
+    {
+      "name": "暂停阻断扫码且不建单车，恢复后可生产",
+      "passed": true
+    },
+    {
+      "name": "失败首码回滚单车及名额，独立保留失败记录",
+      "passed": true
+    },
+    {
+      "name": "首码自动建单车、重复扫码幂等、断点恢复",
+      "passed": true
+    },
+    {
+      "name": "禁止跨工单续扫其他单车",
+      "passed": true
+    },
+    {
+      "name": "计划数量上限拦截、取消释放占用、乱序四码完成",
+      "passed": true
+    },
+    {
+      "name": "一张工单生产两车，满额自动完工且禁止超产",
+      "passed": true
+    },
+    {
+      "name": "工单列表按 SKU、批次和完成状态筛选",
+      "passed": true
+    },
+    {
+      "name": "标签真实渲染、首打不重复、领取回报及补打",
+      "passed": true
+    },
+    {
+      "name": "异常列表可查询，隔离车辆阻断入库，解除后放行",
+      "passed": true
+    },
+    {
+      "name": "两台车真实入库，SKU 实物库存为 2",
+      "passed": true
+    },
+    {
+      "name": "SKU 锁定、锁定转订单及重试幂等、订单确认",
+      "passed": true
+    },
+    {
+      "name": "订单分两批出库，已发数量从 1 累加至 2",
+      "passed": true
+    },
+    {
+      "name": "车架、部件、总码均可追溯生产绑定及出入库",
+      "passed": true
+    }
+  ],
+  "legacyProductionApi": [
+    {
+      "name": "失败扫码独立事务留痕且业务无残留",
+      "passed": true
+    },
+    {
+      "name": "HTTP 扫码参数校验失败留痕",
+      "passed": true
+    },
+    {
+      "name": "扫码进度持久化与恢复",
+      "passed": true
+    },
+    {
+      "name": "重复扫码幂等",
+      "passed": true
+    },
+    {
+      "name": "无序四码完成与聚合码",
+      "passed": true
+    },
+    {
+      "name": "重复完成不重复首打",
+      "passed": true
+    },
+    {
+      "name": "补打任务可查询领取与回报",
+      "passed": true
+    },
+    {
+      "name": "隔离阻断入库及解除",
+      "passed": true
+    },
+    {
+      "name": "按业务单号精确查询入库",
+      "passed": true
+    },
+    {
+      "name": "在库隔离统一生产库存及通用库存可用量",
+      "passed": true
+    },
+    {
+      "name": "客户订单校验出库",
+      "passed": true
+    },
+    {
+      "name": "三种编码追溯返回生产与仓储完整数据",
+      "passed": true
+    }
+  ],
+  "webBrowser": {
+    "workOrderNo": "WO-20261027-182304-46B910",
+    "checks": [
+      "普通 HTTP 创建工单真实落库；响应丢失后原标识重试，只创建一张工单",
+      "真实浏览器乱序四码扫码，单车及工单自动完成",
+      "真实标签包含本车车架码和总码，浏览器成功渲染",
+      "Web 同页完成实物总码核对、仓库库位选择及真实入库"
+    ],
+    "environment": {
+      "secure": false,
+      "randomUUID": "undefined",
+      "getRandomValues": "function"
+    },
+    "workOrderId": 9,
+    "errors": [],
+    "stockNo": "IN5DEA305765A94DB7"
+  },
+  "pdaBrowser": {
+    "orderId": 5,
+    "reworkNo": "RW6690A7DD43B8466B",
+    "checks": [
+      "PDA 搜索工单、首码建立单车、刷新后恢复同一单车",
+      "PDA 四码完成，生成总码与真实标签预览",
+      "HTTP PDA 登记异常并真实上传 WebP 图片，UUID 兼容生效",
+      "PDA 选择仓库库位，扫描总码完成真实入库",
+      "PDA 在库返工换电池成功，保留历史绑定",
+      "PDA 按客户搜索订单、扫码校验及实际出库成功",
+      "PDA 最终追溯展示新旧绑定、生产、入库、返工及出库记录",
+      "返工旧件自动隔离，复检放行接口恢复可用"
+    ],
+    "errors": [],
+    "workOrderId": 8,
+    "quarantine": {
+      "before": 1,
+      "released": "SUCCESS",
+      "after": 0
+    },
+    "stockInNo": "IN99B5EB6999624691",
+    "environment": {
+      "secure": false,
+      "randomUUID": "undefined"
+    },
+    "stockOutNo": "OUT4EDC3BC558A749E1"
+  },
+  "limitations": [
+    "未部署客户服务器",
+    "未验证打印机实物出纸、扫码枪硬件与条码实物识读",
+    "未重跑完整 PI 财务物流与售后验收"
+  ]
+}

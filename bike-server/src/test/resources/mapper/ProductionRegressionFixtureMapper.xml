@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="ProductionRegressionFixture">
+    <update id="createTask">CREATE TABLE bike_production_task(id VARCHAR(64) PRIMARY KEY,sku_id BIGINT,batch_no VARCHAR(64),status VARCHAR(20),vehicle_id BIGINT,created_by VARCHAR(64),created_at DATETIME(3),updated_at DATETIME(3),work_order_id BIGINT NULL)</update>
+    <insert id="insertTask">INSERT INTO bike_production_task(id,sku_id,batch_no,status,vehicle_id,created_by,created_at,updated_at) VALUES(?,1,'BATCH-TEST',?,?,'tester','2026-09-01 00:00:00',?)</insert>
+    <update id="addFailureUpdatedAt">ALTER TABLE bike_production_scan_failure ADD COLUMN updated_at DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3)</update>
+    <update id="createQuarantinedParts">CREATE TEMPORARY TABLE bike_part(id BIGINT PRIMARY KEY,part_sn VARCHAR(128),part_type VARCHAR(32),qc_status VARCHAR(32),status VARCHAR(32),created_at DATETIME(3) DEFAULT '2026-09-01 00:00:00',updated_at DATETIME(3) DEFAULT '2026-09-01 00:00:00')</update>
+    <insert id="insertQuarantinedPart">INSERT INTO bike_part(id,part_sn,part_type,qc_status,status) VALUES(?,?,'MOTOR','FAILED','QUARANTINED')</insert>
+    <update id="addModelCode">ALTER TABLE bike_product_model ADD COLUMN model_code VARCHAR(64)</update>
+    <update id="addSkuFields">ALTER TABLE bike_production_sku ADD COLUMN category VARCHAR(64),ADD COLUMN battery_description VARCHAR(255),ADD COLUMN package_quantity INT,ADD COLUMN carton_size_cm VARCHAR(64),ADD COLUMN gross_weight_kg DECIMAL(12,2),ADD COLUMN net_weight_kg DECIMAL(12,2),ADD COLUMN created_at DATETIME(3),ADD COLUMN updated_at DATETIME(3)</update>
+    <update id="createSkuNames">CREATE TABLE bike_production_sku_name(id BIGINT PRIMARY KEY,sku_id BIGINT)</update>
+    <update id="addIssueUpdatedAt">ALTER TABLE bike_production_issue ADD COLUMN updated_at DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3)</update>
+</mapper>

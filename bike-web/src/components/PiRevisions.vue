@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { createUuid } from '../utils/uuid'
 import { ref, watch } from 'vue'
 import { piApi, type PiView } from '../pi-api'
 
@@ -24,7 +25,7 @@ async function create() {
   if (!reason.value.trim() || reason.value.length > 500) { error.value = '请输入 1–500 字修订原因'; return }
   const id = props.pi.id, current = version
   const next = JSON.stringify([id, props.pi.revision, reason.value.trim()])
-  if (fingerprint !== next) { requestId = crypto.randomUUID(); fingerprint = next }
+  if (fingerprint !== next) { requestId = createUuid(); fingerprint = next }
   busy.value = true; error.value = ''
   try {
     const result = await piApi.createRevision(id, { requestId, expectedRevision: props.pi.revision, reason: reason.value.trim() })

@@ -5,22 +5,24 @@ import type { NavGroup, NavItem } from '../../config/page-presentation'
 
 const props = defineProps<{ groups: NavGroup[]; active: string; username: string; role: string; collapsed: boolean }>()
 const emit = defineEmits<{ 'update:collapsed': [collapsed: boolean]; navigate: [key: string]; settings: []; logout: [] }>()
-const collapsedGroups = ref(new Set<string>())
-const expandedSubmenus = ref(new Set<string>(['production']))
+const collapsedGroups = ref(new Set(['生产作业', '仓储管理', '销售与交付', '售后与追溯', '资料与设置', '代理商工作台']))
+const expandedSubmenus = ref(new Set<string>())
 const navigation = ref<HTMLElement | null>(null)
 const groupPresentation: Record<string, { id: string; icon: string }> = {
   工作台: { id: 'workbench', icon: 'home' },
-  生产与库存: { id: 'manufacturing', icon: 'truck' },
-  业务协同: { id: 'business', icon: 'network' },
-  系统管理: { id: 'system', icon: 'roles' },
+  销售与交付: { id: 'sales', icon: 'orders' },
+  生产作业: { id: 'manufacturing', icon: 'production' },
+  仓储管理: { id: 'warehouse', icon: 'inventory' },
+  售后与追溯: { id: 'service', icon: 'service' },
+  资料与设置: { id: 'settings', icon: 'layers' },
+  代理商工作台: { id: 'agent', icon: 'network' },
 }
 
 // 只归并已通过原权限过滤的菜单，不增删或重新授权业务入口。
-const displayGroups = computed(() => ['工作台', '生产与库存', '业务协同', '系统管理'].map(label => ({
-  label,
-  ...groupPresentation[label],
-  items: props.groups.filter(group => (group.label === '基础资料' ? '系统管理' : group.label === '代理商工作台' ? '业务协同' : group.label) === label).flatMap(group => group.items),
-})).filter(group => group.items.length))
+const displayGroups = computed(() => ['工作台', '生产作业', '仓储管理', '销售与交付', '售后与追溯', '资料与设置', '代理商工作台'].flatMap(label => {
+  const group = props.groups.find(entry => entry.label === label)
+  return group?.items.length ? [{ ...group, ...groupPresentation[label] }] : []
+}))
 
 function toggleGroup(label: string) {
   const next = new Set(collapsedGroups.value)

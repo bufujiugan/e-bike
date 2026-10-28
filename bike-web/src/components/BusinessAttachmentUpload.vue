@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { createUuid } from '../utils/uuid'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import api from '../api'
 
-const props = defineProps<{ endpoint: string; imagesOnly?: boolean; visibility?: string; disabled?: boolean }>()
+const props = defineProps<{ endpoint: string; imagesOnly?: boolean; visibility?: string; disabled?: boolean; autoUpload?: boolean }>()
 const emit = defineEmits<{ saved: [attachment: any]; busy: [value: boolean] }>()
 type Entry = { id: string; file: File; state: 'ready' | 'uploading' | 'saved' | 'failed'; progress: number; message: string }
 const entries = ref<Entry[]>([]), error = ref(''), working = ref(false), input = ref<HTMLInputElement>()
@@ -20,13 +21,15 @@ function select(event: Event) {
       error.value = `${file.name}：格式或大小无效。图片最大20MB${props.imagesOnly ? '' : '，PDF/XLSX最大50MB'}`
       continue
     }
-    entries.value.push({ id: crypto.randomUUID(), file, state: 'ready', progress: 0, message: '' })
+    entries.value.push({ id: createUuid(), file, state: 'ready', progress: 0, message: '' })
   }
   if (input.value) input.value.value = ''
+  if (props.autoUpload && pending.value) void start()
 }
 async function start(selected?: Entry) {
-  if (working.value || props.disabled) return
+  if (working.value || props.disabled) return false
   const current = generation, endpoint = props.endpoint, visibility = props.visibility
+  if (!endpoint) { error.value = '附件上传地址无效，请刷新后重试'; return false }
   working.value = true; emit('busy', true); error.value = ''
   const queue = selected ? [selected] : entries.value.filter(row => row.state !== 'saved')
   try {
@@ -51,22 +54,26 @@ async function start(selected?: Entry) {
       }
     }
   } finally { if (current === generation) { working.value = false; emit('busy', false) } }
+  return current === generation && queue.every(row => row.state === 'saved')
 }
 function clear() { if (!working.value) { entries.value = []; error.value = ''; if (input.value) input.value.value = '' } }
 watch(() => [props.endpoint, props.visibility], () => { generation++; working.value = false; emit('busy', false); clear() })
 onBeforeUnmount(() => { generation++; emit('busy', false) })
+defineExpose({
+  hasPending: () => pending.value,
+})
 </script>
 
 <template>
   <section class="attachment-queue">
-    <p>每批最多20个文件；JPG / PNG / WebP 图片最大20MB<span v-if="!imagesOnly">，PDF / XLSX 文档最大50MB</span>。</p>
+    <p><template v-if="autoUpload">选择文件后自动上传；每批最多20个文件。</template><template v-else>每批最多20个文件；JPG / PNG / WebP 图片最大20MB<span v-if="!imagesOnly">，PDF / XLSX 文档最大50MB</span>。</template></p>
     <input ref="input" type="file" multiple :accept="accept" :disabled="working || disabled" aria-label="选择上传附件" @change="select" />
-    <div class="queue-actions"><el-button type="primary" :loading="working" :disabled="!pending || disabled" @click="start()">上传待处理文件</el-button><el-button :disabled="working || !entries.length" @click="clear">清空当前批次</el-button></div>
+    <div class="queue-actions"><el-button v-if="!autoUpload" type="primary" :loading="working" :disabled="!pending || disabled" @click="start()">上传待处理文件</el-button><el-button :disabled="working || !entries.length" @click="clear">清空当前批次</el-button></div>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <div v-for="row in entries" :key="row.id" class="queue-item">
       <span>{{ row.file.name }} · {{ Math.ceil(row.file.size / 1024) }} KB</span>
       <el-progress :percentage="row.progress" :status="row.state === 'failed' ? 'exception' : row.state === 'saved' ? 'success' : undefined" />
-      <span role="status">{{ row.message || (row.state === 'uploading' ? '上传并校验中' : '等待上传') }}</span>
+      <span role="status">{{ row.message || (row.state === 'uploading' ? '上传并校验中' : autoUpload ? '等待自动上传' : '等待上传') }}</span>
       <el-button v-if="row.state === 'failed'" link type="primary" :disabled="working || disabled" @click="start(row)">重试此文件</el-button>
     </div>
   </section>

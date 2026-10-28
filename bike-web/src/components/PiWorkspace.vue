@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { createUuid } from '../utils/uuid'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
@@ -86,7 +87,7 @@ function emptyDocument(): PiDocument {
   return { sellerName: '', sellerAddress: '', sellerContact: '', buyerAddress: '', buyerContact: '', bankName: '', bankAccount: '', beneficiary: '', paymentTerms: '', deliveryTerms: '', templateCode: '', templateVersion: '' }
 }
 type DraftItem = { key: string; skuId: number | undefined; quantity: number; unitPrice: string; discountAmount: string; taxAmount: string; unit: string; imageAttachmentId?: string | null }
-function newItem(): DraftItem { return { key: crypto.randomUUID(), skuId: undefined, quantity: 1, unitPrice: '', discountAmount: '0.00', taxAmount: '0.00', unit: '台' } }
+function newItem(): DraftItem { return { key: createUuid(), skuId: undefined, quantity: 1, unitPrice: '', discountAmount: '0.00', taxAmount: '0.00', unit: '台' } }
 const draft = reactive({ customerId: undefined as number | undefined, agentId: undefined as number | undefined, sourceOrderId: undefined as number | undefined, tradeType: 'DOMESTIC', currencyCode: 'CNY', plannedShipDate: '', discountAmount: '0.00', taxAmount: '0.00', freightAmount: '0.00', otherFeeAmount: '0.00', depositRequiredAmount: '', shipmentRequiredAmount: '', remark: '', document: emptyDocument(), items: [newItem()] })
 const draftSteps = [
   { title: '客户与商品', description: '选客户，添加商品' },
@@ -374,7 +375,7 @@ async function openEdit() {
     depositRequiredAmount: current.depositRequiredAmount == null ? '' : money(current.depositRequiredAmount),
     shipmentRequiredAmount: current.shipmentRequiredAmount == null ? '' : money(current.shipmentRequiredAmount),
     remark: current.remark || '', document: { ...emptyDocument(), ...current.document },
-    items: current.items.map(item => ({ key: crypto.randomUUID(), skuId: item.skuId, quantity: item.quantity, unitPrice: money(item.unitPrice), discountAmount: money(item.discountAmount), taxAmount: money(item.taxAmount), unit: item.unit || '台', imageAttachmentId: item.imageAttachmentId })),
+    items: current.items.map(item => ({ key: createUuid(), skuId: item.skuId, quantity: item.quantity, unitPrice: money(item.unitPrice), discountAmount: money(item.discountAmount), taxAmount: money(item.taxAmount), unit: item.unit || '台', imageAttachmentId: item.imageAttachmentId })),
   })
   options.value = {
     customers: [{ id: current.customerId, code: current.customerCode || '', name: current.customerName }],
@@ -422,7 +423,7 @@ async function saveCreate() {
       if (!selectedLocks.value.length) throw new Error('请选择至少一条来源SKU锁定')
       const sources = selectedLocks.value.map(lock => ({ lockId: lock.id, quantity: lock.quantity })).sort((a,b) => a.lockId - b.lockId)
       const fingerprint = JSON.stringify({ sources, pi: body })
-      if (fingerprint !== conversionFingerprint) { conversionFingerprint = fingerprint; conversionKey = crypto.randomUUID() }
+      if (fingerprint !== conversionFingerprint) { conversionFingerprint = fingerprint; conversionKey = createUuid() }
       created = await piApi.convert({ requestId: conversionKey, sources, pi: body })
     } else created = editingId.value == null ? await piApi.create(body) : await piApi.update(editingId.value, body)
     createVisible.value = false; await load(); await openDetail(created); ElMessage.success('PI 草稿已保存')
@@ -458,7 +459,7 @@ watch(detailVisible, value => { if (!value) { receiptVisible.value = false; logi
 watch(showFinance, value => { if (!value) { receiptVisible.value = false; receiptPayment.value = null } })
 const paymentMethods: Record<string, string> = { BANK_TRANSFER: '银行转账', CASH: '现金', OTHER: '其他' }
 const payment = reactive({ requestId: '', amount: '', currencyCode: '', receivedAt: '', remark: '', paymentMethod: '', paymentMethodNote: '' })
-function openPayment() { if (!detail.value || !canPay.value) return; Object.assign(payment, { requestId: crypto.randomUUID(), amount: '', currencyCode: detail.value.currencyCode, receivedAt: '', remark: '', paymentMethod: '', paymentMethodNote: '' }); paymentError.value = ''; paymentVisible.value = true }
+function openPayment() { if (!detail.value || !canPay.value) return; Object.assign(payment, { requestId: createUuid(), amount: '', currencyCode: detail.value.currencyCode, receivedAt: '', remark: '', paymentMethod: '', paymentMethodNote: '' }); paymentError.value = ''; paymentVisible.value = true }
 async function savePayment() {
   if (!detail.value || !canPay.value || actionBusy.value) return
   if (!payment.paymentMethod || payment.paymentMethod === 'OTHER' && !payment.paymentMethodNote.trim()) { paymentError.value = '请选择收款方式，其他方式须填写说明'; return }
@@ -473,7 +474,7 @@ const reversalVisible = ref(false), reversalError = ref('')
 const reversal = reactive({ paymentId: 0, requestId: '', revision: 1, reason: '' })
 function openPaymentReversal(row: PiPayment) {
   if (!canReversePayment.value || row.status !== 'CONFIRMED') return
-  Object.assign(reversal, { paymentId: row.id, requestId: crypto.randomUUID(), revision: row.revision, reason: '' }); reversalError.value = ''; reversalVisible.value = true
+  Object.assign(reversal, { paymentId: row.id, requestId: createUuid(), revision: row.revision, reason: '' }); reversalError.value = ''; reversalVisible.value = true
 }
 async function savePaymentReversal() {
   if (!detail.value || !canReversePayment.value || actionBusy.value) return
@@ -534,7 +535,7 @@ async function withdrawLogistics(row: PiLogistics) {
   try {
     const answer = await ElMessageBox.prompt('请核对承运商与实际货物后填写撤回原因。撤回历史和原运单会保留。', '撤回物流', { inputValidator: (value: string) => value.trim().length > 0 && value.length <= 500 ? true : '请填写1–500字原因' })
     actionBusy.value = true
-    detail.value = await piApi.withdrawLogistics(detail.value.id,row.id,{ requestId: crypto.randomUUID(), expectedRevision: row.revision, reason: answer.value.trim() }); await load()
+    detail.value = await piApi.withdrawLogistics(detail.value.id,row.id,{ requestId: createUuid(), expectedRevision: row.revision, reason: answer.value.trim() }); await load()
   } catch(error) { if(error !== 'cancel' && error !== 'close') operationError.value = message(error,'物流撤回失败，请刷新后核对') }
   finally { actionBusy.value = false }
 }
@@ -555,7 +556,7 @@ async function saveLogistics() {
   actionBusy.value = true; logisticsError.value = ''
   try {
     const fingerprint = JSON.stringify({ piId: detail.value.id, logisticsId: logisticsEditingId.value, ...logistics })
-    if(fingerprint !== logisticsFingerprint) { logisticsFingerprint = fingerprint; logisticsKey = crypto.randomUUID() }
+    if(fingerprint !== logisticsFingerprint) { logisticsFingerprint = fingerprint; logisticsKey = createUuid() }
     const body = { ...logistics, stockOutBatchId: logistics.stockOutBatchId ?? null, requestId: logisticsKey }
     detail.value = logisticsEditingId.value ? await piApi.updateLogistics(detail.value.id,logisticsEditingId.value,body) : await piApi.logistics(detail.value.id,body)
     logisticsVisible.value = false; await loadWorkflow(detail.value.id); await load(); ElMessage.success(logistics.status === 'SHIPPED' ? '国际运输已保存，流程已自动推进' : '物流计划已保存')

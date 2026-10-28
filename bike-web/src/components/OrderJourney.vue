@@ -6,6 +6,7 @@ import { hasAnyPermission, hasPermission, hasRole, type PermissionContext } from
 import { reservationLabel } from '../pi-api'
 import RecordDetails from './RecordDetails.vue'
 import PiWorkspace from './PiWorkspace.vue'
+import AppIcon from './AppIcon.vue'
 
 const props = defineProps<{ orderNo: string; context: PermissionContext | null }>()
 const emit = defineEmits<{ close: []; changed: [] }>()
@@ -15,6 +16,12 @@ let version = 0
 const internal = computed(() => !hasRole(props.context, 'WEB_AGENT') && !hasRole(props.context, 'PDA_OPERATOR'))
 const canConfirm = computed(() => internal.value && hasPermission(props.context, 'ORDER_WRITE') && ['DRAFT', 'PENDING'].includes(order.value?.status))
 const names: Record<string, string> = { DRAFT: '草稿', PENDING: '待确认', CONFIRMED: '待出库', PARTIAL_SHIPPED: '部分出库', SHIPPED: '已完成', CANCELLED: '已作废', CLOSED: '已关闭' }
+const journeyStages = computed(() => {
+  const status = order.value?.status
+  if (!status || ['CANCELLED', 'CLOSED'].includes(status)) return []
+  const current = status === 'SHIPPED' ? 2 : ['CONFIRMED', 'PARTIAL_SHIPPED'].includes(status) ? 1 : 0
+  return ['核对并确认订单', '核对放行与出库', '完成交付核对'].map((title, index) => ({ title, state: index < current ? 'done' : index === current ? 'current' : 'waiting' }))
+})
 const time = (value?: string) => value ? value.replace('T', ' ').slice(0, 19) : '—'
 const nextStep = computed(() => {
   const current = order.value
@@ -59,7 +66,8 @@ watch(() => props.orderNo, () => { showPi.value = false; void load() }, { immedi
     <el-alert v-if="error" type="error" :title="error" :closable="false" />
     <div v-loading="busy" class="order-journey">
       <template v-if="order">
-        <div class="journey-heading"><div><h2>{{ order.orderNo }}</h2><p>{{ order.customerName }} · {{ order.modelName }} · {{ names[order.status] ?? order.status }}</p></div><el-button :loading="busy" @click="load">刷新进度</el-button></div>
+        <div class="journey-heading"><div><span class="journey-eyebrow">当前办理订单</span><h2>{{ order.orderNo }}</h2><p>{{ order.customerName }} · {{ order.modelName }}</p></div><div class="journey-heading-actions"><el-tag>{{ names[order.status] ?? order.status }}</el-tag><el-button :loading="busy" @click="load">刷新进度</el-button></div></div>
+        <ol v-if="journeyStages.length" class="journey-stages" aria-label="订单办理进度"><li v-for="(step, index) in journeyStages" :key="step.title" :class="step.state" :aria-current="step.state === 'current' ? 'step' : undefined"><span><AppIcon v-if="step.state === 'done'" name="check" /><template v-else>{{ index + 1 }}</template></span><strong>{{ step.title }}</strong></li></ol>
         <div class="journey-counts"><div>订购数量<strong>{{ order.orderQty }} 台</strong></div><div>已出库<strong>{{ order.shippedQty }} 台</strong></div><div>未出库<strong>{{ Math.max(0, order.orderQty - order.shippedQty) }} 台</strong></div><div>库存占用<strong>{{ reservationLabel(order.reservationStatus) }}</strong></div></div>
         <el-alert :title="nextStep" type="info" :closable="false" show-icon />
         <div class="journey-actions"><el-button v-if="canConfirm" type="primary" :loading="saving" @click="confirm">确认订单，继续出库</el-button><el-button v-if="hasPermission(context, 'PI_READ')" @click="showPi = !showPi">{{ showPi ? '收起 PI 与放行' : '本单 PI 与发货放行' }}</el-button></div>
@@ -83,6 +91,7 @@ watch(() => props.orderNo, () => { showPi.value = false; void load() }, { immedi
 </template>
 
 <style scoped>
+.journey-eyebrow{display:block;margin-bottom:8px;color:#8192a5;font-size:11px;letter-spacing:1px}.journey-heading{padding:18px;background:#f6f9fd;border:1px solid #e4ecf5;border-radius:10px}.journey-heading h2{font-size:21px}.journey-heading p{margin-bottom:0}.journey-heading-actions{display:flex;align-items:center;gap:12px}.journey-stages{display:flex;list-style:none;gap:12px;padding:0;margin:20px 0}.journey-stages li{display:flex;align-items:center;gap:9px;flex:1;color:#8a9aab;font-size:12px}.journey-stages li:not(:last-child)::after{content:'';height:1px;background:#e1e8f0;flex:1;margin-left:8px}.journey-stages li>span{display:grid;place-items:center;width:27px;height:27px;border-radius:50%;background:#f0f3f7;flex-shrink:0}.journey-stages .current{color:#2368cb}.journey-stages .current>span{background:#2368cb;color:white}.journey-stages .done{color:#168775}.journey-stages .done>span{background:#edf8f4}.journey-stages .app-icon{width:17px;height:17px}.journey-stages strong{font-weight:500}@media(max-width:600px){.journey-stages{flex-direction:column}.journey-stages li:not(:last-child)::after{display:none}}
 .order-journey :deep(.pi-workspace){width:100%;max-width:100%;box-sizing:border-box;padding:16px;margin:16px 0}.order-journey :deep(.pi-heading){margin:0 0 16px;padding:12px 0}.order-journey :deep(.pi-filters){flex-wrap:wrap}.order-journey :deep(.pi-filters>*){max-width:100%}
 .order-journey{min-height:120px;overflow-wrap:anywhere}.journey-heading,.journey-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.journey-heading h2{margin:0}.journey-heading p,.order-journey>p{color:#64748b;line-height:1.8}.journey-counts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:18px 0}.journey-counts>div{background:#f1f6fb;padding:14px;border-radius:10px}.journey-counts strong{display:block;margin-top:8px;color:#1765ad}.journey-actions{justify-content:flex-start;margin:16px 0}.el-collapse{margin-top:18px}@media(max-width:600px){.journey-counts{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
