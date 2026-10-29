@@ -9,6 +9,7 @@ import PiDispatchPanel from './components/PiDispatchPanel.vue'
 
 const username = ref('admin')
 const password = ref('')
+const passwordVisible = ref(false)
 const loading = ref(false)
 const loggedIn = ref(Boolean(localStorage.getItem('bike_access_token')))
 const dispatchMode = ref('order')
@@ -430,23 +431,48 @@ if (loggedIn.value) {
 </script>
 
 <template>
-  <main class="pda-shell">
+  <main class="pda-shell" :class="{ 'is-login': !loggedIn }">
     <section v-if="!loggedIn" class="login-panel">
-      <p class="eyebrow">BIKE PDA</p>
-      <h1>工位登录</h1>
-      <p class="description">生产扫码作业端</p>
-      <van-form @submit="login">
-        <van-cell-group inset>
-          <van-field v-model="username" name="username" label="账号" placeholder="请输入账号" />
-          <van-field v-model="password" name="password" type="password" autocomplete="current-password" label="密码" placeholder="请输入密码" />
-        </van-cell-group>
-        <div class="action">
-          <van-button block type="primary" native-type="submit" :loading="loading">登录</van-button>
-        </div>
-      </van-form>
+      <header class="login-hero">
+        <div class="login-brand"><i aria-hidden="true" /><span>BIKE PDA</span></div>
+        <div class="login-hero-visual" aria-hidden="true"><span class="login-scan-frame"><van-icon name="scan" /></span><span class="login-gear"><van-icon name="setting-o" /></span></div>
+        <p class="login-manufacturing"><van-icon name="cluster-o" />E-BIKE MANUFACTURING</p>
+        <h1>工位登录</h1>
+        <p class="description">智能制造作业终端</p>
+      </header>
+
+      <section class="login-form-card">
+        <header class="login-form-heading">
+          <span><van-icon name="manager-o" /></span>
+          <div><h2>账号登录</h2><p>使用已分配的工位账号进入作业</p></div>
+        </header>
+        <van-form @submit="login">
+          <div class="login-fields">
+            <label>
+              <span>工位账号</span>
+              <van-field v-model="username" name="username" autocomplete="username" placeholder="请输入账号" clearable>
+                <template #left-icon><van-icon name="contact-o" /></template>
+              </van-field>
+            </label>
+            <label>
+              <span>登录密码</span>
+              <van-field v-model="password" name="password" :type="passwordVisible ? 'text' : 'password'" autocomplete="current-password" placeholder="请输入密码">
+                <template #left-icon><van-icon name="lock" /></template>
+                <template #right-icon><button type="button" class="password-visibility" :aria-label="passwordVisible ? '隐藏密码' : '显示密码'" @click="passwordVisible = !passwordVisible"><van-icon :name="passwordVisible ? 'eye-o' : 'closed-eye'" /></button></template>
+              </van-field>
+            </label>
+          </div>
+          <div class="login-action">
+            <van-button block type="primary" native-type="submit" :loading="loading"><van-icon name="sign" />登录工位</van-button>
+          </div>
+        </van-form>
+        <div class="login-terminal-status"><span><i />终端在线</span><span>安全连接</span></div>
+      </section>
+
+      <footer class="login-footer">BIKE PDA · PRODUCTION SYSTEM</footer>
     </section>
-    <section v-else class="work-panel">
-      <header class="work-header"><div><p class="eyebrow">BIKE PDA</p><h1>工位作业</h1></div><van-button size="small" plain type="primary" @click="logout">退出</van-button></header>
+    <section v-else class="work-panel pda-work-panel">
+      <header class="work-header"><div><p class="eyebrow">BIKE PDA</p><h1>工位作业</h1><p class="pda-header-tagline">高效 · 准确 · 智能制造</p></div><div class="pda-manufacturing-mark" aria-hidden="true"><van-icon name="setting-o" /><span>E-BIKE<br>MANUFACTURING</span></div><van-button size="small" plain type="primary" @click="logout"><van-icon name="share-o" />退出</van-button></header>
       <van-dialog v-model:show="passwordChangeVisible" title="首次登录请修改密码" :show-confirm-button="false" :close-on-click-overlay="false">
         <div class="password-dialog-form">
           <van-field v-model="currentPassword" type="password" label="当前密码" />
@@ -466,13 +492,31 @@ if (loggedIn.value) {
       <section v-else-if="mode === 'assembly'" class="form-section">
         <ProductionStation v-if="authContext && !passwordChangeVisible" :key="authContext.username" :username="authContext.username" />
       </section>
-      <section v-else-if="mode === 'stockIn'" class="form-section">
-        <van-dropdown-menu :overlay="false">
-          <van-dropdown-item v-model="warehouseId" :options="warehouseOptions" :title="warehouseId === null ? '选择仓库' : undefined" />
-          <van-dropdown-item v-model="locationId" :options="locationOptions" :title="locationId === null ? '选择库位' : undefined" />
-        </van-dropdown-menu>
-        <van-field ref="vehicleQrField" v-model="vehicleQrCode" label="聚合码" placeholder="扫描整车聚合码" clearable autofocus @keyup.enter="validateStockOperation('in')" />
-        <van-button block type="primary" :loading="busy" @click="submitStockIn">确认入库</van-button>
+      <section v-else-if="mode === 'stockIn'" class="form-section stock-in-section">
+        <van-notice-bar class="stock-in-guide" text="选择实际入库仓库和库位后，扫描整车聚合码并确认入库。" wrapable />
+        <section class="pda-card">
+          <h2>入库位置</h2>
+          <label class="pda-field-label">
+            仓库
+            <select v-model="warehouseId" class="pda-select" aria-label="入库仓库" :disabled="busy">
+              <option :value="null" disabled>请选择仓库</option>
+              <option v-for="warehouse in warehouseOptions" :key="warehouse.value" :value="warehouse.value">{{ warehouse.text }}</option>
+            </select>
+          </label>
+          <label class="pda-field-label">
+            库位
+            <select v-model="locationId" class="pda-select" aria-label="入库库位" :disabled="busy || warehouseId === null || locationOptions.length === 0">
+              <option :value="null" disabled>{{ warehouseId === null ? '请先选择仓库' : '请选择库位' }}</option>
+              <option v-for="location in locationOptions" :key="location.value" :value="location.value">{{ location.text }}</option>
+            </select>
+          </label>
+          <p v-if="warehouseId !== null && locationOptions.length === 0" class="pda-field-hint">当前仓库没有可用库位，请联系管理员维护库位状态。</p>
+        </section>
+        <section class="pda-card stock-in-scan-card">
+          <h2>扫描整车</h2>
+          <van-field ref="vehicleQrField" v-model="vehicleQrCode" label="聚合码" placeholder="扫描整车聚合码" clearable autofocus @keyup.enter="validateStockOperation('in')" />
+          <van-button block type="primary" :loading="busy" :disabled="warehouseId === null || locationId === null || !vehicleQrCode.trim()" @click="submitStockIn">确认入库</van-button>
+        </section>
       </section>
       <section v-else-if="mode === 'stockOut'" class="form-section">
         <van-tabs v-model:active="dispatchMode"><van-tab name="order" title="按订单出库" /><van-tab name="pi" title="PI 多车型整批出库" /></van-tabs>
@@ -501,17 +545,84 @@ if (loggedIn.value) {
         <van-button block type="primary" :loading="busy" @click="submitStockOut">确认批量出库</van-button>
         </template>
       </section>
-      <section v-else-if="mode === 'rework'" class="form-section">
-        <van-field ref="reworkQrField" v-model="reworkQrCode" label="聚合码" placeholder="扫描车辆聚合码" clearable autofocus @keyup.enter="focusField(reworkPartField)" />
-        <van-dropdown-menu :overlay="false"><van-dropdown-item v-model="reworkPartType" :options="[{ text: '电池', value: 'BATTERY' }, { text: '电机', value: 'MOTOR' }, { text: '仪表', value: 'DISPLAY' }]" title="更换类型" /></van-dropdown-menu>
-        <van-field ref="reworkPartField" v-model="reworkNewPartSn" label="新零部件" placeholder="扫描新零部件 SN" clearable @keyup.enter="focusField(reworkReasonField)" />
-        <van-field ref="reworkReasonField" v-model="reworkReason" label="返工原因" placeholder="填写返工原因" type="textarea" autosize @keyup.enter="submitRework" />
-        <van-button block type="primary" :loading="busy" @click="submitRework">确认换件</van-button>
+      <section v-else-if="mode === 'rework'" class="form-section operation-section rework-section">
+        <section class="operation-guide is-warning" aria-label="返工作业提示">
+          <span><van-icon name="warning-o" /></span>
+          <div><h2>返工换件</h2><p>核对车辆聚合码和新部件 SN，确认后将更新车辆绑定关系并保留换件记录。</p></div>
+        </section>
+
+        <section class="pda-card operation-card">
+          <header class="operation-card-heading">
+            <span class="operation-heading-icon is-blue"><van-icon name="scan" /></span>
+            <div><h2>识别返工车辆</h2><p>扫描车辆现有聚合码</p></div>
+          </header>
+          <div class="pda-input-group">
+            <span class="pda-input-label"><van-icon name="qr" />车辆聚合码</span>
+            <van-field ref="reworkQrField" v-model="reworkQrCode" aria-label="车辆聚合码" placeholder="扫描车辆聚合码" clearable autofocus @keyup.enter="focusField(reworkPartField)">
+              <template #left-icon><van-icon name="scan" /></template>
+            </van-field>
+          </div>
+        </section>
+
+        <section class="pda-card operation-card replacement-card">
+          <header class="operation-card-heading">
+            <span class="operation-heading-icon is-orange"><van-icon name="exchange" /></span>
+            <div><h2>登记更换部件</h2><p>选择部件类型并扫描新件编号</p></div>
+          </header>
+          <label class="pda-field-label">
+            <span><van-icon name="setting-o" />更换部件类型</span>
+            <span class="pda-select-control">
+              <select v-model="reworkPartType" class="pda-select" aria-label="更换部件类型" :disabled="busy" @change="focusField(reworkPartField)">
+                <option value="BATTERY">电池</option>
+                <option value="MOTOR">电机</option>
+                <option value="DISPLAY">仪表</option>
+              </select>
+              <van-icon name="arrow-down" aria-hidden="true" />
+            </span>
+          </label>
+          <div class="pda-input-group">
+            <span class="pda-input-label"><van-icon name="records-o" />新零部件 SN</span>
+            <van-field ref="reworkPartField" v-model="reworkNewPartSn" aria-label="新零部件 SN" placeholder="扫描新零部件 SN" clearable @keyup.enter="focusField(reworkReasonField)">
+              <template #left-icon><van-icon name="scan" /></template>
+            </van-field>
+          </div>
+          <div class="pda-input-group">
+            <span class="pda-input-label"><van-icon name="description" />返工原因</span>
+            <van-field ref="reworkReasonField" v-model="reworkReason" aria-label="返工原因" placeholder="填写返工原因" type="textarea" rows="3" autosize @keyup.enter="submitRework" />
+          </div>
+          <van-button class="operation-primary-button" block type="primary" :loading="busy" @click="submitRework"><van-icon name="exchange" />确认换件</van-button>
+        </section>
       </section>
-      <section v-else class="form-section">
-        <van-dropdown-menu :overlay="false"><van-dropdown-item v-model="traceType" :options="[{ text: '整车聚合码', value: 'qr' },{ text: '车架 SN', value: 'frame' }, { text: '零部件 SN', value: 'part' }]" title="追溯类型" /></van-dropdown-menu>
-        <van-field ref="traceField" v-model="traceKey" label="追溯编码" placeholder="扫描所选类型的编码" clearable autofocus @keyup.enter="queryTrace" />
-        <van-button block type="primary" :loading="busy" @click="queryTrace">查询完整链路</van-button>
+      <section v-else class="form-section operation-section trace-section">
+        <section class="operation-guide is-info" aria-label="追溯查询提示">
+          <span><van-icon name="records-o" /></span>
+          <div><h2>整车追溯</h2><p>支持聚合码、车架 SN 和零部件 SN，查询车辆生产、换件及出入库完整链路。</p></div>
+        </section>
+
+        <section class="pda-card operation-card trace-query-card">
+          <header class="operation-card-heading">
+            <span class="operation-heading-icon is-blue"><van-icon name="search" /></span>
+            <div><h2>查询追溯链路</h2><p>选择编码类型后扫码或手动输入</p></div>
+          </header>
+          <label class="pda-field-label">
+            <span><van-icon name="cluster-o" />追溯类型</span>
+            <span class="pda-select-control">
+              <select v-model="traceType" class="pda-select" aria-label="追溯类型" :disabled="busy" @change="focusField(traceField)">
+                <option value="qr">整车聚合码</option>
+                <option value="frame">车架 SN</option>
+                <option value="part">零部件 SN</option>
+              </select>
+              <van-icon name="arrow-down" aria-hidden="true" />
+            </span>
+          </label>
+          <div class="pda-input-group">
+            <span class="pda-input-label"><van-icon name="scan" />追溯编码</span>
+            <van-field ref="traceField" v-model="traceKey" aria-label="追溯编码" placeholder="扫描所选类型的编码" clearable autofocus @keyup.enter="queryTrace">
+              <template #left-icon><van-icon name="scan" /></template>
+            </van-field>
+          </div>
+          <van-button class="operation-primary-button" block type="primary" :loading="busy" @click="queryTrace"><van-icon name="search" />查询完整链路</van-button>
+        </section>
         <TraceDetails v-if="traceData" :data="traceData" @select-code="traceRelatedCode" />
       </section>
       <van-notice-bar v-if="resultMessage" :text="resultMessage" wrapable :color="resultSuccess ? '#16a36a' : '#ee0a24'" :background="resultSuccess ? '#edf9f1' : '#fff1f0'" />
