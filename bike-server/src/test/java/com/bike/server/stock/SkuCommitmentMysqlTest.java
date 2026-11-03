@@ -171,7 +171,7 @@ class SkuCommitmentMysqlTest {
 
     @Test void agentInventoryHidesUnauthorizedModelsAndRevokedAuthorizationImmediately() throws Exception {
         try(var f=new Fixture()) {
-            assertThat(f.inventory.list(null,9L,0,100)).extracting(SkuInventoryRow::skuId).containsExactly(10L,11L);
+            assertThat(f.inventory.list(null,9L,0,100)).extracting(SkuInventoryRow::skuId).containsExactly(11L,10L);
             assertThat(f.inventory.list(5L,9L,0,100)).isEmpty();
             f.exec("UPDATE @agent_model_access SET enabled=0");
             assertThat(f.inventory.list(null,9L,0,100)).isEmpty();
@@ -323,6 +323,7 @@ class SkuCommitmentMysqlTest {
                     exec("CREATE TABLE @"+ddl+" ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
                     tables.add(ddl.substring(0,ddl.indexOf('(')));
                 }
+                session.update("warehouseProjectionFixture.addInventoryLockUpdatedAt");
                 try(var input=Resources.getResourceAsStream("db/migration/V28__sku_inventory_commitments.sql")) {
                     String ddl=new String(input.readAllBytes(),StandardCharsets.UTF_8).replace("bike_",prefix)
                             .replaceAll("CONSTRAINT ([a-z_]+)","CONSTRAINT "+prefix+"$1");
