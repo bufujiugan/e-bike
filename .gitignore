@@ -16,6 +16,11 @@
 *.key
 *.p12
 *.jks
+*.keystore
+**/local.properties
+**/.gradle/
+/bike-pda-android/app/build/
+/bike-pda-android/app/src/main/assets/www/
 **/storage/
 backups/
 tmp/
@@ -28,6 +33,10 @@ Thumbs.db
 
 # Deliverables are retained; raw runtime and browser session dumps are excluded
 output/*
+!output/apk/
+output/apk/*
+!output/apk/BIKE-PDA-608-1.0.5.apk
+!output/apk/BIKE-PDA-608-1.0.5.apk.sha256
 !output/pdf/
 !output/prototype/
 !output/playwright/

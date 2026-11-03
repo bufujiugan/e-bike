@@ -3,6 +3,7 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import api from '../api'
 import ProductionImageUpload from './ProductionImageUpload.vue'
 import { showConfirmDialog } from 'vant'
+import { isPda, printDeviceLabel, useDeviceScan, scanBusy, startDeviceScan } from '../device'
 
 type Scan = { codeType: string; code: string; operatorName: string }
 type WorkOrder = { id: number; workOrderNo: string; status: string; skuCode: string; productName: string; batchNo: string; plannedQuantity: number; completedQuantity: number; inProgressQuantity: number }
@@ -14,6 +15,12 @@ const scanCode = ref(''), expectedType = ref(''), busy = ref(false), message = r
 const scanInput = ref<{focus:()=>void}>(), labelHtml = ref(''), labelFrame = ref<HTMLIFrameElement>()
 const reason = ref(''), issueCode = ref(''), issueReason = ref(''), issueId = ref('')
 const issuePanel = ref('')
+const printPanel = ref('')
+useDeviceScan((code) => {
+  if (busy.value) { scanBusy(); return }
+  if (issuePanel.value === 'issue') { issueCode.value = code; return }
+  scanCode.value = code; void scan()
+})
 const savedIssueCode = ref(''), imageUploading = ref(false)
 const taskStorageKey = computed(() => `bike_production_task:${props.username}`)
 const workOrderStorageKey = computed(() => `bike_production_work_order:${props.username}`)
@@ -84,13 +91,14 @@ async function scan() {
 async function cancel() { if(!task.value||!reason.value.trim()) {message.value='请填写取消原因';failed.value=true;return}try{await showConfirmDialog({title:'取消当前单车作业',message:'已扫描记录将保留，部件占用会释放，工单计划名额可重新使用。'})}catch(action){if(action!=='cancel')error(action);return}await run(async()=>{await api.post(`/api/production/tasks/${task.value!.id}/cancel`,{reason:reason.value});task.value=undefined;taskId.value='';localStorage.removeItem(taskStorageKey.value);message.value='本车任务已取消，可以扫描下一台';reason.value='';await refreshWorkOrders()}) }
 async function printBrowser() { await run(async()=>{
   if (!selectedPrint.value || !labelReady.value || !labelFrame.value?.contentWindow) throw new Error('请选择任务并等待标签加载完成')
-  const job = (await api.post(`/api/production/prints/${printId.value}/claim`,{terminal:'browser-manual'})).data.data
+  const job = (await api.post(`/api/production/prints/${printId.value}/claim`,{terminal:isPda?'qs608-native':'browser-manual'})).data.data
   printJobs.value = printJobs.value.map(item => item.id === job.id ? job : item)
-  labelFrame.value.contentWindow.print(); message.value='已打开打印对话框，请核对实物并回报结果'
+  if (isPda) message.value = await printDeviceLabel(labelFrame.value, job.id)
+  else { labelFrame.value.contentWindow.print(); message.value='已打开打印对话框，请核对实物并回报结果' }
 }) }
 async function printResult(status:string) { await run(async()=>{
   if (!canReportPrint.value) throw new Error('只能回报当前账号领取且尚未超时的任务')
-  await api.post(`/api/production/prints/${printId.value}/result`,{status,message:status==='SUBMITTED'?'操作员确认已提交浏览器打印':status==='UNKNOWN'?'实物结果无法确认，等待核对':'操作员确认未成功打印'})
+  await api.post(`/api/production/prints/${printId.value}/result`,{status,message:status==='SUBMITTED'?(isPda?'操作员确认已提交608打印':'操作员确认已提交浏览器打印'):status==='UNKNOWN'?'实物结果无法确认，等待核对':'操作员确认未成功打印'})
   await preview(); message.value='打印结果已记录'
 }) }
 async function reprint() { await run(async()=>{
@@ -99,7 +107,10 @@ async function reprint() { await run(async()=>{
   printId.value=job.id; await preview(); reprintReason.value=''; message.value='补打任务已创建并选中，可以人工打印或等待自动终端领取'
 }) }
 async function reportIssue(){if(imageUploading.value)return;await run(async()=>{const code=issueCode.value;const result=(await api.post('/api/production/issues',{code,reason:issueReason.value})).data.data;issueId.value=result.id;savedIssueCode.value=code;message.value='异常已登记，相关车辆/部件已隔离'})}
-function focusScanInput() { void nextTick(() => scanInput.value?.focus()) }
+function focusScanInput() {
+  if (isPda) { (document.activeElement as HTMLElement | null)?.blur(); startDeviceScan() }
+  else void nextTick(() => scanInput.value?.focus())
+}
 function openIssuePanel() { issuePanel.value = issuePanel.value === 'issue' ? '' : 'issue' }
 async function copyAggregateCode() {
   const value = lastCompleted.value?.qrCode
@@ -189,7 +200,7 @@ onMounted(async()=>{try{await refreshWorkOrders();taskId.value=localStorage.getI
         </label>
         <label class="control-label"><span><van-icon name="bars" />扫描编码</span>
           <van-field ref="scanInput" v-model="scanCode" aria-label="扫描编码" placeholder="首码自动建单车记录，四码可任意顺序" :disabled="busy || !workOrderId" autofocus clearable @keyup.enter="scan">
-            <template #right-icon><button class="scan-focus-button" type="button" aria-label="聚焦扫描输入框" :disabled="busy || !workOrderId" @click="focusScanInput"><van-icon name="scan" /></button></template>
+            <template #right-icon><button class="scan-focus-button" type="button" :aria-label="isPda ? '启动手持机扫描' : '聚焦扫描输入框'" :disabled="busy || !workOrderId" @click.stop="focusScanInput"><van-icon name="scan" /></button></template>
           </van-field>
         </label>
       </div>
@@ -238,7 +249,7 @@ onMounted(async()=>{try{await refreshWorkOrders();taskId.value=localStorage.getI
         <button type="button" aria-label="复制聚合码" @click="copyAggregateCode"><van-icon name="notes-o" /></button>
       </div>
       <p class="print-tip">自动打印终端连接后会领取任务；也可展开使用人工打印。</p>
-      <van-collapse accordion>
+      <van-collapse v-model="printPanel" accordion>
         <van-collapse-item title="打印、结果回报与补打" name="print">
           <label class="control-label"><span><van-icon name="printer" />打印任务</span>
             <select v-model="printId" :disabled="busy" @change="run(loadLabel)"><option v-for="job in printJobs" :key="job.id" :value="job.id">{{ printStates[job.status] ?? job.status }} · {{ job.reason || job.id }}</option></select>

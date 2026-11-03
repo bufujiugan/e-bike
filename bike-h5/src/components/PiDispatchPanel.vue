@@ -3,8 +3,9 @@ import { createUuid } from '../utils/uuid'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { showConfirmDialog, showFailToast, showSuccessToast } from 'vant'
 import api from '../api'
+import { useDeviceScan, scanBusy } from '../device'
 
-const props = defineProps<{ username: string }>()
+const props = defineProps<{ username: string; active?: boolean }>()
 type Option = { id: number; piNo: string; customerName: string; customerId: number }
 type Order = { orderId: number; orderNo: string; skuId?: number; skuCode?: string; status: string; orderedQty: number; shippedQty: number; closedQty: number; remainingQty: number }
 type Detail = Option & { orders: Order[] }
@@ -16,6 +17,7 @@ const pageCount = computed(() => Math.max(1, Math.ceil(total.value / 20)))
 const orderOptions = computed(() => (detail.value?.orders || []).filter(order => ['CONFIRMED', 'PARTIAL_SHIPPED'].includes(order.status) && order.remainingQty > 0).map(order => ({ text: `${order.skuCode || '历史车型单'} · 待发${order.remainingQty} · ${order.orderNo}`, value: order.orderId })))
 let listVersion = 0, detailVersion = 0, disposed = false, requestId = '', fingerprint = ''
 const storageKey = `bike_pi_dispatch:${props.username}`
+useDeviceScan((code) => { if (busy.value) { scanBusy(); return }; qr.value = code; void scan() }, () => props.active !== false)
 function message(cause: unknown) { return api.isAxiosError(cause) ? cause.response?.data?.message || '请求失败，请重试' : cause instanceof Error ? cause.message : '操作失败' }
 async function load(next = page.value) {
   const version = ++listVersion; loading.value = true; error.value = ''
@@ -99,7 +101,12 @@ onUnmounted(() => { disposed = true; ++listVersion; ++detailVersion })
     <template v-if="detail">
       <van-cell :title="detail.piNo" :label="detail.customerName" />
       <van-cell v-for="order in detail.orders" :key="order.orderId" :title="order.skuCode || order.orderNo" :label="order.orderNo" :value="`已发${order.shippedQty} / 关闭${order.closedQty} / 待发${order.remainingQty}`" />
-      <van-dropdown-menu :overlay="false"><van-dropdown-item v-model="orderId" :title="orderId ? undefined : '选择本次扫描SKU订单'" :options="orderOptions" :disabled="busy" /></van-dropdown-menu>
+      <label class="pi-order-select">选择本次扫描 SKU 订单
+        <select v-model="orderId" aria-label="选择本次扫描SKU订单" :disabled="busy">
+          <option :value="undefined" disabled>请选择 SKU 订单</option>
+          <option v-for="option in orderOptions" :key="option.value" :value="option.value">{{ option.text }}</option>
+        </select>
+      </label>
       <van-field v-model="qr" label="整车总码" placeholder="选SKU订单后连续扫码" :disabled="busy || !orderId" @keyup.enter="scan"><template #button><van-button size="small" :loading="busy" :disabled="!orderId" @click="scan">加入</van-button></template></van-field>
       <van-cell :title="`本批次已扫 ${queue.length} 台`" label="可以切换上方SKU订单继续加入另一车型，提交时一起出库。" />
       <van-cell v-for="(item,index) in queue" :key="item.vehicleQrCode" :title="item.vehicleQrCode" :label="detail.orders.find(order => order.orderId === item.orderId)?.orderNo"><template #right-icon><van-button size="mini" :disabled="busy" @click="remove(index)">移除</van-button></template></van-cell>
@@ -109,4 +116,4 @@ onUnmounted(() => { disposed = true; ++listVersion; ++detailVersion })
     <van-cell v-if="result" title="已保存真实出库批次" :label="result.batchNo" :value="`有效${result.activeQty} / 原${result.originalQty}台`" />
   </section>
 </template>
-<style scoped>.pi-dispatch{display:grid;gap:10px}.pi-dispatch :deep(.van-cell__value){min-width:120px;overflow-wrap:anywhere}.pi-dispatch :deep(.van-cell__title){overflow-wrap:anywhere}</style>
+<style scoped>.pi-dispatch{display:grid;gap:10px}.pi-dispatch :deep(.van-cell__value){min-width:120px;overflow-wrap:anywhere}.pi-dispatch :deep(.van-cell__title){overflow-wrap:anywhere}.pi-order-select{display:block;padding:12px;background:#fff;color:#23425b;font-size:14px}.pi-order-select select{display:block;width:100%;min-height:44px;margin-top:8px;border:1px solid #cbdbea;border-radius:6px;background:#fff;font-size:14px}</style>

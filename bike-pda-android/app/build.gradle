@@ -1,0 +1,26 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'com.bike.pda608'
+    compileSdk 30
+    defaultConfig {
+        applicationId 'com.bike.pda608'
+        minSdk 23
+        targetSdk 30
+        versionCode 105
+        versionName '1.0.5-608'
+        ndk { abiFilters 'armeabi-v7a', 'arm64-v8a' }
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_1_8; targetCompatibility JavaVersion.VERSION_1_8 }
+}
+dependencies { implementation files('libs/qs601sdk.jar') }
+
+def frontend = tasks.register('buildPdaFrontend', Exec) {
+    workingDir rootProject.projectDir.parentFile
+    commandLine(System.getProperty('os.name').toLowerCase().contains('windows') ? 'pnpm.cmd' : 'pnpm', '--dir', 'bike-h5', 'build:pda')
+}
+def webAssets = tasks.register('syncPdaAssets', Sync) {
+    dependsOn frontend
+    from '../../bike-h5/dist'
+    into 'src/main/assets/www'
+}
+tasks.named('preBuild').configure { dependsOn webAssets }

@@ -15,6 +15,8 @@
 - [首次使用](#首次使用)
 - [测试与验证](#测试与验证)
 - [部署和运维](docs/deployment.md)
+- [608手持机APK适配与验证](docs/pda-608-adaptation.md)
+- [下载当前608安装包（1.0.5）](https://github.com/bufujiugan/e-bike/raw/refs/heads/main/output/apk/BIKE-PDA-608-1.0.5.apk)
 - [全部资料索引](docs/README.md)
 - [需求沟通与决策](docs/communication/需求决策与版本关系.md)
 - [常见问题](#常见问题)

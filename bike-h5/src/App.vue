@@ -6,6 +6,8 @@ import { showFailToast, showSuccessToast } from 'vant'
 import { hasPermission, isSuperAdmin } from './permissions'
 import ProductionStation from './components/ProductionStation.vue'
 import PiDispatchPanel from './components/PiDispatchPanel.vue'
+import DeviceToolbar from './components/DeviceToolbar.vue'
+import { useDeviceScan, scanBusy } from './device'
 
 const username = ref('admin')
 const password = ref('')
@@ -20,6 +22,9 @@ const mode = ref<'assembly' | 'stockIn' | 'stockOut' | 'rework' | 'trace'>(pathM
 type PdaMode = 'assembly' | 'stockIn' | 'stockOut' | 'rework' | 'trace'
 type AuthContext = { username: string; userType: string; agentId: number | null; roles: string[]; permissions: string[]; workstations: string[]; mustChangePassword: boolean }
 const authContext = ref<AuthContext | null>(null)
+const authLoading = ref(false)
+const authError = ref('')
+let authRequestVersion = 0
 const passwordChangeVisible = ref(false)
 const currentPassword = ref('')
 const newPassword = ref('')
@@ -28,7 +33,8 @@ const passwordChanging = ref(false)
 const allModes: PdaMode[] = ['assembly', 'stockIn', 'stockOut', 'rework', 'trace']
 const allowedModes = computed<PdaMode[]>(() => {
   const context = authContext.value
-  if (!context || isSuperAdmin(context) || context.workstations.includes('*')) return allModes
+  if (!context) return []
+  if (isSuperAdmin(context) || context.workstations.includes('*')) return allModes
   const modeByWorkstation: Record<string, PdaMode> = { ASSEMBLY: 'assembly', FRAME: 'assembly', MOTOR: 'assembly', BATTERY: 'assembly', DISPLAY: 'assembly', STOCK_IN: 'stockIn', STOCK_OUT: 'stockOut', REWORK: 'rework' }
   const modes = context.workstations.map(workstation => modeByWorkstation[workstation]).filter((value): value is PdaMode => Boolean(value))
   if (hasPermission(context, 'TRACE_READ') && modes.length > 0) modes.push('trace')
@@ -65,6 +71,19 @@ const reworkReason = ref('')
 const resultMessage = ref('')
 const resultSuccess = ref(false)
 const busy = ref(false)
+useDeviceScan((code) => {
+  if (!loggedIn.value || passwordChangeVisible.value || !authContext.value || !allowedModes.value.includes(mode.value)) return
+  if (mode.value === 'assembly' || (mode.value === 'stockOut' && dispatchMode.value === 'pi')) return
+  if (busy.value) { scanBusy(); return }
+  if (mode.value === 'stockIn') { vehicleQrCode.value = code; void validateStockOperation('in') }
+  else if (mode.value === 'stockOut') { vehicleQrCode.value = code; void scanStockOutVehicle() }
+  else if (mode.value === 'trace') { traceKey.value = code; void queryTrace() }
+  else if (mode.value === 'rework') {
+    if (!document.activeElement?.closest('[data-scan-target="vehicle"]') && (document.activeElement?.closest('[data-scan-target="part"]') || reworkQrCode.value)) {
+      reworkNewPartSn.value = code; focusField(reworkReasonField)
+    } else { reworkQrCode.value = code; focusField(reworkPartField) }
+  }
+})
 // 每次请求读取当前凭证，避免重新登录后继续使用 computed 缓存的旧 token。
 const tokenHeaders = { get value() { return { Authorization: `Bearer ${localStorage.getItem('bike_access_token')}` } } }
 const customerOptions = computed(() => customers.value.map(customer => ({ text: `${customer.name} (${customer.code})`, value: customer.id })))
@@ -85,9 +104,37 @@ const orderRemainingQty = computed(() => Math.max(0, orderTotalQty.value - order
 const warehouseOptions = computed(() => warehouses.value.filter(warehouse => warehouse.status === 'ENABLED').map(warehouse => ({ text: `${warehouse.name} (${warehouse.code})`, value: warehouse.id })))
 const locationOptions = computed(() => locations.value.filter(location => location.status === 'ENABLED').map(location => ({ text: `${location.name} (${location.code})`, value: location.id })))
 
-async function loadAuthContext() {
-  const response = await axios.get('/api/auth/context', { headers: tokenHeaders.value })
-  authContext.value = response.data.data
+async function restoreSession() {
+  if (authLoading.value) return false
+  const token = localStorage.getItem('bike_access_token')
+  if (!token) { clearSession(); return false }
+  const version = ++authRequestVersion
+  authLoading.value = true
+  authError.value = ''
+  try {
+    const response = await axios.get('/api/auth/context', { headers: { Authorization: `Bearer ${token}` }, timeout: 15000 })
+    if (version !== authRequestVersion || token !== localStorage.getItem('bike_access_token')) return false
+    const context = response.data?.data
+    if (!context || typeof context.username !== 'string' || !['roles', 'permissions', 'workstations'].every(key => Array.isArray(context[key]) && context[key].every((item: unknown) => typeof item === 'string'))) {
+      throw new Error('账号信息返回异常')
+    }
+    authContext.value = context
+    passwordChangeVisible.value = Boolean(context.mustChangePassword)
+    if (!allowedModes.value.includes(mode.value)) mode.value = allowedModes.value[0] ?? 'assembly'
+  } catch (error) {
+    if (version !== authRequestVersion) return false
+    if (axios.isAxiosError(error) && error.response?.status === 401) {
+      clearSession()
+      showFailToast('登录状态已失效，请重新登录')
+    } else {
+      authError.value = '账号信息加载失败，请检查网络和服务器地址后重试。'
+    }
+    return false
+  } finally {
+    if (version === authRequestVersion) authLoading.value = false
+  }
+  if (!passwordChangeVisible.value) await loadOptionsForMode(mode.value)
+  return true
 }
 
 async function loadStockOutOptions() {
@@ -184,19 +231,14 @@ async function loadLocations() {
 }
 
 async function login() {
+  if (loading.value) return
   loading.value = true
   try {
-    const response = await axios.post('/api/auth/login', { username: username.value, password: password.value })
+    const response = await axios.post('/api/auth/login', { username: username.value, password: password.value }, { timeout: 15000 })
     localStorage.setItem('bike_access_token', response.data.data.accessToken)
     loggedIn.value = true
-    await loadAuthContext()
-    if (authContext.value?.mustChangePassword) {
-      passwordChangeVisible.value = true
-      return
-    }
-    if (!allowedModes.value.includes(mode.value)) mode.value = allowedModes.value[0] ?? 'assembly'
-    await loadOptionsForMode(mode.value)
-    showSuccessToast('登录成功')
+    password.value = ''
+    if (await restoreSession()) showSuccessToast('登录成功')
   } catch (error) {
     const message = axios.isAxiosError(error) ? error.response?.data?.message ?? '登录失败' : '登录失败'
     showFailToast(message)
@@ -206,6 +248,7 @@ async function login() {
 }
 
 async function submitStockIn() {
+  if (busy.value) return
   if (warehouseId.value === null || locationId.value === null) {
     resultMessage.value = '请选择仓库和库位'
     showFailToast(resultMessage.value)
@@ -223,6 +266,7 @@ async function submitStockIn() {
 }
 
 async function submitStockOut() {
+  if (busy.value) return
   if (customerId.value === null || orderId.value === null) {
     resultMessage.value = '请选择客户和可出库订单'
     showFailToast(resultMessage.value)
@@ -248,6 +292,7 @@ async function submitStockOut() {
 }
 
 async function scanStockOutVehicle() {
+  if (busy.value) return
   if (customerId.value === null || orderId.value === null) {
     resultMessage.value = '请先选择客户和可出库订单'
     resultSuccess.value = false
@@ -269,6 +314,7 @@ async function scanStockOutVehicle() {
     vehicleQrCode.value = ''
     return
   }
+  busy.value = true
   try {
     const response = await axios.post('/api/stock-out/validate', {
       vehicleQrCode: qr,
@@ -286,9 +332,11 @@ async function scanStockOutVehicle() {
     resultSuccess.value = false
     showFailToast(resultMessage.value)
   }
+  finally { busy.value = false }
 }
 
 async function submitRework() {
+  if (busy.value) return
   if (!reworkQrCode.value.trim() || !reworkNewPartSn.value.trim() || !reworkReason.value.trim()) {
     resultMessage.value = '请填写聚合码、新零部件和返工原因'
     showFailToast(resultMessage.value)
@@ -312,6 +360,7 @@ async function submitRework() {
 }
 
 async function queryTrace() {
+  if (busy.value) return
   busy.value = true
   traceData.value = null
   try {
@@ -332,7 +381,8 @@ async function traceRelatedCode(code: string, codeType: 'qr' | 'frame') {
 }
 
 async function validateStockOperation(stockType: 'in' | 'out') {
-  if (!vehicleQrCode.value.trim()) return
+  if (busy.value || !vehicleQrCode.value.trim()) return
+  busy.value = true
   try {
     const payload = stockType === 'out'
       ? { vehicleQrCode: vehicleQrCode.value, customerId: customerId.value, orderId: orderId.value }
@@ -341,9 +391,11 @@ async function validateStockOperation(stockType: 'in' | 'out') {
     resultMessage.value = response.data.data.message
     resultSuccess.value = response.data.data.valid
   } catch (error) { resultMessage.value = axios.isAxiosError(error) ? error.response?.data?.message ?? '二维码校验失败' : '二维码校验失败'; resultSuccess.value = false }
+  finally { busy.value = false }
 }
 
 function clearSession() {
+  ++authRequestVersion; authLoading.value = false; authError.value = ''
   if(authContext.value?.username) sessionStorage.removeItem(`bike_pi_dispatch:${authContext.value.username}`)
   dispatchMode.value = 'order'
   localStorage.removeItem('bike_access_token'); loggedIn.value = false; passwordChangeVisible.value = false
@@ -357,7 +409,7 @@ function clearSession() {
 }
 async function logout() {
   try {
-    if (localStorage.getItem('bike_access_token')) await axios.post('/api/auth/logout', {}, { headers: tokenHeaders.value })
+    if (localStorage.getItem('bike_access_token')) await axios.post('/api/auth/logout', {}, { headers: tokenHeaders.value, timeout: 15000 })
     clearSession()
   } catch (error) {
     if (axios.isAxiosError(error) && error.response?.status === 401) clearSession()
@@ -381,7 +433,7 @@ watch(allowedModes, (nextModes) => {
 })
 
 watch(mode, (nextMode) => {
-  if (loggedIn.value && !passwordChangeVisible.value) {
+  if (loggedIn.value && authContext.value && !passwordChangeVisible.value) {
     void loadOptionsForMode(nextMode)
     if (nextMode === 'stockIn' || nextMode === 'stockOut') focusField(vehicleQrField)
     if (nextMode === 'rework') focusField(reworkQrField)
@@ -409,28 +461,17 @@ watch(warehouseId, () => { void loadLocations() })
 
 onMounted(() => {
   window.addEventListener('bike-auth-expired', handleAuthExpired)
+  if (loggedIn.value) void restoreSession()
 })
 
 onUnmounted(() => {
   window.removeEventListener('bike-auth-expired', handleAuthExpired)
 })
 
-if (loggedIn.value) {
-  void loadAuthContext().then(() => {
-    if (authContext.value?.mustChangePassword) {
-      passwordChangeVisible.value = true
-      return
-    }
-    if (!allowedModes.value.includes(mode.value)) mode.value = allowedModes.value[0] ?? 'assembly'
-    return loadOptionsForMode(mode.value)
-  }).catch(() => {
-    logout()
-    showFailToast('登录状态已失效，请重新登录')
-  })
-}
 </script>
 
 <template>
+  <DeviceToolbar />
   <main class="pda-shell" :class="{ 'is-login': !loggedIn }">
     <section v-if="!loggedIn" class="login-panel">
       <header class="login-hero">
@@ -481,6 +522,13 @@ if (loggedIn.value) {
           <van-button block type="primary" :loading="passwordChanging" @click="submitPasswordChange">更新密码</van-button>
         </div>
       </van-dialog>
+      <section v-if="!authContext" class="form-section" aria-live="polite">
+        <van-loading v-if="authLoading" vertical>正在加载工位信息…</van-loading>
+        <van-empty v-else :description="authError || '工位信息尚未加载'">
+          <van-button type="primary" @click="restoreSession">重新加载工位</van-button>
+        </van-empty>
+      </section>
+      <template v-else>
       <van-tabs v-if="allowedModes.length > 0" v-model:active="mode" shrink>
         <van-tab v-if="allowedModes.includes('assembly')" name="assembly" title="组装" />
         <van-tab v-if="allowedModes.includes('stockIn')" name="stockIn" title="入库" />
@@ -520,7 +568,7 @@ if (loggedIn.value) {
       </section>
       <section v-else-if="mode === 'stockOut'" class="form-section">
         <van-tabs v-model:active="dispatchMode"><van-tab name="order" title="按订单出库" /><van-tab name="pi" title="PI 多车型整批出库" /></van-tabs>
-        <PiDispatchPanel v-if="authContext && !passwordChangeVisible" v-show="dispatchMode === 'pi'" :key="authContext.username" :username="authContext.username" />
+        <PiDispatchPanel v-if="authContext && !passwordChangeVisible" v-show="dispatchMode === 'pi'" :active="dispatchMode === 'pi'" :key="authContext.username" :username="authContext.username" />
         <template v-if="dispatchMode === 'order'">
         <van-field v-model="orderKeyword" label="查找订单" placeholder="输入订单号或车型" maxlength="100" clearable :disabled="customerId === null" @keyup.enter="searchStockOutOrders">
           <template #button><van-button size="small" type="primary" :loading="orderOptionsLoading" :disabled="customerId === null" @click="searchStockOutOrders">查询</van-button></template>
@@ -558,7 +606,7 @@ if (loggedIn.value) {
           </header>
           <div class="pda-input-group">
             <span class="pda-input-label"><van-icon name="qr" />车辆聚合码</span>
-            <van-field ref="reworkQrField" v-model="reworkQrCode" aria-label="车辆聚合码" placeholder="扫描车辆聚合码" clearable autofocus @keyup.enter="focusField(reworkPartField)">
+            <van-field data-scan-target="vehicle" ref="reworkQrField" v-model="reworkQrCode" aria-label="车辆聚合码" placeholder="扫描车辆聚合码" clearable autofocus @keyup.enter="focusField(reworkPartField)">
               <template #left-icon><van-icon name="scan" /></template>
             </van-field>
           </div>
@@ -582,7 +630,7 @@ if (loggedIn.value) {
           </label>
           <div class="pda-input-group">
             <span class="pda-input-label"><van-icon name="records-o" />新零部件 SN</span>
-            <van-field ref="reworkPartField" v-model="reworkNewPartSn" aria-label="新零部件 SN" placeholder="扫描新零部件 SN" clearable @keyup.enter="focusField(reworkReasonField)">
+            <van-field data-scan-target="part" ref="reworkPartField" v-model="reworkNewPartSn" aria-label="新零部件 SN" placeholder="扫描新零部件 SN" clearable @keyup.enter="focusField(reworkReasonField)">
               <template #left-icon><van-icon name="scan" /></template>
             </van-field>
           </div>
@@ -626,6 +674,7 @@ if (loggedIn.value) {
         <TraceDetails v-if="traceData" :data="traceData" @select-code="traceRelatedCode" />
       </section>
       <van-notice-bar v-if="resultMessage" :text="resultMessage" wrapable :color="resultSuccess ? '#16a36a' : '#ee0a24'" :background="resultSuccess ? '#edf9f1' : '#fff1f0'" />
+      </template>
     </section>
   </main>
 </template>

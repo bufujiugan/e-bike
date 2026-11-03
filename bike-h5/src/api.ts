@@ -12,7 +12,8 @@ api.interceptors.request.use((config) => {
 })
 
 api.interceptors.response.use((response) => response, (error) => {
-  if (error.response?.status === 401) {
+  const currentToken = localStorage.getItem('bike_access_token')
+  if (error.response?.status === 401 && currentToken && error.config?.headers?.Authorization === `Bearer ${currentToken}`) {
     localStorage.removeItem('bike_access_token')
     window.dispatchEvent(new Event('bike-auth-expired'))
   }
