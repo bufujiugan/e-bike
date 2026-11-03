@@ -19,20 +19,25 @@
         (#{piId},5,'FORWARDER_SELECTED','联系货代询价并选择货代','PENDING'),
         (#{piId},6,'DOMESTIC_EXPRESS_BOOKED','预约工厂至货代的快递','PENDING'),
         (#{piId},7,'TRACKING_RECORDED','填写单号并跟踪运输','PENDING'),
-        (#{piId},8,'CUSTOMER_RECEIVED','确认客户收货，完成订单','PENDING')
+        (#{piId},8,'CUSTOMER_RECEIVED','确认客户收货，完成订单','PENDING'),
+        (#{piId},9,'INVENTORY_RESERVED','锁定指定仓库销售库存','PENDING'),
+        (#{piId},10,'PURCHASE_CONTRACT_READY','确认出库所需购销合同','PENDING'),
+        (#{piId},11,'STOCK_DISPATCHED','等待并办理出库','PENDING'),
+        (#{piId},12,'WAREHOUSE_ARRIVED','确认到达货代仓库并保留凭证','PENDING')
     </insert>
     <update id="inheritCompleted">
         UPDATE bike_pi_workflow_step target
         INNER JOIN bike_pi_workflow_step source
-            ON source.pi_id=#{previousPiId} AND source.step_order=target.step_order AND source.status='COMPLETED'
+            ON source.pi_id=#{previousPiId} AND source.step_code=target.step_code AND source.status='COMPLETED'
         SET target.status='COMPLETED',target.completed_by=source.completed_by,target.completed_at=source.completed_at,
             target.note=source.note,target.detail_json=source.detail_json
         WHERE target.pi_id=#{piId} AND target.status='PENDING'
+          AND target.step_code IN ('PURCHASE_CONTRACT_READY','FORWARDER_SELECTED')
     </update>
     <update id="complete">
         UPDATE bike_pi_workflow_step
         SET status='COMPLETED',completed_by=#{operatorId},completed_at=CURRENT_TIMESTAMP(3),note=#{note},detail_json=#{detailJson}
-        WHERE pi_id=#{piId} AND step_order=#{stepOrder} AND status='PENDING'
+        WHERE pi_id=#{piId} AND step_order=#{stepOrder} AND status IN ('PENDING','COMPLETED')
     </update>
     <insert id="insertUpdate">
         INSERT INTO bike_pi_workflow_update(pi_id,step_code,detail_json,note,created_by)

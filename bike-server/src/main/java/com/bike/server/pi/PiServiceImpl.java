@@ -22,6 +22,7 @@ public class PiServiceImpl implements PiService {
     private static final BigDecimal ZERO = new BigDecimal("0.00");
     private static final BigDecimal MAX_MONEY = new BigDecimal("9999999999999999.99");
     private static final Set<String> PUBLISHED = Set.of("CONFIRMED", "RELEASED");
+    @org.springframework.beans.factory.annotation.Autowired private PiBusinessService business;
     private final PiMapper mapper;
     private final PiDocumentService documents;
     private final OperationLogMapper logs;
@@ -59,7 +60,7 @@ public class PiServiceImpl implements PiService {
         var orderOptions=mapper.selectOrderOptions(query);
         if(series!=null) orderOptions=orderOptions.stream().filter(order->series.currentPiForOrder(((Number)order.get("id")).longValue())==null).toList();
         return new PiOptionsView(mapper.selectCustomerOptions(query), mapper.selectAgentOptions(query),
-                mapper.selectSkuOptions(query), orderOptions);
+                mapper.selectSkuOptions(query), orderOptions, business==null?List.of():business.warehouses());
     }
 
     @Override
@@ -186,6 +187,14 @@ public class PiServiceImpl implements PiService {
             fail("AMOUNT_INVALID", "保留库存及放行发货所需收款金额不能大于应付总额");
         }
         PiDocumentSnapshot document=existing==null && customerSnapshots!=null ? customerSnapshots.capture(request.customerId(),request.document()) : request.document();
+        if(business!=null) {
+            business.validateTerms(document,trade);
+            if(existing!=null&&existing.getPreviousRevisionId()!=null) {
+                var baseline=business.document(existing.getPreviousRevisionId());
+                if(baseline!=null&&baseline.business()!=null&&!Objects.equals(baseline.business(),document.business()))
+                    fail("PI_WAREHOUSE_IMMUTABLE","已确认PI不能换仓、改变出货来源或收款主体，请分别建立PI");
+            }
+        }
         if(document!=null && !validator.validate(document).isEmpty())fail("PI_DOCUMENT_INVALID","客户单据资料格式不正确");
         long id;
         if (existing == null) {
@@ -223,6 +232,7 @@ public class PiServiceImpl implements PiService {
         PiView pi = lockOrderAndPi(id);
         if(!"DRAFT".equals(pi.getStatus()))fail("INVALID_STATUS_TRANSITION","只有草稿 PI 可以确认");
         requirePublishableDocument(pi);
+        if(business!=null)business.validateTerms(business.document(id),pi.getTradeType());
         PiView previousRevision = pi.getPreviousRevisionId() == null ? null
                 : requireRevisionIdentity(pi, pi.getCustomerId(), pi.getAgentId(), pi.getCurrencyCode());
         if(previousRevision!=null && quantityRevisions!=null) {
@@ -259,7 +269,16 @@ public class PiServiceImpl implements PiService {
         }
         audit(id, "确认 PI", Map.of("status", "DRAFT"), Map.of("status", "CONFIRMED"), null);
         if(archives!=null)archives.enqueue(require(id),"CONFIRMATION");
-        reservations.retainAfterPayment(pi, mapper.paymentTotal(id));
+        BigDecimal paid = mapper.paymentTotal(id);
+        if (business != null) {
+            if (previousRevision != null) business.validateReservedWarehouse(require(id));
+            if (previousRevision != null && paid.compareTo(pi.getShipmentRequiredAmount()) >= 0
+                    && !business.reserveAfterPayment(require(id), paid)) {
+                fail("PI_WAREHOUSE_STOCK_SHORTAGE", "修订数量超过指定仓库可用库存，不能确认修订");
+            }
+        } else {
+            reservations.retainAfterPayment(pi, paid);
+        }
         return enrich(require(id));
     }
 
@@ -289,12 +308,15 @@ public class PiServiceImpl implements PiService {
             return enrich(pi);
         }
         if (!PUBLISHED.contains(pi.getStatus())) fail("INVALID_STATUS_TRANSITION", "只有已确认 PI 可以登记收款");
+        if (business != null) business.requireDocuments(id);
         BigDecimal before = mapper.paymentTotal(id);
         BigDecimal after = money(before.add(normalized.amount()));
         if (mapper.insertPayment(id, normalized, CurrentOperator.id()) != 1) fail("PI_PAYMENT_FAILED", "收款登记失败");
         String paymentStatus = paymentStatus(after, pi);
         if (mapper.syncSeriesPaymentStatus(id, after) < 1) fail("PI_PAYMENT_FAILED", "收款状态更新失败");
-        String reservationStatus = reservations.retainAfterPayment(pi, after);
+        String reservationStatus = business == null ? reservations.retainAfterPayment(pi, after)
+                : after.compareTo(pi.getShipmentRequiredAmount()) < 0 ? "AWAITING_PAYMENT"
+                : business.reserveAfterPayment(pi, after) ? "PAID_HELD" : "AWAITING_WAREHOUSE_STOCK";
         audit(id, "登记 PI 收款", Map.of("paidAmount", before, "paymentStatus", pi.getPaymentStatus()),
                 Map.of("paidAmount", after, "paymentStatus", paymentStatus, "requestId", normalized.requestId(),
                         "amount", normalized.amount(), "currency", normalized.currencyCode(),
@@ -343,6 +365,11 @@ public class PiServiceImpl implements PiService {
         BigDecimal paid = mapper.paymentTotal(id);
         if (required == null || paid.compareTo(required) < 0) {
             fail("PAYMENT_GATE_NOT_MET", "未达到该 PI 约定的发货收款条件，不能放行发货");
+        }
+        if(business!=null) {
+            business.requireContract(id);
+            if(!business.reserveAfterPayment(pi,paid))fail("PI_WAREHOUSE_STOCK_SHORTAGE","指定仓库可用库存不足或履约SKU不完整，请核对后重试；到账记录已保留");
+            business.requireShipment(id);
         }
         for (long orderId : orderIds(pi)) {
             var reservation = reservations.lockReservation(orderId);

@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class PiLogisticsService {
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.common.CustomerScopeAccess customerScope;
+    @org.springframework.beans.factory.annotation.Autowired private PiBusinessService business;
     private final PiLogisticsMapper mapper;
     private final PiMapper pis;
     private final PiSeriesMapper series;
@@ -51,7 +52,11 @@ public class PiLogisticsService {
         }
         if("SHIPPED".equals(request.status())) {
             if(batch==null)fail("LOGISTICS_ACTUAL_BATCH_REQUIRED","确认发运必须选择实际出库批次，手填批次不能作为出库依据");
-            if(!"RELEASED".equals(pi.getReleaseStatus())||request.carrier()==null||request.trackingNo()==null)fail("LOGISTICS_NOT_READY","发运须已放行且填写承运商和运单号");
+            boolean customerArranged=business!=null&&business.isCustomerForwarder(piId);
+            if(!"RELEASED".equals(pi.getReleaseStatus())||!customerArranged&&(request.carrier()==null||request.trackingNo()==null))
+                fail("LOGISTICS_NOT_READY","发运须已放行；我方联系货代须填写承运商和运单号");
+            if(customerArranged&&(request.carrier()==null||request.trackingNo()==null)&&request.remark()==null)
+                fail("LOGISTICS_NOT_READY","客户安排且运输信息不完整时，请如实填写说明");
         }
         var normalized=new PiLogisticsRequest(batch==null?request.batchNo():batch.batchNo(),request.carrier(),request.trackingNo(),request.status(),request.remark(),request.stockOutBatchId(),request.requestId(),request.expectedRevision());
         Integer quantity="SHIPPED".equals(request.status())?batch.activeQty():null;
@@ -70,6 +75,7 @@ public class PiLogisticsService {
         if(prior!=null){same(prior,hash);return prior.logisticsId();}
         var before=require(piId,id);
         if(mapper.withdraw(id,request.expectedRevision(),request.reason().trim())!=1)fail("LOGISTICS_REVISION_CONFLICT","物流已变更或已撤回，请刷新核对");
+        if (business != null) business.invalidateDelivery(piId);
         finish(piId,id,request.requestId().trim(),hash,"WITHDRAW",before,request.reason().trim());return id;
     }
     public List<Map<String,Object>> history(long piId,long id) {

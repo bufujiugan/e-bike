@@ -47,8 +47,8 @@ public class PiTemplateService {
         if(!Objects.equals(t.tradeType(),tradeType))throw new BusinessException("PI_TEMPLATE_TRADE_MISMATCH","模板与内外销类型不一致");
         if(!t.layoutCode().endsWith("_V3"))throw new BusinessException("PI_TEMPLATE_LEGACY_READ_ONLY","历史模板仅供读取；请发布并选择含完整卖方资料的V3新版本");
         if(!Objects.equals(t.sellerName(),d.sellerName())||!Objects.equals(t.sellerAddress(),d.sellerAddress())
-                ||!Objects.equals(Objects.requireNonNullElse(t.sellerContact(),""),Objects.requireNonNullElse(d.sellerContact(),""))||!Objects.equals(t.bankName(),d.bankName())
-                ||!Objects.equals(t.bankAccount(),d.bankAccount())||!Objects.equals(t.beneficiary(),d.beneficiary())
+                ||!Objects.equals(Objects.requireNonNullElse(t.sellerContact(),""),Objects.requireNonNullElse(d.sellerContact(),""))||(d.business()==null&&!Objects.equals(t.bankName(),d.bankName()))
+                ||(d.business()==null&&(!Objects.equals(t.bankAccount(),d.bankAccount())||!Objects.equals(t.beneficiary(),d.beneficiary())))
                 ||!Objects.equals(t.sellerCountry(),d.sellerCountry())||!Objects.equals(t.sellerContactName(),d.sellerContactName())
                 ||!Objects.equals(t.sellerPhone(),d.sellerPhone())||!Objects.equals(t.sellerEmail(),d.sellerEmail()))
             throw new BusinessException("PI_TEMPLATE_SNAPSHOT_MISMATCH","卖方和银行资料须使用已发布模板；变更请发布新版本后重新选择");

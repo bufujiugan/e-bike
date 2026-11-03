@@ -311,6 +311,27 @@ class PiServiceTest {
         when(mapper.selectById(1L)).thenReturn(pi("DRAFT"));
     }
 
+    @Test void warehouseShortageKeepsActualReceiptAndNeverUsesOldDepositHold() {
+        var pi = prepareLocked("CONFIRMED");
+        var business = mock(PiBusinessService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"business",business);
+        when(mapper.paymentTotal(1L)).thenReturn(money("0"));
+        when(mapper.insertPayment(eq(1L),any(),any())).thenReturn(1);
+        when(mapper.syncSeriesPaymentStatus(1L,money("100.00"))).thenReturn(1);
+        when(business.reserveAfterPayment(pi,money("100.00"))).thenReturn(false);
+        assertThatCode(()->service.recordPayment(1,payment("paid-no-stock","100"))).doesNotThrowAnyException();
+        verify(mapper).insertPayment(eq(1L),any(),any());
+        verify(business).requireDocuments(1L);
+        verify(reservations,never()).retainAfterPayment(any(),any());
+    }
+    @Test void documentsAreRequiredBeforePersistingPayment() {
+        prepareLocked("CONFIRMED");
+        var business = mock(PiBusinessService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"business",business);
+        doThrow(new BusinessException("PI_DOCUMENTS_REQUIRED","请先确认销售合同")).when(business).requireDocuments(1L);
+        assertCode(()->service.recordPayment(1,payment("too-early","100")),"PI_DOCUMENTS_REQUIRED");
+        verify(mapper,never()).insertPayment(anyLong(),any(),any());
+    }
     private PiView prepareLocked(String status) {
         PiView pi = pi(status);
         when(mapper.lockPi(1L)).thenReturn(1L);

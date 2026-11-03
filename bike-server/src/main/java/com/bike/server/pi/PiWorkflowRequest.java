@@ -26,7 +26,24 @@ public record PiWorkflowRequest(
         @Digits(integer = 16, fraction = 2, message = "国内快递价格最多16位整数和2位小数") BigDecimal domesticPrice,
         @Size(max = 128, message = "国内快递单号不能超过128个字符") String domesticTrackingNo,
         @PastOrPresent(message = "客户收货日期不能晚于今天") LocalDate receivedDate,
-        Boolean productionCompleted) {
+        Boolean productionCompleted,
+        @Size(max=128) String purchaseContractNo,
+        @Pattern(regexp="SAVA|YINSANHUAN") String purchaseContractParty,
+        @Pattern(regexp="CUSTOMER|SELLER") String forwarderResponsibility,
+        @Size(max=1000) String forwarderAddress,
+        @Size(max=300) String forwarderContact,
+        @PastOrPresent LocalDate warehouseArrivalDate,
+        @Size(max=500) String arrivalProof,
+        @Size(max=128) String internationalTrackingNo,
+        @DecimalMin("0.00") @Digits(integer=16,fraction=2) BigDecimal internationalPrice,
+        @Pattern(regexp="^[A-Za-z]{3}$") String internationalCurrency) {
+    public PiWorkflowRequest(String note,String contractNo,Boolean contractReady,Boolean paymentTableReady,Boolean productionTableReady,
+            String productionStatus,LocalDate expectedCompletionDate,String materialStatus,String forwarderName,BigDecimal quotedAmount,
+            String quoteCurrency,String domesticCarrier,BigDecimal domesticPrice,String domesticTrackingNo,LocalDate receivedDate,Boolean productionCompleted) {
+        this(note,contractNo,contractReady,paymentTableReady,productionTableReady,productionStatus,expectedCompletionDate,materialStatus,
+                forwarderName,quotedAmount,quoteCurrency,domesticCarrier,domesticPrice,domesticTrackingNo,receivedDate,productionCompleted,
+                null,null,null,null,null,null,null,null,null,null);
+    }
     public PiWorkflowRequest(String note) {
         this(note, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }

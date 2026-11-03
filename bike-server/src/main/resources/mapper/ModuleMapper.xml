@@ -39,7 +39,7 @@
                 ORDER BY si.operation_time DESC
             </when>
             <when test="module == 'stock-out'">
-                SELECT so.stock_out_no AS `业务单号`, '整车出库' AS `类型`, '1 台' AS `整车数量`, COALESCE(c.customer_name, '-') AS `客户 / 仓库`, COALESCE(u.display_name, '-') AS `操作人`, so.operation_time AS `操作时间`, CASE so.status WHEN 'COMPLETED' THEN '已完成' WHEN 'CANCELLED' THEN '已撤销' ELSE so.status END AS `状态`, COALESCE(v.vehicle_qr_code,'-') AS `聚合码`,so.operation_time AS `创建时间`,so.id AS _sort_id,COALESCE(so.cancelled_at,so.operation_time) AS `修改时间`
+                SELECT so.stock_out_no AS `业务单号`, '整车出库' AS `类型`, '1 台' AS `整车数量`, COALESCE(c.customer_name, '-') AS `客户 / 仓库`, COALESCE(u.display_name, '-') AS `操作人`, so.operation_time AS `操作时间`, CASE so.status WHEN 'COMPLETED' THEN '已完成' WHEN 'CANCELLED' THEN '已撤销' ELSE so.status END AS `状态`, COALESCE(v.vehicle_qr_code,'-') AS `聚合码`,so.operation_time AS `创建时间`,so.id AS _sort_id,COALESCE(so.cancelled_at,so.operation_time) AS `修改时间`,(SELECT log.remark FROM bike_operation_log log WHERE log.business_type='STOCK_OUT' AND log.business_id=so.stock_out_no ORDER BY log.id DESC LIMIT 1) AS `出库备注`
                 FROM bike_stock_out_record so LEFT JOIN bike_vehicle v ON v.id=so.vehicle_id LEFT JOIN bike_customer c ON c.id = so.customer_id LEFT JOIN bike_sys_user u ON u.id = so.operator_id WHERE 1=1 <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=so.customer_id)</if>
                 ORDER BY so.operation_time DESC
             </when>

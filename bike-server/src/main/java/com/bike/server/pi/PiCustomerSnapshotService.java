@@ -16,7 +16,7 @@ public class PiCustomerSnapshotService {
                 d.bankName(),d.bankAccount(),d.beneficiary(),d.paymentTerms(),d.deliveryTerms(),d.templateCode(),d.templateVersion(),
                 d.issueDate(),d.validUntil(),value(d.shippingAddress(),p.address()),d.transportMode(),d.tradeTerms(),value(d.buyerCountry(),p.country()),d.sellerCountry(),
                 value(d.buyerContactName(),p.contactName()),value(d.buyerPhone(),p.contactPhone()),value(d.buyerEmail(),p.email()),value(d.businessOwner(),p.businessOwner()),
-                d.sellerContactName(),d.sellerPhone(),d.sellerEmail());
+                d.sellerContactName(),d.sellerPhone(),d.sellerEmail(),d.business());
     }
     private static String value(String specified,String fallback){return specified==null||specified.isBlank()?fallback:specified;}
 }

@@ -16,6 +16,7 @@ const dispatchMode = ref('order')
 const pathMode: Record<string, 'assembly' | 'stockIn' | 'stockOut' | 'rework' | 'trace'> = {
   '/pda/home': 'assembly', '/pda/assembly': 'assembly', '/pda/stock-in': 'stockIn', '/pda/stock-out': 'stockOut', '/pda/rework': 'rework', '/pda/trace': 'trace'
 }
+const stockOutRemark = ref('')
 const mode = ref<'assembly' | 'stockIn' | 'stockOut' | 'rework' | 'trace'>(pathMode[window.location.pathname] ?? 'assembly')
 type PdaMode = 'assembly' | 'stockIn' | 'stockOut' | 'rework' | 'trace'
 type AuthContext = { username: string; userType: string; agentId: number | null; roles: string[]; permissions: string[]; workstations: string[]; mustChangePassword: boolean }
@@ -235,10 +236,11 @@ async function submitStockOut() {
       showFailToast(resultMessage.value)
       return
     }
-    const response = await axios.post('/api/stock-out', { customerId: customerId.value, orderId: orderId.value, vehicleQrCodes: scannedVehicleQrs.value }, { headers: tokenHeaders.value })
+    const response = await axios.post('/api/stock-out', { customerId: customerId.value, orderId: orderId.value, vehicleQrCodes: scannedVehicleQrs.value, remark: stockOutRemark.value }, { headers: tokenHeaders.value })
     resultMessage.value = `出库完成：${scannedVehicleQrs.value.length} 台整车`
     resultSuccess.value = true
     scannedVehicleQrs.value = []
+    stockOutRemark.value = ''
     vehicleQrCode.value = ''
     orderId.value = null; selectedOrder.value = null
     await loadStockOutOrders(1)
@@ -519,6 +521,7 @@ if (loggedIn.value) {
         </section>
       </section>
       <section v-else-if="mode === 'stockOut'" class="form-section">
+        <van-field v-model="stockOutRemark" label="出库备注" type="textarea" maxlength="400" placeholder="填写本次出库说明" />
         <van-tabs v-model:active="dispatchMode"><van-tab name="order" title="按订单出库" /><van-tab name="pi" title="PI 多车型整批出库" /></van-tabs>
         <PiDispatchPanel v-if="authContext && !passwordChangeVisible" v-show="dispatchMode === 'pi'" :key="authContext.username" :username="authContext.username" />
         <template v-if="dispatchMode === 'order'">

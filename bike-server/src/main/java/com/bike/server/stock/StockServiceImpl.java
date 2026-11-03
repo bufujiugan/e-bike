@@ -16,6 +16,7 @@ import java.util.Map;
 
 @Service
 public class StockServiceImpl implements StockService {
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.pi.PiBusinessService piBusiness;
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.common.CustomerScopeAccess customerScope;
     private final StockMapper stockMapper;
     private final OrderMapper orderMapper;
@@ -64,6 +65,7 @@ public class StockServiceImpl implements StockService {
         }
         if(inventoryGuard!=null)inventoryGuard.requireShipment(order,1);
         if(inventoryGuard!=null)inventoryGuard.requireVehicle(order,vehicle.getId());
+            if(piBusiness!=null)piBusiness.requireWarehouseCapacity(vehicle.getId(),order.getId());
         if (piShipmentGuard != null) {
             var pi = piShipmentGuard.requireReleased(order);
             piShipmentGuard.requireVehicle(pi, order.getId(), vehicle.getId());
@@ -133,13 +135,14 @@ public class StockServiceImpl implements StockService {
             if (!java.util.Objects.equals(order.getModelId(), vehicle.getModelId())) throw new BusinessException("ORDER_MODEL_MISMATCH", "整车车型与订单车型不匹配: " + vehicle.getFrameSn());
             if (piShipmentGuard != null) piShipmentGuard.requireVehicle(pi, order.getId(), vehicle.getId());
             if(inventoryGuard!=null)inventoryGuard.requireVehicle(order,vehicle.getId());
+            if(piBusiness!=null)piBusiness.requireWarehouseCapacity(vehicle.getId(),order.getId());
             String stockNo = "OUT" + UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase();
             if (stockMapper.updateVehicleStockOut(vehicle.getId(), request.customerId(), request.orderId()) != 1) throw new BusinessException("INVALID_STATUS_TRANSITION", "整车出库状态更新失败");
             stockMapper.insertStockOut(stockNo, vehicle.getId(), request.customerId(), request.orderId(), CurrentOperator.id());
             if(batchId!=null)dispatchRecorder.attach(batchId,stockNo);
             stockMapper.insertOrderVehicle(request.orderId(), vehicle.getId(), stockNo);
             if(inventoryGuard!=null)inventoryGuard.recordShipment(request.orderId(),vehicle.getId());
-            stockMapper.insertOperationLog("STOCK_OUT", stockNo, "整车出库", vehicle.getFrameSn(), CurrentOperator.id(), operator, "订单:" + request.orderId(), CurrentOperator.clientIp());
+            stockMapper.insertOperationLog("STOCK_OUT", stockNo, "整车出库", vehicle.getFrameSn(), CurrentOperator.id(), operator, "订单:" + request.orderId()+(request.remark()==null||request.remark().isBlank()?"":"；出库备注："+request.remark().trim()), CurrentOperator.clientIp());
             if (first == null) first = stockMapper.selectStockOutByNo(stockNo);
         }
         if (orderMapper.increaseShipped(request.orderId(), request.vehicleQrCodes().size()) != 1) throw new BusinessException("ORDER_QTY_NOT_ENOUGH", "订单出库数量更新失败");
@@ -185,6 +188,7 @@ public class StockServiceImpl implements StockService {
         }
         if(inventoryGuard!=null)inventoryGuard.restoreShipment(record.getOrderId(),record.getVehicleId());
         if (stockMapper.updateOrderStatusAfterCancel(record.getOrderId(), "CONFIRMED") != 1) throw new BusinessException("ORDER_UPDATE_FAILED", "订单状态恢复失败");
+        if (piBusiness != null) piBusiness.invalidateDeliveryForOrder(record.getOrderId());
         stockMapper.insertOperationLog("STOCK_OUT_CANCEL", String.valueOf(id), "撤销出库", record.getFrameSn(), CurrentOperator.id(), CurrentOperator.username(), reason, CurrentOperator.clientIp());
         return stockMapper.selectStockOut(id);
     }

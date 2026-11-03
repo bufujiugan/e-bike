@@ -271,7 +271,7 @@ class SkuCommitmentMysqlTest {
         Fixture(boolean withPi) throws Exception {
             var config=new Configuration(new Environment("sku-commitment",new SpringManagedTransactionFactory(),source));
             config.setMapUnderscoreToCamelCase(true);
-            for(String name:List.of("InventoryPolicyMapper","AuditPolicyMapper","AgentModelAccessMapper","InventoryLockMapper","SkuLockMapper","SkuInventoryMapper","OrderMapper","OrderReservationMapper","ProductionMapper","VehicleMapper","StockMapper","OperationLogMapper","ModuleMapper","DashboardMapper","PiMapper","PiSeriesMapper","PiShipmentMapper","PiDispatchMapper","PiLogisticsMapper","PiQuantityMapper"))
+            for(String name:List.of("InventoryPolicyMapper","AuditPolicyMapper","AgentModelAccessMapper","InventoryLockMapper","SkuLockMapper","SkuInventoryMapper","OrderMapper","OrderReservationMapper","ProductionMapper","VehicleMapper","StockMapper","OperationLogMapper","ModuleMapper","DashboardMapper","PiMapper","PiSeriesMapper","PiShipmentMapper","PiDispatchMapper","PiLogisticsMapper","PiQuantityMapper","PiWarehouseProjectionFixtureMapper"))
                 try(var input=Resources.getResourceAsStream("mapper/"+name+".xml")) {
                     var xml=new String(input.readAllBytes(),StandardCharsets.UTF_8).replace("bike_",prefix);
                     new XMLMapperBuilder(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)),config,name,config.getSqlFragments()).parse();
@@ -342,6 +342,11 @@ class SkuCommitmentMysqlTest {
                 exec("INSERT INTO @warehouse VALUES(1,'库房','ENABLED')");
                 exec("INSERT INTO @warehouse_location VALUES(1,1,'库位','ENABLED')");
                 addVehicle(100,10);addVehicle(101,11);addVehicle(102,null);
+                if (!withPi) {
+                    session.update("warehouseProjectionFixture.createPi"); tables.add("pi");
+                    session.update("warehouseProjectionFixture.createSeries"); tables.add("pi_series");
+                    session.update("warehouseProjectionFixture.createOrderLink"); tables.add("pi_order_link");
+                }
                 if(withPi) {
                     for(String file:List.of("V24__pi_multi_item_and_fulfillment.sql","V30__pi_series_and_atomic_conversion.sql","V31__pi_dispatch_batches.sql","V32__pi_logistics_actual_batches.sql","V33__pi_revisions_and_series_payments.sql","V40__pi_document_details.sql","V43__pi_payment_corrections.sql","V48__pi_revision_sku_sources.sql")) {
                         try(var input=Resources.getResourceAsStream("db/migration/"+file)) {
@@ -402,7 +407,7 @@ class SkuCommitmentMysqlTest {
         long scalar(String sql) {return jdbc.queryForObject(sql.replace("@",prefix),Long.class);}
         @Override public void close() {
             validation.close();
-            if(tables.stream().anyMatch(t -> t.equals("pi_series"))) exec("ALTER TABLE @pi DROP FOREIGN KEY "+prefix+"fk_pi_series");
+            if(tables.contains("pi_revision_request")) exec("ALTER TABLE @pi DROP FOREIGN KEY "+prefix+"fk_pi_series");
             // Foreign keys from inventory_lock to sku_lock_request require this deliberate order.
             List<String> removal=new ArrayList<>(tables.reversed());
             if(removal.contains("stock_out_batch")&&removal.remove("pi_logistics")) removal.add(removal.indexOf("stock_out_batch"),"pi_logistics");

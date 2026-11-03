@@ -40,7 +40,12 @@ class PiShipmentGuardTest {
         when(mapper.remainingForVehicle(1, 5, 9)).thenReturn(null);
         assertThatThrownBy(() -> guard.requireVehicle(p, 5, 9)).isInstanceOf(BusinessException.class).hasMessageContaining("不能按同车型替代");
     }
-    @Test void legacyOrderWithoutPiKeepsExistingWorkflow() {
+    @Test void configuredBusinessFlowRejectsSalesDispatchWithoutPi() {
+        org.springframework.test.util.ReflectionTestUtils.setField(guard,"business",mock(PiBusinessService.class));
+        when(mapper.selectForOrder(5)).thenReturn(List.of());
+        assertThatThrownBy(()->guard.requireReleased(order())).hasMessageContaining("销售出库须先建立PI");
+    }
+    @Test void legacyConstructorRemainsCompatibleWithoutBusinessDependency() {
         when(mapper.selectForOrder(5)).thenReturn(List.of()); assertThat(guard.requireReleased(order())).isNull();
     }
 }

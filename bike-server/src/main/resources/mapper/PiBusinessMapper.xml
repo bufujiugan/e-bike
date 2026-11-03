@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.pi.PiBusinessMapper">
+  <select id="selectWarehouses" resultType="map">SELECT id,warehouse_code code,warehouse_name name FROM bike_warehouse WHERE status='ENABLED' ORDER BY id</select>
+  <select id="countEnabledWarehouse" resultType="int">SELECT COUNT(*) FROM bike_warehouse WHERE id=#{id} AND status='ENABLED'</select>
+  <select id="selectDocument" resultType="string">SELECT document_snapshot FROM bike_pi WHERE id=#{piId}</select>
+  <select id="selectVehicleWarehouse" resultType="long">SELECT current_warehouse_id FROM bike_vehicle WHERE id=#{vehicleId}</select>
+  <select id="selectVehicleSku" resultType="long">SELECT sku_id FROM bike_production_vehicle WHERE vehicle_id=#{vehicleId}</select>
+  <select id="countWarehouseStock" resultType="int">
+    SELECT COUNT(*) FROM bike_vehicle v JOIN bike_production_vehicle pv ON pv.vehicle_id=v.id
+    WHERE v.status=2 AND v.current_warehouse_id=#{warehouseId} AND pv.sku_id=#{skuId}
+      AND NOT <include refid="com.bike.server.stock.InventoryPolicyMapper.quarantined"/>
+  </select>
+  <select id="countWarehouseReserved" resultType="int">
+    SELECT COALESCE(SUM(GREATEST(i.ordered_qty-i.shipped_qty-i.closed_qty,0)),0)
+    FROM bike_order_reservation_item i JOIN bike_order_reservation r ON r.order_id=i.order_id
+    JOIN bike_sales_order o ON o.id=r.order_id JOIN bike_pi_order_link link ON link.order_id=o.id
+    JOIN bike_pi_series series ON series.id=link.series_id JOIN bike_pi p ON p.id=series.current_pi_id
+    WHERE i.sku_id=#{skuId} AND r.hold_mode='PAID' AND o.status IN ('CONFIRMED','PARTIAL_SHIPPED')
+      AND series.id!=#{excludedSeriesId}
+      AND CAST(JSON_UNQUOTE(JSON_EXTRACT(p.document_snapshot,'$.business.warehouseId')) AS UNSIGNED)=#{warehouseId}
+  </select>
+  <insert id="insertPaidSource">
+    INSERT INTO bike_inventory_lock(lock_no,agent_id,customer_id,sku_id,product_model_id,scope_type,lock_qty,converted_qty,expire_time,created_by,status,remark)
+    SELECT #{lockNo},p.agent_id,p.customer_id,sku.id,sku.model_id,'SKU',#{quantity},#{quantity},NOW(3),#{operatorId},'CONVERTED','PI按合同收款后建立订单库存占用'
+    FROM bike_pi p JOIN bike_production_sku sku ON sku.id=#{skuId} WHERE p.id=#{piId}
+  </insert>
+  <select id="selectLockId" resultType="long">SELECT id FROM bike_inventory_lock WHERE lock_no=#{lockNo}</select>
+  <insert id="insertPaidReservation">
+    INSERT INTO bike_order_reservation(order_id,source_lock_id,request_id,model_id,reserved_qty,expires_at,scope_type,hold_mode,payment_hold_pi_id,payment_held_at,payment_held_by,payment_held_amount)
+    SELECT #{orderId},l.id,CONCAT('PI_PAID_',#{piId},'_',#{orderId}),l.product_model_id,l.lock_qty,NOW(3),'SKU','PAID',#{piId},NOW(3),#{operatorId},
+      (SELECT COALESCE(SUM(pay.amount),0) FROM bike_pi_payment pay JOIN bike_pi origin ON origin.id=pay.pi_id JOIN bike_pi current_pi ON current_pi.series_id=origin.series_id WHERE current_pi.id=#{piId} AND pay.status='CONFIRMED')
+    FROM bike_inventory_lock l WHERE l.id=#{lockId}
+  </insert>
+  <update id="updatePaidReservation">
+    UPDATE bike_order_reservation SET hold_mode='PAID',payment_hold_pi_id=#{piId},payment_held_at=NOW(3),payment_held_by=#{operatorId},released_at=NULL
+    WHERE order_id=#{orderId} AND hold_mode IN ('TIMED','PAID')
+  </update>
+  <select id="countPaymentsWithoutReceipt" resultType="int">
+    SELECT COUNT(*) FROM bike_pi_payment payment
+    JOIN bike_pi origin ON origin.id=payment.pi_id
+    JOIN bike_pi current_pi ON current_pi.series_id=origin.series_id
+    WHERE current_pi.id=#{piId} AND payment.status='CONFIRMED'
+      AND NOT EXISTS(SELECT 1 FROM bike_pi_payment_attachment attachment WHERE attachment.payment_id=payment.id)
+  </select>
+  <select id="countUnshipped" resultType="int">
+    SELECT COALESCE(SUM(GREATEST(item.ordered_qty-(SELECT COUNT(*) FROM bike_stock_out_record so
+      JOIN bike_pi_order_link link ON link.order_id=so.order_id JOIN bike_production_vehicle pv ON pv.vehicle_id=so.vehicle_id
+      WHERE link.series_id=p.series_id AND so.status='COMPLETED' AND pv.sku_id=item.sku_id),0)),0)
+    FROM bike_pi p JOIN bike_pi_item item ON item.pi_id=p.id WHERE p.id=#{piId}
+  </select>
+  <select id="countActiveShipments" resultType="int">
+    SELECT COUNT(*) FROM bike_pi p JOIN bike_pi_order_link link ON link.series_id=p.series_id
+    JOIN bike_stock_out_record so ON so.order_id=link.order_id AND so.status='COMPLETED' WHERE p.id=#{piId}
+  </select>
+  <select id="countUntrackedBatches" resultType="int">
+    SELECT COUNT(*) FROM bike_stock_out_batch batch JOIN bike_pi p ON p.series_id=batch.series_id
+    WHERE p.id=#{piId} AND EXISTS(SELECT 1 FROM bike_stock_out_batch_item bi JOIN bike_stock_out_record so ON so.id=bi.stock_out_id AND so.status='COMPLETED' WHERE bi.batch_id=batch.id)
+      AND NOT EXISTS(SELECT 1 FROM bike_pi_logistics l WHERE l.stock_out_batch_id=batch.id AND l.status='SHIPPED')
+  </select>
+  <select id="countArrivalProof" resultType="int">
+    SELECT COUNT(*) FROM bike_pi_logistics_attachment a JOIN bike_pi_logistics l ON l.id=a.logistics_id
+    JOIN bike_pi origin ON origin.id=l.pi_id JOIN bike_pi current_pi ON current_pi.series_id=origin.series_id
+    WHERE current_pi.id=#{piId} AND a.id=#{attachmentId} AND l.status IN ('PLANNED','SHIPPED')
+  </select>
+  <update id="updateDeliveryPending">
+    UPDATE bike_pi_workflow_step step JOIN bike_pi_series series ON series.current_pi_id=step.pi_id
+    JOIN bike_pi origin ON origin.series_id=series.id
+    SET step.status='PENDING',step.completed_by=NULL,step.completed_at=NULL
+    WHERE origin.id=#{piId} AND step.step_code IN ('WAREHOUSE_ARRIVED','TRACKING_RECORDED','CUSTOMER_RECEIVED')
+  </update>
+</mapper>

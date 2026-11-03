@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class OrderInventoryGuard {
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.pi.PiBusinessService piBusiness;
     private final OrderReservationMapper mapper;
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.pi.PiShipmentGuard piShipmentGuard;
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.stock.SkuInventoryGuard skuInventoryGuard;
@@ -17,6 +18,7 @@ public class OrderInventoryGuard {
             throw new BusinessException("INVENTORY_LOCK_CONFLICT","库存已被其他锁定或订单占用，不能出库");
     }
     public void requireUnreservedRemoval(long vehicleId){
+        if(piBusiness!=null)piBusiness.requireWarehouseCapacity(vehicleId,null);
         Long modelId=mapper.vehicleModel(vehicleId);
         if(modelId==null)throw new BusinessException("VEHICLE_NOT_FOUND","车辆不存在");
         if(mapper.snapshot(modelId,0).availableForOrder()<1)

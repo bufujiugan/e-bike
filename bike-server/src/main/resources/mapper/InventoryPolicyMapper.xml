@@ -34,7 +34,7 @@
     JOIN bike_sales_order o ON o.id=r.order_id
     WHERE r.scope_type='SKU' AND <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/>
   </sql>
-  <!-- 同车型内按库位分摊，仅用于展示；最后一行承载库存缺口，避免截断承诺。 -->
+  <!-- PI已付款占用先归属指定仓库，再按库位展示；其余全局承诺沿用原分摊口径。 -->
   <sql id="inventoryCtes">
     WITH sku_commitment_totals AS (
       SELECT model_id,sku_id,SUM(qty) qty FROM (<include refid="com.bike.server.stock.InventoryPolicyMapper.skuCommitments"/>) c GROUP BY model_id,sku_id
@@ -48,6 +48,18 @@
       SELECT model_id,SUM(CASE WHEN kind='TEMPORARY' THEN qty ELSE 0 END) temporary_qty,
         SUM(CASE WHEN kind='ORDER' THEN qty ELSE 0 END) order_qty
       FROM (<include refid="com.bike.server.stock.InventoryPolicyMapper.commitments"/>) c GROUP BY model_id
+    ), warehouse_paid AS (
+      SELECT r.model_id,CAST(JSON_UNQUOTE(JSON_EXTRACT(p.document_snapshot,'$.business.warehouseId')) AS UNSIGNED) warehouse_id,
+        SUM(GREATEST(ri.ordered_qty-ri.shipped_qty-ri.closed_qty,0)) qty
+      FROM bike_order_reservation r JOIN bike_order_reservation_item ri ON ri.order_id=r.order_id
+      JOIN bike_sales_order o ON o.id=r.order_id JOIN bike_pi_order_link link ON link.order_id=o.id
+      JOIN bike_pi_series series ON series.id=link.series_id JOIN bike_pi p ON p.id=series.current_pi_id
+      WHERE r.hold_mode='PAID' AND o.status IN ('CONFIRMED','PARTIAL_SHIPPED')
+        AND JSON_EXTRACT(p.document_snapshot,'$.business.warehouseId') IS NOT NULL
+        AND JSON_TYPE(JSON_EXTRACT(p.document_snapshot,'$.business.warehouseId'))!='NULL'
+      GROUP BY r.model_id,warehouse_id
+    ), warehouse_paid_totals AS (
+      SELECT model_id,SUM(qty) qty FROM warehouse_paid GROUP BY model_id
     ), physical_rows AS (
       SELECT v.model_id,w.id warehouse_id,w.warehouse_name,l.id location_id,l.location_name,
         COUNT(*) physical_qty,SUM(<include refid="com.bike.server.stock.InventoryPolicyMapper.quarantined"/>) quarantined_qty,
@@ -58,24 +70,39 @@
     ), all_rows AS (
       SELECT * FROM physical_rows
       UNION ALL
+      SELECT c.model_id,c.warehouse_id,w.warehouse_name,NULL,NULL,0,0,NULL
+      FROM warehouse_paid c LEFT JOIN bike_warehouse w ON w.id=c.warehouse_id
+      WHERE c.qty&gt;0 AND NOT EXISTS(SELECT 1 FROM physical_rows p WHERE p.model_id=c.model_id AND p.warehouse_id=c.warehouse_id)
+      UNION ALL
       SELECT c.model_id,NULL,NULL,NULL,NULL,0,0,NULL FROM commitment_totals c
       WHERE c.temporary_qty+c.order_qty&gt;0 AND NOT EXISTS(SELECT 1 FROM physical_rows p WHERE p.model_id=c.model_id)
+        AND NOT EXISTS(SELECT 1 FROM warehouse_paid w WHERE w.model_id=c.model_id AND w.qty&gt;0)
+    ), warehouse_ordered AS (
+      SELECT p.*,COALESCE(w.qty,0) warehouse_paid_qty,
+        ROW_NUMBER() OVER(PARTITION BY p.model_id,p.warehouse_id ORDER BY COALESCE(p.location_id,0)) warehouse_row_no,
+        COUNT(*) OVER(PARTITION BY p.model_id,p.warehouse_id) warehouse_row_count,
+        COALESCE(SUM(p.physical_qty-p.quarantined_qty) OVER(PARTITION BY p.model_id,p.warehouse_id ORDER BY COALESCE(p.location_id,0) ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) warehouse_prior_capacity
+      FROM all_rows p LEFT JOIN warehouse_paid w ON w.model_id=p.model_id AND w.warehouse_id=p.warehouse_id
+    ), warehouse_rows AS (
+      SELECT p.*,GREATEST(0,LEAST(warehouse_paid_qty,CASE WHEN warehouse_row_no=warehouse_row_count THEN warehouse_paid_qty ELSE warehouse_prior_capacity+physical_qty-quarantined_qty END)-warehouse_prior_capacity) fixed_order_qty
+      FROM warehouse_ordered p
     ), ordered_rows AS (
       SELECT p.*,COALESCE(m.model_name,'-') model_name,COALESCE(c.temporary_qty,0) model_temporary_qty,
-        COALESCE(c.order_qty,0) model_order_qty,
+        COALESCE(c.order_qty,0)-COALESCE(wpt.qty,0) model_order_qty,
         COALESCE(sms.sku_shortage_qty,0) sku_shortage_qty,
         COALESCE(c.temporary_qty,0)+COALESCE(c.order_qty,0)-COALESCE(sms.sku_committed_qty,0) legacy_model_committed_qty,
         GREATEST(0,SUM(p.physical_qty-p.quarantined_qty) OVER(PARTITION BY p.model_id)-COALESCE(c.temporary_qty,0)-COALESCE(c.order_qty,0)) model_new_commitment_qty,
         ROW_NUMBER() OVER(PARTITION BY p.model_id ORDER BY COALESCE(p.warehouse_id,0),COALESCE(p.location_id,0)) row_no,
         COUNT(*) OVER(PARTITION BY p.model_id) row_count,
-        COALESCE(SUM(p.physical_qty-p.quarantined_qty) OVER(PARTITION BY p.model_id ORDER BY COALESCE(p.warehouse_id,0),COALESCE(p.location_id,0) ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) prior_capacity
-      FROM all_rows p LEFT JOIN bike_product_model m ON m.id=p.model_id
+        COALESCE(SUM(GREATEST(p.physical_qty-p.quarantined_qty-p.fixed_order_qty,0)) OVER(PARTITION BY p.model_id ORDER BY COALESCE(p.warehouse_id,0),COALESCE(p.location_id,0) ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) prior_capacity
+      FROM warehouse_rows p LEFT JOIN bike_product_model m ON m.id=p.model_id
       LEFT JOIN commitment_totals c ON c.model_id=p.model_id
+      LEFT JOIN warehouse_paid_totals wpt ON wpt.model_id=p.model_id
       LEFT JOIN sku_model_status sms ON sms.model_id=p.model_id
     ), commitment_rows AS (
       SELECT o.*,
-        GREATEST(0,LEAST(model_temporary_qty,CASE WHEN row_no=row_count THEN model_temporary_qty+model_order_qty ELSE prior_capacity+physical_qty-quarantined_qty END)-prior_capacity) temporary_locked_qty,
-        GREATEST(0,LEAST(model_temporary_qty+model_order_qty,CASE WHEN row_no=row_count THEN model_temporary_qty+model_order_qty ELSE prior_capacity+physical_qty-quarantined_qty END)-GREATEST(prior_capacity,model_temporary_qty)) order_reserved_qty
+        GREATEST(0,LEAST(model_temporary_qty,CASE WHEN row_no=row_count THEN model_temporary_qty+model_order_qty ELSE prior_capacity+GREATEST(physical_qty-quarantined_qty-fixed_order_qty,0) END)-prior_capacity) temporary_locked_qty,
+        fixed_order_qty+GREATEST(0,LEAST(model_temporary_qty+model_order_qty,CASE WHEN row_no=row_count THEN model_temporary_qty+model_order_qty ELSE prior_capacity+GREATEST(physical_qty-quarantined_qty-fixed_order_qty,0) END)-GREATEST(prior_capacity,model_temporary_qty)) order_reserved_qty
       FROM ordered_rows o
     ), inventory_projection AS (
       SELECT c.*,temporary_locked_qty+order_reserved_qty locked_qty,

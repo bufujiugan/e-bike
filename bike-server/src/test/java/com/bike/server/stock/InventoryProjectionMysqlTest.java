@@ -26,6 +26,10 @@ class InventoryProjectionMysqlTest {
             String mapper=new String(stream.readAllBytes(),StandardCharsets.UTF_8).replace("bike_",tablePrefix);
             new XMLMapperBuilder(new ByteArrayInputStream(mapper.getBytes(StandardCharsets.UTF_8)),config,"inventory-policy",config.getSqlFragments()).parse();
         }
+        try (var input = Resources.getResourceAsStream("mapper/PiWarehouseProjectionFixtureMapper.xml")) {
+            String fixture = new String(input.readAllBytes(),StandardCharsets.UTF_8).replace("bike_",tablePrefix);
+            new XMLMapperBuilder(new ByteArrayInputStream(fixture.getBytes(StandardCharsets.UTF_8)),config,"warehouse-fixture",config.getSqlFragments()).parse();
+        }
         for(String file:List.of("OrderMapper","OrderReservationMapper"))try(var stream=Resources.getResourceAsStream("mapper/"+file+".xml")) {
             String mapper=new String(stream.readAllBytes(),StandardCharsets.UTF_8).replace("bike_",tablePrefix);
             new XMLMapperBuilder(new ByteArrayInputStream(mapper.getBytes(StandardCharsets.UTF_8)),config,file,config.getSqlFragments()).parse();
@@ -57,6 +61,9 @@ class InventoryProjectionMysqlTest {
                 String isolated=ddl.replace("bike_",tablePrefix);
                 sql.execute("CREATE TABLE "+isolated);createdTables.add(isolated.substring(0,isolated.indexOf('(')));
             }
+            session.update("warehouseProjectionFixture.createPi"); createdTables.add(tablePrefix+"pi");
+            session.update("warehouseProjectionFixture.createSeries"); createdTables.add(tablePrefix+"pi_series");
+            session.update("warehouseProjectionFixture.createOrderLink"); createdTables.add(tablePrefix+"pi_order_link");
             for(String insert:List.of(
                 "INSERT INTO bike_product_model VALUES(1,'A'),(2,'B'),(3,'C')",
                 "INSERT INTO bike_warehouse VALUES(1,'W1'),(2,'W2')",

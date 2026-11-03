@@ -54,7 +54,7 @@ public class PiDispatchService {
         var vehicles=input.vehicles().stream().map(v->new PiDispatchRequest.Vehicle(v.orderId(),v.vehicleQrCode().trim()))
                 .sorted(Comparator.comparingLong(PiDispatchRequest.Vehicle::orderId).thenComparing(PiDispatchRequest.Vehicle::vehicleQrCode)).toList();
         if(vehicles.stream().map(PiDispatchRequest.Vehicle::vehicleQrCode).distinct().count()!=vehicles.size())fail("INVALID_QR_CODE","同一整车不能重复扫码");
-        var request=new PiDispatchRequest(input.requestId().trim(),vehicles);
+        var request=new PiDispatchRequest(input.requestId().trim(),vehicles,input.remark());
         guard.lock();
         var header=mapper.warehouseHeader(piId);if(header==null)fail("PI_NOT_FOUND","当前PI不存在");
         customerScope.requireCustomer(((Number)header.get("customerId")).longValue());
@@ -73,7 +73,7 @@ public class PiDispatchService {
         }
         long batch=recorder.begin(piId,request.requestId(),hash,"PI_COMMAND");
         var record=mapper.get(batch);
-        for(var entry:groups.entrySet()) stock.stockOutForPiBatch(new StockOutRequest(record.customerId(),entry.getKey(),entry.getValue()),batch);
+        for(var entry:groups.entrySet()) stock.stockOutForPiBatch(new StockOutRequest(record.customerId(),entry.getKey(),entry.getValue(),input.remark()),batch);
         var result=mapper.get(batch);
         if(result.activeQty()!=vehicles.size())fail("PI_BATCH_FAILED","出库批次数量校验失败");
         if(logs.insert("STOCK_OUT_BATCH",result.batchNo(),"PI整批出库",CurrentOperator.id(),CurrentOperator.username(),null,

@@ -8,13 +8,17 @@ import java.util.Objects;
 /** Called after the sales-order row is locked, in the same transaction as physical dispatch. */
 @Component
 public class PiShipmentGuard {
+    @org.springframework.beans.factory.annotation.Autowired private PiBusinessService business;
     private final PiShipmentMapper mapper;
     @org.springframework.beans.factory.annotation.Autowired private PiSeriesMapper series;
     public PiShipmentGuard(PiShipmentMapper mapper) { this.mapper = mapper; }
 
     public PiShipmentGate requireReleased(SalesOrderView order) {
         var linked = series == null ? mapper.selectForOrder(order.getId()) : series.gates(order.getId());
-        if (linked.isEmpty()) return null;
+        if (linked.isEmpty()) {
+            if(business!=null)throw new BusinessException("PI_REQUIRED","销售出库须先建立PI并完成收款、锁库及合同放行");
+            return null;
+        }
         if (linked.size() != 1) throw new BusinessException("PI_ORDER_CONFLICT", "订单关联多个 PI，须先核对后出库");
         PiShipmentGate pi = linked.getFirst();
         if (!Objects.equals(pi.customerId(), order.getCustomerId())) {
@@ -25,11 +29,13 @@ public class PiShipmentGuard {
                 || pi.paidAmount().compareTo(pi.shipmentRequiredAmount()) < 0) {
             throw new BusinessException("PI_SHIPMENT_NOT_RELEASED", "关联 PI 尚未达到发货收款条件并完成授权放行");
         }
+        if(business!=null)business.requireShipment(pi.id());
         return pi;
     }
 
     public void requireVehicle(PiShipmentGate pi, long orderId, long vehicleId) {
         if (pi == null) return;
+        if(business!=null)business.requireVehicle(pi.id(),vehicleId);
         Integer remaining = series == null ? mapper.remainingForVehicle(pi.id(), orderId, vehicleId)
                 : series.remainingForVehicle(pi.id(), vehicleId);
         if (remaining == null) throw new BusinessException("PI_SKU_MISMATCH", "整车 SKU 不在 PI 明细中，不能按同车型替代");

@@ -3,6 +3,9 @@ package com.bike.server.stock;
 import java.time.LocalDateTime;
 
 public class StockRecordView {
+    private String remark;
+    public String getRemark(){return remark;}
+    public void setRemark(String value){remark=value;}
     private Long id;
     private String stockNo;
     private String type;

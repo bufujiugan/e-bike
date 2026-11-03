@@ -10,7 +10,9 @@ export function reservationLabel(status: ReservationStatus | null | undefined, i
   if (isAgent && (status === 'TIMED_ACTIVE' || status === 'PAID_HELD')) return reservationLabels.ACTIVE
   return status ? reservationLabels[status] ?? '状态待核对' : '状态待获取'
 }
+export type PiBusinessTerms = { warehouseId: number | null; domesticShipment: boolean | null; collectionEntity: 'GUANGTA' | 'HONG_KONG' }
 export type PiDocument = {
+  business?: PiBusinessTerms | null
   sellerName: string; sellerAddress: string; sellerContact: string
   buyerAddress: string; buyerContact: string; bankName: string; bankAccount: string; beneficiary: string
   paymentTerms: string; deliveryTerms: string; templateCode: string; templateVersion: string
@@ -71,7 +73,7 @@ export type PiLockOption = { id: number; lockNo: string; skuId: number; skuCode:
 export type PiMasterOption = { id: number; code: string; name: string }
 export type PiSkuOption = { id: number; modelId?: number; productModelId?: number; skuCode: string; productName: string; specification?: string; enabled?: boolean }
 export type PiOrderOption = { id: number; orderNo: string; customerId: number; agentId?: number | null; status: string }
-export type PiOptions = { customers: PiMasterOption[]; agents: PiMasterOption[]; skus: PiSkuOption[]; orders: PiOrderOption[] }
+export type PiOptions = { customers: PiMasterOption[]; agents: PiMasterOption[]; skus: PiSkuOption[]; orders: PiOrderOption[]; warehouses?: PiMasterOption[] }
 export type PiCreate = {
   revisionSources?: { lockId: number; quantity: number }[]
   customerId: number; agentId?: number | null; sourceOrderId?: number | null; tradeType: string; currencyCode: string
@@ -150,6 +152,10 @@ export type PiWorkflowDetails = {
   forwarderName?: string | null; quotedAmount?: Money | null; quoteCurrency?: string | null
   domesticCarrier?: string | null; domesticPrice?: Money | null; domesticTrackingNo?: string | null
   receivedDate?: string | null
+  purchaseContractNo?: string | null; purchaseContractParty?: string | null
+  forwarderResponsibility?: string | null; forwarderAddress?: string | null; forwarderContact?: string | null
+  warehouseArrivalDate?: string | null; arrivalProof?: string | null
+  internationalTrackingNo?: string | null; internationalPrice?: Money | null; internationalCurrency?: string | null
 }
 export type PiWorkflowComplete = PiWorkflowDetails & { note?: string | null; productionCompleted?: boolean | null }
 export type PiWorkflowStep = { order: number; code: string; name: string; status: 'PENDING' | 'COMPLETED'; completedBy?: number | null; completedAt?: string | null; note?: string | null; details?: PiWorkflowDetails | null }

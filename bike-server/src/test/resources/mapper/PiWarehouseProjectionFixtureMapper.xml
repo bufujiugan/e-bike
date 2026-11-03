@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="warehouseProjectionFixture">
+  <update id="createPi">CREATE TABLE bike_pi(id BIGINT PRIMARY KEY,series_id BIGINT,document_snapshot JSON)</update>
+  <update id="createSeries">CREATE TABLE bike_pi_series(id BIGINT PRIMARY KEY,current_pi_id BIGINT)</update>
+  <update id="createOrderLink">CREATE TABLE bike_pi_order_link(order_id BIGINT,series_id BIGINT)</update>
+</mapper>

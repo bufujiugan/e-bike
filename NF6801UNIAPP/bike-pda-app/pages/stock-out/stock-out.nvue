@@ -1,0 +1,252 @@
+<template>
+  <scroll-view class="page" scroll-y
+    ><view class="content">
+      <text v-if="message" :class="['feedback', failed ? 'error' : '']">{{
+        message
+      }}</text>
+      <view v-if="pending" class="card"
+        ><text class="text error"
+          >上次出库结果未知，队列已锁定。先核对订单履约和车辆追溯。</text
+        ><action-button
+          label="打开追溯"
+          secondary
+          @click="go('trace/trace')" /><action-button
+          label="已核对，解除锁定"
+          secondary
+          :disabled="busy"
+          @click="acknowledgePending"
+      /></view>
+      <view class="card"
+        ><choice-list
+          :value="customerId"
+          :options="customerOptions"
+          label="客户"
+          :disabled="busy || !!queue.length || !!pending"
+          @input="selectCustomer"
+        />
+        <form-field
+          v-model="keyword"
+          label="订单号 / 车型"
+          :disabled="busy"
+        /><action-button
+          label="搜索订单"
+          secondary
+          :disabled="busy || !customerId || !ready"
+          @click="run(() => loadOrders(1))"
+        />
+        <choice-list
+          :value="orderId"
+          :options="orderOptions"
+          label="订单"
+          :disabled="busy || !!queue.length || !!pending"
+          @input="selectOrder"
+        />
+        <text class="muted">第 {{ listPage }} 页，共 {{ total }} 条</text
+        ><action-button
+          label="上一页"
+          secondary
+          :disabled="busy || listPage <= 1"
+          @click="run(() => loadOrders(listPage - 1))"
+        /><action-button
+          label="下一页"
+          secondary
+          :disabled="busy || listPage * 20 >= total"
+          @click="run(() => loadOrders(listPage + 1))"
+        />
+        <text v-if="selectedOrder" class="text"
+          >当前订单：{{ selectedOrder.orderNo }} · 剩余 {{ remaining }} 台</text
+        >
+        <form-field
+          v-model="code"
+          label="整车聚合码"
+          :disabled="busy || !!pending"
+          @confirm="scan"
+        />
+        <action-button
+          label="启动设备扫码"
+          secondary
+          :disabled="busy || !orderId || !ready || !!pending"
+          @click="triggerScan"
+        /><action-button
+          label="校验并加入队列"
+          :disabled="busy || !orderId || !ready || !!pending"
+          @click="scan"
+        />
+      </view>
+      <view class="card"
+        ><text class="subtitle">待出库 {{ queue.length }} 台</text
+        ><view v-for="(row, index) in queue" :key="row.frameSn"
+          ><text class="text">{{ row.frameSn }}</text
+          ><action-button
+            label="移除此车辆"
+            secondary
+            :disabled="busy || !!pending"
+            @click="remove(index)"
+        /></view>
+        <form-field v-model="remark" label="出库备注（最多400字）" :disabled="busy || !!pending" />
+        <action-button
+          label="确认本批订单出库"
+          :disabled="busy || !ready || !queue.length || !!pending"
+          @click="submit"
+        />
+      </view> </view
+  ></scroll-view>
+</template>
+<script>
+import page, { confirm } from "../../common/page.js";
+import { get, post } from "../../common/api.js";
+import { readDraft, saveDraft, removeDraft } from "../../common/storage.js";
+import { assertQueue, writeOnce } from "../../common/operations.js";
+export default {
+  mixins: [page],
+  data: () => ({
+    mode: "stock-out",
+    operationName: "stock-out",
+    customers: [],
+    orders: [],
+    customerId: "",
+    orderId: "",
+    selectedOrder: null,
+    keyword: "",
+    listPage: 1,
+    total: 0,
+    code: "",
+    queue: [],
+    remark: "",
+  }),
+  computed: {
+    customerOptions() {
+      return this.customers.map((row) => ({ value: row.id, text: row.name }));
+    },
+    orderOptions() {
+      return this.orders.map((row) => ({
+        value: row.id,
+        text: `${row.orderNo} · ${row.modelName} · 剩余 ${row.orderQty - row.shippedQty}`,
+      }));
+    },
+    remaining() {
+      return this.selectedOrder
+        ? this.selectedOrder.orderQty - this.selectedOrder.shippedQty
+        : 0;
+    },
+  },
+  methods: {
+    async load() {
+      const saved = readDraft("order-dispatch", {}),
+        receipt = readDraft("result:stock-out");
+      Object.assign(this, {
+        customerId: saved.customerId || "",
+        orderId: saved.orderId || "",
+        selectedOrder: saved.selectedOrder || null,
+        queue: saved.queue || [],
+      });
+      if (
+        receipt?.payload?.orderId === this.orderId &&
+        JSON.stringify(receipt.payload.vehicleQrCodes) ===
+          JSON.stringify(this.queue.map((row) => row.vehicleQrCode))
+      ) {
+        this.queue = [];
+        this.remember();
+        this.message = "已恢复上次成功出库的结果，队列已清空";
+      }
+      removeDraft("result:stock-out");
+      this.customers = await get("/api/master/customers");
+      if (this.customerId) await this.loadOrders(1);
+    },
+    remember() {
+      saveDraft("order-dispatch", {
+        customerId: this.customerId,
+        orderId: this.orderId,
+        selectedOrder: this.selectedOrder,
+        queue: this.queue,
+      });
+    },
+    async loadOrders(next) {
+      const result = await get("/api/orders/stock-out-options", {
+        customerId: this.customerId,
+        keyword: this.keyword.trim(),
+        page: next,
+        pageSize: 20,
+      });
+      this.orders = result.records;
+      this.total = result.total;
+      this.listPage = next;
+      this.selectedOrder =
+        this.orders.find((row) => row.id === this.orderId) ||
+        this.selectedOrder;
+    },
+    selectCustomer(id) {
+      this.run(async () => {
+        this.customerId = id;
+        this.orderId = "";
+        this.selectedOrder = null;
+        this.remember();
+        await this.loadOrders(1);
+      });
+    },
+    selectOrder(id) {
+      this.orderId = id;
+      this.selectedOrder = this.orders.find((row) => row.id === id);
+      this.remember();
+    },
+    async onScan(value) {
+      const code = value.trim();
+      this.code = code;
+      if (!code || !this.selectedOrder)
+        throw new Error("请选择客户和订单，并扫描整车码");
+      if (this.pending) throw new Error("请先核对上次出库结果");
+      const result = await post("/api/stock-out/validate", {
+        vehicleQrCode: code,
+        customerId: this.customerId,
+        orderId: this.orderId,
+      });
+      assertQueue(this.queue, result, code, this.orderId, this.remaining);
+      this.queue.push({
+        orderId: this.orderId,
+        vehicleQrCode: code,
+        frameSn: result.frameSn,
+      });
+      this.remember();
+      this.code = "";
+      this.message = "已加入待出库队列";
+    },
+    scan() {
+      this.run(() => this.onScan(this.code));
+    },
+    remove(index) {
+      if (!this.busy && !this.pending) {
+        this.queue.splice(index, 1);
+        this.remember();
+      }
+    },
+    submit() {
+      this.run(async () => {
+        if (!this.queue.length || !this.orderId) throw new Error("队列为空");
+        if (
+          !(await confirm(
+            "确认订单出库",
+            `${this.selectedOrder.orderNo}，本次 ${this.queue.length} 台。`,
+          ))
+        )
+          return;
+        await writeOnce("stock-out", "/api/stock-out", {
+          customerId: this.customerId,
+          orderId: this.orderId,
+          vehicleQrCodes: this.queue.map((row) => row.vehicleQrCode),
+          remark: this.remark.slice(0,400),
+        });
+        this.queue = [];
+        this.remark = "";
+        removeDraft("order-dispatch");
+        this.message = "订单出库成功";
+        try {
+          await this.loadOrders(this.listPage);
+        } catch (cause) {
+          this.message += "；订单数量刷新失败，请稍后重查";
+        }
+      });
+    },
+  },
+};
+</script>
+<style src="../../common/page.css"></style>

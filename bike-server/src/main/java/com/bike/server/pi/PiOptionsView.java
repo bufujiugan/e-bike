@@ -5,4 +5,8 @@ import java.util.Map;
 
 public record PiOptionsView(
         List<Map<String, Object>> customers, List<Map<String, Object>> agents,
-        List<Map<String, Object>> skus, List<Map<String, Object>> orders) {}
+        List<Map<String, Object>> skus, List<Map<String, Object>> orders, List<Map<String,Object>> warehouses) {
+    public PiOptionsView(List<Map<String,Object>> customers,List<Map<String,Object>> agents,List<Map<String,Object>> skus,List<Map<String,Object>> orders) {
+        this(customers,agents,skus,orders,List.of());
+    }
+}
