@@ -46,7 +46,9 @@ final class Qs608Hardware implements AutoCloseable {
                         reader = new Thread(Qs608Hardware.this::readLoop, "qs608-reader"); reader.start();
                     }
                     Thread.sleep(1500);
-                    if (context.getSharedPreferences("device", 0).getString("scanner", "hard").equals("hard")) send(QsProtocol.POWER_SCAN);
+                    // 官方 608/6801 软解码与硬解码 Demo 都在初始化时拉高扫描头电源（##56UP），
+                    // 软解码模式曾跳过此步，导致扫描头不上电、点按钮无光无声。
+                    send(QsProtocol.POWER_SCAN);
                     send(new byte[]{0x1b,0x23,0x23,0x46,0x54,0x4b,0x54,0x31});
                     send(new byte[]{0x1b,0x23,0x23,0x53,0x54,0x44,0x50,0x27});
                     ready = true; status("608 扫码与打印接口已就绪");
@@ -68,12 +70,16 @@ final class Qs608Hardware implements AutoCloseable {
     void scan() {
         if (!isReady()) { status("设备初始化中或串口不可用，请查看设备设置"); return; }
         if (isPrinting()) { status("正在打印，请完成后再扫描"); return; }
-        if (SystemClock.elapsedRealtime() < scanUntil) return;
+        // 上一轮等待窗口未结束时不再静默忽略：现场连续点击按钮必须能再次点亮扫描头。
         scanDecoder.reset();
         scanUntil = SystemClock.elapsedRealtime() + 10000;
         writer.execute(() -> {
-            try { gpio.setGpioOut(167, 1); Thread.sleep(100); send(QsProtocol.SCAN); Log.d("BikePda608", "Scan command sent to serial port"); }
-            catch (Exception error) { scanUntil = 0; Log.e("BikePda608", "Scan trigger failed", error); status("扫描启动失败，请检查设备连接"); }
+            try {
+                gpio.setGpioOut(167, 1);
+                Thread.sleep(100);
+                send(QsProtocol.SCAN);
+                Log.d("BikePda608", "Scan command sent to serial port");
+            } catch (Exception error) { scanUntil = 0; Log.e("BikePda608", "Scan trigger failed", error); status("扫描启动失败，请检查设备连接"); }
         });
     }
 

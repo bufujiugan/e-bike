@@ -4,6 +4,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { showConfirmDialog, showFailToast, showSuccessToast } from 'vant'
 import api from '../api'
 import { useDeviceScan, scanBusy } from '../device'
+import ScanTriggerButton from './ScanTriggerButton.vue'
 
 const props = defineProps<{ username: string; active?: boolean }>()
 type Option = { id: number; piNo: string; customerName: string; customerId: number }
@@ -13,6 +14,7 @@ type Scan = { orderId: number; vehicleQrCode: string; frameSn: string }
 type Batch = { id: number; batchNo: string; status: string; originalQty: number; activeQty: number }
 const rows = ref<Option[]>([]), total = ref(0), page = ref(1), keyword = ref(''), loading = ref(false), busy = ref(false), error = ref('')
 const detail = ref<Detail>(), orderId = ref<number>(), qr = ref(''), queue = ref<Scan[]>([]), result = ref<Batch>()
+const qrField = ref<{ focus: () => void }>()
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / 20)))
 const orderOptions = computed(() => (detail.value?.orders || []).filter(order => ['CONFIRMED', 'PARTIAL_SHIPPED'].includes(order.status) && order.remainingQty > 0).map(order => ({ text: `${order.skuCode || '历史车型单'} · 待发${order.remainingQty} · ${order.orderNo}`, value: order.orderId })))
 let listVersion = 0, detailVersion = 0, disposed = false, requestId = '', fingerprint = ''
@@ -107,7 +109,10 @@ onUnmounted(() => { disposed = true; ++listVersion; ++detailVersion })
           <option v-for="option in orderOptions" :key="option.value" :value="option.value">{{ option.text }}</option>
         </select>
       </label>
-      <van-field v-model="qr" label="整车总码" placeholder="选SKU订单后连续扫码" :disabled="busy || !orderId" @keyup.enter="scan"><template #button><van-button size="small" :loading="busy" :disabled="!orderId" @click="scan">加入</van-button></template></van-field>
+      <van-field ref="qrField" v-model="qr" label="整车总码" placeholder="选SKU订单后连续扫码" :disabled="busy || !orderId" @keyup.enter="scan">
+        <template #right-icon><ScanTriggerButton :field="qrField" :disabled="busy || !orderId" /></template>
+        <template #button><van-button size="small" :loading="busy" :disabled="!orderId" @click="scan">加入</van-button></template>
+      </van-field>
       <van-cell :title="`本批次已扫 ${queue.length} 台`" label="可以切换上方SKU订单继续加入另一车型，提交时一起出库。" />
       <van-cell v-for="(item,index) in queue" :key="item.vehicleQrCode" :title="item.vehicleQrCode" :label="detail.orders.find(order => order.orderId === item.orderId)?.orderNo"><template #right-icon><van-button size="mini" :disabled="busy" @click="remove(index)">移除</van-button></template></van-cell>
       <van-button block type="primary" :disabled="!queue.length" :loading="busy" @click="submit">确认 PI 整批出库（{{ queue.length }} 台）</van-button>

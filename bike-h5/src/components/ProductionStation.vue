@@ -3,7 +3,7 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import api from '../api'
 import ProductionImageUpload from './ProductionImageUpload.vue'
 import { showConfirmDialog } from 'vant'
-import { isPda, printDeviceLabel, useDeviceScan, scanBusy, startDeviceScan } from '../device'
+import { isPda, printDeviceLabel, useDeviceScan, scanBusy, triggerScan } from '../device'
 
 type Scan = { codeType: string; code: string; operatorName: string }
 type WorkOrder = { id: number; workOrderNo: string; status: string; skuCode: string; productName: string; batchNo: string; plannedQuantity: number; completedQuantity: number; inProgressQuantity: number }
@@ -108,8 +108,8 @@ async function reprint() { await run(async()=>{
 }) }
 async function reportIssue(){if(imageUploading.value)return;await run(async()=>{const code=issueCode.value;const result=(await api.post('/api/production/issues',{code,reason:issueReason.value})).data.data;issueId.value=result.id;savedIssueCode.value=code;message.value='异常已登记，相关车辆/部件已隔离'})}
 function focusScanInput() {
-  if (isPda) { (document.activeElement as HTMLElement | null)?.blur(); startDeviceScan() }
-  else void nextTick(() => scanInput.value?.focus())
+  // 手持机点亮扫描头；键盘输出模式或浏览器只聚焦输入框，由 triggerScan 统一判断。
+  triggerScan(scanInput.value)
 }
 function openIssuePanel() { issuePanel.value = issuePanel.value === 'issue' ? '' : 'issue' }
 async function copyAggregateCode() {

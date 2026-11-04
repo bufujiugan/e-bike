@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$ToolchainDirectory = '',
     [string]$JdkDirectory = $env:JAVA_HOME,
     [switch]$SkipFrontend

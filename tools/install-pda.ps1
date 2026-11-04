@@ -1,4 +1,4 @@
-param([string]$Adb = 'adb', [string]$Serial = '')
+﻿param([string]$Adb = 'adb', [string]$Serial = '')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 [xml]$pdaManifest = Get-Content (Join-Path $projectRoot 'bike-pda-android/app/src/main/AndroidManifest.xml') -Raw

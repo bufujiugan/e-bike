@@ -6,8 +6,8 @@ android {
         applicationId 'com.bike.pda608'
         minSdk 23
         targetSdk 30
-        versionCode 105
-        versionName '1.0.5-608'
+        versionCode 106
+        versionName '1.0.6-608'
         ndk { abiFilters 'armeabi-v7a', 'arm64-v8a' }
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_1_8; targetCompatibility JavaVersion.VERSION_1_8 }

@@ -7,6 +7,7 @@ import { hasPermission, isSuperAdmin } from './permissions'
 import ProductionStation from './components/ProductionStation.vue'
 import PiDispatchPanel from './components/PiDispatchPanel.vue'
 import DeviceToolbar from './components/DeviceToolbar.vue'
+import ScanTriggerButton from './components/ScanTriggerButton.vue'
 import { useDeviceScan, scanBusy } from './device'
 
 const username = ref('admin')
@@ -562,7 +563,9 @@ onUnmounted(() => {
         </section>
         <section class="pda-card stock-in-scan-card">
           <h2>扫描整车</h2>
-          <van-field ref="vehicleQrField" v-model="vehicleQrCode" label="聚合码" placeholder="扫描整车聚合码" clearable autofocus @keyup.enter="validateStockOperation('in')" />
+          <van-field ref="vehicleQrField" v-model="vehicleQrCode" label="聚合码" placeholder="扫描整车聚合码" clearable autofocus :disabled="busy" @keyup.enter="validateStockOperation('in')">
+            <template #right-icon><ScanTriggerButton :field="vehicleQrField" :disabled="busy" /></template>
+          </van-field>
           <van-button block type="primary" :loading="busy" :disabled="warehouseId === null || locationId === null || !vehicleQrCode.trim()" @click="submitStockIn">确认入库</van-button>
         </section>
       </section>
@@ -587,7 +590,9 @@ onUnmounted(() => {
           <van-cell title="已出库数量" :value="`${orderShippedQty} 台`" />
           <van-cell title="本次剩余可出库" :value="`${orderRemainingQty} 台`" />
         </div>
-        <van-field ref="vehicleQrField" v-model="vehicleQrCode" label="聚合码" placeholder="连续扫描整车聚合码" clearable autofocus :disabled="customerId === null || orderId === null || orderRemainingQty <= 0" @keyup.enter="scanStockOutVehicle" />
+        <van-field ref="vehicleQrField" v-model="vehicleQrCode" label="聚合码" placeholder="连续扫描整车聚合码" clearable autofocus :disabled="customerId === null || orderId === null || orderRemainingQty <= 0" @keyup.enter="scanStockOutVehicle">
+          <template #right-icon><ScanTriggerButton :field="vehicleQrField" :disabled="busy || customerId === null || orderId === null || orderRemainingQty <= 0" /></template>
+        </van-field>
         <van-cell title="已扫描数量" :value="`${scannedVehicleQrs.length} 台`" />
         <van-tag v-for="qr in scannedVehicleQrs" :key="qr" type="success" size="large" closeable @close="scannedVehicleQrs = scannedVehicleQrs.filter(item => item !== qr)">{{ qr }}</van-tag>
         <van-button block type="primary" :loading="busy" @click="submitStockOut">确认批量出库</van-button>
@@ -608,6 +613,7 @@ onUnmounted(() => {
             <span class="pda-input-label"><van-icon name="qr" />车辆聚合码</span>
             <van-field data-scan-target="vehicle" ref="reworkQrField" v-model="reworkQrCode" aria-label="车辆聚合码" placeholder="扫描车辆聚合码" clearable autofocus @keyup.enter="focusField(reworkPartField)">
               <template #left-icon><van-icon name="scan" /></template>
+              <template #right-icon><ScanTriggerButton :field="reworkQrField" :disabled="busy" /></template>
             </van-field>
           </div>
         </section>
@@ -632,6 +638,7 @@ onUnmounted(() => {
             <span class="pda-input-label"><van-icon name="records-o" />新零部件 SN</span>
             <van-field data-scan-target="part" ref="reworkPartField" v-model="reworkNewPartSn" aria-label="新零部件 SN" placeholder="扫描新零部件 SN" clearable @keyup.enter="focusField(reworkReasonField)">
               <template #left-icon><van-icon name="scan" /></template>
+              <template #right-icon><ScanTriggerButton :field="reworkPartField" :disabled="busy" /></template>
             </van-field>
           </div>
           <div class="pda-input-group">
@@ -667,6 +674,7 @@ onUnmounted(() => {
             <span class="pda-input-label"><van-icon name="scan" />追溯编码</span>
             <van-field ref="traceField" v-model="traceKey" aria-label="追溯编码" placeholder="扫描所选类型的编码" clearable autofocus @keyup.enter="queryTrace">
               <template #left-icon><van-icon name="scan" /></template>
+              <template #right-icon><ScanTriggerButton :field="traceField" :disabled="busy" /></template>
             </van-field>
           </div>
           <van-button class="operation-primary-button" block type="primary" :loading="busy" @click="queryTrace"><van-icon name="search" />查询完整链路</van-button>

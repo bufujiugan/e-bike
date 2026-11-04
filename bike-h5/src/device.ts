@@ -6,11 +6,34 @@ type NativeDevice = {
   settings(): void
   info(): string
   printBitmap(id: string, png: string): void
+  scannerMode?: () => string
 }
 declare global {
   interface Window { BikePda?: NativeDevice }
 }
 export const isPda = Boolean(window.BikePda)
+
+/** 原生当前扫码方式：hard 硬解码、soft 系统广播软解码、keyboard 键盘输出。 */
+export function scannerMode(): 'hard' | 'soft' | 'keyboard' | 'browser' {
+  if (!window.BikePda) return 'browser'
+  try {
+    const mode = window.BikePda.scannerMode?.()
+    return mode === 'hard' || mode === 'soft' || mode === 'keyboard' ? mode : 'hard'
+  } catch { return 'hard' }
+}
+
+/**
+ * 所有扫码入口统一走这里：手持机通知原生点亮扫描头；键盘输出模式或浏览器只聚焦输入框，
+ * 避免"点了没反应"却以为设备坏了。
+ */
+export function triggerScan(field?: { focus: () => void } | null) {
+  if (window.BikePda && scannerMode() !== 'keyboard') {
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    window.BikePda.scan()
+    return
+  }
+  field?.focus()
+}
 
 /** 每个页面显式接收扫描事件，不向密码、搜索框或隐藏页面模拟键盘输入。 */
 export function useDeviceScan(handler: (code: string) => void, active: () => boolean = () => true) {

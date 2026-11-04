@@ -1,4 +1,4 @@
-param([string]$Destination = '')
+﻿param([string]$Destination = '')
 $ErrorActionPreference = 'Stop'
 if (!$Destination) { $Destination = Join-Path (Split-Path $PSScriptRoot -Parent) 'output/android-toolchain' }
 New-Item -ItemType Directory -Force $Destination | Out-Null

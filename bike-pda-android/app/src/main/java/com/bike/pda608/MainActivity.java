@@ -24,6 +24,7 @@ public class MainActivity extends Activity implements Qs608Hardware.Listener {
     private boolean foreground, pageReady, receiverRegistered, settingsVisible;
     private ValueCallback<Uri[]> fileCallback;
     private Uri cameraUri;
+    private TextView testView;
     private final BroadcastReceiver scanner = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
             if (!foreground || settingsVisible) return;
@@ -49,7 +50,7 @@ public class MainActivity extends Activity implements Qs608Hardware.Listener {
         s.setAllowFileAccessFromFileURLs(false); s.setAllowUniversalAccessFromFileURLs(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         s.setJavaScriptCanOpenWindowsAutomatically(false);
-        s.setUserAgentString(s.getUserAgentString() + " BikePda608/1.0.5");
+        s.setUserAgentString(s.getUserAgentString() + " BikePda608/1.0.6");
         web.addJavascriptInterface(new DeviceBridge(), "BikePda");
         web.setWebViewClient(new WebViewClient() {
             @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
@@ -161,13 +162,18 @@ public class MainActivity extends Activity implements Qs608Hardware.Listener {
     private void startScan() {
         android.util.Log.d("BikePda608", "Scan requested: foreground=" + foreground + ", settings=" + settingsVisible + ", ready=" + (hardware != null && hardware.isReady()));
         if (!foreground || settingsVisible) return;
-        if (!config.getString("scanner", "hard").equals("hard")) { toast("当前模式请使用设备系统扫描键或扫码输入"); return; }
+        // 软解码设备同样由本应用拉高扫描头电源并下发 ##55DN，结果走系统广播；
+        // 只有键盘输出模式不占用扫描头，需人工在输入框录入。
+        if (config.getString("scanner", "hard").equals("keyboard")) { toast("当前是键盘输入模式：请点输入框录入，或在设备设置中改为扫码模式"); return; }
         if (hardware != null && hardware.isReady()) { hardware.scan(); toast("正在扫描，请将扫描头对准条码"); }
         else toast("扫描接口未就绪：" + hardwareStatus);
     }
     @Override public void scan(String code) {
-        if (!foreground || settingsVisible || !pageReady || code == null) return;
+        if (code == null) return;
         code = code.trim(); if (code.isEmpty() || code.length() > 4096) return;
+        // 设备设置里的“测试扫描头”直接显示结果，用于现场判断扫描头与广播链路是否正常。
+        if (settingsVisible) { if (testView != null) testView.setText("扫描结果：" + code); return; }
+        if (!foreground || !pageReady) return;
         long now = SystemClock.elapsedRealtime(); if (code.equals(lastCode) && now - lastScan < 800) return;
         lastCode = code; lastScan = now;
         try {
@@ -187,6 +193,7 @@ public class MainActivity extends Activity implements Qs608Hardware.Listener {
 
     public final class DeviceBridge {
         @JavascriptInterface public void scan() { runOnUiThread(MainActivity.this::startScan); }
+        @JavascriptInterface public String scannerMode() { return config.getString("scanner", "hard"); }
         @JavascriptInterface public void settings() { runOnUiThread(MainActivity.this::showSettings); }
         @JavascriptInterface public String info() {
             return "{\"printWidth\":" + config.getInt("width", 384) + "}";
@@ -222,11 +229,17 @@ public class MainActivity extends Activity implements Qs608Hardware.Listener {
         EditText address = new EditText(this); address.setSingleLine(true); address.setHint("https://服务器地址:端口"); address.setText(config.getString("server", "")); box.addView(address);
         Spinner mode = new Spinner(this); mode.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"硬解码：608串口扫码与打印", "软解码：系统广播接收", "键盘输入：不占用串口"}));
         String selected = config.getString("scanner", "hard"); mode.setSelection(selected.equals("soft") ? 1 : selected.equals("keyboard") ? 2 : 0); box.addView(mode);
+        Button test = new Button(this); test.setText("测试扫描头（结果显示在下方，不下发给页面）"); box.addView(test);
+        testView = new TextView(this); testView.setText("扫描结果：尚未测试"); box.addView(testView);
+        test.setOnClickListener(v -> {
+            if (hardware != null && hardware.isReady()) { hardware.scan(); testView.setText("已下发扫描指令，请对准条码；无光无声时先关闭出厂测试程序"); }
+            else testView.setText("扫描接口未就绪：" + hardwareStatus);
+        });
         Spinner width = new Spinner(this); width.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"58mm纸 / 384点打印宽度", "80mm纸 / 570点打印宽度"})); width.setSelection(config.getInt("width", 384) == 570 ? 1 : 0); box.addView(width);
         CheckBox label = new CheckBox(this); label.setText("间隙/黑标标签纸（普通热敏纸不勾选）"); label.setChecked(config.getBoolean("label", false)); box.addView(label);
         TextView note = new TextView(this); note.setText("硬解码模式需关闭官方测试程序，避免串口争用。宽标签会缩小，使用前须确认条码可识读。修改服务地址将退出当前登录。"); box.addView(note);
         ScrollView scroll = new ScrollView(this); scroll.addView(box);
-        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("608 设备设置 · 1.0.5").setView(scroll).setPositiveButton("保存并加载", null).setNegativeButton("取消", null).create();
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("608 设备设置 · 1.0.6").setView(scroll).setPositiveButton("保存并加载", null).setNegativeButton("取消", null).create();
         dialog.setOnDismissListener(d -> settingsVisible = false); dialog.show();
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(button -> {
             String server = address.getText().toString().trim().replaceAll("/+$", "");

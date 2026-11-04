@@ -37,6 +37,8 @@ output/*
 output/apk/*
 !output/apk/BIKE-PDA-608-1.0.5.apk
 !output/apk/BIKE-PDA-608-1.0.5.apk.sha256
+!output/apk/BIKE-PDA-608-1.0.6.apk
+!output/apk/BIKE-PDA-608-1.0.6.apk.sha256
 !output/pdf/
 !output/prototype/
 !output/playwright/
