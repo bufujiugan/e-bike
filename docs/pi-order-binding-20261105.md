@@ -38,6 +38,6 @@
 - 前端 TypeScript 检查与生产构建通过。
 - Playwright 使用真实 `PiWorkspace` 组件和本地模拟接口验证：默认关联订单、自动带入且禁改、漏选来源阻止下一步、旧草稿补绑提交 `sourceOrderId=1` / `agentId=2` / SKU 数量 5。
 - 截图：`output/playwright/pi-order-binding-existing-20261105.png`。
-- 原有工作区修改已保留；此次未部署线上，也未改动生产数据。
+- 开发验证阶段保留原有工作区修改，未部署线上，也未改动生产数据。随后于 2026-11-05 16:19 完成生产发布，详见 [发布记录](deployment-pi-order-binding-20261105.md)。
 
 详细日志、变更前本地副本及浏览器验证页保存在 `tmp/pi-order-binding-20261105/`。
