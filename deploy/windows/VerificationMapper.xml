@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="com.bike.deployment.WindowsVerificationMapper">
+    <select id="verifyDatabase"><![CDATA[
+SELECT COUNT(*) AS successful_migrations, MAX(installed_rank) AS last_rank FROM bike.bike_schema_history WHERE success = 1;
+SELECT COUNT(*) AS failed_migrations FROM bike.bike_schema_history WHERE success = 0;
+SELECT COUNT(*) AS vehicle_count FROM bike.bike_vehicle;
+SELECT COUNT(*) AS pi_count FROM bike.bike_pi;
+SELECT username, enabled, must_change_password FROM bike.bike_sys_user;
+    ]]></select>
+</mapper>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="com.bike.deployment.WindowsProvisioningMapper">
+    <!-- 仅供新实例初始化；密码由部署脚本生成，不写入版本库。 -->
+    <update id="initializeDatabase"><![CDATA[
+ALTER USER 'root'@'localhost' IDENTIFIED BY '${ROOT_PASSWORD}';
+CREATE DATABASE bike CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'bike'@'localhost' IDENTIFIED BY '${APP_PASSWORD}';
+GRANT ALL PRIVILEGES ON bike.* TO 'bike'@'localhost';
+    ]]></update>
+    <select id="verifyMigration"><![CDATA[
+SELECT COUNT(*) AS successful_migrations, MAX(installed_rank) AS last_rank FROM bike.bike_schema_history WHERE success = 1;
+    ]]></select>
+</mapper>
