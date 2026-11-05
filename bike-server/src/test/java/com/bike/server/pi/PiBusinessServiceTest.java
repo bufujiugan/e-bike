@@ -25,18 +25,21 @@ class PiBusinessServiceTest {
     private final OrderReservationMapper reservations = mock(OrderReservationMapper.class);
     private final SkuInventoryMapper inventory = mock(SkuInventoryMapper.class);
     private final OperationLogMapper logs = mock(OperationLogMapper.class);
+    private final PaymentPriorityService priority = mock(PaymentPriorityService.class);
     private final ObjectMapper json = new ObjectMapper().findAndRegisterModules();
     private final PiBusinessServiceImpl service = new PiBusinessServiceImpl(mapper,pis,series,workflow,orders,reservations,inventory,logs,json);
     private PiView pi;
     private PiItemView item;
 
     @BeforeEach void setup() {
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"paymentPriority",priority);
         var user = new UserAuthRecord(1L,"pi-test","unused","INTERNAL",null,null,true);
         var authentication = new UsernamePasswordAuthenticationToken(user.username(),null,List.of(new SimpleGrantedAuthority("ROLE_SUPER_ADMIN")));
         authentication.setDetails(user);
         SecurityContextHolder.getContext().setAuthentication(authentication);
         pi = new PiView(); pi.setId(1L); pi.setSeriesId(1L); pi.setCustomerId(10L); pi.setTradeType("DOMESTIC");
         pi.setPaidAmount(new BigDecimal("100")); pi.setShipmentRequiredAmount(new BigDecimal("100"));
+        pi.setDepositRequiredAmount(new BigDecimal("50"));
         item = new PiItemView(); item.setSkuId(20L); item.setProductModelId(30L); item.setQuantity(5);
         when(pis.selectById(1L)).thenReturn(pi);
         when(pis.selectItems(1L)).thenReturn(List.of(item));
@@ -70,9 +73,11 @@ class PiBusinessServiceTest {
         when(reservations.selectForUpdate(4L)).thenReturn(new OrderReservationView(4L,"SO4","CONFIRMED","PAID","PAID_HELD",LocalDateTime.now(),5,0,1L,null,null));
         var order = new SalesOrderView(); order.setId(4L); order.setModelId(30L);
         when(orders.selectForUpdate(4L)).thenReturn(order);
-        when(inventory.snapshot(20L,0L)).thenReturn(new SkuInventorySnapshot(5,5,0));
+        when(inventory.selectFulfillmentSnapshot(20L,0L)).thenReturn(new SkuInventorySnapshot(5,5,0));
         var model = new OrderInventorySnapshot(); model.setPhysicalQty(5); model.setCommittedQty(5);
-        when(reservations.snapshot(30L,0L)).thenReturn(model);
+        when(reservations.selectFulfillmentSnapshot(30L,0L)).thenReturn(model);
+        var owned = new OrderInventorySnapshot(); owned.setOwnedQty(5);
+        when(reservations.selectFulfillmentSnapshot(30L,4L)).thenReturn(owned);
         assertThat(service.reserveAfterPayment(pi,pi.getPaidAmount())).isTrue();
         assertThat(service.reserveAfterPayment(pi,pi.getPaidAmount())).isTrue();
         assertThat(service.hasReservedStock(pi)).isTrue();
@@ -81,9 +86,9 @@ class PiBusinessServiceTest {
     }
     @Test void ordinaryPiCreatesPaidFulfillmentAfterSufficientPayment() {
         when(mapper.countWarehouseStock(2L,20L)).thenReturn(5);
-        when(inventory.snapshot(20L,0L)).thenReturn(new SkuInventorySnapshot(5,0,0));
+        when(inventory.selectFulfillmentSnapshot(20L,0L)).thenReturn(new SkuInventorySnapshot(5,0,0));
         var model = new OrderInventorySnapshot(); model.setPhysicalQty(5);
-        when(reservations.snapshot(30L,0L)).thenReturn(model);
+        when(reservations.selectFulfillmentSnapshot(30L,0L)).thenReturn(model);
         var order = new SalesOrderView(); order.setId(4L);
         when(orders.selectByNo(anyString())).thenReturn(order);
         when(orders.insertOrder(anyString(),any(),any())).thenReturn(1);
@@ -96,6 +101,35 @@ class PiBusinessServiceTest {
         when(orders.updateStatus(4L,"CONFIRMED")).thenReturn(1);
         assertThat(service.reserveAfterPayment(pi,pi.getPaidAmount())).isTrue();
         verify(series).link(1L,4L,"PAID_PI");
+        verify(priority).cancelUnfulfillableUnpaidOrders(pi);
+    }
+    @Test void depositReservesBeforeShipmentThresholdWithoutPermittingShipment() {
+        when(series.fulfillment(1L)).thenReturn(List.of(line(5,0,"TIMED_ACTIVE")));
+        when(mapper.countWarehouseStock(2L,20L)).thenReturn(5);
+        when(reservations.selectForUpdate(4L)).thenReturn(new OrderReservationView(4L,"SO4","CONFIRMED","TIMED","TIMED_ACTIVE",LocalDateTime.now(),5,0,null,null,null));
+        var order = new SalesOrderView(); order.setId(4L); order.setModelId(30L);
+        when(orders.selectForUpdate(4L)).thenReturn(order);
+        when(inventory.selectFulfillmentSnapshot(20L,0L)).thenReturn(new SkuInventorySnapshot(5,0,0));
+        var model = new OrderInventorySnapshot(); model.setPhysicalQty(5);
+        when(reservations.selectFulfillmentSnapshot(30L,0L)).thenReturn(model);
+        when(reservations.selectFulfillmentSnapshot(30L,4L)).thenReturn(model);
+        when(mapper.updatePaidReservation(eq(4L),eq(1L),any())).thenReturn(1);
+        assertThat(service.reserveAfterPayment(pi,new BigDecimal("50"))).isTrue();
+        verify(priority).cancelUnfulfillableUnpaidOrders(pi);
+        pi.setPaidAmount(new BigDecimal("50"));
+        when(series.fulfillment(1L)).thenReturn(List.of(line(5,0,"PAID_HELD")));
+        assertThat(service.hasReservedStock(pi)).isTrue();
+        documents();
+        String shipmentDocument=mapper.selectDocument(1L).replace("true","false");
+        when(mapper.selectDocument(1L)).thenReturn(shipmentDocument);
+        assertThatThrownBy(()->service.requireShipment(1L)).hasMessageContaining("出货付款门槛");
+    }
+    @Test void otherPaidOrdersCannotBeDisplacedAndShortageNeverCancelsCompetitors() {
+        when(mapper.countWarehouseStock(2L,20L)).thenReturn(5);
+        when(mapper.countWarehouseReserved(2L,20L,1L)).thenReturn(1);
+        assertThat(service.reserveAfterPayment(pi,new BigDecimal("50"))).isFalse();
+        verifyNoInteractions(priority);
+        verify(orders,never()).insertOrder(any(),any(),any());
     }
     @Test void domesticShipmentNeedsPurchaseContractRegardlessOfTrade() {
         documents();

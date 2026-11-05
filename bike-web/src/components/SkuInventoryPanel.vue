@@ -76,7 +76,7 @@ async function save() {
   try {
     result.value = (await api.post('/api/sku-locks', { requestId: retryKey, ...body })).data.data
     selected.value = []; visible.value = false; retryKey = ''; retryPayload = ''
-    ElMessage.success('SKU库存已锁定，可在库存锁定页面继续转订单')
+    ElMessage.success('SKU预锁已登记，可在库存锁定页面继续转订单')
     await load()
   } catch (cause) { saveError.value = message(cause, '锁定结果未确认，可重试当前内容') }
   finally { saving.value = false }
@@ -101,13 +101,13 @@ onMounted(async () => {
       <el-table-column prop="skuCode" label="SKU" min-width="130" /><el-table-column prop="productName" label="商品" min-width="140" /><el-table-column prop="specification" label="规格" min-width="100" /><el-table-column prop="modelName" label="车型" min-width="100" />
       <el-table-column prop="physicalQty" label="在库" width="75" /><el-table-column prop="quarantinedQty" label="隔离" width="75" /><el-table-column prop="temporaryLockedQty" label="临时锁定" width="90" /><el-table-column prop="orderReservedQty" label="订单占用" width="90" /><el-table-column prop="availableQty" label="SKU净可用" width="105" />
       <el-table-column label="缺口" width="75"><template #default="{ row }"><span :class="{ shortage: row.shortageQty > 0 }">{{ row.shortageQty }}</span></template></el-table-column>
-      <el-table-column prop="legacyModelCommittedQty" label="历史车型承诺" width="120" /><el-table-column prop="maxNewLockQty" label="可新增锁定" width="110" />
-      <el-table-column v-if="canWrite" label="操作" width="100" fixed="right"><template #default="{ row }"><el-button link type="primary" :disabled="row.maxNewLockQty < 1 || selected.some(item => item.skuId === row.skuId)" @click="add(row)">加入锁定</el-button></template></el-table-column>
+      <el-table-column prop="legacyModelCommittedQty" label="历史车型承诺" width="120" /><el-table-column prop="maxNewLockQty" label="库存参考余量" width="110" />
+      <el-table-column v-if="canWrite" label="操作" width="100" fixed="right"><template #default="{ row }"><el-button link type="primary" :disabled="selected.some(item => item.skuId === row.skuId)" @click="add(row)">加入锁定</el-button></template></el-table-column>
       <template #empty-action><el-button size="small" :disabled="busy" @click="load">刷新数据</el-button></template>
     </DataTable>
     <Pagination :total="total" :page-size="20" v-model:page="page" :disabled="busy" @change="load" />
     </section>
-    <AlertCard title="锁定规则" description="库存为全部仓库合计。“历史车型承诺”尚未分配到具体 SKU；当前可新增锁定量同时受该 SKU 和车型剩余库存限制，各 SKU 上限不能相加作为总可售量。" />
+    <AlertCard title="锁定规则" description="SKU预锁数量不受当前库存限制。客户累计收款达到PI约定定金后优先占库；剩余库存不足以满足的其他未付款订单将整单取消并记录原因。预锁不保证供货，已收款和已出库订单不自动取消。" />
     <section v-if="canWrite && selected.length" class="selection"><h3>待锁定商品（{{ selected.length }} 个 SKU）</h3><div v-for="item in selected" :key="item.skuId" class="selected-row"><strong>{{ item.skuCode }}</strong><el-input-number v-model="item.quantity" :min="1" :max="1000000" :precision="0" /><el-button link type="danger" @click="selected = selected.filter(row => row.skuId !== item.skuId)">移除</el-button></div><el-button type="primary" @click="begin">选择客户并锁定</el-button></section>
     <section v-if="result.length" class="selection"><h3>本次锁定已保存 · 继续创建订单</h3><el-table :data="result"><el-table-column prop="lockNo" label="锁定单号" min-width="180" /><el-table-column prop="skuCode" label="SKU" /><el-table-column prop="lockQty" label="数量" /><el-table-column prop="expireTime" label="截止时间" min-width="180" /><el-table-column v-if="canConvert" label="下一步" width="130" fixed="right"><template #default="{row}"><el-button link type="primary" @click="emit('convert',row.lockNo)">直接转订单</el-button></template></el-table-column></el-table><el-button @click="emit('navigate', 'inventory-locks')">查看全部锁定与关联订单</el-button></section>
     <el-dialog v-model="visible" title="锁定所选 SKU" width="560px" :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving">
@@ -123,7 +123,7 @@ onMounted(async () => {
         </el-form-item>
         <el-form-item label="截止时间"><el-date-picker v-model="form.expiresAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="留空采用系统默认时长" /></el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" maxlength="500" /></el-form-item>
-      </el-form><p class="note">本次 {{ selected.length }} 个 SKU 将一起锁定。任一库存不足时全部不保存，转单客户须与锁定客户一致。</p>
+      </el-form><p class="note">本次 {{ selected.length }} 个 SKU 将一起预锁，允许超过当前库存。达到PI约定定金后优先占库，其他未付款订单库存不足时整单取消并记录原因。转单客户须与锁定客户一致。</p>
       <template #footer><el-button :disabled="saving" @click="visible = false">返回</el-button><el-button type="primary" :loading="saving" @click="save">确认锁定</el-button></template>
     </el-dialog>
   </section>

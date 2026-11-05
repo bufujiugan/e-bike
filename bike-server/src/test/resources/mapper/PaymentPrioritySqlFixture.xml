@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="paymentPriorityFixture">
+  <update id="createDatabase">CREATE DATABASE IF NOT EXISTS bike_priority_test_20261105 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci</update>
+  <update id="prepareDocuments">
+    UPDATE bike_pi SET document_snapshot=JSON_SET(document_snapshot,'$.bankName','Test Bank','$.bankAccount','Test Account',
+      '$.beneficiary','Test Seller','$.business',JSON_OBJECT('warehouseId',1,'domesticShipment',CAST('false' AS JSON),'collectionEntity','GUANGTA'))
+  </update>
+  <select id="paymentCount" resultType="long">SELECT COUNT(*) FROM bike_pi_payment</select>
+  <update id="markPaidOrder">UPDATE bike_order_reservation SET hold_mode='PAID' WHERE order_id=#{orderId}</update>
+  <select id="cancellationAuditCount" resultType="long">SELECT COUNT(*) FROM bike_operation_log WHERE action='付款优先占库自动取消'</select>
+</mapper>

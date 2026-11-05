@@ -10,6 +10,13 @@
       COALESCE(SUM(CASE WHEN c.order_id=#{orderId} AND c.kind='ORDER' THEN c.qty ELSE 0 END),0) owned_qty
     FROM (<include refid="com.bike.server.stock.InventoryPolicyMapper.skuCommitments"/>) c WHERE c.sku_id=#{skuId}
   </select>
+  <select id="selectFulfillmentSnapshot" resultType="com.bike.server.stock.SkuInventorySnapshot">
+    SELECT (SELECT COUNT(*) FROM bike_vehicle v JOIN bike_production_vehicle pv ON pv.vehicle_id=v.id
+      WHERE pv.sku_id=#{skuId} AND v.status=2 AND NOT <include refid="com.bike.server.stock.InventoryPolicyMapper.quarantined"/>) physical_qty,
+      COALESCE(SUM(c.qty),0) committed_qty,
+      COALESCE(SUM(CASE WHEN c.order_id=#{orderId} THEN c.qty ELSE 0 END),0) owned_qty
+    FROM (<include refid="com.bike.server.stock.InventoryPolicyMapper.fulfillmentSkuCommitments"/>) c WHERE c.sku_id=#{skuId}
+  </select>
   <sql id="skuWhere"><where>
     <if test="modelId != null">AND s.model_id=#{modelId}</if>
     <if test="agentId != null">AND EXISTS(SELECT 1 FROM bike_agent_model_access access

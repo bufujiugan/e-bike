@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.order.PaymentPriorityMapper">
+  <select id="selectUnpaidCandidates" resultType="com.bike.server.order.UnpaidInventoryCandidate">
+    SELECT 'PI' kind,p.id,p.created_at FROM bike_pi p JOIN bike_pi_series s ON s.current_pi_id=p.id
+    WHERE p.id!=#{paidPiId} AND p.status IN ('DRAFT','CONFIRMED')
+      AND EXISTS(SELECT 1 FROM bike_pi_item item WHERE item.pi_id=p.id AND item.product_model_id IN
+        <foreach collection="modelIds" item="modelId" open="(" separator="," close=")">#{modelId}</foreach>)
+      AND NOT EXISTS(SELECT 1 FROM bike_pi_payment pay JOIN bike_pi origin ON origin.id=pay.pi_id
+        WHERE origin.series_id=p.series_id AND pay.status='CONFIRMED')
+      AND NOT EXISTS(SELECT 1 FROM bike_pi_order_link link JOIN bike_sales_order o ON o.id=link.order_id
+        JOIN bike_sales_order_item item ON item.order_id=o.id LEFT JOIN bike_order_reservation r ON r.order_id=o.id
+        WHERE link.series_id=p.series_id AND (item.shipped_qty&gt;0 OR r.hold_mode='PAID' OR r.scope_type='MODEL_LEGACY'
+          OR o.status NOT IN ('DRAFT','PENDING','CONFIRMED')))
+    UNION ALL
+    SELECT 'ORDER',o.id,o.created_at FROM bike_sales_order o JOIN bike_order_reservation r ON r.order_id=o.id
+    JOIN bike_sales_order_item item ON item.order_id=o.id
+    WHERE r.scope_type='SKU' AND r.hold_mode='TIMED' AND r.expires_at&gt;NOW(3)
+      AND o.status IN ('DRAFT','PENDING','CONFIRMED') AND item.shipped_qty=0
+      AND r.model_id IN <foreach collection="modelIds" item="modelId" open="(" separator="," close=")">#{modelId}</foreach>
+      AND NOT EXISTS(SELECT 1 FROM bike_pi_order_link link WHERE link.order_id=o.id)
+      AND NOT EXISTS(SELECT 1 FROM bike_pi p WHERE p.source_order_id=o.id)
+    UNION ALL
+    SELECT 'LOCK',l.id,l.created_at FROM bike_inventory_lock l WHERE l.scope_type='SKU'
+      AND l.status IN ('LOCKED','PARTIAL_CONVERTED') AND l.expire_time&gt;NOW(3)
+      AND l.lock_qty&gt;l.released_qty+l.converted_qty
+      AND l.product_model_id IN <foreach collection="modelIds" item="modelId" open="(" separator="," close=")">#{modelId}</foreach>
+    ORDER BY created_at,id,kind
+  </select>
+  <select id="selectDraftRevisions" resultType="long">
+    SELECT draft.id FROM bike_pi draft JOIN bike_pi current_pi ON current_pi.series_id=draft.series_id
+    WHERE current_pi.id=#{piId} AND draft.id!=current_pi.id AND draft.status='DRAFT' ORDER BY draft.id
+  </select>
+  <update id="updateCancelledOrder">
+    UPDATE bike_sales_order SET status='CANCELLED',remark=LEFT(CONCAT(#{reason},'；原备注：',COALESCE(remark,'')),500)
+    WHERE id=#{orderId} AND status IN ('DRAFT','PENDING','CONFIRMED')
+  </update>
+  <update id="updateCancelledPi">
+    UPDATE bike_pi SET status='CANCELLED',release_status='BLOCKED',remark=LEFT(CONCAT(#{reason},'；原备注：',COALESCE(remark,'')),500)
+    WHERE id=#{piId} AND status IN ('DRAFT','CONFIRMED')
+  </update>
+  <update id="updateReleasedLock">
+    UPDATE bike_inventory_lock SET status='RELEASED',released_qty=lock_qty-converted_qty,released_at=NOW(3),
+      remark=LEFT(CONCAT(#{reason},'；原备注：',COALESCE(remark,'')),500)
+    WHERE id=#{lockId} AND status IN ('LOCKED','PARTIAL_CONVERTED')
+  </update>
+</mapper>

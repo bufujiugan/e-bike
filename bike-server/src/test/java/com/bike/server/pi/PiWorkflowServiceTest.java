@@ -30,6 +30,7 @@ class PiWorkflowServiceTest {
         SecurityContextHolder.getContext().setAuthentication(authentication);
         ReflectionTestUtils.setField(service,"business",business);
         pi=new PiView();pi.setId(1L);pi.setSeriesId(1L);pi.setCustomerId(10L);pi.setStatus("CONFIRMED");pi.setPaidAmount(BigDecimal.ZERO);pi.setShipmentRequiredAmount(new BigDecimal("100"));
+        pi.setDepositRequiredAmount(new BigDecimal("50"));
         when(pis.selectById(1L)).thenReturn(pi);when(pis.selectForUpdate(1L)).thenReturn(pi);
         when(business.document(1L)).thenReturn(json.readValue("{\"business\":{\"warehouseId\":1,\"domesticShipment\":true,\"collectionEntity\":\"GUANGTA\"}}",PiDocumentSnapshot.class));
         when(logs.insert(any(),any(),any(),any(),any(),any(),any(),any(),any())).thenReturn(1);

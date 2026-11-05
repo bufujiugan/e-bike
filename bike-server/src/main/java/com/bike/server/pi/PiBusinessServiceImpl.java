@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class PiBusinessServiceImpl implements PiBusinessService {
+    @org.springframework.beans.factory.annotation.Autowired private PaymentPriorityService paymentPriority;
     private final PiBusinessMapper mapper;
     private final PiMapper pis;
     private final PiSeriesMapper series;
@@ -72,7 +73,7 @@ public class PiBusinessServiceImpl implements PiBusinessService {
     @Transactional(propagation=Propagation.MANDATORY)
     public boolean reserveAfterPayment(PiView pi,BigDecimal paid) {
         var d=document(pi.getId());
-        if(d==null||d.business()==null||pi.getShipmentRequiredAmount()==null||paid==null||paid.compareTo(pi.getShipmentRequiredAmount())<0)return false;
+        if(d==null||d.business()==null||pi.getDepositRequiredAmount()==null||paid==null||paid.signum()<=0||paid.compareTo(pi.getDepositRequiredAmount())<0)return false;
         validateTerms(d,pi.getTradeType());
         var lines=series.fulfillment(pi.getId());
         var items=pis.selectItems(pi.getId());
@@ -90,23 +91,27 @@ public class PiBusinessServiceImpl implements PiBusinessService {
                 var reservation=reservations.selectForUpdate(line.orderId());
                 if(reservation==null||"RELEASED".equals(reservation.holdMode()))return false;
             }
-            int owned=matching.stream().filter(l->Set.of("TIMED_ACTIVE","PAID_HELD").contains(l.reservationStatus())).mapToInt(PiFulfillmentLine::remainingQty).sum();
-            if(inventory.snapshot(item.getSkuId(),0).availableForOrder()+owned<remaining)return false;
+            int owned=matching.stream().filter(l->"PAID_HELD".equals(l.reservationStatus())).mapToInt(PiFulfillmentLine::remainingQty).sum();
+            if(inventory.selectFulfillmentSnapshot(item.getSkuId(),0).availableForOrder()+owned<remaining)return false;
         }
-        var modelNeeded=new HashMap<Long,Integer>();var modelOwned=new HashMap<Long,Integer>();
+        var modelNeeded=new HashMap<Long,Integer>();var modelOwned=new HashMap<Long,Long>();
         for(var item:items)modelNeeded.merge(item.getProductModelId(),item.getQuantity(),Integer::sum);
         for(var line:lines) {
             var order=orders.selectForUpdate(line.orderId());
             modelNeeded.merge(order.getModelId(),-line.shippedQty(),Integer::sum);
-            if(Set.of("TIMED_ACTIVE","PAID_HELD").contains(line.reservationStatus()))modelOwned.merge(order.getModelId(),line.remainingQty(),Integer::sum);
+            long owned=reservations.selectFulfillmentSnapshot(order.getModelId(),line.orderId()).getOwnedQty();
+            modelOwned.merge(order.getModelId(),owned,Long::sum);
         }
-        for(var entry:modelNeeded.entrySet())if(reservations.snapshot(entry.getKey(),0).availableForOrder()+modelOwned.getOrDefault(entry.getKey(),0)<entry.getValue())return false;
+        for(var entry:modelNeeded.entrySet())if(reservations.selectFulfillmentSnapshot(entry.getKey(),0).availableForOrder()+modelOwned.getOrDefault(entry.getKey(),0L)<entry.getValue())return false;
         if(lines.isEmpty())for(var item:items)createPaidOrder(pi,item);
         else for(var line:lines)if(line.remainingQty()>0&&!"PAID_HELD".equals(line.reservationStatus())) {
             if(mapper.updatePaidReservation(line.orderId(),pi.getId(),CurrentOperator.id())!=1)fail("PI_RESERVATION_FAILED","订单占用保留失败");
+            if(Set.of("DRAFT","PENDING").contains(line.status())&&orders.updateStatus(line.orderId(),"CONFIRMED")!=1)
+                fail("PI_RESERVATION_FAILED","已收款订单确认失败");
         }
+        paymentPriority.cancelUnfulfillableUnpaidOrders(pi);
         if(logs.insert("PI",Long.toString(pi.getId()),"按仓确认收款库存占用",CurrentOperator.id(),CurrentOperator.username(),null,
-                serialize(Map.of("warehouseId",d.business().warehouseId())),CurrentOperator.clientIp(),"按合同付款达标后保留指定仓库库存")!=1)
+                serialize(Map.of("warehouseId",d.business().warehouseId())),CurrentOperator.clientIp(),"累计收款达到PI约定定金后保留指定仓库库存")!=1)
             fail("PI_AUDIT_FAILED","库存占用审计失败");
         return true;
     }
@@ -127,8 +132,8 @@ public class PiBusinessServiceImpl implements PiBusinessService {
         var lines=series.fulfillment(pi.getId());
         var document = document(pi.getId());
         return document != null && document.business() != null && document.business().warehouseId() != null
-                && pi.getPaidAmount() != null && pi.getShipmentRequiredAmount() != null
-                && pi.getPaidAmount().compareTo(pi.getShipmentRequiredAmount()) >= 0
+                && pi.getPaidAmount() != null && pi.getPaidAmount().signum() > 0 && pi.getDepositRequiredAmount() != null
+                && pi.getPaidAmount().compareTo(pi.getDepositRequiredAmount()) >= 0
                 && !lines.isEmpty() && matchesFulfillment(pis.selectItems(pi.getId()), lines)
                 && lines.stream().allMatch(l -> l.remainingQty() == 0
                     || "PAID_HELD".equals(l.reservationStatus()) && Set.of("CONFIRMED", "PARTIAL_SHIPPED").contains(l.status()));
@@ -164,6 +169,8 @@ public class PiBusinessServiceImpl implements PiBusinessService {
     }
     public void requireShipment(long piId) {
         requireContract(piId);var pi=pis.selectById(piId);
+        if(pi.getPaidAmount()==null||pi.getShipmentRequiredAmount()==null||pi.getPaidAmount().compareTo(pi.getShipmentRequiredAmount())<0)
+            fail("PI_PAYMENT_INSUFFICIENT","累计收款未达到PI约定出货付款门槛，不能出库");
         if (mapper.countPaymentsWithoutReceipt(piId) > 0)
             fail("PI_RECEIPT_REQUIRED", "请为已确认收款上传收款凭证后再放行出库");
         if(!hasReservedStock(pi))fail("PI_WAREHOUSE_RESERVATION_REQUIRED","请先确认指定仓库库存占用");

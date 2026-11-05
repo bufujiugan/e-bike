@@ -34,6 +34,21 @@
     JOIN bike_sales_order o ON o.id=r.order_id
     WHERE r.scope_type='SKU' AND <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/>
   </sql>
+  <!-- SKU预锁及未达定金订单属于意向需求，不能阻挡已付款订单履约；历史车型承诺保持兼容。 -->
+  <sql id="fulfillmentCommitments">
+    SELECT product_model_id model_id,lock_qty-released_qty-converted_qty qty FROM bike_inventory_lock
+    WHERE scope_type='MODEL_LEGACY' AND status IN ('LOCKED','PARTIAL_CONVERTED') AND expire_time&gt;NOW(3)
+      AND lock_qty&gt;released_qty+converted_qty
+    UNION ALL
+    SELECT r.model_id,GREATEST(r.reserved_qty-i.shipped_qty,0) qty FROM bike_order_reservation r
+    JOIN bike_sales_order o ON o.id=r.order_id JOIN bike_sales_order_item i ON i.order_id=o.id AND i.product_model_id=r.model_id
+    WHERE <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/> AND (r.scope_type='MODEL_LEGACY' OR r.hold_mode='PAID')
+  </sql>
+  <sql id="fulfillmentSkuCommitments">
+    SELECT si.sku_id,si.ordered_qty-si.shipped_qty-si.closed_qty qty,r.order_id FROM bike_order_reservation_item si
+    JOIN bike_order_reservation r ON r.order_id=si.order_id JOIN bike_sales_order o ON o.id=r.order_id
+    WHERE r.scope_type='SKU' AND r.hold_mode='PAID' AND <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/>
+  </sql>
   <!-- PI已付款占用先归属指定仓库，再按库位展示；其余全局承诺沿用原分摊口径。 -->
   <sql id="inventoryCtes">
     WITH sku_commitment_totals AS (

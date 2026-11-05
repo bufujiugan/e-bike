@@ -52,9 +52,9 @@ public class LockOrderService {
             throw new BusinessException("LOCK_CUSTOMER_MISMATCH","SKU锁定必须转入原客户的订单");
         if(orders.countEnabledCustomer(request.customerId())!=1||(lock.getAgentId()!=null&&orders.countEnabledAgent(lock.getAgentId())!=1)||orders.countEnabledModel(lock.getProductModelId())!=1)
             throw new BusinessException("INVALID_PARAMETER","客户、代理商或车型不存在或已停用");
-        if(lock.getSkuId()!=null && (skuInventory.lockSkuModel(lock.getSkuId())==null || skuInventory.snapshot(lock.getSkuId(),0).availableForOrder()<0))
-            throw new BusinessException("SKU_INVENTORY_NOT_ENOUGH","该SKU合格库存不足以支撑现有锁定，请处理隔离或补足库存");
-        if(reservations.snapshot(lock.getProductModelId(),0).availableForOrder()<0)
+        if(lock.getSkuId()!=null && skuInventory.lockSkuModel(lock.getSkuId())==null)
+            throw new BusinessException("SKU_NOT_FOUND","SKU或车型不存在或已停用");
+        if(lock.getSkuId()==null && reservations.snapshot(lock.getProductModelId(),0).availableForOrder()<0)
             throw new BusinessException("INVENTORY_LOCK_CONFLICT","合格库存不足以支撑现有占用，请处理隔离或补足库存");
         if(locks.convert(id,request.quantity())!=1)throw new BusinessException("INVENTORY_LOCK_CONFLICT","转换数量超过剩余量或锁定已关闭");
         String no="SO"+UUID.randomUUID().toString().replace("-","").substring(0,18).toUpperCase();

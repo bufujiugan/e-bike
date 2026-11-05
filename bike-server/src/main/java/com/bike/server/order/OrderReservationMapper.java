@@ -11,6 +11,7 @@ public interface OrderReservationMapper {
                          @Param("paidAmount") BigDecimal paidAmount, @Param("operatorId") Long operatorId);
     int release(@Param("orderId") long orderId);
     OrderInventorySnapshot snapshot(@Param("modelId") long modelId,@Param("orderId") long orderId);
+    OrderInventorySnapshot selectFulfillmentSnapshot(@Param("modelId") long modelId,@Param("orderId") long orderId);
     int expiredForOrder(@Param("orderId") long orderId);
     java.util.List<SalesOrderView> expiredForAudit();
     int markExpiryAudited(@Param("orderId") long orderId);

@@ -9,6 +9,7 @@ public interface SkuInventoryMapper {
     Long lockSkuModel(@Param("skuId") long skuId);
     Long vehicleSku(@Param("vehicleId") long vehicleId);
     SkuInventorySnapshot snapshot(@Param("skuId") long skuId, @Param("orderId") long orderId);
+    SkuInventorySnapshot selectFulfillmentSnapshot(@Param("skuId") long skuId, @Param("orderId") long orderId);
     List<SkuInventoryRow> list(@Param("modelId") Long modelId, @Param("agentId") Long agentId,
             @Param("offset") long offset, @Param("limit") long limit);
     long count(@Param("modelId") Long modelId, @Param("agentId") Long agentId);

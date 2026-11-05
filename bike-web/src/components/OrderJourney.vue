@@ -70,12 +70,14 @@ watch(() => props.orderNo, () => { showPi.value = false; void load() }, { immedi
         <ol v-if="journeyStages.length" class="journey-stages" aria-label="订单办理进度"><li v-for="(step, index) in journeyStages" :key="step.title" :class="step.state" :aria-current="step.state === 'current' ? 'step' : undefined"><span><AppIcon v-if="step.state === 'done'" name="check" /><template v-else>{{ index + 1 }}</template></span><strong>{{ step.title }}</strong></li></ol>
         <div class="journey-counts"><div>订购数量<strong>{{ order.orderQty }} 台</strong></div><div>已出库<strong>{{ order.shippedQty }} 台</strong></div><div>未出库<strong>{{ Math.max(0, order.orderQty - order.shippedQty) }} 台</strong></div><div>库存占用<strong>{{ reservationLabel(order.reservationStatus) }}</strong></div></div>
         <el-alert :title="nextStep" type="info" :closable="false" show-icon />
+        <el-alert v-if="order.status === 'CANCELLED' && order.remark?.startsWith('自动取消：')" title="订单已自动取消" :description="order.remark" type="warning" :closable="false" show-icon />
         <div class="journey-actions"><el-button v-if="canConfirm" type="primary" :loading="saving" @click="confirm">确认订单，继续出库</el-button><el-button v-if="hasPermission(context, 'PI_READ')" @click="showPi = !showPi">{{ showPi ? '收起 PI 与放行' : '本单 PI 与发货放行' }}</el-button></div>
         <p v-if="['CONFIRMED','PARTIAL_SHIPPED'].includes(order.status)">PDA：进入「出库」，选择客户「{{ order.customerName }}」，搜索订单「{{ order.orderNo }}」，核对后扫描整车总码。关联 PI 的订单还需完成 PI 确认、到账登记与发货放行。</p>
         <PiWorkspace v-if="showPi" :context="context" :initial-keyword="order.orderNo" />
         <el-descriptions title="订单与来源" :column="1" border>
           <el-descriptions-item label="来源锁定">{{ order.sourceLockNo || '无来源锁定' }}<span v-if="sourceLock"> · {{ sourceLock.skuCode || sourceLock.modelName }} · 锁定 {{ sourceLock.lockQty }} 台 · 已转 {{ sourceLock.convertedQty }} 台</span></el-descriptions-item>
           <el-descriptions-item label="计划出库日">{{ order.plannedShipDate || '—' }}</el-descriptions-item>
+          <el-descriptions-item :label="order.status === 'CANCELLED' ? '取消说明 / 备注' : '备注'">{{ order.remark || '—' }}</el-descriptions-item>
           <el-descriptions-item label="创建 / 修改">{{ time(order.createdAt) }} / {{ time(order.updatedAt) }}</el-descriptions-item>
         </el-descriptions>
         <el-alert v-if="lockError" :title="lockError" type="warning" :closable="false" />

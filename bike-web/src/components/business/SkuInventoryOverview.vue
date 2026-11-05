@@ -11,7 +11,7 @@ const metrics = computed<Metric[]>(() => [
   { label: '当前锁定', value: props.error ? null : sum('temporaryLockedQty') + sum('orderReservedQty'), icon: 'lock', hint: '当前页 · 临时锁定 + 订单占用' },
   { label: '订单占用', value: props.error ? null : sum('orderReservedQty'), icon: 'orders', hint: '当前页 SKU' },
   { label: '临时锁定', value: props.error ? null : sum('temporaryLockedQty'), icon: 'clock', tone: 'orange', hint: '当前页 SKU' },
-  { label: '可新增锁定', value: props.error || props.rows.length !== 1 ? null : props.rows[0]!.maxNewLockQty, icon: 'inventory', tone: 'green', hint: props.rows.length === 1 ? '当前唯一 SKU 上限' : '逐 SKU 查看 · 上限不可相加' },
+  { label: '库存参考余量', value: props.error || props.rows.length !== 1 ? null : props.rows[0]!.maxNewLockQty, icon: 'inventory', tone: 'green', hint: '仅供参考 · SKU预锁不设库存上限' },
 ])
 const sources = computed(() => props.error ? null : donutOption([{ name: '订单占用', value: sum('orderReservedQty') }, { name: '临时锁定', value: sum('temporaryLockedQty') }], '当前页锁定量'))
 const structure = computed(() => props.error ? null : barOption([{ name: '订单占用', value: sum('orderReservedQty') }, { name: '临时锁定', value: sum('temporaryLockedQty') }, { name: 'SKU净可用', value: sum('availableQty') }]))

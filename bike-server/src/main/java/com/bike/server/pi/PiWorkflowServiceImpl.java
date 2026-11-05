@@ -171,7 +171,7 @@ public class PiWorkflowServiceImpl implements PiWorkflowService {
                 && Boolean.TRUE.equals(d.paymentTableReady());
     }
     private boolean validPurchase(PiWorkflowDetails d){return d!=null&&!blank(d.purchaseContractNo())&&Set.of("SAVA","YINSANHUAN").contains(Objects.toString(d.purchaseContractParty(),""));}
-    private boolean paymentMet(PiView pi){return pi.getPaidAmount()!=null&&pi.getShipmentRequiredAmount()!=null&&pi.getPaidAmount().compareTo(pi.getShipmentRequiredAmount())>=0;}
+    private boolean paymentMet(PiView pi){return pi.getPaidAmount()!=null&&pi.getPaidAmount().signum()>0&&pi.getDepositRequiredAmount()!=null&&pi.getPaidAmount().compareTo(pi.getDepositRequiredAmount())>=0;}
     private PiView requirePi(long id,boolean lock) {
         var pi=lock?pis.selectForUpdate(id):pis.selectById(id);if(pi==null)fail("PI_NOT_FOUND","PI不存在");
         customerScope.requireCustomer(pi.getCustomerId());

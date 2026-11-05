@@ -13,13 +13,13 @@ public class SkuInventoryGuard {
         var items = mapper.reservationItems(orderId);
         if (!items.isEmpty() && (sku == null || items.stream().noneMatch(i -> i.skuId() == sku && i.remainingQty() > 0)))
             throw new BusinessException("ORDER_SKU_MISMATCH", "整车SKU与订单固定SKU不匹配或该SKU已发完");
-        if (sku != null && mapper.snapshot(sku, orderId).availableForOrder() < 1)
+        if (sku != null && mapper.selectFulfillmentSnapshot(sku, orderId).availableForOrder() < 1)
             throw new BusinessException("SKU_INVENTORY_LOCK_CONFLICT", "该SKU库存已被其他锁定或订单占用");
     }
 
     public void requireUnreservedRemoval(long vehicleId) {
         Long sku = mapper.vehicleSku(vehicleId);
-        if (sku != null && mapper.snapshot(sku, 0).availableForOrder() < 1)
+        if (sku != null && mapper.selectFulfillmentSnapshot(sku, 0).availableForOrder() < 1)
             throw new BusinessException("SKU_INVENTORY_LOCK_CONFLICT", "撤销入库会使该SKU有效承诺失去库存支撑");
     }
 

@@ -10,7 +10,7 @@ class OrderInventoryGuardTest {
     SalesOrderView order(){var o=new SalesOrderView();o.setId(1L);o.setModelId(27L);return o;}
     void snapshot(long orderId,long physical,long committed,long owned,long reservationCount){
         var s=new OrderInventorySnapshot();s.setPhysicalQty(physical);s.setCommittedQty(committed);s.setOwnedQty(owned);s.setReservationCount(reservationCount);
-        when(mapper.snapshot(27,orderId)).thenReturn(s);
+        when(mapper.selectFulfillmentSnapshot(27,orderId)).thenReturn(s);
     }
     @Test void otherOrdersCannotConsumeCommittedInventory(){
         snapshot(1,10,8,0,0);

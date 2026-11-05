@@ -272,7 +272,7 @@ public class PiServiceImpl implements PiService {
         BigDecimal paid = mapper.paymentTotal(id);
         if (business != null) {
             if (previousRevision != null) business.validateReservedWarehouse(require(id));
-            if (previousRevision != null && paid.compareTo(pi.getShipmentRequiredAmount()) >= 0
+            if (previousRevision != null && paid.signum() > 0 && paid.compareTo(pi.getDepositRequiredAmount()) >= 0
                     && !business.reserveAfterPayment(require(id), paid)) {
                 fail("PI_WAREHOUSE_STOCK_SHORTAGE", "修订数量超过指定仓库可用库存，不能确认修订");
             }
@@ -315,7 +315,7 @@ public class PiServiceImpl implements PiService {
         String paymentStatus = paymentStatus(after, pi);
         if (mapper.syncSeriesPaymentStatus(id, after) < 1) fail("PI_PAYMENT_FAILED", "收款状态更新失败");
         String reservationStatus = business == null ? reservations.retainAfterPayment(pi, after)
-                : after.compareTo(pi.getShipmentRequiredAmount()) < 0 ? "AWAITING_PAYMENT"
+                : after.compareTo(pi.getDepositRequiredAmount()) < 0 ? "AWAITING_PAYMENT"
                 : business.reserveAfterPayment(pi, after) ? "PAID_HELD" : "AWAITING_WAREHOUSE_STOCK";
         audit(id, "登记 PI 收款", Map.of("paidAmount", before, "paymentStatus", pi.getPaymentStatus()),
                 Map.of("paidAmount", after, "paymentStatus", paymentStatus, "requestId", normalized.requestId(),

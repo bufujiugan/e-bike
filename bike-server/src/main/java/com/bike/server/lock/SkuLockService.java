@@ -67,10 +67,7 @@ public class SkuLockService {
         for(var item:sorted) {
             Long modelId=inventory.lockSkuModel(item.skuId());
             if(modelId==null) throw new BusinessException("SKU_NOT_FOUND","SKU或车型不存在或已停用");
-            if(inventory.snapshot(item.skuId(),0).availableForOrder()<item.quantity())
-                throw new BusinessException("SKU_INVENTORY_NOT_ENOUGH","该SKU合格库存不足，其他SKU库存不能替代");
-            if(reservations.snapshot(modelId,0).availableForOrder()<item.quantity())
-                throw new BusinessException("INVENTORY_NOT_ENOUGH","车型库存已被现有SKU或历史车型承诺占用");
+            // SKU预锁只登记客户需求；收款达到定金后才按合格库存确认占用。
             String no="LK"+UUID.randomUUID().toString().replace("-","").substring(0,16).toUpperCase();
             if(mapper.insertLock(no,request,item.skuId(),modelId,item.quantity(),expires,operator,requestId)!=1
                     ||locks.insertDetail(no,modelId,item.quantity())!=1)

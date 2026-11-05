@@ -38,7 +38,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 /** Real service transactions and shared database mutex; isolated tables are always removed. */
 @EnabledIfEnvironmentVariable(named="BIKE_MYSQL_TEST_URL",matches=".+")
 class SkuCommitmentMysqlTest {
-    @Test void skuLockIsIdempotentAndBlueOrUnidentifiedStockCannotReplaceRed() throws Exception {
+    @Test void skuPrelockIsIdempotentAndCanExceedPhysicalStock() throws Exception {
         try(var f=new Fixture()) {
             var first=f.tx(()->f.locks.create(request("same-request",10,1)));
             assertThat(first).hasSize(1);
@@ -47,18 +47,18 @@ class SkuCommitmentMysqlTest {
             assertThat(first.getFirst().getCustomerId()).isEqualTo(1L);
             assertThat(f.tx(()->f.locks.create(request("same-request",10,1))).getFirst().getId()).isEqualTo(first.getFirst().getId());
             code(()->f.tx(()->f.locks.create(request("same-request",11,1))),"SKU_LOCK_REQUEST_CONFLICT");
-            code(()->f.tx(()->f.locks.create(request("red-again",10,1))),"SKU_INVENTORY_NOT_ENOUGH");
+            f.tx(()->f.locks.create(request("red-again",10,1)));
             var red=f.inventory.list(null,null,0,100).stream().filter(r->r.skuId()==10).findFirst().orElseThrow();
             assertThat(red.physicalQty()).isEqualTo(1);
-            assertThat(red.temporaryLockedQty()).isEqualTo(1);
+            assertThat(red.temporaryLockedQty()).isEqualTo(2);
             assertThat(red.maxNewLockQty()).isZero();
-            assertThat(f.reservations.snapshot(4,0).getCommittedQty()).isEqualTo(1);
+            assertThat(f.reservations.snapshot(4,0).getCommittedQty()).isEqualTo(2);
             assertThat(f.inventory.snapshot(11,0).availableForOrder()).isEqualTo(1);
-            assertThat(f.scalar("SELECT COUNT(*) FROM @sku_lock_request")).isEqualTo(1);
+            assertThat(f.scalar("SELECT COUNT(*) FROM @sku_lock_request")).isEqualTo(2);
         }
     }
 
-    @Test void twoConcurrentRequestsForLastRedProduceExactlyOneCommitment() throws Exception {
+    @Test void twoConcurrentPrelocksForLastSkuBothSucceed() throws Exception {
         try(var f=new Fixture();var pool=Executors.newFixedThreadPool(2)) {
             var start=new CountDownLatch(1);
             List<Future<String>> futures=new ArrayList<>();
@@ -70,34 +70,33 @@ class SkuCommitmentMysqlTest {
             start.countDown();
             List<String> results=new ArrayList<>();
             for(var future:futures)results.add(future.get(20,TimeUnit.SECONDS));
-            assertThat(results).containsExactlyInAnyOrder("OK","SKU_INVENTORY_NOT_ENOUGH");
-            assertThat(f.reservations.snapshot(4,0).getCommittedQty()).isEqualTo(1);
-            assertThat(f.scalar("SELECT COUNT(*) FROM @inventory_lock")).isEqualTo(1);
+            assertThat(results).containsExactlyInAnyOrder("OK","OK");
+            assertThat(f.reservations.snapshot(4,0).getCommittedQty()).isEqualTo(2);
+            assertThat(f.scalar("SELECT COUNT(*) FROM @inventory_lock")).isEqualTo(2);
         }
     }
 
     @Test void batchFailureRollsBackEarlierSkuAndIdempotencyRecord() throws Exception {
         try(var f=new Fixture()) {
-            var batch=new SkuLockRequest("batch-fails",1L,null,null,null,List.of(new SkuLockRequest.Item(10,1),new SkuLockRequest.Item(12,1)));
-            code(()->f.tx(()->f.locks.create(batch)),"SKU_INVENTORY_NOT_ENOUGH");
+            var batch=new SkuLockRequest("batch-fails",1L,null,null,null,List.of(new SkuLockRequest.Item(10,1),new SkuLockRequest.Item(999,1)));
+            code(()->f.tx(()->f.locks.create(batch)),"SKU_NOT_FOUND");
             assertThat(f.scalar("SELECT COUNT(*) FROM @inventory_lock")).isZero();
             assertThat(f.scalar("SELECT COUNT(*) FROM @sku_lock_request")).isZero();
             assertThat(f.scalar("SELECT COUNT(*) FROM @operation_log")).isZero();
         }
     }
 
-    @Test void legacyModelCommitmentAndSkuCommitmentShareOneModelBudget() throws Exception {
+    @Test void legacyCommitmentDoesNotBlockSkuPrelockButRemainsHardCapacity() throws Exception {
         try(var f=new Fixture()) {
             f.legacyLock(3);
-            code(()->f.tx(()->f.locks.create(request("blocked-by-legacy",10,1))),"INVENTORY_NOT_ENOUGH");
+            f.tx(()->f.locks.create(request("allowed-with-legacy",10,1)));
             assertThat(f.inventory.list(4L,null,0,100)).allSatisfy(r->{
                 assertThat(r.legacyModelCommittedQty()).isEqualTo(3);
                 assertThat(r.maxNewLockQty()).isZero();
             });
-            f.exec("UPDATE @inventory_lock SET lock_qty=2");
-            f.tx(()->f.locks.create(request("red-after-release",10,1)));
-            assertThat(f.reservations.snapshot(4,0).getCommittedQty()).isEqualTo(3);
-            code(()->f.tx(()->f.locks.create(request("blue-blocked",11,1))),"INVENTORY_NOT_ENOUGH");
+            f.tx(()->f.locks.create(request("blue-allowed",11,1)));
+            assertThat(f.reservations.snapshot(4,0).getCommittedQty()).isEqualTo(5);
+            assertThat(f.reservations.selectFulfillmentSnapshot(4,0).availableForOrder()).isZero();
         }
     }
 
@@ -113,6 +112,7 @@ class SkuCommitmentMysqlTest {
             assertThat(f.reservations.snapshot(4,order.getId()).getCommittedQty()).isEqualTo(1);
             assertThat(f.inventory.reservationItems(order.getId())).containsExactly(new SkuReservationItem(10,1,0,0));
             f.tx(()->f.orders.updateStatus(order.getId(),"CONFIRMED"));
+            f.session.update("paymentPriorityFixture.markPaidOrder",Map.of("orderId",order.getId()));
             code(()->f.tx(()->f.stock.stockOut(new StockOutRequest(1L,order.getId(),List.of("QR101")))),"ORDER_SKU_MISMATCH");
             var record=f.tx(()->f.stock.stockOut(new StockOutRequest(1L,order.getId(),List.of("QR100"))));
             assertThat(f.inventory.reservationItems(order.getId()).getFirst().shippedQty()).isEqualTo(1);
@@ -126,7 +126,8 @@ class SkuCommitmentMysqlTest {
 
     @Test void legacyOrderCannotConsumeAnotherSkuHoldAndLastWrongVehicleRollsBackWholeBatch() throws Exception {
         try(var f=new Fixture()) {
-            f.tx(()->f.locks.create(request("red-held",10,1)));
+            var paidOrder=f.skuOrder(1);
+            f.session.update("paymentPriorityFixture.markPaidOrder",Map.of("orderId",paidOrder.getId()));
             long order=f.legacyOrder(2);
             code(()->f.tx(()->f.stock.stockOut(new StockOutRequest(1L,order,List.of("QR101","QR100")))),"SKU_INVENTORY_LOCK_CONFLICT");
             assertThat(f.scalar("SELECT COUNT(*) FROM @stock_out_record")).isZero();
@@ -165,7 +166,7 @@ class SkuCommitmentMysqlTest {
             assertThat(red.availableQty()).isZero();
             assertThat(red.temporaryLockedQty()).isEqualTo(1);
             assertThat(f.inventory.snapshot(11,0).availableForOrder()).isEqualTo(1);
-            code(()->f.tx(()->f.locks.create(request("red-shortage",10,1))),"SKU_INVENTORY_NOT_ENOUGH");
+            assertThat(f.tx(()->f.locks.create(request("red-shortage",10,1)))).hasSize(1);
         }
     }
 
@@ -224,6 +225,7 @@ class SkuCommitmentMysqlTest {
             f.addVehicle(103,10);
             var order=f.skuOrder(2);
             f.tx(()->f.orders.updateStatus(order.getId(),"CONFIRMED"));
+            f.session.update("paymentPriorityFixture.markPaidOrder",Map.of("orderId",order.getId()));
             var out=f.tx(()->f.stock.stockOut(new StockOutRequest(1L,order.getId(),List.of("QR100"))));
             f.tx(()->f.renew.closeRemainder(order.getId(),"剩余一台取消"));
             assertThat(f.inventory.reservationItems(order.getId())).containsExactly(new SkuReservationItem(10,2,1,1));
@@ -255,6 +257,7 @@ class SkuCommitmentMysqlTest {
         final com.bike.server.module.ModuleMapper modules;
         final com.bike.server.dashboard.DashboardMapper dashboard;
         final ProductionGuard guard;
+        final SqlSessionTemplate session;
         final SkuLockService locks;
         final LockOrderService conversion;
         final StockServiceImpl stock;
@@ -271,12 +274,12 @@ class SkuCommitmentMysqlTest {
         Fixture(boolean withPi) throws Exception {
             var config=new Configuration(new Environment("sku-commitment",new SpringManagedTransactionFactory(),source));
             config.setMapUnderscoreToCamelCase(true);
-            for(String name:List.of("InventoryPolicyMapper","AuditPolicyMapper","AgentModelAccessMapper","InventoryLockMapper","SkuLockMapper","SkuInventoryMapper","OrderMapper","OrderReservationMapper","ProductionMapper","VehicleMapper","StockMapper","OperationLogMapper","ModuleMapper","DashboardMapper","PiMapper","PiSeriesMapper","PiShipmentMapper","PiDispatchMapper","PiLogisticsMapper","PiQuantityMapper","PiWarehouseProjectionFixtureMapper"))
+            for(String name:List.of("InventoryPolicyMapper","AuditPolicyMapper","AgentModelAccessMapper","InventoryLockMapper","SkuLockMapper","SkuInventoryMapper","OrderMapper","OrderReservationMapper","ProductionMapper","VehicleMapper","StockMapper","OperationLogMapper","ModuleMapper","DashboardMapper","PiMapper","PiSeriesMapper","PiShipmentMapper","PiDispatchMapper","PiLogisticsMapper","PiQuantityMapper","PiWarehouseProjectionFixtureMapper","PiBusinessMapper","PaymentPriorityMapper","PaymentPrioritySqlFixture"))
                 try(var input=Resources.getResourceAsStream("mapper/"+name+".xml")) {
                     var xml=new String(input.readAllBytes(),StandardCharsets.UTF_8).replace("bike_",prefix);
                     new XMLMapperBuilder(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)),config,name,config.getSqlFragments()).parse();
                 }
-            var session=new SqlSessionTemplate(new SqlSessionFactoryBuilder().build(config));
+            session=new SqlSessionTemplate(new SqlSessionFactoryBuilder().build(config));
             inventory=session.getMapper(SkuInventoryMapper.class);reservations=session.getMapper(OrderReservationMapper.class);
             orders=session.getMapper(OrderMapper.class);lockMapper=session.getMapper(InventoryLockMapper.class);
             stockMapper=session.getMapper(StockMapper.class);modules=session.getMapper(com.bike.server.module.ModuleMapper.class);

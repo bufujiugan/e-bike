@@ -40,7 +40,7 @@ class PiConversionMysqlTest {
             long red=order(draft,10),green=order(draft,12);
             code(()->f.tx(()->f.stock.stockOut(new StockOutRequest(1L,red,List.of("QR100")))),"INVALID_STATUS_TRANSITION");
             f.tx(()->f.pis.confirm(draft.getId()));
-            code(()->f.tx(()->f.stock.stockOut(new StockOutRequest(1L,red,List.of("QR100")))),"PI_SHIPMENT_NOT_RELEASED");
+            code(()->f.tx(()->f.stock.stockOut(new StockOutRequest(1L,red,List.of("QR100")))),"ORDER_RESERVATION_EXPIRED");
             var paid=f.tx(()->f.pis.recordPayment(draft.getId(),new PiPaymentRequest("receipt-one",new BigDecimal("200"),"CNY",null,null,null)));
             assertThat(paid.getPaidAmount()).isEqualByComparingTo("200");
             assertThat(paid.getFulfillment()).allSatisfy(line->assertThat(line.reservationStatus()).isEqualTo("PAID_HELD"));

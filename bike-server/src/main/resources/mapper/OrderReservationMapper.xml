@@ -9,6 +9,15 @@
        WHERE r.order_id=#{orderId} AND <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/>) owned_qty
   </sql>
   <select id="snapshot" resultType="com.bike.server.order.OrderInventorySnapshot"><include refid="snapshotQuery"/></select>
+  <select id="selectFulfillmentSnapshot" resultType="com.bike.server.order.OrderInventorySnapshot">
+    SELECT (SELECT COUNT(*) FROM bike_vehicle v WHERE v.model_id=#{modelId} AND v.status=2 AND NOT <include refid="com.bike.server.stock.InventoryPolicyMapper.quarantined"/>) physical_qty,
+      (SELECT COALESCE(SUM(qty),0) FROM (<include refid="com.bike.server.stock.InventoryPolicyMapper.fulfillmentCommitments"/>) c WHERE model_id=#{modelId}) committed_qty,
+      (SELECT COUNT(*) FROM bike_order_reservation WHERE order_id=#{orderId}) reservation_count,
+      (SELECT COALESCE(SUM(GREATEST(r.reserved_qty-i.shipped_qty,0)),0) FROM bike_order_reservation r
+       JOIN bike_sales_order o ON o.id=r.order_id JOIN bike_sales_order_item i ON i.order_id=o.id AND i.product_model_id=r.model_id
+       WHERE r.order_id=#{orderId} AND <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/>
+         AND (r.scope_type='MODEL_LEGACY' OR r.hold_mode='PAID')) owned_qty
+  </select>
   <select id="expiredForOrder" resultType="int">
     SELECT COUNT(*) FROM bike_order_reservation WHERE order_id=#{orderId}
     AND (hold_mode='RELEASED' OR (hold_mode='TIMED' AND expires_at&lt;=NOW(3)))
