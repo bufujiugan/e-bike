@@ -10,7 +10,7 @@ export function reservationLabel(status: ReservationStatus | null | undefined, i
   if (isAgent && (status === 'TIMED_ACTIVE' || status === 'PAID_HELD')) return reservationLabels.ACTIVE
   return status ? reservationLabels[status] ?? '状态待核对' : '状态待获取'
 }
-export type PiBusinessTerms = { warehouseId: number | null; domesticShipment: boolean | null; collectionEntity: 'GUANGTA' | 'HONG_KONG' }
+export type PiBusinessTerms = { warehouseId: number | null; domesticShipment: boolean | null; collectionEntity: 'GUANGTA' | 'HONG_KONG'; orderSource?: 'EXISTING_ORDER' | 'NEW_BUSINESS' | null }
 export type PiDocument = {
   business?: PiBusinessTerms | null
   sellerName: string; sellerAddress: string; sellerContact: string
@@ -72,7 +72,7 @@ export type PiDispatchBatch = { id: number; batchNo: string; sourceType: string;
 export type PiLockOption = { id: number; lockNo: string; skuId: number; skuCode: string; productName: string; modelId: number; remainingQty: number; expireTime: string }
 export type PiMasterOption = { id: number; code: string; name: string }
 export type PiSkuOption = { id: number; modelId?: number; productModelId?: number; skuCode: string; productName: string; specification?: string; enabled?: boolean }
-export type PiOrderOption = { id: number; orderNo: string; customerId: number; agentId?: number | null; status: string }
+export type PiOrderOption = { id: number; orderNo: string; customerId: number; agentId?: number | null; agentName?: string; status: string; plannedShipDate?: string | null; modelId?: number; skuId?: number | null; skuCode?: string; productName?: string; specification?: string; enabled?: boolean; skuQuantity?: number }
 export type PiOptions = { customers: PiMasterOption[]; agents: PiMasterOption[]; skus: PiSkuOption[]; orders: PiOrderOption[]; warehouses?: PiMasterOption[] }
 export type PiCreate = {
   revisionSources?: { lockId: number; quantity: number }[]

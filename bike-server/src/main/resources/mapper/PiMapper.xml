@@ -20,8 +20,13 @@
     </select>
     <select id="selectOrderOptions" resultType="map">
         SELECT o.id,o.order_no orderNo,o.customer_id customerId,o.agent_id agentId,o.status,
-               i.product_model_id modelId,i.ordered_qty quantity
+               i.product_model_id modelId,i.ordered_qty quantity,o.planned_ship_date plannedShipDate,
+               a.agent_name agentName,ri.sku_id skuId,sku.sku_code skuCode,sku.product_name productName,
+               sku.specification,sku.enabled,ri.ordered_qty-ri.closed_qty skuQuantity
         FROM bike_sales_order o JOIN bike_sales_order_item i ON i.order_id=o.id
+        LEFT JOIN bike_agent a ON a.id=o.agent_id
+        LEFT JOIN bike_order_reservation_item ri ON ri.order_id=o.id
+        LEFT JOIN bike_production_sku sku ON sku.id=ri.sku_id
         WHERE o.status IN ('DRAFT','PENDING','CONFIRMED') AND i.shipped_qty=0
         AND NOT EXISTS(SELECT 1 FROM bike_pi p WHERE p.source_order_id=o.id) <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=o.customer_id)</if>
         <if test="keyword != null">AND o.order_no LIKE CONCAT('%',#{keyword},'%')</if>
@@ -97,7 +102,7 @@
     <update id="updatePi">
         UPDATE bike_pi p JOIN bike_customer c ON c.id=#{request.customerId} AND c.status='ENABLED'
         SET p.customer_id=c.id,p.customer_code=c.customer_code,p.customer_name=c.customer_name,
-            p.agent_id=#{agentId},p.trade_type=#{tradeType},p.currency_code=#{currencyCode},
+            p.agent_id=#{agentId},p.source_order_id=#{request.sourceOrderId},p.trade_type=#{tradeType},p.currency_code=#{currencyCode},
             p.planned_ship_date=#{request.plannedShipDate},p.subtotal=#{subtotal},p.discount_amount=#{discountAmount},
             p.tax_amount=#{taxAmount},p.freight_amount=#{freightAmount},p.total_amount=#{totalAmount},
             p.deposit_required_amount=#{depositRequiredAmount},p.shipment_required_amount=#{shipmentRequiredAmount},

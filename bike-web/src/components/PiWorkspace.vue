@@ -63,7 +63,8 @@ const editingId = ref<number | null>(null)
 const fromLocks = ref(false), lockBusy = ref(false), lockError = ref(''), lockPage = ref(1), lockTotal = ref(0), lockKeyword = ref('')
 const lockRows = ref<PiLockOption[]>([]), selectedLocks = ref<Array<PiLockOption & { quantity: number }>>([])
 let conversionKey = '', conversionFingerprint = '', lockVersion = 0
-const fixedItems = computed(() => fromLocks.value || Boolean(editingId.value && detail.value?.fulfillment?.length && !detail.value.sourceOrderId))
+const fixedItems = computed(() => fromLocks.value || Boolean(draft.sourceOrderId) || Boolean(editingId.value && detail.value?.fulfillment?.length))
+const hasBoundOrders = computed(() => Boolean(editingId.value && (detail.value?.sourceOrderId || detail.value?.fulfillment?.length)))
 const editingRevision = computed(() => Boolean(editingId.value && detail.value?.previousRevisionId))
 const revisionFulfillment = computed(() => editingRevision.value && Boolean(detail.value?.fulfillment?.length))
 const options = ref<PiOptions>({ customers: [], agents: [], skus: [], orders: [] })
@@ -84,7 +85,7 @@ const documentLabels: [keyof PiDocument, string][] = [
   ['buyerContactName', '买方联系人'], ['buyerPhone', '买方电话'], ['buyerEmail', '买方Email'], ['businessOwner', '业务归属'],
 ]
 function emptyDocument(): PiDocument {
-  return { business: { warehouseId: null, domesticShipment: null, collectionEntity: 'GUANGTA' }, sellerName: '', sellerAddress: '', sellerContact: '', buyerAddress: '', buyerContact: '', bankName: '', bankAccount: '', beneficiary: '', paymentTerms: '', deliveryTerms: '', templateCode: '', templateVersion: '' }
+  return { business: { warehouseId: null, domesticShipment: null, collectionEntity: 'GUANGTA', orderSource: 'EXISTING_ORDER' }, sellerName: '', sellerAddress: '', sellerContact: '', buyerAddress: '', buyerContact: '', bankName: '', bankAccount: '', beneficiary: '', paymentTerms: '', deliveryTerms: '', templateCode: '', templateVersion: '' }
 }
 type DraftItem = { key: string; skuId: number | undefined; quantity: number; unitPrice: string; discountAmount: string; taxAmount: string; unit: string; imageAttachmentId?: string | null }
 function newItem(): DraftItem { return { key: createUuid(), skuId: undefined, quantity: 1, unitPrice: '', discountAmount: '0.00', taxAmount: '0.00', unit: '台' } }
@@ -95,7 +96,7 @@ const draftSteps = [
   { title: '核对保存', description: '核对后保存草稿' },
 ]
 const draftStep = ref(0), templateRefreshKey = ref(0), draftScroll = ref<HTMLElement | null>(null)
-const buyerExpanded = ref(false), orderLinksExpanded = ref(false), feesExpanded = ref(false)
+const buyerExpanded = ref(false), feesExpanded = ref(false)
 const draftValidation = ref<{ step: number; field: string; message: string } | null>(null)
 let draftBaseline = '', closePromptOpen = false
 const draftTitle = computed(() => fromLocks.value ? '从 SKU 锁定生成 PI' : editingId.value == null ? '新建 PI' : '编辑 PI 草稿')
@@ -110,7 +111,7 @@ const buyerFields: [keyof PiDocument, string, number][] = [
 function draftFingerprint() { return JSON.stringify({ draft, sources: selectedLocks.value.map(lock => ({ id: lock.id, quantity: lock.quantity })) }) }
 function resetDraftWizard() {
   draftStep.value = 0; draftValidation.value = null
-  buyerExpanded.value = false; orderLinksExpanded.value = Boolean(draft.agentId || draft.sourceOrderId)
+  buyerExpanded.value = false
   feesExpanded.value = [draft.discountAmount, draft.taxAmount, draft.freightAmount, draft.otherFeeAmount].some(amount => cents(amount) !== 0n)
   draftBaseline = draftFingerprint()
 }
@@ -135,6 +136,11 @@ function stepIssue(step: number): { step: number; field: string; message: string
     if (!draft.document.business?.warehouseId) return issue('warehouse', '请先选择出库仓库，不同仓库分别建立 PI')
     if (draft.document.business.domesticShipment == null) return issue('warehouse', '请明确是否从国内出货')
     if (!draft.customerId) return issue('customer', '请先选择客户')
+    if (!fromLocks.value && !hasBoundOrders.value) {
+      if (!draft.document.business.orderSource) return issue('orderSource', '请选择关联已有订单，或明确选择无原订单的新业务')
+      if (draft.document.business.orderSource === 'EXISTING_ORDER' && !draft.sourceOrderId) return issue('sourceOrder', '请选择来源销售订单，系统将复用原订单及库存占用')
+      if (draft.sourceOrderId && !options.value.orders.some(order => order.id === draft.sourceOrderId && order.skuId && (order.skuQuantity ?? 0) > 0)) return issue('sourceOrder', '该订单缺少精确 SKU 明细，请先核对原订单')
+    }
     if (customerBusy.value || customerLoadFailed.value) return issue('customer', '客户资料尚未成功带入，请重试加载客户资料')
     if (!/^[A-Z]{3}$/.test(draft.currencyCode.trim().toUpperCase())) return issue('currency', '请输入 3 位币种代码，如 CNY、USD、EUR')
     if (fromLocks.value && !selectedLocks.value.length) return issue('locks', '请至少选择一条来源 SKU 锁定')
@@ -200,7 +206,26 @@ async function closeDraft(done?: () => void) {
   customerLoadVersion++; customerBusy.value = false; lockVersion++; lockBusy.value = false
   if (done) done(); else createVisible.value = false
 }
-const filteredOrders = computed(() => options.value.orders.filter(order => order.customerId === draft.customerId))
+const filteredOrders = computed(() => [...new Map(options.value.orders.filter(order => order.customerId === draft.customerId).map(order => [order.id, order])).values()])
+function chooseSourceOrder(id?: number) {
+  if (!id) return
+  const sources = options.value.orders.filter(order => order.id === id)
+  const source = sources[0]
+  if (!source) return
+  draft.agentId = source.agentId ?? undefined
+  draft.plannedShipDate = source.plannedShipDate || ''
+  if (draft.document.business) draft.document.business.orderSource = 'EXISTING_ORDER'
+  if (source.agentId && !options.value.agents.some(agent => agent.id === source.agentId))
+    options.value.agents.push({ id: source.agentId, code: '', name: source.agentName || '原订单代理商' })
+  draft.items = sources.filter(order => order.skuId && (order.skuQuantity ?? 0) > 0).map(order => {
+    if (!options.value.skus.some(sku => sku.id === order.skuId)) options.value.skus.push({ id: order.skuId!, modelId: order.modelId, skuCode: order.skuCode || '', productName: order.productName || '', specification: order.specification, enabled: order.enabled })
+    return { ...(draft.items.find(item => item.skuId === order.skuId) || newItem()), skuId: order.skuId!, quantity: order.skuQuantity! }
+  })
+}
+function changeOrderSource() {
+  if (!hasBoundOrders.value && draft.document.business?.orderSource === 'NEW_BUSINESS') draft.sourceOrderId = undefined
+  if (!draft.items.length) draft.items = [newItem()]
+}
 const customerBusy = ref(false)
 const customerLoadFailed = ref(false)
 let customerLoadVersion = 0
@@ -217,7 +242,6 @@ async function chooseCustomer(id: number) {
   finally { if (version === customerLoadVersion) customerBusy.value = false }
 }
 watch(() => draft.customerId, () => { if (editingId.value == null && !filteredOrders.value.some(order => order.id === draft.sourceOrderId)) draft.sourceOrderId = undefined })
-watch(() => draft.sourceOrderId, (id) => { const source = options.value.orders.find(order => order.id === id); if (source) draft.agentId = source.agentId ?? undefined })
 watch([() => draft.customerId, () => draft.agentId], () => {
   lockVersion++; lockRows.value = []; lockTotal.value = 0; lockPage.value = 1; selectedLocks.value = []
   if (fromLocks.value) { draft.items = []; void loadLocks() }
@@ -379,7 +403,7 @@ async function openEdit() {
     taxAmount: fromCents((cents(String(current.taxAmount)) ?? 0n) - lineTax), freightAmount: money(current.freightAmount), otherFeeAmount: money(current.otherFeeAmount ?? '0.00'),
     depositRequiredAmount: current.depositRequiredAmount == null ? '' : money(current.depositRequiredAmount),
     shipmentRequiredAmount: current.shipmentRequiredAmount == null ? '' : money(current.shipmentRequiredAmount),
-    remark: current.remark || '', document: { ...emptyDocument(), ...current.document, business: current.document?.business ?? { warehouseId: null, domesticShipment: null, collectionEntity: current.tradeType === 'EXPORT' ? 'HONG_KONG' : 'GUANGTA' } },
+    remark: current.remark || '', document: { ...emptyDocument(), ...current.document, business: { ...(current.document?.business ?? { warehouseId: null, domesticShipment: null, collectionEntity: current.tradeType === 'EXPORT' ? 'HONG_KONG' : 'GUANGTA' }) } },
     items: current.items.map(item => ({ key: createUuid(), skuId: item.skuId, quantity: item.quantity, unitPrice: money(item.unitPrice), discountAmount: money(item.discountAmount), taxAmount: money(item.taxAmount), unit: item.unit || '台', imageAttachmentId: item.imageAttachmentId })),
   })
   options.value = {
@@ -636,7 +660,18 @@ onMounted(() => { if (canRead.value) void load() })
                   <summary><span><strong>{{ selectedCustomer?.name || '已选客户' }}</strong><small>{{ [draft.document.buyerContactName, draft.document.buyerCountry].filter(Boolean).join(' · ') || '商务资料可在此补充' }}</small></span><span>核对 / 补充客户资料</span></summary>
                   <div class="pi-draft-grid"><el-form-item v-for="[key, label, maxLength] in buyerFields" :key="key" :label="label" :data-draft-field="key" :error="fieldError(key)" :class="{ 'pi-span-two': key === 'buyerAddress' }"><el-input v-model="draft.document[key]" :aria-label="label" :disabled="customerBusy" :type="key === 'buyerAddress' ? 'textarea' : 'text'" :rows="2" :maxlength="maxLength" /></el-form-item></div>
                 </details>
-                <details class="pi-disclosure" :open="orderLinksExpanded" @toggle="orderLinksExpanded = ($event.target as HTMLDetailsElement).open"><summary><span>代理商与来源订单</span><small>按需关联</small></summary><div class="pi-draft-grid"><el-form-item label="所属代理商"><el-select v-model="draft.agentId" aria-label="所属代理商" :disabled="editingRevision || fixedItems && !fromLocks" clearable filterable placeholder="可选；确认后该代理商可查看"><el-option v-for="agent in options.agents" :key="agent.id" :value="agent.id" :label="agent.code + ' · ' + agent.name" /></el-select></el-form-item><el-form-item label="来源销售订单"><el-select v-model="draft.sourceOrderId" aria-label="来源销售订单" clearable filterable :disabled="fromLocks || !draft.customerId || editingId !== null" placeholder="可选；先选择客户"><el-option v-for="order in filteredOrders" :key="order.id" :value="order.id" :label="order.orderNo" /></el-select></el-form-item></div></details>
+                <div class="pi-disclosure">
+                  <h3>订单来源与代理商</h3>
+                  <el-form-item v-if="!fromLocks && !hasBoundOrders && draft.document.business" label="订单来源" required data-draft-field="orderSource" :error="fieldError('orderSource')">
+                    <el-radio-group v-model="draft.document.business.orderSource" aria-label="订单来源" @change="changeOrderSource"><el-radio value="EXISTING_ORDER">关联已有订单</el-radio><el-radio value="NEW_BUSINESS">无原订单的新业务</el-radio></el-radio-group>
+                  </el-form-item>
+                  <el-alert v-if="fromLocks" title="将从所选锁单生成并关联履约订单，沿用原锁单的客户、代理商与数量。" type="info" :closable="false" />
+                  <el-alert v-else-if="!hasBoundOrders && draft.document.business?.orderSource === 'NEW_BUSINESS'" title="仅用于没有原订单的新业务。收款达到门槛且所选仓库库存充足后，系统自动生成关联订单；已有锁单或订单请使用对应入口。" type="warning" :closable="false" />
+                  <div class="pi-draft-grid">
+                    <el-form-item v-if="!fromLocks && (draft.sourceOrderId || !hasBoundOrders && draft.document.business?.orderSource === 'EXISTING_ORDER')" label="来源销售订单" required data-draft-field="sourceOrder" :error="fieldError('sourceOrder')"><el-select v-model="draft.sourceOrderId" aria-label="来源销售订单" clearable filterable :disabled="!draft.customerId || hasBoundOrders || editingRevision" placeholder="先选择客户，再选择原订单" @change="chooseSourceOrder"><el-option v-for="order in filteredOrders" :key="order.id" :value="order.id" :label="order.orderNo" /></el-select><p class="pi-field-help">自动带入原订单的代理商、SKU 和数量，复用原库存占用。</p></el-form-item>
+                    <el-form-item label="所属代理商"><el-select v-model="draft.agentId" aria-label="所属代理商" :disabled="editingRevision || fixedItems && !fromLocks" clearable filterable placeholder="选择代理商；关联订单后自动带入"><el-option v-for="agent in options.agents" :key="agent.id" :value="agent.id" :label="agent.code + ' · ' + agent.name" /></el-select></el-form-item>
+                  </div>
+                </div>
               </section>
               <section class="pi-form-card" data-draft-field="items">
                 <div class="pi-section-heading"><div><h3>商品明细 <span class="pi-count-badge">{{ draft.items.length }}</span></h3><p>{{ fromLocks ? '从下方锁定中选择商品，再填写单价。' : '选择 SKU 后填写数量与单价，图片在保存时带入。' }}</p></div><el-button :disabled="fixedItems || draft.items.length >= 100" @click="draft.items.push(newItem())">＋ 添加商品</el-button></div>
@@ -685,7 +720,7 @@ onMounted(() => { if (canRead.value) void load() })
             </section>
             <section v-if="draftStep === 2" class="pi-draft-step">
               <div class="pi-step-heading"><span class="pi-eyebrow">STEP 03</span><h2>最后，核对一下。</h2><p>本次仅保存草稿，不会发布单据或触发收款、放行。</p></div>
-              <section class="pi-form-card"><div class="pi-section-heading"><h3>客户与商品</h3><el-button text type="primary" @click="goToDraftStep(0)">返回修改</el-button></div><dl class="pi-detail-grid"><div><dt>客户</dt><dd>{{ selectedCustomer?.name }}</dd></div><div><dt>贸易 / 币种</dt><dd>{{ draft.tradeType === 'EXPORT' ? '外销' : '内销' }} · {{ draft.currencyCode.toUpperCase() }}</dd></div><div><dt>所属代理商</dt><dd>{{ selectedAgent?.name || '未关联' }}</dd></div><div><dt>来源订单</dt><dd>{{ options.orders.find(order => order.id === draft.sourceOrderId)?.orderNo || (fromLocks ? '由来源锁定生成' : '未关联') }}</dd></div></dl><div class="pi-review-items"><article v-for="item in draft.items" :key="item.key"><div><strong>{{ options.skus.find(sku => sku.id === item.skuId)?.skuCode }}</strong><span>{{ options.skus.find(sku => sku.id === item.skuId)?.productName }}</span><small>{{ item.quantity }} {{ item.unit }} × {{ money(item.unitPrice) }} · 折扣 {{ money(item.discountAmount) }} · 税费 {{ money(item.taxAmount) }}</small></div><strong>{{ lineTotal(item) == null ? '—' : fromCents(lineTotal(item)!) }}</strong></article></div><p v-if="selectedLocks.length" class="pi-field-help">关联 {{ selectedLocks.length }} 笔来源锁定，沿用原截止时间。</p></section>
+              <section class="pi-form-card"><div class="pi-section-heading"><h3>客户与商品</h3><el-button text type="primary" @click="goToDraftStep(0)">返回修改</el-button></div><dl class="pi-detail-grid"><div><dt>客户</dt><dd>{{ selectedCustomer?.name }}</dd></div><div><dt>贸易 / 币种</dt><dd>{{ draft.tradeType === 'EXPORT' ? '外销' : '内销' }} · {{ draft.currencyCode.toUpperCase() }}</dd></div><div><dt>所属代理商</dt><dd>{{ selectedAgent?.name || '未关联' }}</dd></div><div><dt>来源订单</dt><dd>{{ options.orders.find(order => order.id === draft.sourceOrderId)?.orderNo || (fromLocks ? '由来源锁定生成' : hasBoundOrders ? '已关联履约订单' : draft.document.business?.orderSource === 'NEW_BUSINESS' ? '新业务，收款达标后自动生成' : '请选择来源订单') }}</dd></div></dl><div class="pi-review-items"><article v-for="item in draft.items" :key="item.key"><div><strong>{{ options.skus.find(sku => sku.id === item.skuId)?.skuCode }}</strong><span>{{ options.skus.find(sku => sku.id === item.skuId)?.productName }}</span><small>{{ item.quantity }} {{ item.unit }} × {{ money(item.unitPrice) }} · 折扣 {{ money(item.discountAmount) }} · 税费 {{ money(item.taxAmount) }}</small></div><strong>{{ lineTotal(item) == null ? '—' : fromCents(lineTotal(item)!) }}</strong></article></div><p v-if="selectedLocks.length" class="pi-field-help">关联 {{ selectedLocks.length }} 笔来源锁定，沿用原截止时间。</p></section>
               <section class="pi-form-card"><div class="pi-section-heading"><h3>交易与交付</h3><el-button text type="primary" @click="goToDraftStep(1)">返回修改</el-button></div><dl class="pi-detail-grid"><div><dt>模板</dt><dd>{{ draft.document.templateCode }} · {{ draft.document.templateVersion }}</dd></div><div><dt>卖方</dt><dd>{{ draft.document.sellerName }}</dd></div><div><dt>收款人</dt><dd>{{ draft.document.beneficiary }}</dd></div><div><dt>收款银行 / 账号</dt><dd>{{ draft.document.bankName }}<br />{{ draft.document.bankAccount }}</dd></div><div><dt>库存保留门槛</dt><dd>{{ draft.currencyCode.toUpperCase() }} {{ money(draft.depositRequiredAmount) }}</dd></div><div><dt>发货放行门槛</dt><dd>{{ draft.currencyCode.toUpperCase() }} {{ money(draft.shipmentRequiredAmount) }}</dd></div><div class="pi-span-two"><dt>付款条款</dt><dd>{{ draft.document.paymentTerms }}</dd></div><div class="pi-span-two"><dt>交付条款</dt><dd>{{ draft.document.deliveryTerms }}</dd></div><div><dt>计划发货 / 运输方式</dt><dd>{{ draft.plannedShipDate || '待补充' }} · {{ draft.document.transportMode || '待补充' }}</dd></div><div><dt>开单日期 / 有效期</dt><dd>{{ draft.document.issueDate || '待补充' }} / {{ draft.document.validUntil || '待补充' }}</dd></div><div v-if="draft.tradeType === 'EXPORT'"><dt>贸易术语</dt><dd>{{ draft.document.tradeTerms || '待补充' }}</dd></div><div class="pi-span-two"><dt>收货地址</dt><dd>{{ draft.document.shippingAddress || '待补充' }}</dd></div><div v-if="draft.remark" class="pi-span-two"><dt>备注</dt><dd>{{ draft.remark }}</dd></div></dl></section>
               <div class="pi-save-notice"><strong>保存后还可以继续编辑</strong><p>客户发布、收款确认与发货放行仍须在 PI 详情中分别操作。</p></div>
             </section>

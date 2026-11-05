@@ -41,6 +41,7 @@ public class PiServiceImpl implements PiService {
     @org.springframework.beans.factory.annotation.Autowired private PiImageService images;
     @org.springframework.beans.factory.annotation.Autowired private PiCustomerSnapshotService customerSnapshots;
     @org.springframework.beans.factory.annotation.Autowired private PiQuantityService quantityRevisions;
+    @org.springframework.beans.factory.annotation.Autowired private PiOrderBindingService orderBinding;
 
     public PiServiceImpl(PiMapper mapper, PiDocumentService documents, OperationLogMapper logs,
             ObjectMapper json, Validator validator, OrderReservationCoordinator reservations) {
@@ -102,7 +103,9 @@ public class PiServiceImpl implements PiService {
         validate(request);
         PiView existing = lockOrderAndPi(id);
         if (!"DRAFT".equals(existing.getStatus())) fail("INVALID_STATUS_TRANSITION", "只有草稿 PI 可以编辑");
-        if (!Objects.equals(existing.getSourceOrderId(), request.sourceOrderId())) {
+        boolean initialBinding = existing.getSourceOrderId() == null && request.sourceOrderId() != null
+                && existing.getPreviousRevisionId() == null && orderIds(existing).isEmpty();
+        if (!Objects.equals(existing.getSourceOrderId(), request.sourceOrderId()) && !initialBinding) {
             fail("PI_SOURCE_ORDER_IMMUTABLE", "草稿的来源订单不可改绑，请取消后重新核对业务");
         }
         if (existing.getPreviousRevisionId() == null) {
@@ -175,7 +178,8 @@ public class PiServiceImpl implements PiService {
             lineDiscount = money(lineDiscount.add(discount));
             lineTax = money(lineTax.add(tax));
         }
-        if(existing==null || existing.getPreviousRevisionId()==null)checkSourceOrder(request, items, existing != null);
+        if(existing==null || existing.getPreviousRevisionId()==null)
+            checkSourceOrder(request, items, existing != null && existing.getSourceOrderId() != null);
         BigDecimal discount = money(optionalMoney(request.discountAmount()).add(lineDiscount));
         BigDecimal tax = money(optionalMoney(request.taxAmount()).add(lineTax));
         BigDecimal freight = optionalMoney(request.freightAmount());
@@ -191,7 +195,7 @@ public class PiServiceImpl implements PiService {
             business.validateTerms(document,trade);
             if(existing!=null&&existing.getPreviousRevisionId()!=null) {
                 var baseline=business.document(existing.getPreviousRevisionId());
-                if(baseline!=null&&baseline.business()!=null&&!Objects.equals(baseline.business(),document.business()))
+                if(baseline!=null&&baseline.business()!=null&&!sameFulfillmentTerms(baseline.business(),document.business()))
                     fail("PI_WAREHOUSE_IMMUTABLE","已确认PI不能换仓、改变出货来源或收款主体，请分别建立PI");
             }
         }
@@ -217,6 +221,9 @@ public class PiServiceImpl implements PiService {
             if (request.sourceOrderId() != null && series.link(id,request.sourceOrderId(),"LEGACY_SOURCE") != 1)
                 fail("PI_CREATE_FAILED", "PI来源订单关联失败");
         }
+        if (existing != null && existing.getSourceOrderId() == null && request.sourceOrderId() != null && series != null
+                && series.link(id, request.sourceOrderId(), "LEGACY_SOURCE") != 1)
+            fail("PI_UPDATE_FAILED", "PI来源订单关联失败");
         if(existing!=null && quantityRevisions!=null)quantityRevisions.saveSources(id,request.revisionSources());
         audit(id, existing == null ? "创建 PI 草稿" : "编辑 PI 草稿", existing,
                 Map.of("status", "DRAFT", "totalAmount", total, "currency", currency,
@@ -240,7 +247,8 @@ public class PiServiceImpl implements PiService {
             for(var item:mapper.selectItems(id))requested.put(item.getSkuId(),item.getQuantity());
             quantityRevisions.apply(id,requested);
         }
-        if (series != null && pi.getSourceOrderId() == null && previousRevision == null) {
+        if (orderBinding != null) orderBinding.requireConfirmableBinding(pi);
+        if (series != null && previousRevision == null) {
             for (long orderId : orderIds(pi)) {
                 var order = fulfillmentOrders.selectForUpdate(orderId);
                 if (!Set.of("DRAFT","PENDING","CONFIRMED").contains(order.getStatus()))
@@ -456,6 +464,13 @@ public class PiServiceImpl implements PiService {
                 if(!fixedSkus.equals(requestedSkus))fail("ORDER_SKU_MISMATCH","PI的SKU及数量必须与来源订单固定SKU完全一致");
             }
         }
+    }
+
+    private boolean sameFulfillmentTerms(PiBusinessTerms baseline, PiBusinessTerms requested) {
+        // 业务来源标记允许旧草稿补录，不改变已确认的仓库、出货地点或收款主体。
+        return requested != null && Objects.equals(baseline.warehouseId(), requested.warehouseId())
+                && Objects.equals(baseline.domesticShipment(), requested.domesticShipment())
+                && Objects.equals(baseline.collectionEntity(), requested.collectionEntity());
     }
 
     private PiView enrich(PiView pi) {

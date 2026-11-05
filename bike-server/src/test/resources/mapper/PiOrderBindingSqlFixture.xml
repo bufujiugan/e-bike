@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="piOrderBindingFixture">
+  <update id="createDatabase">CREATE DATABASE IF NOT EXISTS bike_binding_test_20261105 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci</update>
+  <update id="changeAgent">UPDATE bike_sales_order SET agent_id=9 WHERE id=#{orderId}</update>
+  <update id="changeQuantity">UPDATE bike_order_reservation_item SET ordered_qty=ordered_qty+1 WHERE order_id=#{orderId}</update>
+  <update id="expireReservation">UPDATE bike_order_reservation SET expires_at=DATE_SUB(NOW(3),INTERVAL 1 DAY) WHERE order_id=#{orderId}</update>
+  <select id="orderCount" resultType="long">SELECT COUNT(*) FROM bike_sales_order</select>
+  <select id="linkCount" resultType="long">SELECT COUNT(*) FROM bike_pi_order_link</select>
+  <select id="sourcePiCount" resultType="long">SELECT COUNT(*) FROM bike_pi WHERE source_order_id=#{orderId}</select>
+  <select id="reservedQuantity" resultType="long">SELECT SUM(reserved_qty) FROM bike_order_reservation</select>
+  <select id="paymentCount" resultType="long">SELECT COUNT(*) FROM bike_pi_payment</select>
+</mapper>

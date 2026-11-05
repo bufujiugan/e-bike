@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class PiBusinessServiceImpl implements PiBusinessService {
     @org.springframework.beans.factory.annotation.Autowired private PaymentPriorityService paymentPriority;
+    @org.springframework.beans.factory.annotation.Autowired private PiOrderBindingService orderBinding;
     private final PiBusinessMapper mapper;
     private final PiMapper pis;
     private final PiSeriesMapper series;
@@ -169,6 +170,7 @@ public class PiBusinessServiceImpl implements PiBusinessService {
     }
     public void requireShipment(long piId) {
         requireContract(piId);var pi=pis.selectById(piId);
+        if (orderBinding != null) orderBinding.requireConsistentFulfillment(pi);
         if(pi.getPaidAmount()==null||pi.getShipmentRequiredAmount()==null||pi.getPaidAmount().compareTo(pi.getShipmentRequiredAmount())<0)
             fail("PI_PAYMENT_INSUFFICIENT","累计收款未达到PI约定出货付款门槛，不能出库");
         if (mapper.countPaymentsWithoutReceipt(piId) > 0)
