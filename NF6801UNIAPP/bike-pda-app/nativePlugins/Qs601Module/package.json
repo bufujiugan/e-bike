@@ -1,0 +1,32 @@
+{
+  "name": "Qs601Module",
+  "id": "Qs601Module",
+  "version": "1.0.4",
+  "description": "群索产品打印扫码SDK",
+  "_dp_type": "nativeplugin",
+  "_dp_nativeplugin": {
+    "android": {
+      "plugins": [
+        {
+          "type": "module",
+          "name": "Qs601Module",
+          "class": "com.qs.n601.UpdateModule"
+        }
+      ],
+      "hooksClass": "",
+      "integrateType": "aar",
+      "dependencies": [],
+      "excludeDependencies": [],
+      "compileOptions": {
+        "sourceCompatibility": "1.8",
+        "targetCompatibility": "1.8"
+      },
+      "abis": ["arm64-v8a"],
+      "minSdkVersion": "21",
+      "targetSdkVersion": 30,
+      "useAndroidX": false,
+      "permissions": [],
+      "parameters": {}
+    }
+  }
+}

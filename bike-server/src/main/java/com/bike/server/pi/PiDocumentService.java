@@ -32,6 +32,7 @@ public class PiDocumentService {
     private static final Color PALE = new Color(235, 241, 245);
 
     public byte[] excel(PiView pi) {
+        if(java.util.Set.of("PI_V4","PI_INVOICE_V1").contains(Objects.toString(pi.getDocumentRenderVersion(),"")))return new PiReferenceExcelRenderer().render(pi, this::thumbnail);
         if("PI_V1".equals(pi.getDocumentRenderVersion()))return legacy.excel(pi);
         try (XSSFWorkbook book = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Sheet sheet = book.createSheet("PI");
@@ -114,7 +115,8 @@ public class PiDocumentService {
             document.getDocumentInformation().setTitle("PI " + pi.getPiNo() + " R" + pi.getRevision());
             document.getDocumentInformation().setSubject("Proforma Invoice");
             try (Layout layout = new Layout(document, font, pi)) {
-                for (String line : header(pi)) layout.paragraph(line, 10, 5);
+                if ("PI_INVOICE_V1".equals(pi.getDocumentRenderVersion())) layout.invoiceHeader();
+                else for (String line : header(pi)) layout.paragraph(line, 10, 5);
                 layout.gap(10);
                 layout.tableHeader();
                 for (PiItemView item : pi.getItems()) {
@@ -154,8 +156,8 @@ public class PiDocumentService {
             lines.add("卖方 / Seller: " + text(d.sellerName()));
             add(lines, "卖方地址: ", d.sellerAddress()); add(lines, "卖方联系方式: ", d.sellerContact());
             add(lines,"卖方国家/地区 / Seller country: ",d.sellerCountry());
-            // Saved V2 jobs retain their original output. New fields belong only to the V3 renderer.
-            if("PI_V3".equals(p.getDocumentRenderVersion())) {
+            // V2 归档保持原样，V3 及后续版本才展示结构化卖方联系方式。
+            if("PI_V3".equals(p.getDocumentRenderVersion()) || "PI_V4".equals(p.getDocumentRenderVersion())) {
                 add(lines,"卖方联系人 / Seller contact: ",d.sellerContactName());
                 add(lines,"卖方电话 / Seller phone: ",d.sellerPhone());
                 add(lines,"卖方邮箱 / Seller email: ",d.sellerEmail());
@@ -283,6 +285,36 @@ public class PiDocumentService {
         void paragraph(String value, float size, float after) throws IOException {
             for (String line : wrap(value, size, WIDTH)) { ensure(size + 5); draw(stream, font, line, size, LEFT, y - size); y -= size + 5; }
             gap(after);
+        }
+        void invoiceHeader() throws IOException {
+            paragraph("PROFORMA INVOICE / 形式发票", 21, 8);
+            var d = pi.getDocument();
+            paragraph("Currency / 币种: " + text(pi.getCurrencyCode()) + "    Trade / 贸易: " + text(pi.getTradeType()), 9, 4);
+            if (d == null) return;
+            paragraph("Issued / 开单: " + Objects.toString(d.issueDate(), "")
+                    + "    Valid until / 有效期: " + Objects.toString(d.validUntil(), ""), 9, 10);
+            var seller = new ArrayList<String>();
+            seller.add("SELLER / 卖方"); seller.add(text(d.sellerName())); seller.add(text(d.sellerAddress()));
+            add(seller, "Country: ", d.sellerCountry()); add(seller, "Contact: ", d.sellerContactName());
+            add(seller, "Phone: ", d.sellerPhone()); add(seller, "Email: ", d.sellerEmail());
+            add(seller, "", d.sellerContact());
+            var buyer = new ArrayList<String>();
+            buyer.add("BUYER / 买方"); buyer.add(text(pi.getCustomerName()));
+            add(buyer, "Code: ", pi.getCustomerCode()); add(buyer, "", d.buyerAddress());
+            add(buyer, "Country: ", d.buyerCountry()); add(buyer, "Contact: ", d.buyerContactName());
+            add(buyer, "Phone: ", d.buyerPhone()); add(buyer, "Email: ", d.buyerEmail());
+            add(buyer, "", d.buyerContact()); add(buyer, "Account owner: ", d.businessOwner());
+            // 两栏独立换行，长联系人或地址可跨页，不依赖国家或固定公司名称。
+            var leftLines = new ArrayList<String>(); var rightLines = new ArrayList<String>();
+            for (String line : seller) leftLines.addAll(wrap(line, 9, 244));
+            for (String line : buyer) rightLines.addAll(wrap(line, 9, 244));
+            for (int i = 0; i < Math.max(leftLines.size(), rightLines.size()); i++) {
+                ensure(15);
+                if (i < leftLines.size()) draw(stream, font, leftLines.get(i), 9, LEFT, y - 9);
+                if (i < rightLines.size()) draw(stream, font, rightLines.get(i), 9, LEFT + 270, y - 9);
+                y -= 15;
+            }
+            gap(6);
         }
         List<String> wrap(String value, float size, float width) throws IOException {
             List<String> lines = new ArrayList<>();

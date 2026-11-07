@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="piFulfillmentAcceptance">
+  <update id="createDatabase">CREATE DATABASE IF NOT EXISTS bike_unified_acceptance CHARACTER SET utf8mb4</update>
+  <select id="schemaColumns" resultType="map">
+    SELECT TABLE_NAME,COLUMN_NAME,COLUMN_TYPE,IS_NULLABLE,COLUMN_DEFAULT
+    FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='bike_unified_migration_test'
+    AND TABLE_NAME IN ('bike_customer','bike_product_model','bike_warehouse','bike_warehouse_location','bike_production_sku','bike_vehicle','bike_production_vehicle')
+    ORDER BY TABLE_NAME,ORDINAL_POSITION
+  </select>
+  <insert id="seedCustomer">INSERT IGNORE INTO bike_customer(id,customer_code,customer_name,contact_name,contact_phone) VALUES(990001,'UF_ACCEPTANCE','统一履约验收客户（模拟）','测试联系人','TEST-000')</insert>
+  <insert id="seedWarehouse">INSERT IGNORE INTO bike_warehouse(id,warehouse_code,warehouse_name) VALUES(990001,'UF_ACCEPTANCE','欧洲验收仓（模拟）')</insert>
+  <insert id="seedLocation">INSERT IGNORE INTO bike_warehouse_location(id,warehouse_id,location_code,location_name) VALUES(990001,990001,'UF-A','验收库位')</insert>
+  <insert id="seedModel">INSERT IGNORE INTO bike_product_model(id,model_code,model_name) VALUES(990001,'UF_ACCEPTANCE','统一履约验收车型')</insert>
+  <insert id="seedSku">INSERT IGNORE INTO bike_production_sku(id,model_id,sku_code,product_name,specification,template_id) SELECT 990001,990001,'UF_ACCEPTANCE','验收自行车（模拟）','Blue / 48V',MIN(id) FROM bike_production_template</insert>
+  <insert id="seedVehicles">
+    INSERT IGNORE INTO bike_vehicle(id,frame_sn,model_id,status,vehicle_qr_code,vehicle_qr_token,current_warehouse_id,current_location_id,stock_in_time)
+    WITH RECURSIVE numbers(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM numbers WHERE n&lt;100)
+    SELECT 990000+n,CONCAT('UF-FRAME-',n),990001,2,CONCAT('UF-QR-',n),CONCAT('UF-TOKEN-',n),990001,990001,NOW(3) FROM numbers
+  </insert>
+  <insert id="seedProductionVehicles">
+    INSERT IGNORE INTO bike_production_vehicle(vehicle_id,task_id,sku_id,batch_no)
+    SELECT id,CONCAT('UF-TASK-',id),990001,'UF-ACCEPTANCE' FROM bike_vehicle WHERE id BETWEEN 990001 AND 990100
+  </insert>
+  <select id="availableVehicle" resultType="string">SELECT vehicle_qr_code FROM bike_vehicle WHERE model_id=990001 AND status=2 ORDER BY id LIMIT 1</select>
+  <select id="acceptanceCounts" resultType="map">SELECT (SELECT COUNT(*) FROM bike_pi WHERE customer_id=990001) piCount,(SELECT COUNT(*) FROM bike_stock_out_record WHERE customer_id=990001 AND status='COMPLETED') shippedCount</select>
+</mapper>

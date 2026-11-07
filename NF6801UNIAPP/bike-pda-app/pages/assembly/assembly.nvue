@@ -1,0 +1,343 @@
+<template>
+  <scroll-view class="page" scroll-y
+    ><view class="content">
+      <text v-if="message" :class="['feedback', failed ? 'error' : '']">{{
+        message
+      }}</text>
+      <view v-if="pending" class="card"
+        ><text class="text error"
+          >上次写入结果未确认，已阻止再次扫码。请查找并恢复任务。</text
+        ><action-button
+          label="已经核对，解除本机锁定"
+          secondary
+          :disabled="busy"
+          @click="acknowledgePending"
+      /></view>
+      <view class="card"
+        ><text class="subtitle">选择生产工单</text>
+        <form-field
+          v-model="keyword"
+          label="工单号 / SKU / 商品"
+          :disabled="busy"
+          @confirm="search"
+        />
+        <action-button
+          label="搜索工单"
+          secondary
+          :disabled="busy || !ready"
+          @click="search"
+        />
+        <choice-list
+          :value="workOrderId"
+          :options="orderOptions"
+          label="已下达工单"
+          :disabled="busy || !!task || !!pending"
+          @input="selectOrder"
+        />
+        <text class="muted">第 {{ listPage }} 页，共 {{ total }} 条</text>
+        <action-button
+          label="上一页"
+          secondary
+          :disabled="busy || listPage <= 1"
+          @click="run(() => loadOrders(listPage - 1))"
+        />
+        <action-button
+          label="下一页"
+          secondary
+          :disabled="busy || listPage * pageSize >= total"
+          @click="run(() => loadOrders(listPage + 1))"
+        />
+        <text v-if="selectedOrder" class="text"
+          >当前：{{ selectedOrder.workOrderNo }} · {{ selectedOrder.skuCode }} ·
+          {{ selectedOrder.completedQuantity }}/{{
+            selectedOrder.plannedQuantity
+          }}</text
+        >
+      </view>
+      <view class="card"
+        ><text class="subtitle">四码任意顺序</text>
+        <choice-list
+          v-model="expectedType"
+          label="编码类型（未知新车架请选择车架）"
+          :options="types"
+          :disabled="busy"
+        />
+        <form-field
+          v-model="code"
+          label="车架 / 电机 / 电池 / 仪表编码"
+          :disabled="busy || !!pending"
+          @confirm="scan"
+        />
+        <action-button
+          label="启动设备扫码"
+          secondary
+          :disabled="busy || !ready || !!pending"
+          @click="triggerScan"
+        />
+        <action-button
+          label="提交当前编码"
+          :disabled="busy || !ready || !workOrderId || !!pending"
+          @click="scan"
+        />
+        <text class="text">{{
+          task
+            ? "任务 " + task.id + " · " + task.scans.length + "/4"
+            : "等待扫描第一项"
+        }}</text>
+        <view v-if="task"
+          ><text v-for="item in task.scans" :key="item.codeType" class="text"
+            >{{ typeName(item.codeType) }}：{{ item.code }} ·
+            {{ item.operatorName }}</text
+          >
+          <form-field
+            v-model="reason"
+            label="取消本车作业原因"
+            :disabled="busy"
+          /><action-button
+            label="取消本车作业"
+            secondary
+            :disabled="busy || !reason.trim() || !!pending"
+            @click="cancelTask"
+          />
+        </view>
+      </view>
+      <view v-if="lastCompleted" class="card"
+        ><text class="subtitle">上一台已完成</text
+        ><text class="text" selectable>{{ lastCompleted.qrCode }}</text>
+        <action-button
+          label="复制聚合码"
+          secondary
+          :disabled="busy"
+          @click="copyCode"
+        /><action-button
+          label="查看标签并打印"
+          :disabled="busy"
+          @click="
+            go('prints/prints?taskId=' + encodeURIComponent(lastCompleted.id))
+          "
+        />
+      </view>
+      <view class="card"
+        ><text class="subtitle">任务恢复 / 跨设备交接</text
+        ><form-field v-model="taskId" label="任务 ID" :disabled="busy" />
+        <action-button
+          label="恢复任务"
+          secondary
+          :disabled="busy || !ready || !taskId"
+          @click="run(resume)"
+        />
+        <form-field
+          v-model="recoveryKeyword"
+          label="按已扫编码查找任务"
+          :disabled="busy"
+        /><action-button
+          label="查找任务"
+          secondary
+          :disabled="busy || !ready"
+          @click="findTasks"
+        />
+        <action-button
+          v-for="row in recoveryRows"
+          :key="row.id"
+          :label="
+            row.id +
+            ' · ' +
+            (row.frameSn || row.skuCode || '') +
+            ' · ' +
+            row.status
+          "
+          secondary
+          :disabled="busy"
+          @click="restoreRow(row.id)"
+        /> </view
+      ><action-button
+        label="登记生产异常 / 上传图片"
+        secondary
+        :disabled="busy"
+        @click="go('issues/issues')"
+      /> </view
+  ></scroll-view>
+</template>
+<script>
+import page, { confirm } from "../../common/page.js";
+import { get } from "../../common/api.js";
+import { readDraft, saveDraft, removeDraft } from "../../common/storage.js";
+import { writeOnce } from "../../common/operations.js";
+export default {
+  mixins: [page],
+  data: () => ({
+    mode: "assembly",
+    operationName: "assembly",
+    keyword: "",
+    orders: [],
+    workOrderId: "",
+    selectedOrder: null,
+    listPage: 1,
+    total: 0,
+    pageSize: 20,
+    task: null,
+    taskId: "",
+    code: "",
+    expectedType: "",
+    reason: "",
+    lastCompleted: null,
+    recoveryKeyword: "",
+    recoveryRows: [],
+    types: [
+      { value: "", text: "自动识别" },
+      { value: "FRAME", text: "车架" },
+      { value: "MOTOR", text: "电机" },
+      { value: "BATTERY", text: "电池" },
+      { value: "DISPLAY", text: "仪表" },
+    ],
+  }),
+  computed: {
+    orderOptions() {
+      return this.orders.map((row) => ({
+        value: row.id,
+        text: `${row.workOrderNo} · ${row.skuCode} · ${row.completedQuantity}/${row.plannedQuantity}`,
+      }));
+    },
+  },
+  methods: {
+    async load() {
+      const saved = readDraft("assembly", {});
+      this.workOrderId = saved.workOrderId || "";
+      this.taskId = saved.taskId || "";
+      this.lastCompleted = saved.lastCompleted || null;
+      const receipt = readDraft("result:assembly");
+      if (receipt?.result?.id) {
+        this.accept(receipt.result);
+        removeDraft("result:assembly");
+      }
+      await this.loadOrders(1);
+      if (this.taskId) await this.resume();
+    },
+    async loadOrders(next) {
+      const result = await get("/api/production/work-orders", {
+        keyword: this.keyword.trim(),
+        status: "RELEASED",
+        page: next,
+      });
+      this.orders = result.records;
+      this.total = result.total;
+      this.pageSize = result.pageSize || 20;
+      this.listPage = next;
+      this.selectedOrder =
+        this.orders.find((row) => row.id === this.workOrderId) ||
+        this.selectedOrder;
+    },
+    search() {
+      this.run(() => this.loadOrders(1));
+    },
+    selectOrder(id) {
+      this.workOrderId = id;
+      this.selectedOrder = this.orders.find((row) => row.id === id);
+      this.remember();
+    },
+    remember() {
+      saveDraft("assembly", {
+        workOrderId: this.workOrderId,
+        taskId: this.task?.id || "",
+        lastCompleted: this.lastCompleted,
+      });
+    },
+    typeName(value) {
+      return this.types.find((row) => row.value === value)?.text || value;
+    },
+    accept(result) {
+      this.workOrderId = result.workOrderId;
+      this.selectedOrder = result.workOrder || this.selectedOrder;
+      if (result.status === "COMPLETED") {
+        this.lastCompleted = result;
+        this.task = null;
+        this.taskId = "";
+        this.message = "本车四码绑定完成，聚合码与打印任务已生成";
+      } else if (result.status === "OPEN") {
+        this.task = result;
+        this.taskId = result.id;
+        this.message = `当前进度 ${result.scans.length}/4`;
+      } else {
+        this.task = null;
+        this.taskId = "";
+        this.message = "该任务已结束：" + result.status;
+      }
+      this.remember();
+      removeDraft("result:assembly");
+    },
+    async resume() {
+      const result = await get(
+        "/api/production/tasks/" + encodeURIComponent(this.taskId.trim()),
+      );
+      if (!result.workOrderId) throw new Error("历史任务未关联生产工单");
+      this.accept(result);
+    },
+    async onScan(code) {
+      if (!this.workOrderId) throw new Error("请先选择生产工单");
+      if (!code.trim()) throw new Error("请扫描或输入编码");
+      this.code = code;
+      const result = await writeOnce(
+        "assembly",
+        `/api/production/work-orders/${this.workOrderId}/scan`,
+        {
+          taskId: this.task?.id || null,
+          code: code.trim(),
+          expectedType: this.expectedType || null,
+        },
+      );
+      this.accept(result);
+      this.code = "";
+      this.expectedType = "";
+      // 先保存已经完成的任务，再刷新工单；刷新失败不改变业务成功状态。
+      if (result.status === "COMPLETED") {
+        try {
+          await this.loadOrders(this.listPage);
+        } catch (cause) {
+          this.message += "；工单列表刷新失败，可稍后重查";
+        }
+      }
+    },
+    scan() {
+      this.run(() => this.onScan(this.code));
+    },
+    cancelTask() {
+      this.run(async () => {
+        if (!this.task || !this.reason.trim())
+          throw new Error("请填写取消原因");
+        if (
+          !(await confirm("取消本车作业", "扫描历史会保留，部件占用将释放。"))
+        )
+          return;
+        await writeOnce(
+          "assembly",
+          `/api/production/tasks/${this.task.id}/cancel`,
+          { reason: this.reason.trim() },
+        );
+        this.task = null;
+        this.taskId = "";
+        this.reason = "";
+        this.remember();
+        this.message = "本车任务已取消";
+      });
+    },
+    findTasks() {
+      this.run(async () => {
+        this.recoveryRows = (
+          await get("/api/production/tasks", {
+            keyword: this.recoveryKeyword.trim(),
+            page: 1,
+          })
+        ).records;
+      });
+    },
+    restoreRow(id) {
+      this.taskId = id;
+      this.run(this.resume);
+    },
+    copyCode() {
+      uni.setClipboardData({ data: this.lastCompleted.qrCode });
+    },
+  },
+};
+</script>
+<style src="../../common/page.css"></style>

@@ -1,0 +1,10 @@
+node_modules/
+dist/
+unpackage/
+*.keystore
+*.jks
+*.dpapi
+*.apk
+release.local.json
+.hbuilderx/
+*.log

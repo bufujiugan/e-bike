@@ -1278,7 +1278,7 @@ async function submitPrimaryAction() {
         <el-table-column prop="shippedQty" label="已发货" />
         <el-table-column label="状态"><template #default="scope">{{ orderStateNames[scope.row.status] ?? scope.row.status }}</template></el-table-column>
         <el-table-column label="占用状态" min-width="185"><template #default="scope">{{ reservationLabel(scope.row.reservationStatus, isAgentAccount) }}</template></el-table-column>
-        <el-table-column v-if="!isAgentAccount" label="占用截止" min-width="210"><template #default="scope">{{ scope.row.reservationStatus === 'PAID_HELD' ? '待履约或人工关闭' : ['TIMED_ACTIVE', 'EXPIRED_REQUIRES_REACQUIRE'].includes(scope.row.reservationStatus) ? scope.row.reservationExpiresAt || '—' : '—' }}</template></el-table-column>
+        <el-table-column v-if="!isAgentAccount" label="占用截止" min-width="210"><template #default="scope">{{ ['PAID_HELD','CREDIT_HELD'].includes(scope.row.reservationStatus) ? '待履约或人工关闭' : ['TIMED_ACTIVE', 'EXPIRED_REQUIRES_REACQUIRE'].includes(scope.row.reservationStatus) ? scope.row.reservationExpiresAt || '—' : '—' }}</template></el-table-column>
         <el-table-column label="操作" width="100" fixed="right"><template #default="scope"><el-button link type="primary" @click="locateLinkedOrder(scope.row.orderNo)">查看订单</el-button></template></el-table-column>
       </el-table>
       <el-pagination v-model:current-page="linkedOrdersPage" :page-size="20" :total="linkedOrdersTotal" layout="prev, pager, next, total" @current-change="loadLinkedOrders" />

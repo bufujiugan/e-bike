@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class PiServiceImpl implements PiService {
+    @org.springframework.beans.factory.annotation.Autowired private PiFulfillmentProfileService fulfillmentProfiles;
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.common.CustomerScopeAccess customerScope;
     private static final BigDecimal ZERO = new BigDecimal("0.00");
     private static final BigDecimal MAX_MONEY = new BigDecimal("9999999999999999.99");
@@ -193,6 +194,11 @@ public class PiServiceImpl implements PiService {
         PiDocumentSnapshot document=existing==null && customerSnapshots!=null ? customerSnapshots.capture(request.customerId(),request.document()) : request.document();
         if(business!=null) {
             business.validateTerms(document,trade);
+            if(fulfillmentProfiles!=null) {
+                var previousDocument=existing==null?null:business.document(existing.getId());
+                Long previousProfile=previousDocument==null||previousDocument.business()==null?null:previousDocument.business().fulfillmentProfileId();
+                fulfillmentProfiles.validateSelection(document,trade,existing==null||!Objects.equals(previousProfile,document.business().fulfillmentProfileId()));
+            }
             if(existing!=null&&existing.getPreviousRevisionId()!=null) {
                 var baseline=business.document(existing.getPreviousRevisionId());
                 if(baseline!=null&&baseline.business()!=null&&!sameFulfillmentTerms(baseline.business(),document.business()))
@@ -280,7 +286,10 @@ public class PiServiceImpl implements PiService {
         BigDecimal paid = mapper.paymentTotal(id);
         if (business != null) {
             if (previousRevision != null) business.validateReservedWarehouse(require(id));
-            if (previousRevision != null && paid.signum() > 0 && paid.compareTo(pi.getDepositRequiredAmount()) >= 0
+            var profile = fulfillmentProfiles == null ? null : fulfillmentProfiles.resolveProfile(business.document(id));
+            // 后付款修订需重新授权；确认只校验现有占用容量，不把待授权误判成库存不足。
+            if (previousRevision != null && (profile == null || !profile.rules().credit())
+                    && paid.signum() > 0 && paid.compareTo(pi.getDepositRequiredAmount()) >= 0
                     && !business.reserveAfterPayment(require(id), paid)) {
                 fail("PI_WAREHOUSE_STOCK_SHORTAGE", "修订数量超过指定仓库可用库存，不能确认修订");
             }
@@ -371,10 +380,12 @@ public class PiServiceImpl implements PiService {
         if (!"CONFIRMED".equals(pi.getStatus())) fail("INVALID_STATUS_TRANSITION", "只有已确认且未放行的 PI 可以放行");
         BigDecimal required = pi.getShipmentRequiredAmount();
         BigDecimal paid = mapper.paymentTotal(id);
-        if (required == null || paid.compareTo(required) < 0) {
+        var profile=fulfillmentProfiles==null?null:fulfillmentProfiles.resolveProfile(business.document(id));
+        if ((profile==null||!profile.rules().credit())&&(required == null || paid.compareTo(required) < 0)) {
             fail("PAYMENT_GATE_NOT_MET", "未达到该 PI 约定的发货收款条件，不能放行发货");
         }
         if(business!=null) {
+            business.requirePaymentAuthorization(id);
             business.requireContract(id);
             if(!business.reserveAfterPayment(pi,paid))fail("PI_WAREHOUSE_STOCK_SHORTAGE","指定仓库可用库存不足或履约SKU不完整，请核对后重试；到账记录已保留");
             business.requireShipment(id);
@@ -470,7 +481,9 @@ public class PiServiceImpl implements PiService {
         // 业务来源标记允许旧草稿补录，不改变已确认的仓库、出货地点或收款主体。
         return requested != null && Objects.equals(baseline.warehouseId(), requested.warehouseId())
                 && Objects.equals(baseline.domesticShipment(), requested.domesticShipment())
-                && Objects.equals(baseline.collectionEntity(), requested.collectionEntity());
+                && Objects.equals(baseline.collectionEntity(), requested.collectionEntity())
+                && Objects.equals(baseline.fulfillmentProfileId(), requested.fulfillmentProfileId())
+                && Objects.equals(baseline.paymentDueDate(), requested.paymentDueDate());
     }
 
     private PiView enrich(PiView pi) {
@@ -504,7 +517,7 @@ public class PiServiceImpl implements PiService {
             pi.setShipmentRequiredAmount(null);
             pi.setReleaseStatus(null);
             pi.setReleasedAt(null);
-            if (Set.of("PAID_HELD", "TIMED_ACTIVE").contains(Objects.toString(pi.getReservationStatus(), ""))) {
+            if (Set.of("PAID_HELD", "CREDIT_HELD", "TIMED_ACTIVE").contains(Objects.toString(pi.getReservationStatus(), ""))) {
                 pi.setReservationStatus("ACTIVE");
             }
         }
@@ -593,7 +606,7 @@ public class PiServiceImpl implements PiService {
         var lines=series.fulfillment(pi.getId());
         if(CurrentOperator.hasRole("WEB_AGENT")) lines=lines.stream().map(line -> new PiFulfillmentLine(
                 line.orderId(),line.orderNo(),line.status(),line.skuId(),line.skuCode(),line.orderedQty(),
-                line.shippedQty(),line.closedQty(),line.remainingQty(),Set.of("PAID_HELD","TIMED_ACTIVE").contains(line.reservationStatus())?"ACTIVE":line.reservationStatus())).toList();
+                line.shippedQty(),line.closedQty(),line.remainingQty(),Set.of("PAID_HELD","CREDIT_HELD","TIMED_ACTIVE").contains(line.reservationStatus())?"ACTIVE":line.reservationStatus())).toList();
         pi.setFulfillment(lines);
         if(!lines.isEmpty()) {
             var states=lines.stream().map(PiFulfillmentLine::reservationStatus).distinct().toList();

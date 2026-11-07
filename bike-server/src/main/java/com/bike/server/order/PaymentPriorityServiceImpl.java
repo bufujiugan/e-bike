@@ -121,7 +121,7 @@ public class PaymentPriorityServiceImpl implements PaymentPriorityService {
     private void cancelOrder(long orderId,long paidPiId,String reason) {
         var order=orders.selectForUpdate(orderId);
         var reservation=reservations.selectForUpdate(orderId);
-        if(order.getShippedQty()>0||reservation!=null&&"PAID".equals(reservation.holdMode()))fail();
+        if(order.getShippedQty()>0||reservation!=null&&java.util.Set.of("PAID","CREDIT").contains(reservation.holdMode()))fail();
         if(reservation!=null&&!"RELEASED".equals(reservation.holdMode())&&reservations.release(orderId)!=1)fail();
         inventory.closeRemainder(orderId);
         if(mapper.updateCancelledOrder(orderId,reason)!=1)fail();

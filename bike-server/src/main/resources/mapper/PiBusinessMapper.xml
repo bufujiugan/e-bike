@@ -16,7 +16,7 @@
     FROM bike_order_reservation_item i JOIN bike_order_reservation r ON r.order_id=i.order_id
     JOIN bike_sales_order o ON o.id=r.order_id JOIN bike_pi_order_link link ON link.order_id=o.id
     JOIN bike_pi_series series ON series.id=link.series_id JOIN bike_pi p ON p.id=series.current_pi_id
-    WHERE i.sku_id=#{skuId} AND r.hold_mode='PAID' AND o.status IN ('CONFIRMED','PARTIAL_SHIPPED')
+    WHERE i.sku_id=#{skuId} AND r.hold_mode IN ('PAID','CREDIT') AND o.status IN ('CONFIRMED','PARTIAL_SHIPPED')
       AND series.id!=#{excludedSeriesId}
       AND CAST(JSON_UNQUOTE(JSON_EXTRACT(p.document_snapshot,'$.business.warehouseId')) AS UNSIGNED)=#{warehouseId}
   </select>
@@ -67,6 +67,6 @@
     UPDATE bike_pi_workflow_step step JOIN bike_pi_series series ON series.current_pi_id=step.pi_id
     JOIN bike_pi origin ON origin.series_id=series.id
     SET step.status='PENDING',step.completed_by=NULL,step.completed_at=NULL
-    WHERE origin.id=#{piId} AND step.step_code IN ('WAREHOUSE_ARRIVED','TRACKING_RECORDED','CUSTOMER_RECEIVED')
+    WHERE origin.id=#{piId} AND step.step_code IN ('WAREHOUSE_ARRIVED','TRACKING_RECORDED','CUSTOMER_RECEIVED','CI_SENT','RD_SENT','RD_SIGNED','CMR_COLLECTED','CASE_CLOSED')
   </update>
 </mapper>

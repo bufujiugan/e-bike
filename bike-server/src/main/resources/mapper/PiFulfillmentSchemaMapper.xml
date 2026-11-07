@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.pi.PiFulfillmentSchemaMapper">
+  <update id="createProfiles">
+    CREATE TABLE bike_pi_fulfillment_profile (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      profile_code VARCHAR(64) NOT NULL,
+      version VARCHAR(32) NOT NULL,
+      profile_json JSON NOT NULL,
+      enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      created_by BIGINT NULL,
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      UNIQUE KEY uk_pi_fulfillment_version(profile_code,version)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  </update>
+  <update id="allowCreditHold">ALTER TABLE bike_order_reservation DROP CHECK ck_reservation_hold_mode, ADD CONSTRAINT ck_reservation_hold_mode CHECK (hold_mode IN ('TIMED','PAID','CREDIT','RELEASED'))</update>
+</mapper>

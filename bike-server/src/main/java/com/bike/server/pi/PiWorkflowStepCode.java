@@ -14,7 +14,16 @@ public enum PiWorkflowStepCode {
     WAREHOUSE_ARRIVED(12, "确认到达货代仓库并保留凭证"),
     TRACKING_RECORDED(7, "登记货代发货号、费用并跟踪运输"),
     CUSTOMER_RECEIVED(8, "确认全部货物签收，完成订单"),
-    PRODUCTION_FOLLOW_UP(4, "生产跟进（可选）");
+    PRODUCTION_FOLLOW_UP(4, "生产跟进（可选）"),
+    CREDIT_APPROVED(13, "批准后付款及库存保留"),
+    DISPATCH_SHEET_SENT(14, "同步出货表并登记接收情况"),
+    GOODS_PREPARED(15, "确认备货完成"),
+    CI_SENT(16, "登记 CI 已发送"),
+    RD_SENT(17, "登记 RD 已发送"),
+    RD_SIGNED(18, "收回已签署 RD"),
+    CMR_COLLECTED(19, "收集 CMR"),
+    PAYMENT_SETTLED(20, "确认全部应收款到账"),
+    CASE_CLOSED(21, "核对交付、结算和单据后结案");
 
     private final int order;
     private final String name;

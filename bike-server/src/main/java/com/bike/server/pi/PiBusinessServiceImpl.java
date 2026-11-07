@@ -16,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class PiBusinessServiceImpl implements PiBusinessService {
     @org.springframework.beans.factory.annotation.Autowired private PaymentPriorityService paymentPriority;
     @org.springframework.beans.factory.annotation.Autowired private PiOrderBindingService orderBinding;
+    @org.springframework.beans.factory.annotation.Autowired private PiFulfillmentProfileService profiles;
+    @org.springframework.beans.factory.annotation.Autowired private PiFulfillmentProfileMapper profileMapper;
     private final PiBusinessMapper mapper;
     private final PiMapper pis;
     private final PiSeriesMapper series;
@@ -40,8 +42,9 @@ public class PiBusinessServiceImpl implements PiBusinessService {
         if(d==null||d.business()==null||d.business().warehouseId()==null||d.business().domesticShipment()==null)
             fail("PI_BUSINESS_REQUIRED","请补齐出库仓库及是否国内出货；不同仓库须分别建立PI");
         if(mapper.countEnabledWarehouse(d.business().warehouseId())!=1)fail("WAREHOUSE_NOT_FOUND","出库仓库不存在或已停用");
+        if(profiles!=null)profiles.validateSelection(d,tradeType,false);
         String expected="EXPORT".equals(tradeType)?"HONG_KONG":"GUANGTA";
-        if(!expected.equals(d.business().collectionEntity()))fail("PI_COLLECTION_ENTITY_INVALID","内销收款主体须为广塔，外销须为香港");
+        if(profile(d)==null&&!expected.equals(d.business().collectionEntity()))fail("PI_COLLECTION_ENTITY_INVALID","内销收款主体须为广塔，外销须为香港");
         if(blank(d.bankName())||blank(d.bankAccount())||blank(d.beneficiary()))fail("PI_BANK_REQUIRED","请确认收款主体对应的银行、账户和收款人");
     }
     private PiWorkflowDetails step(long piId,String code) {
@@ -60,21 +63,25 @@ public class PiBusinessServiceImpl implements PiBusinessService {
     }
     public void requireDocuments(long piId) {
         var d=step(piId,"DOCUMENTS_READY");
-        if(d==null||blank(d.contractNo())||!Boolean.TRUE.equals(d.contractReady())||!Boolean.TRUE.equals(d.paymentTableReady()))
+        var p=profile(document(piId));
+        if(d==null||((p==null||p.rules().salesContractRequired())&&(blank(d.contractNo())||!Boolean.TRUE.equals(d.contractReady())))||!Boolean.TRUE.equals(d.paymentTableReady()))
             fail("PI_DOCUMENTS_REQUIRED","请先确认PI、销售合同及收付款表");
     }
     public void requireContract(long piId) {
         var pi=pis.selectById(piId);var d=document(piId);validateTerms(d,pi.getTradeType());requireDocuments(piId);
-        if(Boolean.TRUE.equals(d.business().domesticShipment())) {
+        var p=profile(d);
+        if(p==null?Boolean.TRUE.equals(d.business().domesticShipment()):p.rules().purchaseContractRequired()) {
             var contract=step(piId,"PURCHASE_CONTRACT_READY");
-            if(contract==null||blank(contract.purchaseContractNo())||!Set.of("SAVA","YINSANHUAN").contains(Objects.toString(contract.purchaseContractParty(),"")))
-                fail("PI_PURCHASE_CONTRACT_REQUIRED","国内出货须补齐SAVA或银三环购销合同后才能出库");
+            if(contract==null||blank(contract.purchaseContractNo())||(p==null?!Set.of("SAVA","YINSANHUAN").contains(Objects.toString(contract.purchaseContractParty(),"")):blank(contract.purchaseContractParty())))
+                fail("PI_PURCHASE_CONTRACT_REQUIRED",p==null?"国内出货须补齐SAVA或银三环购销合同后才能出库":"请按履约配置补齐购销合同后再出库");
         }
     }
     @Transactional(propagation=Propagation.MANDATORY)
     public boolean reserveAfterPayment(PiView pi,BigDecimal paid) {
         var d=document(pi.getId());
-        if(d==null||d.business()==null||pi.getDepositRequiredAmount()==null||paid==null||paid.signum()<=0||paid.compareTo(pi.getDepositRequiredAmount())<0)return false;
+        boolean credit=creditApproved(pi.getId(),d);
+        if(profile(d)!=null&&profile(d).rules().credit()&&!credit)return false;
+        if(!credit&&(d==null||d.business()==null||pi.getDepositRequiredAmount()==null||paid==null||paid.signum()<=0||paid.compareTo(pi.getDepositRequiredAmount())<0))return false;
         validateTerms(d,pi.getTradeType());
         var lines=series.fulfillment(pi.getId());
         var items=pis.selectItems(pi.getId());
@@ -92,7 +99,7 @@ public class PiBusinessServiceImpl implements PiBusinessService {
                 var reservation=reservations.selectForUpdate(line.orderId());
                 if(reservation==null||"RELEASED".equals(reservation.holdMode()))return false;
             }
-            int owned=matching.stream().filter(l->"PAID_HELD".equals(l.reservationStatus())).mapToInt(PiFulfillmentLine::remainingQty).sum();
+            int owned=matching.stream().filter(l->Set.of("PAID_HELD","CREDIT_HELD").contains(l.reservationStatus())).mapToInt(PiFulfillmentLine::remainingQty).sum();
             if(inventory.selectFulfillmentSnapshot(item.getSkuId(),0).availableForOrder()+owned<remaining)return false;
         }
         var modelNeeded=new HashMap<Long,Integer>();var modelOwned=new HashMap<Long,Long>();
@@ -104,40 +111,40 @@ public class PiBusinessServiceImpl implements PiBusinessService {
             modelOwned.merge(order.getModelId(),owned,Long::sum);
         }
         for(var entry:modelNeeded.entrySet())if(reservations.selectFulfillmentSnapshot(entry.getKey(),0).availableForOrder()+modelOwned.getOrDefault(entry.getKey(),0L)<entry.getValue())return false;
-        if(lines.isEmpty())for(var item:items)createPaidOrder(pi,item);
-        else for(var line:lines)if(line.remainingQty()>0&&!"PAID_HELD".equals(line.reservationStatus())) {
-            if(mapper.updatePaidReservation(line.orderId(),pi.getId(),CurrentOperator.id())!=1)fail("PI_RESERVATION_FAILED","订单占用保留失败");
+        if(lines.isEmpty())for(var item:items)createReservedOrder(pi,item,credit);
+        else for(var line:lines)if(line.remainingQty()>0&&!Set.of("PAID_HELD","CREDIT_HELD").contains(line.reservationStatus())) {
+            if((credit?profileMapper.updateCreditReservation(line.orderId(),pi.getId(),CurrentOperator.id()):mapper.updatePaidReservation(line.orderId(),pi.getId(),CurrentOperator.id()))!=1)fail("PI_RESERVATION_FAILED","订单占用保留失败");
             if(Set.of("DRAFT","PENDING").contains(line.status())&&orders.updateStatus(line.orderId(),"CONFIRMED")!=1)
                 fail("PI_RESERVATION_FAILED","已收款订单确认失败");
         }
-        paymentPriority.cancelUnfulfillableUnpaidOrders(pi);
+        if(!credit)paymentPriority.cancelUnfulfillableUnpaidOrders(pi);
         if(logs.insert("PI",Long.toString(pi.getId()),"按仓确认收款库存占用",CurrentOperator.id(),CurrentOperator.username(),null,
-                serialize(Map.of("warehouseId",d.business().warehouseId())),CurrentOperator.clientIp(),"累计收款达到PI约定定金后保留指定仓库库存")!=1)
+                serialize(Map.of("warehouseId",d.business().warehouseId())),CurrentOperator.clientIp(),credit?"经授权保留后付款订单库存，未登记收款":"累计收款达到PI约定定金后保留指定仓库库存")!=1)
             fail("PI_AUDIT_FAILED","库存占用审计失败");
         return true;
     }
-    private void createPaidOrder(PiView pi,PiItemView item) {
+    private void createReservedOrder(PiView pi,PiItemView item,boolean credit) {
         String no="SO"+UUID.randomUUID().toString().replace("-","").substring(0,18).toUpperCase();
-        var request=new SalesOrderCreateRequest(pi.getCustomerId(),pi.getAgentId(),item.getProductModelId(),item.getQuantity(),pi.getPlannedShipDate(),"PI收款后履约："+pi.getPiNo());
+        var request=new SalesOrderCreateRequest(pi.getCustomerId(),pi.getAgentId(),item.getProductModelId(),item.getQuantity(),pi.getPlannedShipDate(),(credit?"PI后付款授权履约：":"PI收款后履约：")+pi.getPiNo());
         if(orders.insertOrder(no,request,CurrentOperator.id())!=1||orders.insertItem(no,request)!=1)fail("PI_RESERVATION_FAILED","履约订单创建失败");
         long orderId=orders.selectByNo(no).getId();String lockNo="LK"+UUID.randomUUID().toString().replace("-","").substring(0,16).toUpperCase();
-        if(mapper.insertPaidSource(pi.getId(),item.getSkuId(),item.getQuantity(),lockNo,CurrentOperator.id())!=1)fail("PI_RESERVATION_FAILED","收款占用来源保存失败");
+        if((credit?profileMapper.insertCreditSource(pi.getId(),item.getSkuId(),item.getQuantity(),lockNo,CurrentOperator.id()):mapper.insertPaidSource(pi.getId(),item.getSkuId(),item.getQuantity(),lockNo,CurrentOperator.id()))!=1)fail("PI_RESERVATION_FAILED","收款占用来源保存失败");
         Long lockId = mapper.selectLockId(lockNo);
         if (lockId == null) fail("PI_RESERVATION_FAILED", "收款占用来源读取失败");
-        if(mapper.insertPaidReservation(orderId,lockId,pi.getId(),CurrentOperator.id())!=1
+        if((credit?profileMapper.insertCreditReservation(orderId,lockId,pi.getId(),CurrentOperator.id()):mapper.insertPaidReservation(orderId,lockId,pi.getId(),CurrentOperator.id()))!=1
                 ||inventory.insertReservationItem(orderId,item.getSkuId(),item.getQuantity())!=1
-                ||series.link(pi.getId(),orderId,"PAID_PI")!=1||orders.updateStatus(orderId,"CONFIRMED")!=1)
+                ||series.link(pi.getId(),orderId,credit?"CREDIT_PI":"PAID_PI")!=1||orders.updateStatus(orderId,"CONFIRMED")!=1)
             fail("PI_RESERVATION_FAILED","按仓库存占用创建失败");
     }
     public boolean hasReservedStock(PiView pi) {
         var lines=series.fulfillment(pi.getId());
         var document = document(pi.getId());
         return document != null && document.business() != null && document.business().warehouseId() != null
-                && pi.getPaidAmount() != null && pi.getPaidAmount().signum() > 0 && pi.getDepositRequiredAmount() != null
-                && pi.getPaidAmount().compareTo(pi.getDepositRequiredAmount()) >= 0
+                && (creditApproved(pi.getId(),document) || pi.getPaidAmount() != null && pi.getPaidAmount().signum() > 0 && pi.getDepositRequiredAmount() != null
+                && pi.getPaidAmount().compareTo(pi.getDepositRequiredAmount()) >= 0)
                 && !lines.isEmpty() && matchesFulfillment(pis.selectItems(pi.getId()), lines)
                 && lines.stream().allMatch(l -> l.remainingQty() == 0
-                    || "PAID_HELD".equals(l.reservationStatus()) && Set.of("CONFIRMED", "PARTIAL_SHIPPED").contains(l.status()));
+                    || Set.of("PAID_HELD","CREDIT_HELD").contains(l.reservationStatus()) && Set.of("CONFIRMED", "PARTIAL_SHIPPED").contains(l.status()));
     }
     private boolean matchesFulfillment(List<PiItemView> items, List<PiFulfillmentLine> lines) {
         var expected = new HashMap<Long, Integer>();
@@ -156,7 +163,7 @@ public class PiBusinessServiceImpl implements PiBusinessService {
         validateTerms(d, pi.getTradeType());
         var held = new HashMap<Long, Integer>();
         for (var line : series.fulfillment(pi.getId())) {
-            if (line.remainingQty() > 0 && "PAID_HELD".equals(line.reservationStatus())) {
+            if (line.remainingQty() > 0 && Set.of("PAID_HELD","CREDIT_HELD").contains(line.reservationStatus())) {
                 if (line.skuId() == null) fail("PI_LEGACY_SKU_REQUIRED", "历史订单缺少精确SKU，请先核对履约关系");
                 held.merge(line.skuId(), line.remainingQty(), Integer::sum);
             }
@@ -171,11 +178,23 @@ public class PiBusinessServiceImpl implements PiBusinessService {
     public void requireShipment(long piId) {
         requireContract(piId);var pi=pis.selectById(piId);
         if (orderBinding != null) orderBinding.requireConsistentFulfillment(pi);
-        if(pi.getPaidAmount()==null||pi.getShipmentRequiredAmount()==null||pi.getPaidAmount().compareTo(pi.getShipmentRequiredAmount())<0)
+        requirePaymentAuthorization(piId);
+        if(!creditApproved(piId,document(piId))&&(pi.getPaidAmount()==null||pi.getShipmentRequiredAmount()==null||pi.getPaidAmount().compareTo(pi.getShipmentRequiredAmount())<0))
             fail("PI_PAYMENT_INSUFFICIENT","累计收款未达到PI约定出货付款门槛，不能出库");
         if (mapper.countPaymentsWithoutReceipt(piId) > 0)
             fail("PI_RECEIPT_REQUIRED", "请为已确认收款上传收款凭证后再放行出库");
+        var profile=profile(document(piId));
+        if(profile!=null) {
+            if(profile.rules().dispatchSheetRequired()&&step(piId,"DISPATCH_SHEET_SENT")==null)fail("PI_PREPARATION_REQUIRED","请先同步出货表");
+            if(profile.rules().preparationRequired()&&step(piId,"GOODS_PREPARED")==null)fail("PI_PREPARATION_REQUIRED","请先确认备货完成");
+            if(step(piId,"FORWARDER_SELECTED")==null)fail("PI_DELIVERY_REQUIRED","请先确认提货或运输安排");
+        }
         if(!hasReservedStock(pi))fail("PI_WAREHOUSE_RESERVATION_REQUIRED","请先确认指定仓库库存占用");
+    }
+    public void requirePaymentAuthorization(long piId) {
+        var document=document(piId);var configured=profile(document);
+        if(configured!=null&&configured.rules().credit()&&!creditApproved(piId,document))
+            fail("PI_CREDIT_APPROVAL_REQUIRED","后付款订单须先完成本修订的授权");
     }
     public void requireVehicle(long piId,long vehicleId) {
         var d=document(piId);
@@ -200,9 +219,11 @@ public class PiBusinessServiceImpl implements PiBusinessService {
         if (piId != null) mapper.updateDeliveryPending(piId);
     }
     public boolean allDispatched(long piId){return mapper.countActiveShipments(piId)>0&&mapper.countUnshipped(piId)==0;}
-    public boolean isCustomerForwarder(long piId){var d=step(piId,"FORWARDER_SELECTED");return d!=null&&"CUSTOMER".equals(d.forwarderResponsibility());}
+    public boolean isCustomerForwarder(long piId){var d=step(piId,"FORWARDER_SELECTED");var p=profile(document(piId));return p!=null?p.rules().customerPickup():d!=null&&"CUSTOMER".equals(d.forwarderResponsibility());}
     public boolean allTracked(long piId){return allDispatched(piId)&&mapper.countUntrackedBatches(piId)==0;}
     public void requireArrivalProof(long piId,String id){if(blank(id)||mapper.countArrivalProof(piId,id)<1)fail("PI_ARRIVAL_PROOF_REQUIRED","请先上传本PI物流附件，并选择到货凭证");}
+    private PiFulfillmentProfile profile(PiDocumentSnapshot document){return profiles==null?null:profiles.resolveProfile(document);}
+    private boolean creditApproved(long piId,PiDocumentSnapshot document){var p=profile(document);return p!=null&&p.rules().credit()&&step(piId,"CREDIT_APPROVED")!=null;}
     private String serialize(Object value){try{return json.writeValueAsString(value);}catch(com.fasterxml.jackson.core.JsonProcessingException error){throw new IllegalStateException("库存审计序列化失败",error);}}
     private static boolean blank(String s){return s==null||s.isBlank();}
     private static void fail(String code,String message){throw new BusinessException(code,message);}

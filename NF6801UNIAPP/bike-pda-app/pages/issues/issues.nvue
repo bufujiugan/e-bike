@@ -1,0 +1,288 @@
+<template>
+  <scroll-view class="page" scroll-y
+    ><view class="content">
+      <text v-if="message" :class="['feedback', failed ? 'error' : '']">{{
+        message
+      }}</text>
+      <view v-if="pending" class="card"
+        ><text class="text error"
+          >上次异常登记结果未确认，请先在下方搜索异常记录。</text
+        ><action-button
+          label="已核对，解除锁定"
+          secondary
+          :disabled="busy"
+          @click="acknowledgePending"
+      /></view>
+      <view class="card"
+        ><form-field
+          v-model="code"
+          label="车辆或部件编码"
+          :disabled="busy || !!issueId"
+        /><form-field
+          v-model="reason"
+          label="异常原因"
+          :disabled="busy || !!issueId"
+        />
+        <action-button
+          label="启动设备扫码"
+          secondary
+          :disabled="busy || !ready || !!issueId"
+          @click="triggerScan"
+        /><action-button
+          label="登记异常并隔离"
+          :disabled="busy || !ready || !!issueId || !!pending"
+          @click="submit"
+        />
+        <text v-if="issueId" class="text">已登记异常：{{ issueId }}</text
+        ><action-button
+          v-if="issueId"
+          label="新建另一条异常"
+          secondary
+          :disabled="busy"
+          @click="newIssue"
+        />
+      </view>
+      <view v-if="issueId" class="card"
+        ><text class="subtitle">异常图片</text
+        ><text class="muted"
+          >每批最多 20 张 JPG / PNG / WebP，每张最大
+          20MB。失败图片可单独重试。</text
+        >
+        <action-button
+          label="拍照 / 从相册选择"
+          secondary
+          :disabled="busy || entries.length >= 20"
+          @click="chooseImages"
+        /><action-button
+          label="上传待处理图片"
+          :disabled="busy || !ready || !entries.length"
+          @click="uploadAll"
+        />
+        <view v-for="entry in entries" :key="entry.id" class="card"
+          ><image
+            class="image"
+            :src="entry.path"
+            mode="aspectFit"
+            @click="preview(entry.path)" /><text class="text"
+            >{{ entry.progress }}% · {{ entry.message || entry.state }}</text
+          ><action-button
+            v-if="entry.state === 'failed'"
+            label="重试此图片"
+            secondary
+            :disabled="busy || !ready"
+            @click="uploadOne(entry)"
+        /></view>
+      </view>
+      <view class="card"
+        ><text class="subtitle">查找已登记异常</text
+        ><form-field
+          v-model="keyword"
+          label="编码 / 原因 / 异常 ID"
+          :disabled="busy"
+        /><action-button
+          label="搜索异常"
+          secondary
+          :disabled="busy || !ready"
+          @click="findIssues"
+        />
+        <action-button
+          v-for="row in issues"
+          :key="row.id"
+          :label="
+            row.id +
+            ' · ' +
+            (row.code || row.frameSn || '') +
+            ' · ' +
+            row.reason
+          "
+          secondary
+          :disabled="busy"
+          @click="selectIssue(row)"
+        />
+      </view> </view
+  ></scroll-view>
+</template>
+<script>
+import page, { confirm } from "../../common/page.js";
+import { get, uploadImage } from "../../common/api.js";
+import {
+  readDraft,
+  saveDraft,
+  removeDraft,
+  uuid,
+} from "../../common/storage.js";
+import { writeOnce } from "../../common/operations.js";
+const nativeCall = (method, options) =>
+  new Promise((resolve, reject) =>
+    uni[method]({
+      ...options,
+      success: resolve,
+      fail: () => reject(new Error("操作取消或本地图片无法读取")),
+    }),
+  );
+export default {
+  mixins: [page],
+  data: () => ({
+    mode: "issues",
+    operationName: "issue",
+    code: "",
+    reason: "",
+    issueId: "",
+    entries: [],
+    keyword: "",
+    issues: [],
+  }),
+  methods: {
+    async load() {
+      const saved = readDraft("issue-draft", {});
+      this.code = saved.code || "";
+      this.reason = saved.reason || "";
+      this.issueId = saved.issueId || "";
+      this.entries = (saved.entries || []).map((row) => ({
+        ...row,
+        state: row.state === "uploading" ? "failed" : row.state,
+      }));
+      const receipt = readDraft("result:issue");
+      if (!this.issueId && receipt?.result?.id) {
+        this.issueId = receipt.result.id;
+        this.message = "已恢复最近登记的异常，可继续上传图片";
+      }
+    },
+    remember() {
+      saveDraft("issue-draft", {
+        code: this.code,
+        reason: this.reason,
+        issueId: this.issueId,
+        entries: this.entries,
+      });
+      removeDraft("result:issue");
+    },
+    async onScan(code) {
+      if (this.issueId) throw new Error("请先选择新建另一条异常");
+      this.code = code;
+      this.message = "编码已填入，请填写异常原因";
+    },
+    submit() {
+      this.run(async () => {
+        if (!this.code.trim() || !this.reason.trim())
+          throw new Error("请填写编码和原因");
+        if (
+          !(await confirm("登记并隔离", "相关车辆或部件会被隔离，暂停流转。"))
+        )
+          return;
+        const result = await writeOnce("issue", "/api/production/issues", {
+          code: this.code.trim(),
+          reason: this.reason.trim(),
+        });
+        this.issueId = result.id;
+        this.remember();
+        this.message = "异常已登记，可添加图片";
+      });
+    },
+    newIssue() {
+      this.run(async () => {
+        if (
+          this.entries.some((row) => row.state !== "saved") &&
+          !(await confirm(
+            "新建异常",
+            "当前尚有未上传的图片，确认放弃本批上传列表？",
+          ))
+        )
+          return;
+        this.issueId = "";
+        this.code = "";
+        this.reason = "";
+        this.entries = [];
+        this.remember();
+      });
+    },
+    chooseImages() {
+      this.run(async () => {
+        const result = await nativeCall("chooseImage", {
+          count: 20 - this.entries.length,
+          sizeType: ["original"],
+          sourceType: ["camera", "album"],
+        });
+        for (const file of result.tempFiles) {
+          if (!file.size || file.size > 20 * 1024 * 1024)
+            throw new Error("图片不得为空或超过 20MB");
+          const image = await nativeCall("getImageInfo", { src: file.path });
+          if (
+            !["jpg", "jpeg", "png", "webp"].includes(
+              String(image.type).toLowerCase(),
+            )
+          )
+            throw new Error("仅支持 JPG / PNG / WebP");
+          const saved = await nativeCall("saveFile", {
+            tempFilePath: file.path,
+          });
+          this.entries.push({
+            id: uuid(),
+            path: saved.savedFilePath,
+            state: "ready",
+            progress: 0,
+            message: "",
+          });
+          this.remember();
+        }
+      });
+    },
+    async uploadEntry(entry) {
+      entry.state = "uploading";
+      entry.message = "上传中";
+      this.remember();
+      try {
+        await uploadImage(this.issueId, entry, (progress) => {
+          entry.progress = progress;
+        });
+        entry.state = "saved";
+        entry.progress = 100;
+        entry.message = "已保存";
+      } catch (cause) {
+        entry.state = "failed";
+        entry.message = cause.message;
+      }
+      this.remember();
+    },
+    uploadAll() {
+      this.run(async () => {
+        for (const entry of this.entries.filter((row) => row.state !== "saved"))
+          await this.uploadEntry(entry);
+        this.message = "图片处理完成，请检查每张结果";
+      });
+    },
+    uploadOne(entry) {
+      this.run(() => this.uploadEntry(entry));
+    },
+    preview(path) {
+      uni.previewImage({ urls: [path] });
+    },
+    findIssues() {
+      this.run(async () => {
+        this.issues = (
+          await get("/api/production/issues", {
+            keyword: this.keyword.trim(),
+            page: 1,
+          })
+        ).records;
+      });
+    },
+    selectIssue(row) {
+      this.run(async () => {
+        if (
+          this.entries.some((entry) => entry.state !== "saved") &&
+          !(await confirm("切换异常", "当前有未上传图片，确认切换？"))
+        )
+          return;
+        this.issueId = row.id;
+        this.code = row.code || row.frameSn || "";
+        this.reason = row.reason;
+        this.entries = [];
+        this.remember();
+        this.message = "已选择异常，可以补充图片";
+      });
+    },
+  },
+};
+</script>
+<style src="../../common/page.css"></style>

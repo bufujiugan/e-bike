@@ -1,0 +1,75 @@
+{
+    "name" : "BIKE PDA",
+    "appid" : "__UNI__9B4F0FE",
+    "description" : "电动自行车生产与仓储 PDA 作业终端",
+    "versionName" : "1.0.3",
+    "versionCode" : "103",
+    "transformPx" : false,
+    "app-plus" : {
+        "renderer" : "native",
+        "usingComponents" : true,
+        "nvueStyleCompiler" : "uni-app",
+        "compilerVersion" : 3,
+        "splashscreen" : {
+            "alwaysShowBeforeRender" : true,
+            "waiting" : true,
+            "autoclose" : true,
+            "delay" : 0
+        },
+        "modules" : {
+            "Camera" : {},
+            "Gallery" : {}
+        },
+        "distribute" : {
+            "android" : {
+                "permissions" : [
+                    "<uses-permission android:name=\"android.permission.CAMERA\"/>",
+                    "<uses-permission android:name=\"android.permission.INTERNET\"/>",
+                    "<uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\"/>",
+                    "<uses-permission android:name=\"android.permission.ACCESS_WIFI_STATE\"/>",
+                    "<uses-permission android:name=\"android.permission.CHANGE_NETWORK_STATE\"/>",
+                    "<uses-permission android:name=\"android.permission.CHANGE_WIFI_STATE\"/>",
+                    "<uses-permission android:name=\"android.permission.WAKE_LOCK\"/>",
+                    "<uses-permission android:name=\"android.permission.VIBRATE\"/>",
+                    "<uses-permission android:name=\"android.permission.USB_PERMISSION\"/>",
+                    "<uses-feature android:name=\"android.hardware.usb.host\"/>"
+                ],
+                "minSdkVersion" : 21,
+                "targetSdkVersion" : 30,
+                "abiFilters" : [ "arm64-v8a" ],
+                "usesCleartextTraffic" : true
+            },
+            "icons" : {
+                "android" : {
+                    "mdpi" : "static/icons/bike-48.png",
+                    "hdpi" : "static/icons/bike-72.png",
+                    "xhdpi" : "static/icons/bike-96.png",
+                    "xxhdpi" : "static/icons/bike-144.png",
+                    "xxxhdpi" : "static/icons/bike-192.png"
+                }
+            },
+            "sdkConfigs" : {
+                "ad" : {}
+            },
+            "ios" : {
+                "dSYMs" : false
+            }
+        },
+        "nativePlugins" : {
+            "Qs601Module" : {
+                "__plugin_info__" : {
+                    "name" : "Qs601Module",
+                    "description" : "群索产品打印扫码SDK",
+                    "platforms" : "Android",
+                    "isCloud" : false,
+                    "parameters" : {}
+                }
+            }
+        }
+    },
+    "quickapp" : {},
+    "uniStatistics" : {
+        "enable" : false
+    },
+    "vueVersion" : "2"
+}

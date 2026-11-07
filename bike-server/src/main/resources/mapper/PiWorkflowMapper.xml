@@ -23,7 +23,16 @@
         (#{piId},9,'INVENTORY_RESERVED','锁定指定仓库销售库存','PENDING'),
         (#{piId},10,'PURCHASE_CONTRACT_READY','确认出库所需购销合同','PENDING'),
         (#{piId},11,'STOCK_DISPATCHED','等待并办理出库','PENDING'),
-        (#{piId},12,'WAREHOUSE_ARRIVED','确认到达货代仓库并保留凭证','PENDING')
+        (#{piId},12,'WAREHOUSE_ARRIVED','确认到达货代仓库并保留凭证','PENDING'),
+        (#{piId},13,'CREDIT_APPROVED','后付款授权','PENDING'),
+        (#{piId},14,'DISPATCH_SHEET_SENT','同步出货表','PENDING'),
+        (#{piId},15,'GOODS_PREPARED','备货完成','PENDING'),
+        (#{piId},16,'CI_SENT','CI发送','PENDING'),
+        (#{piId},17,'RD_SENT','RD发送','PENDING'),
+        (#{piId},18,'RD_SIGNED','RD回签','PENDING'),
+        (#{piId},19,'CMR_COLLECTED','CMR归档','PENDING'),
+        (#{piId},20,'PAYMENT_SETTLED','款项结清','PENDING'),
+        (#{piId},21,'CASE_CLOSED','业务结案','PENDING')
     </insert>
     <update id="inheritCompleted">
         UPDATE bike_pi_workflow_step target

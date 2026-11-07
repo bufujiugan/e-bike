@@ -151,7 +151,7 @@ public class OrderServiceImpl implements OrderService {
         order.setReservationHoldMode(null);
         order.setReservationHeldAt(null);
         order.setReservationExpiresAt(null);
-        if (Set.of("PAID_HELD", "TIMED_ACTIVE").contains(Objects.toString(order.getReservationStatus(), ""))) {
+        if (Set.of("PAID_HELD", "CREDIT_HELD", "TIMED_ACTIVE").contains(Objects.toString(order.getReservationStatus(), ""))) {
             order.setReservationStatus("ACTIVE");
         }
     }

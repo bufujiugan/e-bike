@@ -30,7 +30,7 @@ watch(() => props.modelValue, async (visible) => {
 
 type GuideDestination =
   | { label: string; kind: 'stage'; key: 'skus' | 'tasks' | 'prints' | 'inventory' | 'locks' | 'orders' }
-  | { label: string; kind: 'module'; key: 'models' | 'parts' | 'production-templates' }
+  | { label: string; kind: 'module'; key: 'models' | 'parts' | 'production-templates' | 'pis' | 'fulfillment-profiles' }
 
 type GuideStep = {
   title: string
@@ -97,20 +97,20 @@ const steps: GuideStep[] = [
   },
   {
     title: '锁定 SKU 库存', owner: '销售/库存管理员', menu: 'Web 后台 → 我的工作台 → 库存与锁定',
-    actions: ['按 SKU 核对“可新增锁定”数量，将目标 SKU 加入锁定，在“待锁定商品”中填写数量。', '点击“选择客户并锁定”或“锁定所选 SKU”，选择客户、可选代理商和有效期，再点击“确认锁定”。'],
-    result: '只占用指定数量，不锁整个 SKU，也不指定车架 SN。若可用 100 台且无其他限制，A 锁 30 台后，B 仍可锁 30 台，余量为 40 台；同时须满足 SKU 和车型剩余库存上限。', next: '在锁定转订单环节将锁定数量转成销售订单。',
+    actions: ['按 SKU 核对库存和已有占用，将目标 SKU 加入锁定，在“待锁定商品”中填写意向数量。预锁可超过当前库存，不代表已经正式保留足额库存。', '点击“选择客户并锁定”或“锁定所选 SKU”，选择客户、可选代理商和有效期，再点击“确认锁定”。'],
+    result: '记录 SKU 数量与有效期，不指定车架 SN。后续正式保留库存时重新核对仓库、SKU 与车型可用量；不足时须补货或调整数量。', next: '在锁定转订单环节将锁定数量转成销售订单。',
     destination: { label: '打开库存与锁定', kind: 'stage', key: 'inventory' },
   },
   {
     title: '锁定转销售订单', owner: '销售/订单管理员', menu: 'Web 后台 → 我的工作台 → 锁定转订单',
     actions: ['找到锁定记录，点击“转订单”。', '核对固定 SKU、客户、转换数量和计划出库日，点击“创建订单”。'],
-    result: '生成销售订单并保留对应库存占用；页面会直接打开新订单办理。', next: '进入订单办理确认销售订单；如有关联 PI，先完成 PI 放行。',
+    result: '生成销售订单并保留对应库存占用；页面会直接打开新订单办理。', next: '为销售出库建立并确认 PI，按所选履约配置办理。',
     destination: { label: '打开锁定转订单', kind: 'stage', key: 'locks' },
   },
   {
     title: '确认订单与 PI 放行', owner: '销售/订单管理员', menu: 'Web 后台 → 我的工作台 → 订单与出库',
-    actions: ['打开目标订单，核对客户、数量、库存占用和计划出库日。', '点击“确认订单，继续出库”。', '若订单关联 PI，在订单办理中打开“本单 PI 与发货放行”，完成 PI 确认、到账登记和发货放行。'],
-    result: '订单进入待出库状态；PI 订单还需满足发货放行条件。', next: 'PDA 按客户和订单扫描实际要发出的整车总码。',
+    actions: ['打开目标订单，核对客户、数量、库存占用和计划出库日。', '点击“确认订单，继续出库”。', '销售出库必须关联 PI。打开 PI 与履约，选择已发布的履约配置、实际仓库和对应模板。', '预付业务登记真实到账；后付款业务填写到期日，由有放行权限的人员批准后保留库存。', '按本单配置完成出货表、备货和提货安排；条件齐全后授权放行。客户货代提货也必须登记实际出库。'],
+    result: '库存按仓库和 SKU 保留；真实到账与后付款授权分别记录，放行后才能出库。', next: 'PDA 按客户和订单扫描实际要发出的整车总码。',
     destination: { label: '打开订单与出库', kind: 'stage', key: 'orders' },
   },
   {
@@ -118,6 +118,18 @@ const steps: GuideStep[] = [
     actions: ['先选择客户，再搜索并选择“待出库”或“部分出库且有待发数量”的订单。', '连续扫描每台整车的总码，核对订单数量和本次扫描数量。', '点击“确认批量出库”。'],
     result: '系统校验客户、订单余量、车辆库存和总码；成功后更新订单为部分出库或已完成。', next: '回 Web 订单办理核对已出库车辆和出库单。',
     pdaLink: true,
+  },
+  {
+    title: '管理员配置（首次开单前）', owner: '模板／业务管理员', menu: 'PI 与履约 → 履约配置',
+    actions: ['先在模板与银行资料中选择“标准明细表”或“双栏发票”版式，发布真实卖方及银行资料；版式独立于国家。', '在履约配置中选择模板、收款主体、适用仓库、付款方式和交付方式，并选择所需合同、备货及单据。新建 PI 必须选择已发布配置；历史无配置单据按原规则办理。', '发布版本后不可覆盖；调整时复制为新版本。停用仅限制新选用，历史单据仍使用原版本。后付款 PI 修订确认后须重新授权，原到账记录仍保留。'],
+    result: '不同国家共用配置能力；新国家或仓库不需要新增专用流程。', next: '开单时选用适合本笔业务的配置，确认前核对版本。',
+    destination: { label: '打开履约配置', kind: 'module', key: 'fulfillment-profiles' },
+  },
+  {
+    title: '运输、结算与单据结案', owner: '业务／物流／财务', menu: 'PI 与履约 → PI 详情 → 业务流程',
+    actions: ['按实际出库批次登记运输；客户货代提走与客户收到货分别确认。', '在业务单据附件上传出货表、CI、RD、已签 RD 或 CMR，再在对应流程节点选择文件并填写实际日期、接收人或办理情况。', '文件由经办人实际发送后登记，上传不会自动发给客户或工厂。', '登记真实到账及收款凭证；按配置核对款项结清、RD 回签和 CMR 后结案。可提前办理的单据和收款使用待办入口，无须等待列表顺序。'],
+    result: '签收仅代表交付完成，结案同时核对本单配置要求。', next: '撤回物流或出库后重新核对相关交付凭证及结案状态。',
+    destination: { label: '打开 PI 与履约', kind: 'module', key: 'pis' },
   },
 ]
 
@@ -134,6 +146,7 @@ function canOpen(step: GuideStep) {
   const destination = step.destination
   if (!destination) return false
   if (destination.kind === 'module') {
+    if (['pis','fulfillment-profiles'].includes(destination.key)) return hasPermission(props.context, 'PI_READ')
     if (destination.key === 'models') return hasPermission(props.context, 'MASTER_READ')
     if (destination.key === 'parts') return hasPermission(props.context, 'PART_READ')
     return !hasRole(props.context, 'WEB_AGENT') && hasAnyPermission(props.context, ['ASSEMBLY_OPERATE','REWORK_OPERATE','VEHICLE_READ','PRODUCTION_MANAGE'])
@@ -149,12 +162,18 @@ function canOpen(step: GuideStep) {
   }
   return hasPermission(props.context, 'ORDER_READ')
 }
-function open(step: GuideStep) {
+function destinationUrl(step: GuideStep) {
   const destination = step.destination
-  if (!destination || !canOpen(step)) return
-  emit('update:modelValue', false)
-  if (destination.kind === 'stage') emit('stage', destination.key)
-  else emit('navigate', destination.key)
+  if (!destination) return '#'
+  const url = new URL(window.location.origin)
+  if (destination.kind === 'stage') {
+    url.pathname = '/workflow'; url.searchParams.set('stage', destination.key)
+  } else {
+    const paths: Record<string, string> = { models: '/master/models', parts: '/parts', 'production-templates': '/production/templates', pis: '/pis' }
+    url.pathname = paths[destination.key] || '/pis'
+    if (destination.key === 'fulfillment-profiles') url.searchParams.set('panel', 'profiles')
+  }
+  return url.toString()
 }
 function close() { emit('update:modelValue', false) }
 </script>
@@ -167,14 +186,14 @@ function close() { emit('update:modelValue', false) }
       <el-button :type="activeView === 'steps' ? 'primary' : 'default'" :aria-pressed="activeView === 'steps'" @click="selectedStep = null; activeView = 'steps'">逐步操作</el-button>
     </div>
     <div ref="guideBody" class="guide-body">
-      <div v-if="activeView !== 'sequence'" class="guide-intro"><strong>从车型准备到订单出库，按顺序逐步办理</strong><span>Web 后台负责资料、生产单、扫码打印、库存和订单；PDA/H5 提供面向现场的组装、入库和出库操作。</span></div>
+      <div v-if="activeView !== 'sequence'" class="guide-intro"><strong>从车型准备到订单出库，按顺序逐步办理</strong><span>首次开单前由管理员完成文末的统一履约配置；Web 后台负责资料、生产、库存及履约；业务入口在新标签页打开，本说明保留供对照。已有库存可从库存与 PI 环节开始。</span></div>
       <div v-if="activeView !== 'sequence'" class="guide-entry"><span>当前 Web：工作台 → 我的工作台；页面右上角可随时重新打开本说明。正式环境请使用已配置的 PDA/H5 地址；本机联调地址：<a v-if="pdaUrl" :href="pdaUrl" target="_blank" rel="noopener noreferrer">{{ pdaUrl }}</a><span v-else>请联系管理员获取</span></span></div>
       <ProductionFulfillmentDiagrams v-if="activeView !== 'steps'" :mode="activeView" @select="showStep" />
       <ol v-else class="guide-steps">
         <li v-for="(step, index) in steps" :key="step.title" class="guide-step" :class="{ 'is-selected': selectedStep === index }" :data-guide-step="index" tabindex="-1">
           <div class="step-index" :class="`tone-${index % 4}`">{{ String(index + 1).padStart(2, '0') }}</div>
           <div class="step-content">
-            <div class="step-heading"><div><h3>{{ step.title }}</h3><span class="step-owner">{{ step.owner }}</span></div><div class="step-links"><el-button v-if="canOpen(step)" link type="primary" @click="open(step)">{{ step.destination?.label }}</el-button><a v-if="step.pdaLink && pdaUrl" :href="pdaUrl" target="_blank" rel="noopener noreferrer">打开本机 PDA/H5 <AppIcon name="arrow" /></a></div></div>
+            <div class="step-heading"><div><h3>{{ step.title }}</h3><span class="step-owner">{{ step.owner }}</span></div><div class="step-links"><a v-if="canOpen(step)" :href="destinationUrl(step)" target="_blank" rel="noopener noreferrer" :aria-label="`${step.destination?.label}（新标签页）`">{{ step.destination?.label }} ↗</a><a v-if="step.pdaLink && pdaUrl" :href="pdaUrl" target="_blank" rel="noopener noreferrer">打开本机 PDA/H5 <AppIcon name="arrow" /></a></div></div>
             <p class="step-menu"><strong>操作位置</strong> {{ step.menu }}</p>
             <ol class="step-actions"><li v-for="action in step.actions" :key="action">{{ action }}</li></ol>
             <div class="step-outcomes"><p><strong>完成后：</strong>{{ step.result }}</p><p><strong>下一步：</strong>{{ step.next }}</p></div>

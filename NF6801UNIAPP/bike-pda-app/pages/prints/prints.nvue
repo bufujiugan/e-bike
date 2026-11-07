@@ -1,0 +1,302 @@
+<template>
+  <scroll-view class="page" scroll-y
+    ><view class="content">
+      <text v-if="message" :class="['feedback', failed ? 'error' : '']">{{
+        message
+      }}</text>
+      <view class="card"
+        ><text class="subtitle">{{
+          taskId ? "当前车辆的打印任务" : "打印任务列表"
+        }}</text
+        ><action-button
+          label="刷新任务"
+          secondary
+          :disabled="busy || !ready"
+          @click="run(loadJobs)"
+        />
+        <choice-list
+          :value="job ? job.id : ''"
+          :options="jobOptions"
+          label="请选择任务"
+          :disabled="busy"
+          @input="selectJob"
+        />
+        <view v-if="!taskId"
+          ><text class="muted">第 {{ listPage }} 页，共 {{ total }} 条</text
+          ><action-button
+            label="上一页"
+            secondary
+            :disabled="busy || listPage <= 1"
+            @click="changePage(-1)" /><action-button
+            label="下一页"
+            secondary
+            :disabled="busy || listPage * 50 >= total"
+            @click="changePage(1)"
+        /></view>
+      </view>
+      <view v-if="job" class="card"
+        ><text class="subtitle">标签内容预览</text
+        ><text class="text"
+          >任务：{{ job.id }} · {{ statusName(job.status) }}</text
+        ><text class="muted"
+          >领取人：{{ job.claimedBy || "—" }} · {{ job.message || "" }}</text
+        ><text
+          v-for="(line, index) in previewLines"
+          :key="index"
+          class="text"
+          selectable
+          >{{ line }}</text
+        >
+        <text class="muted"
+          >打印前检查模板尺寸。SDK
+          发送后请核对实物，未知结果不会自动重打。</text
+        >
+        <action-button
+          label="领取任务并发送到本机打印"
+          :disabled="busy || !ready || job.status !== 'PENDING' || attempted"
+          @click="print"
+        />
+        <text v-if="attempted" class="text error"
+          >本机已有此任务的发送记录。请核对实物并回报，禁止重新发送同一任务。</text
+        >
+        <view v-if="canReport"
+          ><action-button
+            label="已确认提交 / 实物正常"
+            :disabled="busy || !ready"
+            @click="report('SUBMITTED')" /><action-button
+            label="确认未成功出纸"
+            secondary
+            :disabled="busy || !ready"
+            @click="report('FAILED')" /><action-button
+            label="结果不确定，待核对"
+            secondary
+            :disabled="busy || !ready"
+            @click="report('UNKNOWN')"
+        /></view>
+        <form-field
+          v-model="reason"
+          label="补打原因（请先核对实物）"
+          :disabled="busy"
+        /><action-button
+          label="创建补打任务"
+          secondary
+          :disabled="busy || !ready || !canReprint || !!pending"
+          @click="reprint"
+        />
+        <view v-if="pending"
+          ><text class="text error"
+            >补打请求结果未确认，请刷新车辆任务列表核对。</text
+          ><action-button
+            label="已核对补打任务，解除锁定"
+            secondary
+            :disabled="busy"
+            @click="acknowledgePending"
+        /></view> </view
+      ><action-button
+        label="纸张与设备设置"
+        secondary
+        :disabled="busy"
+        @click="go('settings/settings')"
+      /> </view
+  ></scroll-view>
+</template>
+<script>
+import page, { confirm } from "../../common/page.js";
+import { get, post } from "../../common/api.js";
+import { deviceConfig, readDraft, saveDraft } from "../../common/storage.js";
+import { createDevice } from "../../common/device.js";
+import { buildPaper, snapshotOf, labelFields } from "../../common/label.js";
+import { writeOnce } from "../../common/operations.js";
+const states = {
+  PENDING: "待打印",
+  PROCESSING: "已领取，待核对回报",
+  SUBMITTED: "已提交打印",
+  FAILED: "打印失败",
+  UNKNOWN: "结果待核对",
+};
+export default {
+  mixins: [page],
+  data: () => ({
+    mode: "prints",
+    operationName: "reprint",
+    taskId: "",
+    jobs: [],
+    job: null,
+    listPage: 1,
+    total: 0,
+    reason: "",
+    attempted: false,
+  }),
+  onLoad(options) {
+    this.taskId = options.taskId || "";
+  },
+  computed: {
+    jobOptions() {
+      return this.jobs.map((row) => ({
+        value: row.id,
+        text: row.id + " · " + this.statusName(row.status),
+      }));
+    },
+    previewLines() {
+      if (!this.job) return [];
+      try {
+        const snapshot = snapshotOf(this.job);
+        const profile = deviceConfig().labelProfile === "608_80X100";
+        return [
+          profile
+            ? "实际输出：80×100mm / 570点，608重新排版（以下为原始快照）"
+            : "按原始模板输出",
+          ...labelFields.map(
+            ([key, title]) => title + "：" + (snapshot[key] ?? "—"),
+          ),
+        ];
+      } catch (cause) {
+        return [cause.message];
+      }
+    },
+    canReport() {
+      return (
+        this.job?.status === "PROCESSING" &&
+        this.job.claimedBy === this.context?.username
+      );
+    },
+    canReprint() {
+      return this.job && !["PENDING", "PROCESSING"].includes(this.job.status);
+    },
+  },
+  methods: {
+    statusName(status) {
+      return states[status] || status;
+    },
+    async load() {
+      await this.loadJobs();
+    },
+    async loadJobs() {
+      if (this.taskId) {
+        this.jobs = await get(
+          `/api/production/tasks/${encodeURIComponent(this.taskId)}/prints`,
+        );
+      } else {
+        const result = await get("/api/production/prints", {
+          page: this.listPage,
+        });
+        this.jobs = result.records;
+        this.total = result.total;
+      }
+      if (this.job) {
+        this.job = await get(
+          "/api/production/prints/" + encodeURIComponent(this.job.id),
+        );
+        this.attempted = !!readDraft("print-attempt:" + this.job.id);
+      }
+    },
+    selectJob(id) {
+      this.run(async () => {
+        this.job = await get(
+          "/api/production/prints/" + encodeURIComponent(id),
+        );
+        this.attempted = !!readDraft("print-attempt:" + id);
+      });
+    },
+    changePage(delta) {
+      this.run(async () => {
+        this.listPage += delta;
+        await this.loadJobs();
+      });
+    },
+    print() {
+      this.run(async () => {
+        const config = deviceConfig();
+        if (!/^[a-zA-Z0-9_.-]{1,64}$/.test(config.terminal))
+          throw new Error("请先设置终端编号");
+        if (
+          !this.job ||
+          this.job.status !== "PENDING" ||
+          readDraft("print-attempt:" + this.job.id)
+        )
+          throw new Error("任务不能重复发送");
+        buildPaper(this.job, config);
+        if (
+          !(await confirm(
+            "发送标签到打印机",
+            config.labelProfile === "608_80X100"
+              ? `原任务模板 ${snapshotOf(this.job).widthMm}×${snapshotOf(this.job).heightMm}mm；本次保留字段，重新排版到 80×100mm 标签，不修改原任务快照。确认使用此版式并核对实物？`
+              : "请确认纸张、黑标和实际模板匹配。发送后必须人工核对出纸结果。",
+          ))
+        )
+          return;
+        if (this._device) this._device.close();
+        this._device = createDevice();
+        this._device.open();
+        try {
+          await this._device.ready();
+          this.job = await post(
+            `/api/production/prints/${encodeURIComponent(this.job.id)}/claim`,
+            { terminal: config.terminal },
+          );
+          const paper = buildPaper(this.job, config);
+          saveDraft("print-attempt:" + this.job.id, {
+            at: new Date().toISOString(),
+            terminal: config.terminal,
+            labelProfile: config.labelProfile,
+            paperWidthMm: config.paperWidthMm,
+            paperHeightMm: config.paperHeightMm,
+          });
+          this.attempted = true;
+          await this._device.print(paper);
+          this.message = "已调用设备打印，请核对实物并回报结果；不会自动重打";
+        } catch (cause) {
+          this.message = "打印结果需要核对";
+          throw cause;
+        }
+      });
+    },
+    report(status) {
+      this.run(async () => {
+        if (!this.canReport)
+          throw new Error("只能回报当前账号领取的处理中任务");
+        if (
+          !(await confirm(
+            "确认打印结果",
+            this.statusName(status) + "。请以现场核对结果为准。",
+          ))
+        )
+          return;
+        await post(
+          `/api/production/prints/${encodeURIComponent(this.job.id)}/result`,
+          { status, message: "PDA 操作员核对：" + this.statusName(status) },
+        );
+        this.job = { ...this.job, status };
+        this.message = "打印结果已记录";
+      });
+    },
+    reprint() {
+      this.run(async () => {
+        if (!this.canReprint || !this.reason.trim())
+          throw new Error("请先核对实物并填写补打原因");
+        if (
+          !(await confirm(
+            "创建补打任务",
+            "将生成新的打印任务，原任务及原因继续保留。",
+          ))
+        )
+          return;
+        this.job = await writeOnce(
+          "reprint",
+          `/api/production/prints/${encodeURIComponent(this.job.id)}/reprint`,
+          { reason: this.reason.trim() },
+        );
+        this.attempted = false;
+        this.reason = "";
+        this.message = "补打任务已生成，请选择领取打印";
+        try {
+          await this.loadJobs();
+        } catch (cause) {
+          this.message += "；列表刷新失败";
+        }
+      });
+    },
+  },
+};
+</script>
+<style src="../../common/page.css"></style>

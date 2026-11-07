@@ -1,0 +1,154 @@
+<template>
+  <scroll-view class="page" scroll-y
+    ><view class="content">
+      <text v-if="message" :class="['feedback', failed ? 'error' : '']">{{
+        message
+      }}</text>
+      <view v-if="pending" class="card"
+        ><text class="text error">上次入库结果未确认，请先追溯核对。</text
+        ><action-button
+          label="打开追溯"
+          secondary
+          @click="go('trace/trace')" /><action-button
+          label="已核对，解除锁定"
+          secondary
+          :disabled="busy"
+          @click="acknowledgePending"
+      /></view>
+      <view class="card"
+        ><choice-list
+          :value="warehouseId"
+          :options="warehouseOptions"
+          label="仓库"
+          :disabled="busy || !ready"
+          @input="chooseWarehouse"
+        />
+        <choice-list
+          v-model="locationId"
+          :options="locationOptions"
+          label="库位"
+          :disabled="busy || !ready"
+        />
+        <form-field
+          :value="code"
+          label="整车聚合码"
+          :disabled="busy || !!pending"
+          @input="changeCode"
+          @confirm="validate"
+        />
+        <action-button
+          label="启动设备扫码"
+          secondary
+          :disabled="busy || !ready || !!pending"
+          @click="triggerScan"
+        />
+        <action-button
+          label="校验车辆"
+          secondary
+          :disabled="busy || !ready || !!pending"
+          @click="validate"
+        />
+        <text v-if="checked" class="text"
+          >校验通过：{{ checked.frameSn || code }}</text
+        >
+        <action-button
+          label="确认入库"
+          :disabled="
+            busy ||
+            !ready ||
+            !checked ||
+            !warehouseId ||
+            !locationId ||
+            !!pending
+          "
+          @click="submit"
+        />
+      </view> </view
+  ></scroll-view>
+</template>
+<script>
+import page, { confirm } from "../../common/page.js";
+import { get, post } from "../../common/api.js";
+import { writeOnce } from "../../common/operations.js";
+export default {
+  mixins: [page],
+  data: () => ({
+    mode: "stock-in",
+    operationName: "stock-in",
+    warehouses: [],
+    locations: [],
+    warehouseId: "",
+    locationId: "",
+    code: "",
+    checked: null,
+  }),
+  computed: {
+    warehouseOptions() {
+      return this.warehouses.map((row) => ({ value: row.id, text: row.name }));
+    },
+    locationOptions() {
+      return this.locations.map((row) => ({ value: row.id, text: row.name }));
+    },
+  },
+  methods: {
+    async load() {
+      this.warehouses = (await get("/api/master/warehouses")).filter(
+        (row) => row.status === "ENABLED",
+      );
+      this.checked = null;
+    },
+    chooseWarehouse(id) {
+      this.run(async () => {
+        this.warehouseId = id;
+        this.locationId = "";
+        this.locations = [];
+        this.locations = (
+          await get(`/api/master/warehouses/${id}/locations`)
+        ).filter((row) => row.status === "ENABLED");
+      });
+    },
+    changeCode(value) {
+      this.code = value;
+      this.checked = null;
+    },
+    async onScan(value) {
+      this.code = value.trim();
+      this.checked = null;
+      if (!this.code) throw new Error("请输入整车聚合码");
+      const result = await post("/api/stock-in/validate", {
+        vehicleQrCode: this.code,
+      });
+      if (!result.valid) throw new Error(result.message || "车辆不能入库");
+      this.checked = result;
+      this.message = "校验通过，请确认仓库库位后入库";
+    },
+    validate() {
+      this.run(() => this.onScan(this.code));
+    },
+    submit() {
+      this.run(async () => {
+        if (!this.checked || !this.warehouseId || !this.locationId)
+          throw new Error("请先选择仓库库位并校验车辆");
+        if (
+          !(await confirm(
+            "确认入库",
+            "车辆 " +
+              (this.checked.frameSn || this.code) +
+              " 将入库到所选库位。",
+          ))
+        )
+          return;
+        await writeOnce("stock-in", "/api/stock-in", {
+          vehicleQrCode: this.code,
+          warehouseId: this.warehouseId,
+          locationId: this.locationId,
+        });
+        this.code = "";
+        this.checked = null;
+        this.message = "入库成功";
+      });
+    },
+  },
+};
+</script>
+<style src="../../common/page.css"></style>

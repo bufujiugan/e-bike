@@ -52,6 +52,48 @@ class PiBusinessServiceTest {
     }
     @AfterEach void cleanup() { SecurityContextHolder.clearContext(); }
 
+    private PiFulfillmentProfileMapper configureCredit(boolean approved) throws Exception {
+        var profiles=mock(PiFulfillmentProfileService.class);
+        var credit=mock(PiFulfillmentProfileMapper.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"profiles",profiles);
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"profileMapper",credit);
+        when(profiles.resolveProfile(any())).thenReturn(PiFulfillmentProfileTest.profile());
+        pi.setPaidAmount(BigDecimal.ZERO);
+        if(approved)when(workflow.selectSteps(1L)).thenReturn(List.of(new PiWorkflowStepRecord(13,"CREDIT_APPROVED","授权","COMPLETED",1L,LocalDateTime.now(),"合同批准", "{}")));
+        return credit;
+    }
+    @Test void unapprovedCreditCannotReserveEvenWhenDepositHasBeenPaid() throws Exception {
+        configureCredit(false);
+        assertThat(service.reserveAfterPayment(pi,new BigDecimal("100"))).isFalse();
+        verifyNoInteractions(orders,reservations,inventory);
+    }
+    @Test void creditApprovalCreatesProtectedReservationWithoutInventingPayment() throws Exception {
+        var credit=configureCredit(true);
+        when(mapper.countWarehouseStock(2L,20L)).thenReturn(5);
+        when(inventory.selectFulfillmentSnapshot(20L,0L)).thenReturn(new SkuInventorySnapshot(5,0,0));
+        var model=new OrderInventorySnapshot();model.setPhysicalQty(5);
+        when(reservations.selectFulfillmentSnapshot(30L,0L)).thenReturn(model);
+        var order=new SalesOrderView();order.setId(4L);
+        when(orders.selectByNo(anyString())).thenReturn(order);
+        when(orders.insertOrder(anyString(),any(),any())).thenReturn(1);when(orders.insertItem(anyString(),any())).thenReturn(1);
+        when(credit.insertCreditSource(eq(1L),eq(20L),eq(5),anyString(),any())).thenReturn(1);
+        when(mapper.selectLockId(anyString())).thenReturn(9L);
+        when(credit.insertCreditReservation(eq(4L),eq(9L),eq(1L),any())).thenReturn(1);
+        when(inventory.insertReservationItem(4L,20L,5)).thenReturn(1);
+        when(series.link(eq(1L),eq(4L),anyString())).thenReturn(1);when(orders.updateStatus(4L,"CONFIRMED")).thenReturn(1);
+        assertThat(service.reserveAfterPayment(pi,BigDecimal.ZERO)).isTrue();
+        verify(credit).insertCreditReservation(eq(4L),eq(9L),eq(1L),any());
+        verify(mapper,never()).insertPaidReservation(anyLong(),anyLong(),anyLong(),any());
+        verifyNoInteractions(priority);
+        assertThat(pi.getPaidAmount()).isZero();
+    }
+    @Test void creditCannotBypassWarehouseShortage() throws Exception {
+        var credit=configureCredit(true);
+        when(mapper.countWarehouseStock(2L,20L)).thenReturn(4);
+        assertThat(service.reserveAfterPayment(pi,BigDecimal.ZERO)).isFalse();
+        verifyNoInteractions(credit);
+    }
+
     @Test void paymentBelowContractThresholdNeverCreatesOrders() {
         assertThat(service.reserveAfterPayment(pi,new BigDecimal("30"))).isFalse();
         verifyNoInteractions(orders,reservations,inventory);

@@ -1,0 +1,76 @@
+<template>
+  <scroll-view class="page" scroll-y
+    ><view class="content">
+      <view class="card"
+        ><text class="title">作业工作台</text
+        ><text class="text">{{
+          context ? context.username : "正在校验身份…"
+        }}</text
+        ><text class="muted">{{
+          context ? context.workstations.join(" / ") : ""
+        }}</text></view
+      >
+      <text v-if="message" :class="['feedback', failed ? 'error' : '']">{{
+        message
+      }}</text>
+      <action-button
+        v-for="item in entries"
+        :key="item.mode"
+        :label="item.label"
+        :disabled="busy || !ready"
+        @click="go(item.mode + '/' + item.mode)"
+      />
+      <text v-if="ready && !entries.length" class="text"
+        >当前账号没有可用工位，请联系管理员配置。</text
+      >
+      <action-button
+        label="修改密码"
+        secondary
+        :disabled="busy || !ready"
+        @click="go('password/password')"
+      />
+      <action-button
+        label="服务器与设备设置"
+        secondary
+        :disabled="busy"
+        @click="go('settings/settings')"
+      />
+      <action-button
+        label="退出登录"
+        secondary
+        :disabled="busy"
+        @click="signOut"
+      /> </view
+  ></scroll-view>
+</template>
+<script>
+import page from "../../common/page.js";
+import { canEnter, logout } from "../../common/auth.js";
+const entries = [
+  ["assembly", "生产组装"],
+  ["stock-in", "扫码入库"],
+  ["stock-out", "订单出库"],
+  ["pi", "PI 多车型整批出库"],
+  ["rework", "返工换件"],
+  ["trace", "全链路追溯"],
+  ["issues", "生产异常与图片"],
+  ["prints", "标签打印"],
+];
+export default {
+  mixins: [page],
+  data: () => ({ mode: "home" }),
+  computed: {
+    entries() {
+      return entries
+        .filter(([mode]) => canEnter(this.context, mode))
+        .map(([mode, label]) => ({ mode, label }));
+    },
+  },
+  methods: {
+    signOut() {
+      this.run(logout);
+    },
+  },
+};
+</script>
+<style src="../../common/page.css"></style>

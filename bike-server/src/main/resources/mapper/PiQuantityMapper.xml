@@ -18,9 +18,9 @@
     WHERE order_id=#{orderId} AND shipped_qty&lt;=#{quantity} AND #{quantity}&gt;0</update>
   <update id="resizeReservation">UPDATE bike_order_reservation SET reserved_qty=#{quantity}
     WHERE order_id=#{orderId} AND scope_type='SKU'
-    AND (hold_mode='PAID' OR (hold_mode='TIMED' AND expires_at&gt;NOW(3)))</update>
+    AND (hold_mode IN ('PAID','CREDIT') OR (hold_mode='TIMED' AND expires_at&gt;NOW(3)))</update>
   <update id="closeSku">UPDATE bike_order_reservation_item SET closed_qty=ordered_qty-shipped_qty WHERE order_id=#{orderId} AND closed_qty=0</update>
   <update id="closeReservation">UPDATE bike_order_reservation SET reserved_qty=0,hold_mode='RELEASED',released_at=NOW(3)
     WHERE order_id=#{orderId} AND scope_type='SKU'
-    AND (hold_mode='PAID' OR (hold_mode='TIMED' AND expires_at&gt;NOW(3)))</update>
+    AND (hold_mode IN ('PAID','CREDIT') OR (hold_mode='TIMED' AND expires_at&gt;NOW(3)))</update>
 </mapper>

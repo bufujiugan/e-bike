@@ -14,6 +14,7 @@ public interface PiBusinessService {
     boolean hasReservedStock(PiView pi);
     void validateReservedWarehouse(PiView pi);
     void requireShipment(long piId);
+    void requirePaymentAuthorization(long piId);
     void requireVehicle(long piId,long vehicleId);
     void requireWarehouseCapacity(long vehicleId,Long orderId);
     void invalidateDelivery(long piId);

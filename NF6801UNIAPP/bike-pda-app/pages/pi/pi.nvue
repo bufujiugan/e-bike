@@ -1,0 +1,277 @@
+<template>
+  <scroll-view class="page" scroll-y
+    ><view class="content">
+      <text v-if="message" :class="['feedback', failed ? 'error' : '']">{{
+        message
+      }}</text>
+      <view v-if="attempt" class="card"
+        ><text class="text error"
+          >当前批次已发送但尚未确认。保持原车辆和请求编号重试，可找回原批次。</text
+        ><text class="muted">{{ attempt.requestId }}</text
+        ><action-button
+          label="按原批次重试 / 核对结果"
+          :disabled="busy || !ready"
+          @click="submit"
+      /></view>
+      <view class="card"
+        ><form-field
+          v-model="keyword"
+          label="PI 号 / 客户"
+          :disabled="busy"
+        /><action-button
+          label="搜索 PI"
+          secondary
+          :disabled="busy || !ready"
+          @click="run(() => loadOptions(1))"
+        />
+        <choice-list
+          :value="detail ? detail.id : ''"
+          :options="piOptions"
+          label="可出库 PI"
+          :disabled="busy || !!attempt"
+          @input="selectPi"
+        />
+        <text class="muted">第 {{ listPage }} 页，共 {{ total }} 条</text
+        ><action-button
+          label="上一页"
+          secondary
+          :disabled="busy || listPage <= 1"
+          @click="run(() => loadOptions(listPage - 1))"
+        /><action-button
+          label="下一页"
+          secondary
+          :disabled="busy || listPage * 20 >= total"
+          @click="run(() => loadOptions(listPage + 1))"
+        />
+      </view>
+      <view v-if="detail" class="card"
+        ><text class="subtitle"
+          >{{ detail.piNo }} · {{ detail.customerName }}</text
+        >
+        <choice-list
+          v-model="orderId"
+          :options="orderOptions"
+          label="本次扫描归属的 SKU 订单"
+          :disabled="busy || !!attempt"
+        />
+        <form-field
+          v-model="code"
+          label="整车聚合码"
+          :disabled="busy || !!attempt"
+          @confirm="scan"
+        />
+        <action-button
+          label="启动设备扫码"
+          secondary
+          :disabled="busy || !orderId || !!attempt || !ready"
+          @click="triggerScan"
+        /><action-button
+          label="校验并加入批次"
+          :disabled="busy || !orderId || !!attempt || !ready"
+          @click="scan"
+        />
+        <text class="subtitle">本批 {{ queue.length }} / 200 台</text
+        ><view v-for="(row, index) in queue" :key="row.frameSn"
+          ><text class="text"
+            >{{ orderName(row.orderId) }} · {{ row.frameSn }}</text
+          ><action-button
+            label="移除此车辆"
+            secondary
+            :disabled="busy || !!attempt"
+            @click="remove(index)"
+        /></view>
+        <action-button
+          label="确认整批出库"
+          :disabled="busy || !ready || !queue.length"
+          @click="submit"
+        />
+      </view>
+      <view v-if="result" class="card"
+        ><text class="subtitle">已保存批次 {{ result.batchNo }}</text
+        ><text class="text"
+          >{{ result.status }} · 原始 {{ result.originalQty }} 台 · 有效
+          {{ result.activeQty }} 台</text
+        ><action-button
+          label="刷新此批次状态"
+          secondary
+          :disabled="busy || !ready"
+          @click="refreshBatch"
+      /></view> </view
+  ></scroll-view>
+</template>
+<script>
+import page, { confirm } from "../../common/page.js";
+import { get, post } from "../../common/api.js";
+import { readDraft, saveDraft, uuid } from "../../common/storage.js";
+import { assertQueue, dispatchPayload } from "../../common/operations.js";
+export default {
+  mixins: [page],
+  data: () => ({
+    mode: "pi",
+    keyword: "",
+    rows: [],
+    listPage: 1,
+    total: 0,
+    detail: null,
+    orderId: "",
+    code: "",
+    queue: [],
+    attempt: null,
+    result: null,
+  }),
+  computed: {
+    piOptions() {
+      return this.rows.map((row) => ({
+        value: row.id,
+        text: row.piNo + " · " + row.customerName,
+      }));
+    },
+    orderOptions() {
+      return (this.detail?.orders || [])
+        .filter(
+          (row) =>
+            ["CONFIRMED", "PARTIAL_SHIPPED"].includes(row.status) &&
+            row.remainingQty > 0,
+        )
+        .map((row) => ({
+          value: row.orderId,
+          text: `${row.skuCode || "历史车型单"} · ${row.orderNo} · 待发 ${row.remainingQty}`,
+        }));
+    },
+  },
+  methods: {
+    async load() {
+      const saved = readDraft("pi-dispatch", {});
+      this.queue = saved.queue || [];
+      this.attempt = saved.attempt || null;
+      this.result = saved.result || null;
+      if (saved.piId) this.detail = await get("/api/pi-dispatch/" + saved.piId);
+      await this.loadOptions(1);
+    },
+    async loadOptions(next) {
+      const result = await get("/api/pi-dispatch/options", {
+        keyword: this.keyword.trim(),
+        page: next,
+      });
+      this.rows = result.records;
+      this.total = result.total;
+      this.listPage = next;
+    },
+    remember() {
+      saveDraft("pi-dispatch", {
+        piId: this.detail?.id,
+        queue: this.queue,
+        attempt: this.attempt,
+        result: this.result,
+      });
+    },
+    selectPi(id) {
+      this.run(async () => {
+        if (this.attempt) throw new Error("待核对批次不能更换 PI");
+        if (this.detail?.id === id) return;
+        if (
+          this.queue.length &&
+          !(await confirm("更换 PI", "清空尚未提交的车辆队列？"))
+        )
+          return;
+        const detail = await get("/api/pi-dispatch/" + id);
+        this.detail = detail;
+        this.queue = [];
+        this.orderId = "";
+        this.result = null;
+        this.remember();
+      });
+    },
+    orderName(id) {
+      return (
+        this.detail?.orders.find((row) => row.orderId === id)?.orderNo || id
+      );
+    },
+    async onScan(value) {
+      if (this.attempt) throw new Error("待核对批次不能增加车辆");
+      const code = value.trim(),
+        order = this.detail?.orders.find((row) => row.orderId === this.orderId);
+      this.code = code;
+      if (!code || !order) throw new Error("请先选择 PI 及 SKU 订单");
+      const checked = await post("/api/stock-out/validate", {
+        customerId: this.detail.customerId,
+        orderId: order.orderId,
+        vehicleQrCode: code,
+      });
+      assertQueue(this.queue, checked, code, order.orderId, order.remainingQty);
+      this.queue.push({
+        orderId: order.orderId,
+        vehicleQrCode: code,
+        frameSn: checked.frameSn,
+      });
+      this.code = "";
+      this.remember();
+      this.message = "已加入 PI 批次";
+    },
+    scan() {
+      this.run(() => this.onScan(this.code));
+    },
+    remove(index) {
+      if (!this.busy && !this.attempt) {
+        this.queue.splice(index, 1);
+        this.remember();
+      }
+    },
+    submit() {
+      this.run(async () => {
+        if (!this.detail || !this.queue.length)
+          throw new Error("请选择 PI 并加入车辆");
+        if (!this.attempt) {
+          if (
+            !(await confirm(
+              "确认 PI 整批出库",
+              `${this.detail.piNo}，本次 ${this.queue.length} 台。`,
+            ))
+          )
+            return;
+          const prepared = dispatchPayload(this.detail.id, this.queue);
+          this.attempt = { requestId: uuid(), ...prepared };
+          this.remember();
+        }
+        if (
+          this.attempt.fingerprint !==
+          dispatchPayload(this.detail.id, this.queue).fingerprint
+        )
+          throw new Error(
+            "待核对批次内容不一致，请联系管理员核对，禁止生成新编号重试",
+          );
+        try {
+          this.result = await post("/api/pi-dispatch/" + this.detail.id, {
+            requestId: this.attempt.requestId,
+            vehicles: this.attempt.vehicles,
+          });
+        } catch (cause) {
+          if (!cause.uncertain) {
+            this.attempt = null;
+            this.remember();
+          }
+          throw cause;
+        }
+        this.queue = [];
+        this.attempt = null;
+        this.orderId = "";
+        this.remember();
+        this.message = "已取得批次结果，请核对有效数量和状态";
+        try {
+          this.detail = await get("/api/pi-dispatch/" + this.detail.id);
+          await this.loadOptions(this.listPage);
+        } catch (cause) {
+          this.message += "；列表刷新失败，批次结果已保存";
+        }
+      });
+    },
+    refreshBatch() {
+      this.run(async () => {
+        this.result = await get("/api/pi-dispatch/batches/" + this.result.id);
+        this.remember();
+      });
+    },
+  },
+};
+</script>
+<style src="../../common/page.css"></style>

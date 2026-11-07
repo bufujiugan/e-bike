@@ -1,0 +1,251 @@
+<template>
+  <scroll-view class="page" scroll-y
+    ><view class="content"
+      ><view class="card">
+        <text class="subtitle">API 服务器</text
+        ><form-field
+          v-model="server"
+          label="服务器根地址（不带 /api）"
+          :disabled="busy"
+        /><text class="muted"
+          >更换服务器会退出当前账号，作业草稿按服务器与账号隔离。</text
+        >
+        <text class="subtitle">NF6801 / 608 扫码与打印</text>
+        <text class="muted">BIKE PDA 1.0.3 · 608-3 串口分帧与扫码修复版</text>
+        <action-button
+          label="应用本机 80×100mm 标签参数"
+          secondary
+          :disabled="busy"
+          @click="apply608"
+        />
+        <text class="muted">{{
+          labelProfile === "608_80X100"
+            ? "608 专用重新排版；保留全部业务字段，不改服务器模板。"
+            : "按服务器模板尺寸打印。"
+        }}</text>
+        <form-field
+          v-model="terminal"
+          label="终端编号，例如 PDA-01"
+          :disabled="busy"
+          :maxlength="64"
+        />
+        <form-field
+          v-model="paperWidthMm"
+          label="实际纸宽 mm（按设备和纸张填写）"
+          type="digit"
+          :disabled="busy"
+        />
+        <form-field
+          v-model="printableDots"
+          label="打印头可打印点数"
+          type="number"
+          :disabled="busy"
+        />
+        <form-field
+          v-model="paperHeightMm"
+          label="标签纸高 mm"
+          type="digit"
+          :disabled="busy"
+        />
+        <form-field
+          v-model="dpi"
+          label="打印 DPI"
+          type="number"
+          :disabled="busy"
+        /><form-field
+          v-model="offset"
+          label="黑标起始偏移（厂商默认 52）"
+          type="number"
+          :disabled="busy"
+        />
+        <choice-list
+          v-model="blackMark"
+          label="间隙标签 / 黑标纸模式"
+          :options="blackOptions"
+          :disabled="busy"
+        />
+        <text class="muted"
+          >80mm 纸的有效打印上限为 570
+          点。打印与扫码自检请先保存，并完全退出厂商 Demo，避免争用串口。</text
+        >
+        <action-button label="保存设置" :disabled="busy" @click="save" />
+        <action-button
+          label="扫码自检（不提交业务）"
+          secondary
+          :disabled="busy || scanStarting"
+          @click="testScan"
+        />
+        <action-button
+          label="打印自检标签（不领取任务）"
+          secondary
+          :disabled="busy || scanStarting"
+          @click="testPrint"
+        />
+        <text v-if="message" :class="['feedback', failed ? 'error' : '']">{{
+          message
+        }}</text>
+      </view></view
+    ></scroll-view
+  >
+</template>
+<script>
+import page, { confirm } from "../../common/page.js";
+import { origin, setOrigin, deviceConfig } from "../../common/storage.js";
+import { maxPrintableDots, normalizeOrigin } from "../../config.js";
+import { createDevice } from "../../common/device.js";
+import { buildHardwareTestPaper } from "../../common/label.js";
+export default {
+  mixins: [page],
+  data: () => ({
+    publicPage: true,
+    server: "",
+    terminal: "",
+    paperWidthMm: 0,
+    paperHeightMm: 0,
+    labelProfile: "TEMPLATE",
+    printableDots: 0,
+    dpi: 203,
+    offset: 52,
+    blackMark: "yes",
+    blackOptions: [
+      { value: "yes", text: "间隙标签纸（开启标签定位）" },
+      { value: "no", text: "连续热敏纸（关闭标签定位）" },
+    ],
+  }),
+  onShow() {
+    const config = deviceConfig();
+    this.server = origin();
+    this.terminal = config.terminal;
+    this.paperWidthMm = config.paperWidthMm;
+    this.paperHeightMm = config.paperHeightMm;
+    this.labelProfile = config.labelProfile;
+    this.printableDots = config.printableDots;
+    this.dpi = config.dpi;
+    this.offset = config.offset;
+    this.blackMark = config.blackMark ? "yes" : "no";
+  },
+  methods: {
+    apply608() {
+      this.paperWidthMm = 80;
+      this.paperHeightMm = 100;
+      this.printableDots = 570;
+      this.dpi = 203;
+      this.blackMark = "yes";
+      this.labelProfile = "608_80X100";
+      this.message =
+        "已填入 80×100mm 参数，请点击保存设置。原黑标偏移与终端编号保留。";
+    },
+    prepareTest() {
+      if (this._device) this._device.close();
+      this._device = createDevice();
+      this._device.open((code) => {
+        this.message = "扫码成功：" + code;
+        this.failed = false;
+      });
+    },
+    async testScan() {
+      if (this.busy || this.scanStarting) return;
+      this.scanStarting = true;
+      try {
+        this.prepareTest();
+        this.message = "正在初始化并触发扫描头";
+        await this._device.scan();
+      } catch (cause) {
+        this.failed = true;
+        this.message = cause.message;
+      } finally {
+        this.scanStarting = false;
+      }
+    },
+    testPrint() {
+      this.run(async () => {
+        const paper = buildHardwareTestPaper(deviceConfig());
+        if (
+          !(await confirm(
+            "打印设备自检",
+            "将打印一张标有自检字样的标签，不创建或领取任何业务任务。请先完全退出厂商 Demo。",
+          ))
+        )
+          return;
+        this.prepareTest();
+        await this._device.print(paper);
+        this.message =
+          "已发送自检标签，请核对出纸，再扫描标签上的二维码；这不是出纸成功确认。";
+      });
+    },
+    save() {
+      this.run(async () => {
+        const next = normalizeOrigin(this.server),
+          changed = next !== origin();
+        if (!/^[a-zA-Z0-9_.-]{1,64}$/.test(this.terminal))
+          throw new Error(
+            "终端编号仅允许字母、数字、下划线、点、连字符，最多 64 位",
+          );
+        const width = Number(this.paperWidthMm),
+          height = Number(this.paperHeightMm),
+          dots = Number(this.printableDots),
+          dpi = Number(this.dpi),
+          offset = Number(this.offset);
+        const documentedMaxDots = maxPrintableDots(width);
+        if (
+          !Number.isFinite(width) ||
+          width < 0 ||
+          width > 210 ||
+          !Number.isFinite(height) ||
+          height < 0 ||
+          height > 1000 ||
+          !Number.isInteger(dots) ||
+          dots < 0 ||
+          dots > 5000 ||
+          !Number.isFinite(dpi) ||
+          dpi < 150 ||
+          dpi > 600 ||
+          !Number.isInteger(offset) ||
+          offset < 0 ||
+          offset > 255
+        )
+          throw new Error(
+            "请填写有效设备参数；未知纸宽和点数可留为 0（打印不可用）",
+          );
+        if (documentedMaxDots && dots > documentedMaxDots)
+          throw new Error(
+            `${width}mm 纸张的厂商文档可打印点数上限为 ${documentedMaxDots}，请按打印头规格修正`,
+          );
+        if (
+          this.labelProfile === "608_80X100" &&
+          (width !== 80 ||
+            height !== 100 ||
+            dots !== 570 ||
+            dpi !== 203 ||
+            this.blackMark !== "yes")
+        )
+          throw new Error(
+            "608 专用版式需要 80×100mm、570 点、203 DPI 和间隙标签模式",
+          );
+        if (
+          changed &&
+          !(await confirm(
+            "更换服务器",
+            "保存后需要重新登录。原服务器未确认的作业仍保留，请回原服务器核对。",
+          ))
+        )
+          return;
+        uni.setStorageSync("bike.device", {
+          terminal: this.terminal,
+          paperWidthMm: width,
+          paperHeightMm: height,
+          labelProfile: this.labelProfile,
+          printableDots: dots,
+          dpi,
+          offset,
+          blackMark: this.blackMark === "yes",
+        });
+        setOrigin(next);
+        this.message = "设置已保存";
+        if (changed) uni.reLaunch({ url: "/pages/login/login" });
+      });
+    },
+  },
+};
+</script>
+<style src="../../common/page.css"></style>

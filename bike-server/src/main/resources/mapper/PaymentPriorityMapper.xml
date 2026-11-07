@@ -10,7 +10,7 @@
         WHERE origin.series_id=p.series_id AND pay.status='CONFIRMED')
       AND NOT EXISTS(SELECT 1 FROM bike_pi_order_link link JOIN bike_sales_order o ON o.id=link.order_id
         JOIN bike_sales_order_item item ON item.order_id=o.id LEFT JOIN bike_order_reservation r ON r.order_id=o.id
-        WHERE link.series_id=p.series_id AND (item.shipped_qty&gt;0 OR r.hold_mode='PAID' OR r.scope_type='MODEL_LEGACY'
+        WHERE link.series_id=p.series_id AND (item.shipped_qty&gt;0 OR r.hold_mode IN ('PAID','CREDIT') OR r.scope_type='MODEL_LEGACY'
           OR o.status NOT IN ('DRAFT','PENDING','CONFIRMED')))
     UNION ALL
     SELECT 'ORDER',o.id,o.created_at FROM bike_sales_order o JOIN bike_order_reservation r ON r.order_id=o.id

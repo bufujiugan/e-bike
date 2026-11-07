@@ -1,0 +1,129 @@
+<template>
+  <scroll-view class="page" scroll-y
+    ><view class="content">
+      <text v-if="message" :class="['feedback', failed ? 'error' : '']">{{
+        message
+      }}</text>
+      <view v-if="pending" class="card"
+        ><text class="text error">上次返工结果未确认，请先追溯核对。</text
+        ><action-button
+          label="打开追溯"
+          secondary
+          @click="go('trace/trace')" /><action-button
+          label="已核对，解除锁定"
+          secondary
+          :disabled="busy"
+          @click="acknowledgePending"
+      /></view>
+      <view class="card"
+        ><choice-list
+          v-model="scanTarget"
+          label="扫码填入位置"
+          :options="targets"
+          :disabled="busy"
+        />
+        <form-field
+          v-model="vehicleQrCode"
+          label="整车聚合码"
+          :disabled="busy || !!pending"
+          @focus="scanTarget = 'vehicle'"
+        />
+        <choice-list
+          v-model="partType"
+          label="更换部件类型"
+          :options="types"
+          :disabled="busy || !!pending"
+        />
+        <form-field
+          v-model="newPartSn"
+          label="新部件 SN"
+          :disabled="busy || !!pending"
+          @focus="scanTarget = 'part'"
+        />
+        <form-field
+          v-model="reason"
+          label="返工原因"
+          :disabled="busy || !!pending"
+        />
+        <action-button
+          label="启动设备扫码"
+          secondary
+          :disabled="busy || !ready || !!pending"
+          @click="triggerScan"
+        />
+        <action-button
+          label="确认返工换件"
+          :disabled="busy || !ready || !!pending"
+          @click="submit"
+        />
+      </view> </view
+  ></scroll-view>
+</template>
+<script>
+import page, { confirm } from "../../common/page.js";
+import { writeOnce } from "../../common/operations.js";
+export default {
+  mixins: [page],
+  data: () => ({
+    mode: "rework",
+    operationName: "rework",
+    scanTarget: "vehicle",
+    vehicleQrCode: "",
+    newPartSn: "",
+    partType: "BATTERY",
+    reason: "",
+    targets: [
+      { value: "vehicle", text: "车辆聚合码" },
+      { value: "part", text: "新部件 SN" },
+    ],
+    types: [
+      { value: "MOTOR", text: "电机" },
+      { value: "BATTERY", text: "电池" },
+      { value: "DISPLAY", text: "仪表" },
+    ],
+  }),
+  methods: {
+    async onScan(code) {
+      if (this.pending) throw new Error("请先核对上次结果");
+      if (this.scanTarget === "vehicle") {
+        this.vehicleQrCode = code;
+        this.scanTarget = "part";
+        this.message = "车辆码已填入，请扫描新部件";
+      } else {
+        this.newPartSn = code;
+        this.message = "新部件已填入，请确认原因后提交";
+      }
+    },
+    submit() {
+      this.run(async () => {
+        if (
+          !this.vehicleQrCode.trim() ||
+          !this.newPartSn.trim() ||
+          !this.reason.trim()
+        )
+          throw new Error("请填写车辆、新部件和原因");
+        if (
+          !(await confirm(
+            "确认返工换件",
+            "旧件将隔离并保留绑定历史，请核对新部件。",
+          ))
+        )
+          return;
+        const result = await writeOnce("rework", "/api/rework", {
+          vehicleQrCode: this.vehicleQrCode.trim(),
+          partType: this.partType,
+          newPartSn: this.newPartSn.trim(),
+          reason: this.reason.trim(),
+        });
+        this.message =
+          "返工成功：" + result.reworkNo + " · " + result.newPartSn;
+        this.vehicleQrCode = "";
+        this.newPartSn = "";
+        this.reason = "";
+        this.scanTarget = "vehicle";
+      });
+    },
+  },
+};
+</script>
+<style src="../../common/page.css"></style>

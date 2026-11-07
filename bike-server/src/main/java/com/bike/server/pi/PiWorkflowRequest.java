@@ -28,7 +28,7 @@ public record PiWorkflowRequest(
         @PastOrPresent(message = "客户收货日期不能晚于今天") LocalDate receivedDate,
         Boolean productionCompleted,
         @Size(max=128) String purchaseContractNo,
-        @Pattern(regexp="SAVA|YINSANHUAN") String purchaseContractParty,
+        @Size(max=200) String purchaseContractParty,
         @Pattern(regexp="CUSTOMER|SELLER") String forwarderResponsibility,
         @Size(max=1000) String forwarderAddress,
         @Size(max=300) String forwarderContact,

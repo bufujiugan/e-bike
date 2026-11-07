@@ -1,16 +1,16 @@
 import api from './api'
 
 export type Money = string | number
-export type ReservationStatus = 'NONE' | 'TIMED_ACTIVE' | 'PAID_HELD' | 'EXPIRED_REQUIRES_REACQUIRE' | 'RELEASED' | 'FULFILLED' | 'ACTIVE' | 'MIXED'
+export type ReservationStatus = 'NONE' | 'TIMED_ACTIVE' | 'PAID_HELD' | 'CREDIT_HELD' | 'EXPIRED_REQUIRES_REACQUIRE' | 'RELEASED' | 'FULFILLED' | 'ACTIVE' | 'MIXED'
 const reservationLabels: Record<ReservationStatus, string> = {
-  NONE: '无来源库存占用', TIMED_ACTIVE: '限时占用中', PAID_HELD: '收款达标保留', MIXED: '各履约订单状态不同',
+  NONE: '无来源库存占用', TIMED_ACTIVE: '限时占用中', PAID_HELD: '收款达标保留', CREDIT_HELD: '后付款授权保留', MIXED: '各履约订单状态不同',
   EXPIRED_REQUIRES_REACQUIRE: '已到期，需重新占用', RELEASED: '已释放', FULFILLED: '已履约', ACTIVE: '有效占用',
 }
 export function reservationLabel(status: ReservationStatus | null | undefined, isAgent = false): string {
-  if (isAgent && (status === 'TIMED_ACTIVE' || status === 'PAID_HELD')) return reservationLabels.ACTIVE
+  if (isAgent && (status === 'TIMED_ACTIVE' || status === 'PAID_HELD' || status === 'CREDIT_HELD')) return reservationLabels.ACTIVE
   return status ? reservationLabels[status] ?? '状态待核对' : '状态待获取'
 }
-export type PiBusinessTerms = { warehouseId: number | null; domesticShipment: boolean | null; collectionEntity: 'GUANGTA' | 'HONG_KONG'; orderSource?: 'EXISTING_ORDER' | 'NEW_BUSINESS' | null }
+export type PiBusinessTerms = { warehouseId: number | null; domesticShipment: boolean | null; collectionEntity: string; fulfillmentProfileId?: number | null; paymentDueDate?: string | null; orderSource?: 'EXISTING_ORDER' | 'NEW_BUSINESS' | null }
 export type PiDocument = {
   business?: PiBusinessTerms | null
   sellerName: string; sellerAddress: string; sellerContact: string

@@ -57,7 +57,7 @@ public class OrderReservationService {
             throw new BusinessException("INVALID_STATUS_TRANSITION", "订单没有可处理的剩余数量");
         }
         // A paid hold remains paid; a legacy renewal request must not turn it back into a timed hold.
-        if ("PAID".equals(reservation.holdMode())) return order;
+        if (java.util.Set.of("PAID","CREDIT").contains(reservation.holdMode())) return order;
         if (reservations.snapshot(order.getModelId(), id).availableForOrder() < remaining) {
             throw new BusinessException("INVENTORY_NOT_ENOUGH", "当前可用库存不足，不能重新占用；已登记的收款保持不变");
         }

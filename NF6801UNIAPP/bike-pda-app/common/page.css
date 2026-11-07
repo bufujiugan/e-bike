@@ -1,0 +1,57 @@
+.page {
+  flex: 1;
+  background-color: #f1f5f9;
+}
+.content {
+  padding: 24rpx;
+  padding-bottom: 60rpx;
+}
+.card {
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  border-radius: 16rpx;
+  background-color: #ffffff;
+}
+.title {
+  font-size: 38rpx;
+  font-weight: bold;
+  color: #123454;
+  margin-bottom: 16rpx;
+}
+.subtitle {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #123454;
+  margin-bottom: 12rpx;
+}
+.text {
+  font-size: 28rpx;
+  color: #243b53;
+  margin-bottom: 12rpx;
+}
+.muted {
+  font-size: 25rpx;
+  color: #52667a;
+  margin-bottom: 12rpx;
+}
+.feedback {
+  font-size: 28rpx;
+  color: #12664f;
+  margin-bottom: 18rpx;
+}
+.error {
+  color: #b42318;
+}
+.row {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.image {
+  width: 220rpx;
+  height: 180rpx;
+  margin-bottom: 12rpx;
+}
+.space {
+  margin-bottom: 20rpx;
+}

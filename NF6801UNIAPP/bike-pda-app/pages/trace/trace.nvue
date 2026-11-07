@@ -1,0 +1,116 @@
+<template>
+  <scroll-view class="page" scroll-y
+    ><view class="content">
+      <view class="card"
+        ><choice-list
+          v-model="kind"
+          label="查询方式"
+          :options="kinds"
+          :disabled="busy" /><form-field
+          v-model="code"
+          label="编码"
+          :disabled="busy"
+          @confirm="query" /><action-button
+          label="启动设备扫码"
+          secondary
+          :disabled="busy || !ready"
+          @click="triggerScan" /><action-button
+          label="查询完整链路"
+          :disabled="busy || !ready"
+          @click="query"
+      /></view>
+      <text v-if="message" :class="['feedback', failed ? 'error' : '']">{{
+        message
+      }}</text>
+      <view v-if="result"
+        ><view v-if="result.vehicle" class="card"
+          ><text class="subtitle">整车档案</text
+          ><text
+            v-for="(line, index) in vehicleLines"
+            :key="index"
+            class="text"
+            selectable
+            >{{ line }}</text
+          ></view
+        >
+        <view
+          v-if="result.relatedVehicles && result.relatedVehicles.length"
+          class="card"
+          ><text class="subtitle">关联车辆</text
+          ><action-button
+            v-for="(vehicle, index) in result.relatedVehicles"
+            :key="index"
+            :label="vehicle.frameSn || vehicle.vehicleQrCode"
+            secondary
+            :disabled="busy"
+            @click="queryVehicle(vehicle)"
+        /></view>
+        <view v-for="group in groups" :key="group.key" class="space"
+          ><text class="subtitle"
+            >{{ group.label }} · {{ group.rows.length }} 条</text
+          ><view v-for="(lines, index) in group.rows" :key="index" class="card"
+            ><text
+              v-for="(line, lineIndex) in lines"
+              :key="lineIndex"
+              class="text"
+              selectable
+              >{{ line }}</text
+            ></view
+          ><text v-if="!group.rows.length" class="muted">暂无记录</text></view
+        >
+      </view>
+    </view></scroll-view
+  >
+</template>
+<script>
+import page from "../../common/page.js";
+import { get } from "../../common/api.js";
+import { vehicleFields, traceGroups, fieldLines } from "../../common/trace.js";
+export default {
+  mixins: [page],
+  data: () => ({
+    mode: "trace",
+    kind: "qr",
+    code: "",
+    result: null,
+    kinds: [
+      { value: "qr", text: "整车聚合码" },
+      { value: "frame", text: "车架 SN" },
+      { value: "part", text: "当前或历史部件 SN" },
+    ],
+  }),
+  computed: {
+    vehicleLines() {
+      return this.result?.vehicle
+        ? fieldLines(this.result.vehicle, vehicleFields)
+        : [];
+    },
+    groups() {
+      return traceGroups.map(([key, label, fields]) => ({
+        key,
+        label,
+        rows: (this.result?.[key] || []).map((row) => fieldLines(row, fields)),
+      }));
+    },
+  },
+  methods: {
+    async onScan(code) {
+      this.code = code.trim();
+      this.result = null;
+      if (!this.code) throw new Error("请输入编码");
+      this.result = await get(
+        `/api/trace/${this.kind}/${encodeURIComponent(this.code)}`,
+      );
+      this.message = "追溯查询完成";
+    },
+    query() {
+      this.run(() => this.onScan(this.code));
+    },
+    queryVehicle(vehicle) {
+      this.kind = vehicle.vehicleQrCode ? "qr" : "frame";
+      this.run(() => this.onScan(vehicle.vehicleQrCode || vehicle.frameSn));
+    },
+  },
+};
+</script>
+<style src="../../common/page.css"></style>

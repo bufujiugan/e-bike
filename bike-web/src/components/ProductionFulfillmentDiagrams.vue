@@ -5,6 +5,9 @@ defineProps<{ mode: 'flow' | 'sequence' }>()
 const emit = defineEmits<{ select: [index: number] }>()
 type FlowNode = { step: number; title: string; owner: string; detail: string; tag: string; automatic?: boolean; conditional?: boolean }
 const phases: { title: string; timing: string; outcome: string; nodes: FlowNode[] }[] = [
+  { title: '首次开单前 · 配置业务约定', timing: '管理员首次配置或发布新版本时', outcome: '已有配置直接选用；不同国家和仓库共用同一套规则能力', nodes: [
+    { step: 12, title: '发布模板与履约配置', owner: '业务管理员 · PI 与履约', detail: '选用标准明细表或双栏发票；配置主体、仓库、付款、交付及单据要求', tag: '新单必选配置' },
+  ] },
   { title: '生产前 · 把资料备齐', timing: '首次生产或更换规格时', outcome: '交接：可用 SKU、部件 SN 和已下达工单', nodes: [
     { step: 0, title: '确认车型与标签', owner: '计划员 · Web', detail: '启用车型，准备可用标签模板', tag: '准备资料' },
     { step: 2, title: '建立商品 SKU', owner: '计划员 · 商品准备', detail: '一套确定配置对应一个 SKU', tag: '定义规格' },
@@ -24,10 +27,15 @@ const phases: { title: string; timing: string; outcome: string; nodes: FlowNode[
     { step: 10, title: '确认销售订单', owner: '订单员 · 订单与出库', detail: '确认后进入待出库状态', tag: '准备交仓库' },
   ] },
   { title: '发货前后 · 放行、出库与核对', timing: '订单待出库或部分出库且仍有余量', outcome: '完成：出库记录可追溯到订单、总码和车架号', nodes: [
-    { step: 10, title: '判断是否关联 PI', owner: '订单员 · 订单办理', detail: '关联 PI：确认、到账登记并完成放行', tag: '有 PI 先放行', conditional: true },
-    { step: 11, title: '选客户与订单', owner: '仓管员 · PDA 出库', detail: '无 PI 或 PI 已满足放行条件后办理', tag: '进入出库' },
+    { step: 10, title: '确认 PI 与履约配置', owner: '订单员 · 订单办理', detail: '按配置核对收款或后付款授权及备货要求', tag: '销售出库须放行', conditional: true },
+    { step: 11, title: '选客户与订单', owner: '仓管员 · PDA 出库', detail: 'PI 已满足配置要求且放行后办理', tag: '进入出库' },
     { step: 11, title: '扫码并确认批量出库', owner: '仓管员 · PDA 出库', detail: '逐台扫总码，核对本次数量后确认', tag: '选定实际车辆' },
-    { step: 11, title: '核对出库结果', owner: '业务员 / 仓管员 · 订单办理', detail: '部分出库可继续发货；全部发完则完成', tag: '闭环核对' },
+    { step: 11, title: '核对出库结果', owner: '业务员 / 仓管员 · 订单办理', detail: '分批核对交接；送达后继续结算与单据归档', tag: '闭环核对' },
+  ] },
+  { title: '交付后 · 结算与单据归档', timing: '按本单已发布配置办理', outcome: '交接、实际收款和文件分别留痕，全部满足结案条件后关闭业务', nodes: [
+    { step: 13, title: '核对运输与送达', owner: '业务 / 物流', detail: '提货交接不等同客户签收', tag: '真实交付' },
+    { step: 13, title: '收款与单据回收', owner: '财务 / 业务', detail: '按要求登记 CI、RD、已签 RD 和 CMR', tag: '并行办理' },
+    { step: 13, title: '核对后结案', owner: '业务人员', detail: '核对款项与必需单据，不能仅凭签收结案', tag: '业务完成' },
   ] },
 ]
 </script>
@@ -48,12 +56,12 @@ const phases: { title: string; timing: string; outcome: string; nodes: FlowNode[
         <p class="phase-outcome">{{ phase.outcome }}</p>
         <div v-if="index < phases.length - 1" class="phase-connector" aria-hidden="true">↓</div>
       </section>
-      <div class="pi-branch"><strong>PI 分支</strong><span>确认订单 → 未关联 PI → PDA 按订单出库</span><span>确认订单 → 已关联 PI → 完成 PI 发货放行 → PDA 按订单出库</span></div>
+      <div class="pi-branch"><strong>统一履约配置</strong><span>新单必选配置与模板 → 确认 PI → 预付收款或后付款授权 → 按仓保留库存 → 按配置备货 → 放行与实际出库</span><span>后付款修订须重新授权；我方安排运输 / 客户货代提货 → 确认送达 → 按配置完成 CI、RD 回签、收款及 CMR → 结案</span></div>
     </template>
     <ProductionRoleSequence v-else @select="emit('select', $event)" />
     <div class="diagram-rules">
       <article><strong>SKU ≠ 单台车</strong><p>SKU 是一种确定配置；车架号标识具体车辆。新车架在 PDA 选择“车架”，录入实物号码，后台没有单独维护车架号的页面。</p></article>
-      <article><strong>计划 100 台 ≠ 库存 100 台</strong><p>完成组装后还要确认入库。锁定上限按实际合格库存、已有占用及车型余量计算。</p></article>
+      <article><strong>计划 100 台 ≠ 库存 100 台</strong><p>完成组装后还要确认入库。预锁可超过库存；正式保留时核对仓库、SKU、车型余量及已有占用。</p></article>
       <article><strong>锁 30 台 ≠ 锁住整个 SKU</strong><p>假设可用库存 100 台且无其他限制：A 锁 30 台后，B 仍可锁 30 台，剩余 40 台。</p></article>
     </div>
   </div>

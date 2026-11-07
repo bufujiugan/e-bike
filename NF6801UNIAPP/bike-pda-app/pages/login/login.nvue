@@ -1,0 +1,66 @@
+<template>
+  <scroll-view class="page" scroll-y
+    ><view class="content">
+      <view class="card"
+        ><text class="title">BIKE · PDA 作业终端</text
+        ><text class="muted">登录后按账号权限进入工位</text>
+        <form-field
+          v-model="username"
+          label="账号"
+          :disabled="busy"
+          :maxlength="100"
+        />
+        <form-field
+          v-model="password"
+          label="密码"
+          password
+          :disabled="busy"
+          :maxlength="100"
+          @confirm="submit"
+        />
+        <action-button
+          :label="busy ? '登录中…' : '登录'"
+          :disabled="busy"
+          @click="submit"
+        />
+        <text v-if="message" class="feedback error">{{ message }}</text> </view
+      ><text class="muted">{{ server }}</text
+      ><action-button
+        label="服务器与设备设置"
+        secondary
+        :disabled="busy"
+        @click="go('settings/settings')"
+      /> </view
+  ></scroll-view>
+</template>
+<script>
+import page from "../../common/page.js";
+import { login } from "../../common/auth.js";
+import { origin } from "../../common/storage.js";
+export default {
+  mixins: [page],
+  data: () => ({ publicPage: true, username: "", password: "", server: "" }),
+  onShow() {
+    this.server = origin();
+  },
+  onHide() {
+    this.password = "";
+  },
+  methods: {
+    submit() {
+      this.run(async () => {
+        if (!this.username.trim() || !this.password)
+          throw new Error("请输入账号和密码");
+        const context = await login(this.username, this.password);
+        this.password = "";
+        uni.reLaunch({
+          url: context.mustChangePassword
+            ? "/pages/password/password"
+            : "/pages/index/index",
+        });
+      });
+    },
+  },
+};
+</script>
+<style src="../../common/page.css"></style>

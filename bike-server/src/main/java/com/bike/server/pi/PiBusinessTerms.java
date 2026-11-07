@@ -8,9 +8,14 @@ import jakarta.validation.constraints.Pattern;
 public record PiBusinessTerms(
         @NotNull @Positive Long warehouseId,
         @NotNull Boolean domesticShipment,
-        @NotNull @Pattern(regexp = "GUANGTA|HONG_KONG") String collectionEntity,
+        @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max=200) String collectionEntity,
         @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
-        @Pattern(regexp = "EXISTING_ORDER|NEW_BUSINESS") String orderSource) {
+        @Pattern(regexp = "EXISTING_ORDER|NEW_BUSINESS") String orderSource,
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) @Positive Long fulfillmentProfileId,
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) java.time.LocalDate paymentDueDate) {
+    public PiBusinessTerms(Long warehouseId, Boolean domesticShipment, String collectionEntity, String orderSource) {
+        this(warehouseId, domesticShipment, collectionEntity, orderSource, null, null);
+    }
     public PiBusinessTerms(Long warehouseId, Boolean domesticShipment, String collectionEntity) {
         this(warehouseId, domesticShipment, collectionEntity, null);
     }

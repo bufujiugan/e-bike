@@ -61,19 +61,19 @@ export const fulfillmentSequence: SequencePhase[] = [
       ] },
       { title: '车辆入库后才形成库存', tag: '库存变化', messages: [
         { from: 'warehouse', to: 'system', kind: 'action', title: '选仓库、库位，扫总码入库', summary: '核对后点击“确认入库”', location: 'PDA → 入库', input: '选择实际仓库及其库位，扫描本车整车总码。', check: '仓库库位有效且匹配；车辆已组装、未入库、未出库且无阻断异常。', result: '成功后记录车辆所在仓库和库位，生成入库记录。', recovery: '已入库先核对原记录；隔离或状态不符先处理异常，不重复确认。', guideStep: 7 },
-        { from: 'system', to: 'warehouse', kind: 'result', title: '返回入库成功与记录', summary: '在库增加，可用量仍须扣除占用', location: 'PDA 入库结果；Web → 库存管理 → 入库记录', input: '核对入库结果、车架号和库位；必要时回后台查询入库单。', check: 'SKU 可新增锁定量还要扣除隔离及已有承诺，并受车型余量限制。', result: '销售可查询该 SKU 的实际库存，进入锁定环节。', recovery: '网络中断、结果不明时先查车辆状态和入库记录，再决定下一步。', guideStep: 7 },
+        { from: 'system', to: 'warehouse', kind: 'result', title: '返回入库成功与记录', summary: '在库增加，可用量仍须扣除占用', location: 'PDA 入库结果；Web → 库存管理 → 入库记录', input: '核对入库结果、车架号和库位；必要时回后台查询入库单。', check: '正式保留库存时须扣除隔离及已有承诺，并核对仓库、SKU 和车型余量。', result: '销售可查询该 SKU 的实际库存，进入锁定环节。', recovery: '网络中断、结果不明时先查车辆状态和入库记录，再决定下一步。', guideStep: 7 },
       ] },
     ],
   },
   {
     title: '锁定与转单', subtitle: '从客户需求到待出库订单', roles: ['sales', 'system', 'warehouse'],
-    before: '客户已确定需求，SKU 已有可支撑本次锁定的合格库存。',
+    before: '客户已确定需求；先核对实际库存，预锁可超过库存，正式保留前须补足。',
     deliver: '锁定单号、销售订单号、客户、固定 SKU 与待发数量。',
     decision: '只占数量；转单要保持原客户，且不能超过锁定剩余量或有效期。',
     groups: [
-      { title: '核对库存并为客户留货', tag: '数量锁定', messages: [
-        { from: 'sales', to: 'system', kind: 'action', title: '刷新 SKU 库存与可新增锁定量', summary: '查看在库、隔离、锁定及订单占用', location: 'Web → 业务办理工作台 → 库存与锁定', input: '按车型或 SKU 找到所需规格，读取“可新增锁定”。', check: '数量同时受 SKU 合格余量和车型余量约束；各 SKU 上限不能简单相加。', result: '得到本次能够承诺给客户的数量上限。', recovery: '计划数量、作业中数量不能当作库存；库存不符先核对入库与占用记录。', guideStep: 8 },
-        { from: 'sales', to: 'system', kind: 'action', title: '提交客户、SKU、数量与有效期', summary: '代理商可选，数量在待锁定商品填写', location: 'Web → 库存与锁定 → 加入锁定 → 选择客户并锁定', input: '填写每个 SKU 数量，选择客户、可选代理商和截止时间。', check: '客户及代理商应有效、数量可用；多个 SKU 任一不足时整批不保存。', result: '按指定数量创建临时锁定，不指定具体车架。', recovery: '库存变化导致失败时刷新后调整数量；结果不明先查看锁定记录。', guideStep: 8 },
+      { title: '核对库存并登记客户预锁', tag: '数量锁定', messages: [
+        { from: 'sales', to: 'system', kind: 'action', title: '刷新 SKU 库存与可新增锁定量', summary: '查看在库、隔离、锁定及订单占用', location: 'Web → 业务办理工作台 → 库存与锁定', input: '按车型或 SKU 找到所需规格，读取“可新增锁定”。', check: '库存用于判断交付能力；预锁可以超过当前库存，不能视为已经留足实物。', result: '明确当前库存与客户意向数量的差额。', recovery: '计划数量、作业中数量不能当作库存；库存不符先核对入库与占用记录。', guideStep: 8 },
+        { from: 'sales', to: 'system', kind: 'action', title: '提交客户、SKU、数量与有效期', summary: '代理商可选，数量在待锁定商品填写', location: 'Web → 库存与锁定 → 加入锁定 → 选择客户并锁定', input: '填写每个 SKU 数量，选择客户、可选代理商和截止时间。', check: '客户及代理商应有效、数量和有效期合法；后续正式保留库存会重新核对库存。', result: '按指定数量创建临时锁定，不指定具体车架。', recovery: '库存变化导致失败时刷新后调整数量；结果不明先查看锁定记录。', guideStep: 8 },
         { from: 'system', to: 'sales', kind: 'result', title: '返回锁定单与有效期', summary: 'A 锁 30 台，剩余仍可给其他客户', location: 'Web → 本次锁定已保存 / 库存锁定列表', input: '记录锁定单号、客户、SKU、数量与到期时间。', check: '例：100 台合格可用且无其他限制，A 锁 30、B 再锁 30，剩 40。', result: '临时锁定增加；未被占用的数量仍可销售。', recovery: '不要把“加入锁定”的本次选择去重理解成整个 SKU 被禁售。', guideStep: 8 },
       ] },
       { title: '有效锁定转订单', tag: '保留库存占用', messages: [
@@ -83,7 +83,7 @@ export const fulfillmentSequence: SequencePhase[] = [
       ] },
       { title: '确认订单并准备交接', tag: '待出库', messages: [
         { from: 'sales', to: 'system', kind: 'action', title: '核对后确认销售订单', summary: '点击“确认订单，继续出库”', location: 'Web → 订单与出库 → 打开订单办理', input: '核对客户、数量、占用、计划出库日，再确认销售订单。', check: '必须是可确认订单且账号有权限；业务占用异常需先解决。', result: '订单进入待出库；关联 PI 的还需处理 PI 发货条件。', recovery: '不能确认时根据订单状态和提示处理，不让仓管绕过订单发货。', guideStep: 10 },
-        { from: 'sales', to: 'warehouse', kind: 'handoff', title: '交接订单号、客户与待发数量', summary: '提醒仓管：关联 PI 还须先完成放行', location: 'Web 订单办理 → 出库岗位', input: '交接客户、订单号、固定 SKU、数量和是否关联 PI。', check: '只有待出库或部分出库且仍有余量的订单可以继续办理。', result: '进入放行与出库阶段，按实际总码选车。', recovery: '客户或 SKU 不明确时先回订单核对，不按同车型随意替代配置。', guideStep: 10 },
+        { from: 'sales', to: 'warehouse', kind: 'handoff', title: '交接订单号、客户与待发数量', summary: '提醒仓管：销售出库必须完成 PI 放行', location: 'Web 订单办理 → 出库岗位', input: '交接客户、订单号、固定 SKU、数量和关联 PI 的履约要求。', check: '只有待出库或部分出库且仍有余量的订单可以继续办理。', result: '进入放行与出库阶段，按实际总码选车。', recovery: '客户或 SKU 不明确时先回订单核对，不按同车型随意替代配置。', guideStep: 10 },
       ] },
     ],
   },
@@ -91,17 +91,17 @@ export const fulfillmentSequence: SequencePhase[] = [
     title: '放行与出库', subtitle: '收款条件、授权放行与逐车出库', roles: ['sales', 'finance', 'system', 'warehouse'],
     before: '订单已确认或部分出库，仍有待发数量且库存占用有效。',
     deliver: '实际出库车辆、出库单、订单已发数量与剩余数量。',
-    decision: '无 PI 跳过 PI 环节；有关联 PI 时须满足收款条件并由有权限人员放行。',
+    decision: '销售出库必须关联 PI；按配置核对预付收款或后付款授权、备货及交付要求。',
     groups: [
-      { title: '是否关联 PI：有则先满足放行条件，无则跳至仓管选单', tag: '条件分支 · PI', messages: [
-        { from: 'sales', to: 'system', kind: 'condition', title: '核对订单是否关联 PI', summary: '无 PI：直接进入下面的选单与扫码', location: 'Web → 订单办理 → 本单 PI 与发货放行', input: '查关联 PI，核对客户、商品明细与本订单。', check: '有关联 PI 时不能绕过其收款与放行要求；关联冲突需先处理。', result: '无 PI 则跳到仓管选单；有 PI 则继续确认、到账与放行。', recovery: '多个 PI 关联冲突或客户不一致时，交订单人员核对后再发货。', guideStep: 10 },
+      { title: '确认 PI 与统一履约配置', tag: '条件分支 · PI', messages: [
+        { from: 'sales', to: 'system', kind: 'condition', title: '核对订单是否关联 PI', summary: '未关联 PI：先建立并确认 PI', location: 'Web → 订单办理 → 本单 PI 与发货放行', input: '查关联 PI，核对客户、商品明细与本订单。', check: '有关联 PI 时不能绕过其收款与放行要求；关联冲突需先处理。', result: '新单必须选择已发布配置与模板，确认后按要求保留库存、备货并放行。', recovery: '多个 PI 关联冲突或客户不一致时，交订单人员核对后再发货。', guideStep: 10 },
         { from: 'sales', to: 'finance', kind: 'handoff', title: '确认 PI 并交接收款要求', summary: '按 PI 约定的发货收款条件办理', location: 'Web → PI 与履约 / 本单 PI 与发货放行', input: '核对 PI 客户、SKU 明细、数量及发货收款条件，按页面完成确认。', check: '必须使用当前订单关联的 PI，不拿其他客户的收款或放行代替。', result: '财务可按该 PI 核对实际到账。', recovery: '明细或收款要求有误时先修正业务资料，不直接进入出库。', guideStep: 10 },
-        { from: 'finance', to: 'system', kind: 'action', title: '按实际到账登记收款', summary: '到账达到发货要求后才能继续', location: 'Web → PI 与履约 → 到账登记', input: '核对真实收款，再由有权限的人员填写页面要求的到账信息。', check: '出库时到账金额须达到该 PI 的发货要求金额，不统一假设必须全款。', result: '记录收款；仅登记到账还不代表已获发货放行。', recovery: '到账不足时等待或核对业务收款条件，不能用虚假到账放行。', guideStep: 10 },
-        { from: 'finance', to: 'system', kind: 'action', title: '授权人员执行发货放行', summary: '按岗位权限填写放行说明并确认', location: 'Web → PI 与履约 → 发货放行', input: '由具备放行权限的人员核对条件并填写放行说明。', check: '出库校验 PI 与放行状态均已放行，并满足发货收款要求。', result: '满足条件后可交接仓管出库。财务与放行人员可为不同人员。', recovery: '无权限交由授权人员处理；尚未放行时不能让 PDA 强行发货。', guideStep: 10 },
+        { from: 'finance', to: 'system', kind: 'action', title: '按实际到账登记收款', summary: '预付按到账门槛；后付款须逐单授权', location: 'Web → PI 与履约 → 到账登记', input: '核对真实收款，再由有权限的人员填写页面要求的到账信息。', check: '预付按约定金额校验；后付款由有权限人员批准并明确付款期限；修订确认后重新授权，原到账保留。', result: '记录收款；仅登记到账还不代表已获发货放行。', recovery: '到账不足时等待或核对业务收款条件，不能用虚假到账放行。', guideStep: 10 },
+        { from: 'finance', to: 'system', kind: 'action', title: '授权人员执行发货放行', summary: '按岗位权限填写放行说明并确认', location: 'Web → PI 与履约 → 发货放行', input: '由具备放行权限的人员核对条件并填写放行说明。', check: '出库校验 PI 与放行状态均已放行，并满足本单配置的收款或授权、库存及备货要求。', result: '满足条件后可交接仓管出库。财务与放行人员可为不同人员。', recovery: '无权限交由授权人员处理；尚未放行时不能让 PDA 强行发货。', guideStep: 10 },
         { from: 'system', to: 'sales', kind: 'result', title: 'PI 已满足发货放行条件', summary: '仍需仓管扫描实际车辆并确认出库', location: 'Web → PI / 订单办理', input: '核对放行结果与本次待发数量。', check: '放行之后实际出库仍会重新校验客户、库存、SKU 和数量。', result: '可以把订单及发货要求交给仓管。', recovery: '后续状态变化导致出库拦截时，以当前校验结果为准重新核对。', guideStep: 10 },
       ] },
       { title: '按客户与订单选车，逐台扫描总码', tag: '循环 · 本批车辆', messages: [
-        { from: 'sales', to: 'warehouse', kind: 'handoff', title: '交接本次可发订单与数量', summary: '无 PI 或已完成 PI 放行', location: '订单岗位 → PDA 出库岗位', input: '告知客户、订单号、固定 SKU 和本次计划发货数量。', check: '仓管需要实际核对车辆，订单确认和 PI 放行都不会自动出库。', result: '仓管按客户与订单建立本次扫描清单。', recovery: '发货数量临时调整时先核对订单余量，不能超过剩余量。', guideStep: 11 },
+        { from: 'sales', to: 'warehouse', kind: 'handoff', title: '交接本次可发订单与数量', summary: '已关联 PI 并完成授权放行', location: '订单岗位 → PDA 出库岗位', input: '告知客户、订单号、固定 SKU 和本次计划发货数量。', check: '仓管需要实际核对车辆，订单确认和 PI 放行都不会自动出库。', result: '仓管按客户与订单建立本次扫描清单。', recovery: '发货数量临时调整时先核对订单余量，不能超过剩余量。', guideStep: 11 },
         { from: 'warehouse', to: 'system', kind: 'action', title: 'PDA 选择客户，再搜索订单', summary: '只选待出库 / 部分出库且仍有余量的单', location: 'PDA → 出库 → 按订单出库', input: '先选客户，再按订单号或车型查询并选择目标订单。', check: '客户与订单要匹配，订单状态允许出库且有待发数量。', result: '展示订单总量、已发和剩余数量。', recovery: '找不到订单时核对客户、确认状态、关键词和权限。', guideStep: 11 },
         { from: 'warehouse', to: 'system', kind: 'action', title: '逐台扫描整车总码', summary: '每台只扫一次，核对扫描清单', location: 'PDA → 出库 → 扫描整车总码', input: '扫描本次实际要发出的每台车，核对总码与实物一致。', check: '车辆需在库、无阻断异常、车型及固定 SKU 符合订单；PI SKU 也须匹配。', result: '形成待确认扫描清单；扫描通过还不等于已经出库。', recovery: '扫错先从清单移除；同车型不同 SKU 不能随意替代。', guideStep: 11 },
       ] },
@@ -109,8 +109,20 @@ export const fulfillmentSequence: SequencePhase[] = [
         { from: 'warehouse', to: 'system', kind: 'action', title: '核对数量，确认批量出库', summary: '提交前再对照本批实物和订单余量', location: 'PDA → 出库 → 确认批量出库', input: '核对客户、订单、扫描清单与本次数量后确认。', check: '系统重新校验整批重复码、客户、订单余量、库存占用、车辆状态与 PI 条件。', result: '全部校验通过后，记录出库车辆并更新库存及订单数量。', recovery: '业务校验失败时本次整批不生效；修正错误项后再确认。', guideStep: 11 },
         { from: 'system', to: 'warehouse', kind: 'condition', title: '若有拦截：整批失败，先处理原因', summary: '未入库 / 隔离 / SKU 不符 / 余量不足等', location: 'PDA → 出库反馈', input: '按提示定位问题车辆或订单，不要把失败的扫描清单当作已出库。', check: '任一车辆或订单校验失败会回滚本次整批出库。', result: '修正后重新核对清单；不应出现只发出一部分却提示整批失败的正常业务结果。', recovery: '网络超时与业务拒绝不同：结果不确定时先查订单和出库记录，防止重复提交。', guideStep: 11 },
         { from: 'system', to: 'warehouse', kind: 'result', title: '出库成功，返回业务结果', summary: '车辆变为已出库，已发数量同步增加', location: 'PDA 出库结果；Web → 订单办理', input: '核对成功反馈、车辆清单及订单已发数量。', check: '本次车辆、库存占用与订单数量一并更新。', result: '未发完为“部分出库”；全部发完为“已完成”。', recovery: '页面未返回但记录已成功时不要重复出库，按已有出库记录核对。', guideStep: 11 },
-        { from: 'warehouse', to: 'sales', kind: 'handoff', title: '回交出库单与剩余待发数量', summary: '部分出库可下次继续；完成后核对归档', location: 'Web → 订单与出库 → 打开订单办理', input: '查看已出库车辆、总码、车架号、出库单及时间。', check: '按实际记录核对已发与剩余，不只看本次手写数量。', result: '订单、库存与实际车辆交接形成闭环。', recovery: '发现出库错误先核对实物和状态，再按授权撤销 / 纠正流程处理。', guideStep: 11 },
+        { from: 'warehouse', to: 'sales', kind: 'handoff', title: '回交出库单与剩余待发数量', summary: '部分出库可下次继续；出库后继续核对交付、结算及单据', location: 'Web → 订单与出库 → 打开订单办理', input: '查看已出库车辆、总码、车架号、出库单及时间。', check: '按实际记录核对已发与剩余，不只看本次手写数量。', result: '出库事实与库存一致；之后进入 PI 流程确认送达、款项和必需单据并结案。', recovery: '发现出库错误先核对实物和状态，再按授权撤销 / 纠正流程处理。', guideStep: 11 },
       ] },
     ],
   },
+  {
+    title: '交付与结案', subtitle: '按配置核对运输、款项与文件', roles: ['sales','finance','system','warehouse'],
+    before: '已按订单实际出库；客户货代提货也须保留交接记录。', deliver: '送达记录、实际收款及本单配置要求的业务单据。',
+    decision: '付款与单据按实际情况分别办理；签收不自动代表结案。',
+    groups: [{ title: '按本单配置办理', tag: '统一规则', messages: [
+      { from: 'warehouse', to: 'sales', kind: 'handoff', title: '交接提货或运输信息', summary: '客户提货和我方运输分别登记实际安排', location: 'PI 与履约 → 物流信息', input: '按实际出库批次填写提货联系人、承运商或运单信息。', check: '不得把货代提货当作客户送达。', result: '业务继续跟进运输并确认实际送达。', recovery: '信息未知时如实说明；撤回物流后重新核对凭证。', guideStep: 13 },
+      { from: 'sales', to: 'system', kind: 'action', title: '登记发送与回收业务单据', summary: '按要求办理 CI、RD、回签及 CMR', location: 'PI 详情 → 业务单据附件与流程', input: '上传本单文件，选择附件并登记实际日期和接收人。', check: '上传不会自动发给客户；先实际发送，再登记发送完成。', result: '文件与对应节点关联，保留操作人及日期。', recovery: '缺少附件或日期时补齐，不使用其他 PI 的附件代替。', guideStep: 13 },
+      { from: 'finance', to: 'system', kind: 'action', title: '确认真实到账并核对结清', summary: '后付款授权不是到账', location: 'PI 详情 → 收款与放行', input: '按约定期限登记实际到账及凭证。', check: '所需结清金额按当前 PI 总金额核对。', result: '到账足额后结清节点自动完成。', recovery: '错误到账按权限撤回；需要重新核对结案条件。', guideStep: 13 },
+      { from: 'sales', to: 'system', kind: 'action', title: '核对后结案', summary: '交付、款项和必需单据都已满足', location: 'PI 详情 → 业务流程', input: '核对本单配置及各节点，填写结案说明。', check: '未出库、未送达、未结清或必需文件未完成时不能结案。', result: '本笔履约业务完成。', recovery: '撤销出库、运输或到账会使相关完成条件失效，须重新核对。', guideStep: 13 },
+    ] }],
+  },
+
 ]

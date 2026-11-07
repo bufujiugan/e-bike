@@ -4,12 +4,13 @@
   <!-- 调用方固定使用占用别名r、订单别名o；时间由数据库判定。 -->
   <sql id="reservationActive">
     o.status IN ('DRAFT','PENDING','CONFIRMED','PARTIAL_SHIPPED','SHIPPED')
-    AND (r.hold_mode='PAID' OR (r.hold_mode='TIMED' AND r.expires_at&gt;NOW(3)))
+    AND (r.hold_mode IN ('PAID','CREDIT') OR (r.hold_mode='TIMED' AND r.expires_at&gt;NOW(3)))
   </sql>
   <sql id="reservationStatus">
     CASE WHEN r.order_id IS NULL THEN 'NONE'
       WHEN r.hold_mode='RELEASED' OR o.status IN ('CANCELLED','CLOSED') THEN 'RELEASED'
       WHEN o.status='SHIPPED' THEN 'FULFILLED'
+      WHEN r.hold_mode='CREDIT' THEN 'CREDIT_HELD'
       WHEN r.hold_mode='PAID' THEN 'PAID_HELD'
       WHEN r.hold_mode='TIMED' AND r.expires_at&gt;NOW(3) THEN 'TIMED_ACTIVE'
       ELSE 'EXPIRED_REQUIRES_REACQUIRE' END
@@ -42,12 +43,12 @@
     UNION ALL
     SELECT r.model_id,GREATEST(r.reserved_qty-i.shipped_qty,0) qty FROM bike_order_reservation r
     JOIN bike_sales_order o ON o.id=r.order_id JOIN bike_sales_order_item i ON i.order_id=o.id AND i.product_model_id=r.model_id
-    WHERE <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/> AND (r.scope_type='MODEL_LEGACY' OR r.hold_mode='PAID')
+    WHERE <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/> AND (r.scope_type='MODEL_LEGACY' OR r.hold_mode IN ('PAID','CREDIT'))
   </sql>
   <sql id="fulfillmentSkuCommitments">
     SELECT si.sku_id,si.ordered_qty-si.shipped_qty-si.closed_qty qty,r.order_id FROM bike_order_reservation_item si
     JOIN bike_order_reservation r ON r.order_id=si.order_id JOIN bike_sales_order o ON o.id=r.order_id
-    WHERE r.scope_type='SKU' AND r.hold_mode='PAID' AND <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/>
+    WHERE r.scope_type='SKU' AND r.hold_mode IN ('PAID','CREDIT') AND <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/>
   </sql>
   <!-- PI已付款占用先归属指定仓库，再按库位展示；其余全局承诺沿用原分摊口径。 -->
   <sql id="inventoryCtes">
@@ -69,7 +70,7 @@
       FROM bike_order_reservation r JOIN bike_order_reservation_item ri ON ri.order_id=r.order_id
       JOIN bike_sales_order o ON o.id=r.order_id JOIN bike_pi_order_link link ON link.order_id=o.id
       JOIN bike_pi_series series ON series.id=link.series_id JOIN bike_pi p ON p.id=series.current_pi_id
-      WHERE r.hold_mode='PAID' AND o.status IN ('CONFIRMED','PARTIAL_SHIPPED')
+      WHERE r.hold_mode IN ('PAID','CREDIT') AND o.status IN ('CONFIRMED','PARTIAL_SHIPPED')
         AND JSON_EXTRACT(p.document_snapshot,'$.business.warehouseId') IS NOT NULL
         AND JSON_TYPE(JSON_EXTRACT(p.document_snapshot,'$.business.warehouseId'))!='NULL'
       GROUP BY r.model_id,warehouse_id

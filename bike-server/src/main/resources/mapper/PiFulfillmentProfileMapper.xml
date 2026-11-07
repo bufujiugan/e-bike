@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.pi.PiFulfillmentProfileMapper">
+  <select id="listProfiles" resultType="com.bike.server.pi.PiFulfillmentProfileMapper$StoredProfile">SELECT id,profile_json,enabled,created_at FROM bike_pi_fulfillment_profile ORDER BY id DESC</select>
+  <select id="selectProfile" resultType="com.bike.server.pi.PiFulfillmentProfileMapper$StoredProfile">SELECT id,profile_json,enabled,created_at FROM bike_pi_fulfillment_profile WHERE id=#{id}</select>
+  <select id="selectVersion" resultType="com.bike.server.pi.PiFulfillmentProfileMapper$StoredProfile">SELECT id,profile_json,enabled,created_at FROM bike_pi_fulfillment_profile WHERE profile_code=#{code} AND version=#{version}</select>
+  <insert id="insertProfile">INSERT INTO bike_pi_fulfillment_profile(profile_code,version,profile_json,enabled,created_by) VALUES(#{r.profileCode},#{r.version},#{json},1,#{operatorId})</insert>
+  <update id="updateEnabled">UPDATE bike_pi_fulfillment_profile SET enabled=#{enabled} WHERE id=#{id}</update>
+  <select id="countDocumentEvidence" resultType="int">SELECT COUNT(*) FROM bike_pi_confirmation_attachment WHERE pi_id=#{piId} AND id=#{id}</select>
+  <insert id="insertCreditSource">
+    INSERT INTO bike_inventory_lock(lock_no,agent_id,customer_id,sku_id,product_model_id,scope_type,lock_qty,converted_qty,expire_time,created_by,status,remark)
+    SELECT #{lockNo},p.agent_id,p.customer_id,sku.id,sku.model_id,'SKU',#{quantity},#{quantity},NOW(3),#{operatorId},'CONVERTED','PI经后付款授权后建立订单库存占用'
+    FROM bike_pi p JOIN bike_production_sku sku ON sku.id=#{skuId} WHERE p.id=#{piId}
+  </insert>
+  <insert id="insertCreditReservation">
+    INSERT INTO bike_order_reservation(order_id,source_lock_id,request_id,model_id,reserved_qty,expires_at,scope_type,hold_mode,payment_hold_pi_id,payment_held_at,payment_held_by,payment_held_amount)
+    SELECT #{orderId},id,CONCAT('PI_CREDIT_',#{piId},'_',#{orderId}),product_model_id,lock_qty,NOW(3),'SKU','CREDIT',#{piId},NOW(3),#{operatorId},0 FROM bike_inventory_lock WHERE id=#{lockId}
+  </insert>
+  <update id="updateCreditReservation">UPDATE bike_order_reservation SET hold_mode='CREDIT',payment_hold_pi_id=#{piId},payment_held_at=NOW(3),payment_held_by=#{operatorId},released_at=NULL WHERE order_id=#{orderId} AND hold_mode IN ('TIMED','CREDIT')</update>
+</mapper>

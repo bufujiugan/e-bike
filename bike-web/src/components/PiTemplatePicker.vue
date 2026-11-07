@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isSelectablePiLayout } from '../pi-template-layouts'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import api from '../api'
 import { piApi, type PiDocument, type PiTemplate } from '../pi-api'
@@ -38,12 +39,12 @@ function isSelected(template: PiTemplate) {
     <el-alert v-if="error" :title="error" type="error" show-icon :closable="false"><el-button text :disabled="disabled" @click="load">重新加载模板</el-button></el-alert>
     <div v-else-if="!busy && !templates.length" class="pi-template-empty">
       <strong>{{ hasSelection ? '当前查询未返回可替换的模板' : '暂无已发布的' + (tradeType === 'EXPORT' ? '外销' : '内销') + '模板' }}</strong>
-      <p>{{ hasSelection ? '已保留单据中的模板快照；保存时仍由服务端校验模板有效性。' : '可先填写其他资料；保存前需要选用已发布的完整 V3 模板。' }}</p>
+      <p>{{ hasSelection ? '已保留单据中的模板快照；保存时仍由服务端校验模板有效性。' : '可先填写其他资料；保存前需要选用已发布的完整模板。' }}</p>
       <el-button v-if="canManage" :disabled="disabled" @click="emit('manage')">前往模板管理</el-button><span v-else>请联系模板管理员发布。</span>
     </div>
     <div v-loading="busy" class="pi-template-options" :aria-busy="busy">
-      <button v-for="template in templates" :key="template.id" type="button" class="pi-template-option" :class="{ selected: isSelected(template) }" :aria-pressed="isSelected(template)" :disabled="disabled || busy || !template.layoutCode.endsWith('_V3')" @click="emit('select', template)">
-        <span class="pi-template-option-title"><strong>{{ template.templateCode }}</strong><span>{{ template.templateVersion }}</span><b>{{ isSelected(template) ? '已选用' : template.layoutCode.endsWith('_V3') ? '选用' : '历史版式 · 不可选用' }}</b></span>
+      <button v-for="template in templates" :key="template.id" type="button" class="pi-template-option" :class="{ selected: isSelected(template) }" :aria-pressed="isSelected(template)" :disabled="disabled || busy || !isSelectablePiLayout(template.layoutCode)" @click="emit('select', template)">
+        <span class="pi-template-option-title"><strong>{{ template.templateCode }}</strong><span>{{ template.templateVersion }}</span><b>{{ isSelected(template) ? '已选用' : isSelectablePiLayout(template.layoutCode) ? '选用' : '历史版式 · 不可选用' }}</b></span>
         <span>{{ template.sellerName }}</span><small>{{ template.bankName }}</small>
       </button>
     </div>
