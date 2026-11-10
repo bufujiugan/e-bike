@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RecordIdColumn from './table/RecordIdColumn.vue'
 import { onMounted, ref, watch } from 'vue'
 import api from '../api'
 import { piApi, type PiQueueRow } from '../pi-api'
@@ -44,6 +45,7 @@ onMounted(summary)
       <form class="pi-filters" @submit.prevent="search"><el-input v-model="keyword" placeholder="业务编号或客户名称" clearable /><el-button native-type="submit" :loading="busy">查询</el-button></form>
       <el-alert v-if="error" :title="error" type="error" :closable="false" />
       <el-table :data="rows" v-loading="busy" empty-text="没有符合条件的待办">
+      <RecordIdColumn />
         <el-table-column label="类型" width="85"><template #default="{ row }">{{ { PI: 'PI', ORDER: '订单', LOCK: '锁定' }[row.recordType as PiQueueRow['recordType']] }}</template></el-table-column>
         <el-table-column prop="referenceNo" label="业务编号" min-width="220"><template #default="{ row }"><el-button v-if="row.piId" link type="primary" @click="emit('openPi', row.piId)">{{ row.referenceNo }} · R{{ row.revision }}</el-button><span v-else>{{ row.referenceNo }}</span></template></el-table-column>
         <el-table-column prop="customerName" label="客户" min-width="150" /><el-table-column prop="businessOwner" label="负责人" min-width="120" />

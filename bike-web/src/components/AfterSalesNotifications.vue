@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RecordIdColumn from './table/RecordIdColumn.vue'
 import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { afterSales, afterSalesError, type CaseNotification, type NotificationPage } from '../after-sales-api'
@@ -36,6 +37,7 @@ onMounted(load); onUnmounted(() => { version++ })
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <el-button :loading="loading" @click="load">刷新通知状态</el-button>
     <el-table :data="result?.notifications.records || []" v-loading="loading" empty-text="当前案例暂无通知">
+      <RecordIdColumn />
       <el-table-column label="事件" min-width="150"><template #default="{row}">{{ events[row.eventType] || row.eventType }}</template></el-table-column>
       <el-table-column label="收件人" min-width="180"><template #default="{row}">{{ row.audience === 'STAFF' ? '售后公共邮箱' : '客户' }} · {{ row.recipient || '待配置' }}<small v-if="row.originalRecipient && row.originalRecipient !== row.recipient">原地址：{{ row.originalRecipient }}</small></template></el-table-column>
       <el-table-column label="状态 / 最近原因" min-width="200"><template #default="{row}">{{ states[row.status as keyof typeof states] }}<small v-if="row.lastError">{{ errors[row.lastError] || row.lastError }}</small></template></el-table-column>

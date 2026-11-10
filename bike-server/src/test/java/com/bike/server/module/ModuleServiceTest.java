@@ -44,14 +44,14 @@ class ModuleServiceTest {
         ModuleMapper mapper = mock(ModuleMapper.class);
         when(mapper.countRows(eq("agents"), isNull(), anyList(), isNull(), eq(false))).thenReturn(1L);
         when(mapper.selectRowsPage(eq("agents"), isNull(), anyList(), isNull(), eq("创建时间"), eq(0L), eq(20L), eq(false))).thenReturn(List.of(
-                Map.of("代理商编号", "AGT-001", "代理商名称", "Global E-Bike", "联系人", "Bob", "联系电话", "139", "状态", "启用", "创建时间", "2026-09-06 10:00:00", "修改时间", "2026-09-06 11:00:00")
+                Map.of("代理商编号", "AGT-001", "代理商名称", "Global E-Bike", "联系人", "Bob", "联系电话", "139", "状态", "启用", "创建时间", "2026-09-06 10:00:00", "修改时间", "2026-09-06 11:00:00", "ID", 123L)
         ));
 
         ModulePageResponse page = com.bike.server.common.CustomerScopeTestSupport.isolated(new ModuleServiceImpl(mapper)).list("agents", null, 1, 20);
 
         assertThat(page.total()).isEqualTo(1);
-        assertThat(page.columns()).containsExactly("代理商编号", "代理商名称", "联系人", "联系电话", "状态", "创建时间", "修改时间");
-        assertThat(page.rows().get(0)).containsExactly("AGT-001", "Global E-Bike", "Bob", "139", "启用", "2026-09-06 10:00:00", "2026-09-06 11:00:00");
+        assertThat(page.columns()).containsExactly("代理商编号", "代理商名称", "联系人", "联系电话", "状态", "创建时间", "修改时间", "ID");
+        assertThat(page.rows().get(0)).containsExactly("AGT-001", "Global E-Bike", "Bob", "139", "启用", "2026-09-06 10:00:00", "2026-09-06 11:00:00", "123");
     }
 
     @Test
@@ -60,13 +60,13 @@ class ModuleServiceTest {
         ModuleMapper mapper = mock(ModuleMapper.class);
         when(mapper.countRows(eq("locations"), isNull(), anyList(), isNull(), eq(false))).thenReturn(1L);
         when(mapper.selectRowsPage(eq("locations"), isNull(), anyList(), isNull(), eq("创建时间"), eq(0L), eq(20L), eq(false))).thenReturn(List.of(
-                Map.of("仓库", "成品仓", "仓库编码", "FG-01", "库位", "A区一号位", "库位编码", "A-01-01", "状态", "启用", "创建时间", "2026-09-06 10:00:00", "修改时间", "2026-09-06 11:00:00")
+                Map.of("仓库", "成品仓", "仓库编码", "FG-01", "库位", "A区一号位", "库位编码", "A-01-01", "状态", "启用", "创建时间", "2026-09-06 10:00:00", "修改时间", "2026-09-06 11:00:00", "ID", 123L, "仓库 ID", 7L)
         ));
 
         ModulePageResponse page = com.bike.server.common.CustomerScopeTestSupport.isolated(new ModuleServiceImpl(mapper)).list("locations", null, 1, 20);
 
         assertThat(page.total()).isEqualTo(1);
-        assertThat(page.rows().get(0)).containsExactly("成品仓", "FG-01", "A区一号位", "A-01-01", "启用", "2026-09-06 10:00:00", "2026-09-06 11:00:00");
+        assertThat(page.rows().get(0)).containsExactly("成品仓", "FG-01", "A区一号位", "A-01-01", "启用", "2026-09-06 10:00:00", "2026-09-06 11:00:00", "123", "7");
     }
 
     @Test
@@ -107,8 +107,8 @@ class ModuleServiceTest {
 
         ModulePageResponse page = com.bike.server.common.CustomerScopeTestSupport.isolated(new ModuleServiceImpl(mapper)).list("orders", null, 1, 20);
 
-        assertThat(page.columns()).endsWith("创建时间", "修改时间");
-        assertThat(page.rows().getFirst()).endsWith("2026-10-16 10:00:00", "2026-10-16 11:00:00");
+        assertThat(page.columns().subList(11, 13)).containsExactly("创建时间", "修改时间");
+        assertThat(page.rows().getFirst().subList(11, 13)).containsExactly("2026-10-16 10:00:00", "2026-10-16 11:00:00");
         verify(mapper).selectRowsPage(eq("orders"), isNull(), anyList(), isNull(), eq("创建时间"), eq(0L), eq(20L), eq(false));
     }
 
@@ -121,7 +121,7 @@ class ModuleServiceTest {
                         "修改时间", java.sql.Timestamp.valueOf("2026-10-16 10:06:07.123"),
                         "计划发货", java.sql.Date.valueOf("2026-10-20"))));
         var page = com.bike.server.common.CustomerScopeTestSupport.isolated(new ModuleServiceImpl(mapper)).list("orders", null, 1, 20);
-        assertThat(page.rows().getFirst()).endsWith("2026-10-16 09:05:00", "2026-10-16 10:06:07");
+        assertThat(page.rows().getFirst().subList(11, 13)).containsExactly("2026-10-16 09:05:00", "2026-10-16 10:06:07");
         assertThat(page.rows().getFirst().get(5)).isEqualTo("2026-10-20");
     }
 
@@ -130,5 +130,33 @@ class ModuleServiceTest {
         authorities.add(new SimpleGrantedAuthority("ROLE_" + role));
         for (String permission : permissions) authorities.add(new SimpleGrantedAuthority(permission));
         return UsernamePasswordAuthenticationToken.authenticated("test-user", null, authorities);
+    }
+
+    @Test
+    void supplierIdentifiersKeepFullPrecisionAndExistingBusinessColumnPositions() {
+        SecurityContextHolder.getContext().setAuthentication(authentication("WEB_OPERATOR", "PERM_MASTER_READ"));
+        ModuleMapper mapper = mock(ModuleMapper.class);
+        when(mapper.selectRowsPage(eq("suppliers"), isNull(), anyList(), eq("9007199254740993"),
+                eq("创建时间"), eq(20L), eq(20L), eq(false))).thenReturn(List.of(
+                Map.of("ID", 9007199254740993L, "供应商编号", "SUP-01", "供应商名称", "供应商一", "状态", "启用")));
+        var page = com.bike.server.common.CustomerScopeTestSupport.isolated(new ModuleServiceImpl(mapper))
+                .list("suppliers", "9007199254740993", 2, 20);
+        assertThat(page.columns()).endsWith("ID");
+        assertThat(page.rows().getFirst().getFirst()).isEqualTo("SUP-01");
+        assertThat(page.rows().getFirst().get(4)).isEqualTo("启用");
+        assertThat(page.rows().getFirst().getLast()).isEqualTo("9007199254740993");
+        verify(mapper).countRows(eq("suppliers"), isNull(), argThat(columns -> columns.contains("ID")),
+                eq("9007199254740993"), eq(false));
+    }
+
+    @Test
+    void inventoryShowsRealDimensionIdentifiersInsteadOfInventedRowIds() {
+        SecurityContextHolder.getContext().setAuthentication(authentication("WEB_OPERATOR", "PERM_INVENTORY_READ"));
+        ModuleMapper mapper = mock(ModuleMapper.class);
+        when(mapper.selectRowsPage(eq("inventory"), isNull(), anyList(), isNull(), eq("入库日期"),
+                eq(0L), eq(20L), eq(false))).thenReturn(List.of(Map.of("车型 ID", 3L, "仓库 ID", 5L, "库位 ID", 8L)));
+        var page = com.bike.server.common.CustomerScopeTestSupport.isolated(new ModuleServiceImpl(mapper)).list("inventory", null, 1, 20);
+        assertThat(page.columns()).endsWith("车型 ID", "仓库 ID", "库位 ID");
+        assertThat(page.rows().getFirst()).endsWith("3", "5", "8");
     }
 }

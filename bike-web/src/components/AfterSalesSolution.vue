@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RecordIdColumn from './table/RecordIdColumn.vue'
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { afterSales, afterSalesError, warrantyNames, type AfterSalesCase, type SolutionDraft, type SolutionVersion } from '../after-sales-api'
@@ -62,7 +63,8 @@ const time = (value: string | null) => value ? value.replace('T', ' ').slice(0, 
     </el-form>
     <template v-else-if="displayed">
       <dl class="grid"><div><dt>技术判断</dt><dd>{{ displayed.document.technicalJudgment || '—' }}</dd></div><div><dt>故障原因</dt><dd>{{ displayed.document.faultCause || '—' }}</dd></div><div class="wide"><dt>维修方案</dt><dd>{{ displayed.document.solution }}</dd></div><div><dt>客户操作</dt><dd>{{ displayed.document.customerActions || '—' }}</dd></div><div><dt>维修说明</dt><dd>{{ displayed.document.repairNotes || '—' }}</dd></div><div><dt>保修责任</dt><dd>{{ warrantyNames[displayed.document.warrantyStatus] || '历史未确认' }}</dd></div><div><dt>费用责任</dt><dd>{{ displayed.document.chargeReason || '未登记客户承担费用' }}（{{ displayed.document.currency || '旧资料未明确币种' }}）</dd></div><div v-if="canInternal" class="wide"><dt>内部备注</dt><dd>{{ displayed.document.internalNote || '—' }}</dd></div><div><dt>技术确认</dt><dd>{{ time(displayed.confirmedAt) }}</dd></div><div><dt>负责人审批</dt><dd>{{ time(displayed.approvedAt) }}</dd></div></dl>
-      <el-table :data="displayed.parts" empty-text="本版没有结构化配件条目"><el-table-column prop="partCode" label="编号" min-width="130" /><el-table-column prop="partName" label="配件" min-width="150" /><el-table-column prop="quantity" label="累计批准" width="100" /><el-table-column prop="allocatedQty" label="已计划 / 已发" width="130" /><el-table-column prop="unitCharge" label="每件客户费用" min-width="130" /><el-table-column label="旧件退回" width="110"><template #default="scope">{{ scope.row.returnRequired ? '需退回' : '无需退回' }}</template></el-table-column></el-table>
+      <el-table :data="displayed.parts" empty-text="本版没有结构化配件条目">
+      <RecordIdColumn /><el-table-column prop="partCode" label="编号" min-width="130" /><el-table-column prop="partName" label="配件" min-width="150" /><el-table-column prop="quantity" label="累计批准" width="100" /><el-table-column prop="allocatedQty" label="已计划 / 已发" width="130" /><el-table-column prop="unitCharge" label="每件客户费用" min-width="130" /><el-table-column label="旧件退回" width="110"><template #default="scope">{{ scope.row.returnRequired ? '需退回' : '无需退回' }}</template></el-table-column></el-table>
     </template>
   </section>
 </template>

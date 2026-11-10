@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RecordIdColumn from './table/RecordIdColumn.vue'
 import { onMounted, ref } from 'vue'
 import api from '../api'
 import CustomerScopeEditor from './CustomerScopeEditor.vue'
@@ -23,6 +24,7 @@ onMounted(() => load())
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <el-form inline @submit.prevent="load()"><el-form-item label="账号或姓名"><el-input v-model="keyword" :disabled="busy" /></el-form-item><el-button native-type="submit" :loading="busy">查询</el-button></el-form>
     <el-table :data="users" v-loading="busy" empty-text="没有匹配的内部账号">
+      <RecordIdColumn />
       <el-table-column prop="username" label="账号" /><el-table-column prop="displayName" label="姓名" /><el-table-column prop="userType" label="账号类型" />
       <el-table-column label="状态"><template #default="{ row }">{{ row.enabled ? '启用' : '停用' }}</template></el-table-column>
       <el-table-column label="创建时间" min-width="175"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column>

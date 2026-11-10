@@ -151,6 +151,19 @@ public class ModuleServiceImpl implements ModuleService {
         definitions.put("agent-inventory", definitions.get("inventory"));
         definitions.put("agent-locks", definitions.get("inventory-locks"));
         definitions.put("purchase-intents", definition("代理商采购意向与后续订单线索", List.of("代理商", "授权车型", "意向数量", "有效期", "状态", "创建时间", "修改时间"), "新增采购意向"));
+        // ID 追加到响应末尾，保留现有按列下标读取的编辑、状态变更和详情逻辑。
+        definitions.replaceAll((module, definition) -> {
+            List<String> identifiers = switch (module) {
+                case "inventory", "agent-inventory" -> List.of("车型 ID", "仓库 ID", "库位 ID");
+                case "warehouses" -> List.of("仓库 ID", "库位 ID");
+                case "locations" -> List.of("ID", "仓库 ID");
+                case "orders" -> List.of("ID", "订单明细 ID");
+                default -> List.of("ID");
+            };
+            List<String> columns = new java.util.ArrayList<>(definition.columns());
+            columns.addAll(identifiers);
+            return definition(definition.subtitle(), List.copyOf(columns), definition.action());
+        });
         return definitions;
     }
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RecordIdColumn from './table/RecordIdColumn.vue'
 import { createUuid } from '../utils/uuid'
 import { computed, ref, reactive, watch, onMounted, onUnmounted } from "vue";
 import api from "../api";
@@ -640,7 +641,8 @@ onMounted(() =>
 
     <template v-if="tab === 'inventory'">
       <DataTable :loading="loading" :error="readError" :rows="inventoryRows" :max-height="moduleTableMaxHeight"
-        ><el-table-column prop="skuCode" label="SKU" /><el-table-column
+        >
+      <RecordIdColumn prop="skuId" label="SKU ID" /><RecordIdColumn prop="modelId" label="车型 ID" /><RecordIdColumn prop="warehouseId" label="仓库 ID" /><RecordIdColumn prop="locationId" label="库位 ID" /><el-table-column prop="skuCode" label="SKU" /><el-table-column
           prop="productName"
           label="商品" /><el-table-column
           prop="warehouseName"
@@ -657,7 +659,8 @@ onMounted(() =>
       </p></template
     >
     <DataTable :loading="loading" :error="readError" v-if="tab === 'quarantine'" :rows="quarantinedParts" :max-height="moduleTableMaxHeight"
-      ><el-table-column prop="code" label="隔离旧件编码" /><el-table-column
+      >
+      <RecordIdColumn /><el-table-column prop="code" label="隔离旧件编码" /><el-table-column
         prop="codeType"
         label="类型"
       /><el-table-column prop="qcStatus" label="质检状态" /><el-table-column label="创建时间" min-width="165"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column><el-table-column label="修改时间" min-width="165"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column><el-table-column
@@ -671,6 +674,7 @@ onMounted(() =>
       ></DataTable
     >
     <DataTable :loading="loading" :error="readError" v-if="tab === 'scan-failures'" :rows="scanFailures" :max-height="moduleTableMaxHeight">
+      <RecordIdColumn />
       <el-table-column label="创建时间" min-width="170"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column>
       <el-table-column label="修改时间" min-width="170"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column>
       <el-table-column prop="taskId" label="任务" min-width="210" />
@@ -683,6 +687,7 @@ onMounted(() =>
     <template v-if="tab === 'tasks'">
       <p class="task-list-hint"><AppIcon name="info" />一个工单关联一个 SKU、一个批次和多台车；首次扫码时自动创建单车记录，进入工单即可连续扫码、打印和入库。</p>
       <DataTable :loading="loading" :error="readError" :rows="tasks" class="production-task-table" scrollbar-always-on stripe :max-height="moduleTableMaxHeight" row-key="id" empty-title="暂无生产工单">
+      <RecordIdColumn />
         <el-table-column prop="workOrderNo" label="工单号" min-width="150" show-overflow-tooltip />
         <el-table-column prop="skuCode" label="商品规格（SKU）" min-width="100" show-overflow-tooltip>
           <template #header><el-tooltip content="SKU是商品规格编号，用来区分同一车型的颜色、电池容量等配置。"><span>商品规格（SKU）</span></el-tooltip></template>
@@ -701,6 +706,7 @@ onMounted(() =>
     </template>
     <template v-if="tab === 'skus'">
       <DataTable :loading="loading" :error="readError" :rows="pagedSkus" class="production-sku-table" scrollbar-always-on row-key="id" :max-height="moduleTableMaxHeight" :empty-title="skuSearch ? '没有匹配的商品 SKU' : '暂无商品 SKU'">
+      <RecordIdColumn />
         <el-table-column prop="productName" label="标签标题" min-width="180" show-overflow-tooltip />
         <el-table-column prop="modelCode" label="MODEL" min-width="120" show-overflow-tooltip />
         <el-table-column prop="category" label="CATEGORY" min-width="100"><template #default="{ row }">{{ row.category || '—' }}</template></el-table-column>
@@ -718,7 +724,8 @@ onMounted(() =>
       <Pagination v-model:page="skuPage" v-model:page-size="skuPageSize" :sizes="[20, 50, 100]" :total="filteredSkus.length" :disabled="loading" />
     </template>
     <DataTable :loading="loading" :error="readError" v-if="tab === 'templates'" :rows="templates" :max-height="moduleTableMaxHeight"
-      ><el-table-column prop="name" label="标签模板" /><el-table-column
+      >
+      <RecordIdColumn /><el-table-column prop="name" label="标签模板" /><el-table-column
         prop="widthMm"
         label="宽 mm"
       /><el-table-column prop="heightMm" label="高 mm" /><el-table-column
@@ -744,7 +751,8 @@ onMounted(() =>
       <p v-if="canReportIssue && lastIssueId">照片归属：{{ savedIssueCode }} · 异常 {{ lastIssueId }}</p>
       <BusinessAttachmentUpload v-if="canReportIssue && lastIssueId" :key="lastIssueId" :endpoint="`/api/production/issues/${lastIssueId}/images`" images-only @saved="perform(load)" @busy="issueImagesBusy = $event" />
       <DataTable :loading="loading" :error="readError" :rows="issues" :max-height="moduleTableMaxHeight"
-        ><el-table-column label="聚合码 / 部件码" min-width="200" show-overflow-tooltip><template #default="{ row }">{{ row.vehicleQrCode || row.code }}</template></el-table-column><el-table-column
+        >
+      <RecordIdColumn /><el-table-column label="聚合码 / 部件码" min-width="200" show-overflow-tooltip><template #default="{ row }">{{ row.vehicleQrCode || row.code }}</template></el-table-column><el-table-column
           prop="reason"
           label="异常原因"
         /><el-table-column label="状态"
@@ -781,7 +789,7 @@ onMounted(() =>
       /><DataTable :loading="loading" :error="readError" :rows="prints" :max-height="moduleTableMaxHeight"
         ><el-table-column
           prop="id"
-          label="任务号"
+          label="ID"
           min-width="280"
         /><el-table-column label="状态"
           ><template #default="s">{{
@@ -864,6 +872,7 @@ onMounted(() =>
         <el-button v-if="canManage" type="primary" plain :disabled="skuNamesBusy" @click="addSkuName"><AppIcon name="plus" />添加 Name</el-button>
       </div>
       <DataTable :loading="skuNamesBusy" :rows="skuNames" row-key="clientKey" empty-title="尚未绑定 Name">
+      <RecordIdColumn />
         <el-table-column label="NAME" min-width="235">
           <template #default="{ row }"><el-input v-model="row.name" :disabled="!canManage" maxlength="128" placeholder="填写唯一 Name" /></template>
         </el-table-column>
@@ -918,7 +927,7 @@ onMounted(() =>
       <div v-loading="journeyBusy" v-if="vehicleJourney">
         <p>车架：{{ vehicleJourney.frameSn || '—' }} · 总码：{{ vehicleJourney.qrCode || '四码未完成' }}</p>
         <el-alert v-if="journeyError" type="error" :title="journeyError" :closable="false" /><el-button v-if="journeyError" @click="openVehicleJourney(vehicleJourney)">重试关联记录</el-button>
-        <h3>本车打印记录</h3><el-table :data="vehiclePrints" empty-text="暂无打印任务；四码完成后自动生成首次打印任务"><el-table-column prop="id" label="任务号" min-width="180" /><el-table-column label="状态" min-width="100"><template #default="{row}">{{ states[row.status] ?? row.status }}</template></el-table-column><el-table-column label="创建时间 ↓" min-width="165"><template #default="{row}">{{ formatDateTime(row.createdAt) }}</template></el-table-column><el-table-column label="修改时间" min-width="165"><template #default="{row}">{{ formatDateTime(row.updatedAt) }}</template></el-table-column><el-table-column label="操作" width="130"><template #default="{row}"><el-button link type="primary" @click="preview(row.id)">预览 / 打印</el-button></template></el-table-column></el-table>
+        <h3>本车打印记录</h3><el-table :data="vehiclePrints" empty-text="暂无打印任务；四码完成后自动生成首次打印任务"><el-table-column prop="id" label="ID" min-width="180" /><el-table-column label="状态" min-width="100"><template #default="{row}">{{ states[row.status] ?? row.status }}</template></el-table-column><el-table-column label="创建时间 ↓" min-width="165"><template #default="{row}">{{ formatDateTime(row.createdAt) }}</template></el-table-column><el-table-column label="修改时间" min-width="165"><template #default="{row}">{{ formatDateTime(row.updatedAt) }}</template></el-table-column><el-table-column label="操作" width="130"><template #default="{row}"><el-button link type="primary" @click="preview(row.id)">预览 / 打印</el-button></template></el-table-column></el-table>
         <p>打印提交后请核对实物标签；返回生产单的「办理入库」即可继续，也可由入库人员使用 PDA 扫码办理。</p>
         <el-button v-if="vehicleTrace?.vehicle.currentOrderNo && hasPermission(context,'ORDER_READ')" type="primary" @click="emit('order',String(vehicleTrace.vehicle.currentOrderNo))">打开本车关联订单 {{ vehicleTrace.vehicle.currentOrderNo }}</el-button>
         <TraceDetails v-if="vehicleTrace" :data="vehicleTrace" />

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RecordIdColumn from './table/RecordIdColumn.vue'
 import { createUuid } from '../utils/uuid'
 import { ref, watch } from 'vue'
 import { piApi, type PiView } from '../pi-api'
@@ -41,6 +42,7 @@ function select(row: PiView) { visible.value = false; emit('select', row) }
   <el-dialog v-model="visible" title="PI 修订与版本历史" width="min(850px, 94vw)" append-to-body :close-on-click-modal="false">
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <el-table :data="rows" v-loading="busy">
+      <RecordIdColumn />
       <el-table-column prop="revision" label="版本" width="70" />
       <el-table-column label="状态"><template #default="{ row }">{{ states[row.status] || row.status }}</template></el-table-column>
       <el-table-column prop="currencyCode" label="币种" width="70" />

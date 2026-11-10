@@ -34,6 +34,7 @@ watch(() => props.record.id, () => { visible.value = false; selected.value = nul
     <article v-for="row in record.shipments" :key="row.id" class="shipment">
       <header><strong>{{ row.partCode || '历史编号未核对' }} · {{ row.partName }} × {{ row.quantity }}</strong><el-tag>{{ states[row.status] }}</el-tag></header>
       <dl>
+        <div><dt>ID</dt><dd>{{ row.id }}</dd></div>
         <div><dt>发货仓库</dt><dd>{{ row.warehouseName || '未登记' }}</dd></div>
         <div><dt>收货人 / 电话</dt><dd>{{ row.recipient || '未登记' }} / {{ row.phone || '未登记' }}</dd></div>
         <div class="wide"><dt>收货地址 / 邮编</dt><dd>{{ [row.countryCode,row.region,row.city,row.addressLine].filter(Boolean).join(' · ') || '未登记' }} / {{ row.postalCode || '—' }}</dd></div>

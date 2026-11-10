@@ -45,7 +45,7 @@ function isSelected(template: PiTemplate) {
     <div v-loading="busy" class="pi-template-options" :aria-busy="busy">
       <button v-for="template in templates" :key="template.id" type="button" class="pi-template-option" :class="{ selected: isSelected(template) }" :aria-pressed="isSelected(template)" :disabled="disabled || busy || !isSelectablePiLayout(template.layoutCode)" @click="emit('select', template)">
         <span class="pi-template-option-title"><strong>{{ template.templateCode }}</strong><span>{{ template.templateVersion }}</span><b>{{ isSelected(template) ? '已选用' : isSelectablePiLayout(template.layoutCode) ? '选用' : '历史版式 · 不可选用' }}</b></span>
-        <span>{{ template.sellerName }}</span><small>{{ template.bankName }}</small>
+        <small>模板 ID：{{ template.id }}</small><span>{{ template.sellerName }}</span><small>{{ template.bankName }}</small>
       </button>
     </div>
     <el-pagination v-if="total > 20" v-model:current-page="page" :disabled="disabled || busy" :page-size="20" :total="total" layout="prev, pager, next" @current-change="load" />

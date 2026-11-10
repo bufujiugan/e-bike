@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RecordIdColumn from './table/RecordIdColumn.vue'
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { blankShipping, shippingFromShipment, afterSales, afterSalesError, caseStatuses, warrantyNames, type AfterSalesCase, type CaseDraft, type CaseStatus, type CaseShipment, type CaseOptions, type CaseAttachment, type CaseMessage, type CaseFilters, type CaseDashboard, type CaseQueue, type ShipmentDraft } from '../after-sales-api'
@@ -243,6 +244,7 @@ watch(() => props.authContext?.username, () => { listVersion++; detailVersion++;
       </el-form>
       <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
       <el-table :data="rows" v-loading="loading" stripe empty-text="暂无符合条件的售后案例" @row-dblclick="(row: AfterSalesCase) => open(row.id)">
+      <RecordIdColumn />
         <el-table-column prop="caseNo" label="案例编号" min-width="225"><template #default="scope"><el-button link type="primary" @click="open(scope.row.id)">{{ scope.row.caseNo }}</el-button></template></el-table-column>
         <el-table-column label="客户 / 代理商" min-width="150"><template #default="scope">{{ scope.row.customerName || scope.row.agentName || '—' }}</template></el-table-column>
         <el-table-column v-if="!warehouseOnly" prop="vehicleQrCode" label="聚合码" min-width="220" show-overflow-tooltip /><el-table-column v-if="!warehouseOnly" prop="frameSn" label="车架号" min-width="140" /><el-table-column v-if="!warehouseOnly" prop="modelName" label="车型" min-width="115" /><el-table-column v-if="!warehouseOnly" prop="faultType" label="故障类型" min-width="100" />
@@ -287,6 +289,7 @@ watch(() => props.authContext?.username, () => { listVersion++; detailVersion++;
             <el-tab-pane v-if="!warehouseOnly" :label="`附件（${attachments.length}）`" name="attachments">
               <p class="file-help">支持 JPG、PNG、PDF、MP4（H.264）、UTF-8 文本及 JSON 诊断文件。视频最大50MB，其余最大10MB；每批最多5个、合计150MB。</p>
               <el-table :data="attachments" empty-text="暂无附件">
+      <RecordIdColumn />
                 <el-table-column label="文件" min-width="190"><template #default="scope"><el-button link type="primary" @click="downloadAttachment(scope.row)">{{ scope.row.fileName }}</el-button></template></el-table-column>
                 <el-table-column label="用途" min-width="125"><template #default="scope">{{ attachmentCategories[scope.row.category] || '其他附件' }}</template></el-table-column>
                 <el-table-column label="大小" width="90"><template #default="scope">{{ fileSize(scope.row.fileSize) }}</template></el-table-column>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RecordIdColumn from './table/RecordIdColumn.vue'
 import { computed, ref, watch } from 'vue'
 import api from '../api'
 import { hasPermission, hasRole, type PermissionContext } from '../permissions'
@@ -38,6 +39,7 @@ watch(() => [props.kind, props.refreshKey], () => { page.value = 1; void load() 
     <form v-if="kind === 'orders'" class="queue-toolbar" @submit.prevent="search"><el-input v-model="keyword" placeholder="搜索订单号 / 客户" clearable /><el-select v-model="status" aria-label="订单状态" placeholder="全部状态" clearable><el-option v-for="key in ['DRAFT','PENDING','CONFIRMED','PARTIAL_SHIPPED','SHIPPED','CANCELLED','CLOSED']" :key="key" :value="key" :label="names[key]" /></el-select><el-button native-type="submit" type="primary">查询</el-button></form>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <el-table v-loading="busy" :data="rows" max-height="520" empty-text="暂无记录">
+      <RecordIdColumn />
       <el-table-column :prop="kind === 'locks' ? 'lockNo' : 'orderNo'" label="单号" min-width="200" />
       <el-table-column v-if="kind === 'orders'" prop="customerName" label="客户" min-width="130" />
       <el-table-column v-if="kind === 'locks'" prop="skuCode" label="SKU" min-width="150" />
@@ -50,7 +52,8 @@ watch(() => [props.kind, props.refreshKey], () => { page.value = 1; void load() 
     <Pagination v-model:page="page" :total="total" :page-size="20" :disabled="busy" @change="load" />
     <el-dialog :model-value="!!linkedLock" title="本次锁定的关联订单" width="min(800px,96vw)" @close="linkedLock = undefined; linkedVersion++">
       <p>{{ linkedLock?.lockNo }}</p><el-alert v-if="linkedError" type="error" :title="linkedError" :closable="false" />
-      <el-table v-loading="linkedBusy" :data="linked"><el-table-column prop="orderNo" label="订单号" min-width="200" /><el-table-column prop="customerName" label="客户" /><el-table-column prop="orderQty" label="数量" /><el-table-column label="操作" width="140"><template #default="{row}"><el-button link type="primary" @click="emit('order',row.orderNo); linkedLock = undefined">继续办理</el-button></template></el-table-column></el-table>
+      <el-table v-loading="linkedBusy" :data="linked">
+      <RecordIdColumn /><el-table-column prop="orderNo" label="订单号" min-width="200" /><el-table-column prop="customerName" label="客户" /><el-table-column prop="orderQty" label="数量" /><el-table-column label="操作" width="140"><template #default="{row}"><el-button link type="primary" @click="emit('order',row.orderNo); linkedLock = undefined">继续办理</el-button></template></el-table-column></el-table>
       <Pagination v-model:page="linkedPage" :total="linkedTotal" :page-size="20" :disabled="linkedBusy" @change="openLinked(linkedLock, linkedPage)" />
       <el-button v-if="linkedError" @click="openLinked(linkedLock, linkedPage)">重试</el-button>
     </el-dialog>

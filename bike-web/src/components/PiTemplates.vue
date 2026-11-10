@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RecordIdColumn from './table/RecordIdColumn.vue'
 import { isSelectablePiLayout, piLayoutLabel, piTemplateLayouts } from '../pi-template-layouts'
 import { reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -37,6 +38,7 @@ async function publish() {
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <el-button @click="load">刷新模板</el-button><el-button v-if="canManage" @click="editing = !editing">发布新版本</el-button>
     <el-table :data="rows" empty-text="暂无已发布模板，请联系模板管理员">
+      <RecordIdColumn />
       <el-table-column prop="templateCode" label="模板" /><el-table-column prop="templateVersion" label="版本" width="80" />
       <el-table-column label="类型" width="80"><template #default="s">{{ s.row.tradeType === 'EXPORT' ? '外销' : '内销' }}</template></el-table-column>
       <el-table-column label="版式" width="170"><template #default="s">{{ piLayoutLabel(s.row.layoutCode) }}</template></el-table-column>

@@ -3,7 +3,7 @@
 <mapper namespace="com.bike.server.production.ProductionMapper">
     <select id="selectMutexForUpdate" resultType="int">SELECT id FROM bike_production_mutex WHERE id=1 FOR UPDATE</select>
     <select id="selectProductionInventory" resultType="map">
-        SELECT COALESCE(s.sku_code,'历史未关联') skuCode,COALESCE(s.product_name,m.model_name) productName,w.warehouse_name warehouseName,l.location_name locationName,
+        SELECT s.id skuId,m.id modelId,w.id warehouseId,l.id locationId,COALESCE(s.sku_code,'历史未关联') skuCode,COALESCE(s.product_name,m.model_name) productName,w.warehouse_name warehouseName,l.location_name locationName,
         COUNT(*) physicalQty,SUM(EXISTS(SELECT 1 FROM bike_production_issue i WHERE i.status='OPEN' AND (i.code COLLATE utf8mb4_unicode_ci=v.frame_sn COLLATE utf8mb4_unicode_ci OR EXISTS(SELECT 1 FROM bike_vehicle_part_binding b WHERE b.vehicle_id=v.id AND b.is_current=1 AND b.part_sn COLLATE utf8mb4_unicode_ci=i.code COLLATE utf8mb4_unicode_ci)))) quarantinedQty
         FROM bike_vehicle v LEFT JOIN bike_production_vehicle p ON p.vehicle_id=v.id LEFT JOIN bike_production_sku s ON s.id=p.sku_id
         LEFT JOIN bike_product_model m ON m.id=v.model_id
@@ -94,7 +94,7 @@
     <select id="selectWorkOrderTasks" resultType="map"><include refid="taskSelect"/> WHERE t.work_order_id=#{workOrderId} <include refid="taskOrder"/> LIMIT #{offset},50</select>
     <select id="countWorkOrderTasks" resultType="int">SELECT COUNT(*) FROM bike_production_task WHERE work_order_id=#{workOrderId}</select>
     <select id="selectProductionInventoryFiltered" resultType="map">
-      SELECT COALESCE(s.sku_code,'历史未关联') skuCode,COALESCE(s.product_name,m.model_name) productName,
+      SELECT s.id skuId,m.id modelId,w.id warehouseId,l.id locationId,COALESCE(s.sku_code,'历史未关联') skuCode,COALESCE(s.product_name,m.model_name) productName,
         w.warehouse_name warehouseName,l.location_name locationName,COUNT(*) physicalQty,
         SUM(<include refid="com.bike.server.stock.InventoryPolicyMapper.quarantined"/>) quarantinedQty
       FROM bike_vehicle v LEFT JOIN bike_production_vehicle p ON p.vehicle_id=v.id
@@ -119,7 +119,7 @@
     <sql id="quarantinedPartsFilter">status='QUARANTINED'
       <if test="keyword != null and keyword != ''">AND (part_sn LIKE CONCAT('%',#{keyword},'%') OR part_type LIKE CONCAT('%',#{keyword},'%'))</if>
     </sql>
-    <select id="selectQuarantinedParts" resultType="map">SELECT part_sn code,part_type codeType,qc_status qcStatus,created_at createdAt,updated_at updatedAt FROM bike_part WHERE <include refid="quarantinedPartsFilter"/> ORDER BY created_at DESC,id DESC LIMIT 50 OFFSET #{offset}</select>
+    <select id="selectQuarantinedParts" resultType="map">SELECT id,part_sn code,part_type codeType,qc_status qcStatus,created_at createdAt,updated_at updatedAt FROM bike_part WHERE <include refid="quarantinedPartsFilter"/> ORDER BY created_at DESC,id DESC LIMIT 50 OFFSET #{offset}</select>
     <select id="countQuarantinedParts" resultType="int">SELECT COUNT(*) FROM bike_part WHERE <include refid="quarantinedPartsFilter"/></select>
     <update id="updatePartReleased">UPDATE bike_part SET status='AVAILABLE',qc_status='PASSED' WHERE part_sn=#{code} AND status='QUARANTINED' AND bind_status='UNBOUND'</update>
     <select id="selectCurrentBindings" resultType="map">SELECT part_type codeType,part_sn code FROM bike_vehicle_part_binding WHERE vehicle_id=#{vehicleId} AND is_current=1</select>

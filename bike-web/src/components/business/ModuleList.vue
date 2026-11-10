@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { ModuleData } from '../../config/page-presentation'
 import SectionHeader from '../common/SectionHeader.vue'
 import FilterBar from '../common/FilterBar.vue'
@@ -10,14 +11,17 @@ import StatusTag from './StatusTag.vue'
 import ProgressBar from './ProgressBar.vue'
 import { bindingProgress } from './module-presentation'
 import AppIcon from '../AppIcon.vue'
-defineProps<{ module: ModuleData; title: string; search: string; page: number; pageSize: number; loading: boolean; error: string; columnWidth: (column: string) => number }>()
+const props = defineProps<{ module: ModuleData; title: string; search: string; page: number; pageSize: number; loading: boolean; error: string; columnWidth: (column: string) => number }>()
+// 仅调整展示顺序，原始行数组仍完整传给编辑和状态操作。
+const displayColumns = computed(() => props.module.columns.map((column, index) => ({ column, index }))
+  .sort((a, b) => Number(/(?:^| )ID$/.test(b.column)) - Number(/(?:^| )ID$/.test(a.column))))
 const emit = defineEmits<{ 'update:search': [value: string]; 'update:page': [value: number]; 'update:pageSize': [value: number]; refresh: []; reset: []; pageChange: []; sizeChange: [] }>()
 </script>
 <template>
   <section class="sm-card sm-module-list"><SectionHeader :title="title"><span class="sm-scope-label">{{ module.total ?? 0 }} 条查询结果</span></SectionHeader>
     <FilterBar><SearchBar :model-value="search" :placeholder="`搜索${title.replace('列表', '')}…`" @update:model-value="emit('update:search', $event)" /><template #actions><ActionToolbar><el-button type="primary" :loading="loading" @click="emit('refresh')"><AppIcon name="refresh" />刷新</el-button><el-button :disabled="loading" @click="emit('reset')">重置</el-button><slot name="actions" /></ActionToolbar></template></FilterBar>
     <DataTable :rows="module.rows" :loading="loading" :error="error" :empty-title="search ? '没有符合条件的记录' : `暂无${title.replace('列表', '')}`" :max-height="540">
-      <el-table-column v-for="(column, index) in module.columns" :key="column" :label="column" :prop="String(index)" :min-width="columnWidth(column)" show-overflow-tooltip><template #default="{ row }"><StatusTag v-if="/状态/.test(column) && row[index] && row[index] !== '-'" :label="row[index]" /><ProgressBar v-else-if="column === '完成进度'" :value="bindingProgress(row[index])" :label="row[index]" /><span v-else :class="{ 'sm-code-cell': /聚合码|订单号|业务单号/.test(column) }">{{ row[index] || '—' }}</span></template></el-table-column>
+      <el-table-column v-for="{ column, index } in displayColumns" :key="column" :label="column" :prop="String(index)" :min-width="/(?:^| )ID$/.test(column) ? 170 : columnWidth(column)" show-overflow-tooltip><template #default="{ row }"><StatusTag v-if="/状态/.test(column) && row[index] && row[index] !== '-'" :label="row[index]" /><ProgressBar v-else-if="column === '完成进度'" :value="bindingProgress(row[index])" :label="row[index]" /><span v-else :class="{ 'sm-code-cell': /聚合码|订单号|业务单号/.test(column) }">{{ row[index] || '—' }}</span></template></el-table-column>
       <el-table-column label="操作" fixed="right" :width="200"><template #default="{ row }"><slot name="row-actions" :row="row" /></template></el-table-column>
       <template #empty-action><el-button size="small" :disabled="loading" @click="emit('refresh')">刷新数据</el-button><el-button v-if="search" size="small" @click="emit('reset')">清除搜索</el-button></template>
     </DataTable>

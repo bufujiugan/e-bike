@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RecordIdColumn from './table/RecordIdColumn.vue'
 import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
@@ -83,6 +84,7 @@ watch(() => props.orderNo, () => { showPi.value = false; void load() }, { immedi
         <el-alert v-if="lockError" :title="lockError" type="warning" :closable="false" />
         <h3>本单已出库车辆（{{ order.shippedVehicles?.length ?? 0 }}）</h3>
         <el-table :data="order.shippedVehicles ?? []" max-height="360" empty-text="本单尚无有效出库车辆">
+          <RecordIdColumn prop="vehicleId" label="整车 ID" />
           <el-table-column prop="vehicleQrCode" label="总码" min-width="180" /><el-table-column prop="frameSn" label="车架码" min-width="170" /><el-table-column prop="stockOutNo" label="出库单号" min-width="180" /><el-table-column label="出库时间" min-width="170"><template #default="{row}">{{ time(row.stockOutTime) }}</template></el-table-column>
         </el-table>
         <el-collapse><el-collapse-item title="完整订单信息" name="details"><RecordDetails :value="order" /></el-collapse-item></el-collapse>

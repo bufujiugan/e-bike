@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RecordIdColumn from './table/RecordIdColumn.vue'
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
@@ -42,6 +43,7 @@ onMounted(() => load())
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <el-form inline @submit.prevent="load()"><el-form-item label="状态"><el-select v-model="state" style="width: 210px" :disabled="busy"><el-option label="待处理（默认）" value="" /><el-option v-for="key in ['PENDING','REVIEW','CLEANUP_PENDING','CLEANED','BOUND']" :key="key" :label="labels[key]" :value="key" /></el-select></el-form-item><el-button native-type="submit" :loading="busy">查询 / 刷新</el-button></el-form>
     <el-table :data="records" v-loading="busy" empty-text="没有匹配的上传记录">
+      <RecordIdColumn prop="objectKey" label="文件 ID（objectKey）" />
       <el-table-column label="业务" min-width="135"><template #default="{ row }">{{ purposes[row.purpose] || row.purpose }} · {{ row.businessId }}</template></el-table-column>
       <el-table-column prop="fileName" label="文件名" min-width="170" show-overflow-tooltip />
       <el-table-column label="大小" width="100"><template #default="{ row }">{{ (row.fileSize / 1024).toFixed(1) }} KB</template></el-table-column>
@@ -54,6 +56,7 @@ onMounted(() => load())
     </el-table>
     <p>共 {{ total }} 条，第 {{ page }} 页。超时未绑定记录会自动进入核对；文件清理须由授权人员明确申请。</p>
     <el-button :disabled="busy || page <= 1" @click="load(page - 1)">上一页</el-button><el-button :disabled="busy || page * 20 >= total" @click="load(page + 1)">下一页</el-button>
-    <el-dialog v-model="historyVisible" title="最近100条核对历史" width="850px"><el-table :data="history"><el-table-column label="操作"><template #default="{ row }">{{ row.action === 'RECONCILE' ? '核对' : '申请清理' }}</template></el-table-column><el-table-column prop="operatorName" label="人员" /><el-table-column prop="reason" label="原因" min-width="200" /><el-table-column label="时间" min-width="175"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column></el-table></el-dialog>
+    <el-dialog v-model="historyVisible" title="最近100条核对历史" width="850px"><el-table :data="history">
+      <RecordIdColumn /><el-table-column label="操作"><template #default="{ row }">{{ row.action === 'RECONCILE' ? '核对' : '申请清理' }}</template></el-table-column><el-table-column prop="operatorName" label="人员" /><el-table-column prop="reason" label="原因" min-width="200" /><el-table-column label="时间" min-width="175"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column></el-table></el-dialog>
   </section>
 </template>

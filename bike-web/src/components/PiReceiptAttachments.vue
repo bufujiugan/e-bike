@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RecordIdColumn from './table/RecordIdColumn.vue'
 import { computed, ref, watch } from 'vue'
 import BusinessAttachmentUpload from './BusinessAttachmentUpload.vue'
 import api from '../api'
@@ -53,6 +54,7 @@ watch(() => [props.modelValue, props.piId, props.payment.id] as const, () => {
     <BusinessAttachmentUpload v-if="modelValue && canUpload && payment.status === 'CONFIRMED'" :key="`${piId}/${payment.id}`" :endpoint="`/api/pis/${piId}/payments/${payment.id}/attachments`" @saved="saved" @busy="uploading = $event" />
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
     <el-table v-loading="loading" :data="rows" empty-text="这笔到账尚无已上传凭证">
+      <RecordIdColumn />
       <el-table-column prop="fileName" label="凭证文件" min-width="210" />
       <el-table-column label="大小" width="100"><template #default="scope">{{ Math.max(1, Math.ceil(scope.row.fileSize / 1024)) }} KB</template></el-table-column>
       <el-table-column prop="createdAt" label="上传时间" min-width="180" />

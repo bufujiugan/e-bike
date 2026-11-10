@@ -61,6 +61,7 @@ onUnmounted(() => { version++ })
       <article v-for="row in rows" :key="row.shipmentId" class="return-card">
         <header><h3>{{ row.partName }} × {{ row.quantity }}</h3><el-tag>{{ names[row.status] }}</el-tag></header>
         <dl>
+        <div><dt>补发记录 ID</dt><dd>{{ row.shipmentId }}</dd></div>
           <div><dt>退回仓库 / 收件人</dt><dd>{{ row.warehouseName || '待提供' }} / {{ row.recipient || '—' }}</dd></div>
           <div><dt>联系电话 / 邮编</dt><dd>{{ row.phone || '—' }} / {{ row.postalCode || '—' }}</dd></div>
           <div class="wide"><dt>退回地址</dt><dd>{{ row.addressLine || '请等待售后人员提供退回地址后再寄出' }}</dd></div>

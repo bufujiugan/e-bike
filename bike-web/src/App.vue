@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RecordIdColumn from './components/table/RecordIdColumn.vue'
 import { createUuid } from './utils/uuid'
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import axios from './api'
@@ -332,7 +333,7 @@ const linkedLockId = ref(0)
 const linkedLockNo = ref('')
 const linkedOrdersPage = ref(1)
 const linkedOrdersTotal = ref(0)
-const linkedOrders = ref<Array<{orderNo:string; customerName:string; orderQty:number; shippedQty:number; status:string; reservationExpiresAt:string | null; reservationStatus?:ReservationStatus | null}>>([])
+const linkedOrders = ref<Array<{id:number; orderNo:string; customerName:string; orderQty:number; shippedQty:number; status:string; reservationExpiresAt:string | null; reservationStatus?:ReservationStatus | null}>>([])
 const orderStateNames: Record<string,string> = {DRAFT:'草稿',PENDING:'待确认',CONFIRMED:'待出库',PARTIAL_SHIPPED:'部分出库',SHIPPED:'已完成',CANCELLED:'已作废',CLOSED:'已关闭'}
 async function loadLinkedOrders() {
   linkedOrdersLoading.value=true
@@ -1272,6 +1273,7 @@ async function submitPrimaryAction() {
     </el-dialog>
     <el-dialog v-model="linkedOrdersVisible" :title="`${linkedLockNo} · 关联订单`" width="900px">
       <el-table :data="linkedOrders" v-loading="linkedOrdersLoading" empty-text="没有转换生成的订单">
+        <RecordIdColumn />
         <el-table-column prop="orderNo" label="订单号" min-width="190" />
         <el-table-column prop="customerName" label="客户" />
         <el-table-column prop="orderQty" label="订单数量" />

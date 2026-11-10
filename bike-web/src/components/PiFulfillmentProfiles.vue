@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RecordIdColumn from './table/RecordIdColumn.vue'
 import { isSelectablePiLayout } from '../pi-template-layouts'
 import { onMounted, reactive, ref, toRaw } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -46,6 +47,7 @@ onMounted(load)
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <el-button v-if="canManage" type="primary" @click="begin()">发布新配置</el-button><el-button @click="load">刷新</el-button>
     <el-table :data="rows" empty-text="尚无配置，可先发布 PI 模板，再建立履约配置">
+      <RecordIdColumn />
       <el-table-column prop="name" label="配置名称" min-width="160" /><el-table-column prop="version" label="版本" width="85" />
       <el-table-column label="付款 / 交付" min-width="200"><template #default="{row}">{{ row.rules.paymentMode === 'CREDIT' ? '后付款（须授权）' : '预付' }} · {{ row.rules.deliveryMode === 'CUSTOMER_PICKUP' ? '客户货代提货' : '我方安排运输' }}</template></el-table-column>
       <el-table-column prop="collectionEntity" label="收款主体" min-width="150" />

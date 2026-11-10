@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RecordIdColumn from './table/RecordIdColumn.vue'
 import { createUuid } from '../utils/uuid'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
@@ -98,6 +99,7 @@ onMounted(async () => {
     <FilterBar><el-select v-model="modelId" aria-label="车型筛选" placeholder="全部车型" clearable filterable><el-option v-for="model in models" :key="model.id" :value="model.id" :label="model.name" /></el-select><template #actions><el-button :loading="busy" @click="load"><AppIcon name="refresh" />刷新库存</el-button><el-button v-if="canSeeLocks" @click="emit('navigate', hasRole(context, 'WEB_AGENT') ? 'agent-locks' : 'inventory-locks')">查看库存锁定</el-button><el-button v-if="canWrite && selected.length" type="primary" @click="begin"><AppIcon name="lock" />锁定所选 {{ selected.length }} 个 SKU</el-button></template></FilterBar>
     <SectionHeader title="SKU 库存锁定列表" description="按具体规格核对库存与占用" />
     <DataTable :rows="rows" :loading="busy" :error="error" empty-title="暂无 SKU 库存" row-key="skuId">
+      <RecordIdColumn prop="skuId" label="SKU ID" />
       <el-table-column prop="skuCode" label="SKU" min-width="130" /><el-table-column prop="productName" label="商品" min-width="140" /><el-table-column prop="specification" label="规格" min-width="100" /><el-table-column prop="modelName" label="车型" min-width="100" />
       <el-table-column prop="physicalQty" label="在库" width="75" /><el-table-column prop="quarantinedQty" label="隔离" width="75" /><el-table-column prop="temporaryLockedQty" label="临时锁定" width="90" /><el-table-column prop="orderReservedQty" label="订单占用" width="90" /><el-table-column prop="availableQty" label="SKU净可用" width="105" />
       <el-table-column label="缺口" width="75"><template #default="{ row }"><span :class="{ shortage: row.shortageQty > 0 }">{{ row.shortageQty }}</span></template></el-table-column>
@@ -109,7 +111,8 @@ onMounted(async () => {
     </section>
     <AlertCard title="锁定规则" description="SKU预锁数量不受当前库存限制。客户累计收款达到PI约定定金后优先占库；剩余库存不足以满足的其他未付款订单将整单取消并记录原因。预锁不保证供货，已收款和已出库订单不自动取消。" />
     <section v-if="canWrite && selected.length" class="selection"><h3>待锁定商品（{{ selected.length }} 个 SKU）</h3><div v-for="item in selected" :key="item.skuId" class="selected-row"><strong>{{ item.skuCode }}</strong><el-input-number v-model="item.quantity" :min="1" :max="1000000" :precision="0" /><el-button link type="danger" @click="selected = selected.filter(row => row.skuId !== item.skuId)">移除</el-button></div><el-button type="primary" @click="begin">选择客户并锁定</el-button></section>
-    <section v-if="result.length" class="selection"><h3>本次锁定已保存 · 继续创建订单</h3><el-table :data="result"><el-table-column prop="lockNo" label="锁定单号" min-width="180" /><el-table-column prop="skuCode" label="SKU" /><el-table-column prop="lockQty" label="数量" /><el-table-column prop="expireTime" label="截止时间" min-width="180" /><el-table-column v-if="canConvert" label="下一步" width="130" fixed="right"><template #default="{row}"><el-button link type="primary" @click="emit('convert',row.lockNo)">直接转订单</el-button></template></el-table-column></el-table><el-button @click="emit('navigate', 'inventory-locks')">查看全部锁定与关联订单</el-button></section>
+    <section v-if="result.length" class="selection"><h3>本次锁定已保存 · 继续创建订单</h3><el-table :data="result">
+      <RecordIdColumn /><el-table-column prop="lockNo" label="锁定单号" min-width="180" /><el-table-column prop="skuCode" label="SKU" /><el-table-column prop="lockQty" label="数量" /><el-table-column prop="expireTime" label="截止时间" min-width="180" /><el-table-column v-if="canConvert" label="下一步" width="130" fixed="right"><template #default="{row}"><el-button link type="primary" @click="emit('convert',row.lockNo)">直接转订单</el-button></template></el-table-column></el-table><el-button @click="emit('navigate', 'inventory-locks')">查看全部锁定与关联订单</el-button></section>
     <el-dialog v-model="visible" title="锁定所选 SKU" width="560px" :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving">
       <el-alert v-if="saveError" type="error" :title="saveError" :closable="false" />
       <el-form label-width="100px" :disabled="saving">

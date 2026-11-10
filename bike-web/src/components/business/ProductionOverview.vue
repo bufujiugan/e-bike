@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RecordIdColumn from '../table/RecordIdColumn.vue'
 import { computed, ref } from 'vue'
 import type { Metric } from '../../config/page-presentation'
 import { productionFlow } from '../../config/page-presentation'
@@ -80,6 +81,7 @@ function stateLabel(status: string) { return states.find(state => state.key === 
     <div class="pc-middle-grid">
       <section class="sm-card pc-current-tasks"><SectionHeader title="当前生产工单" description="当前页最多5条 · 创建时间倒序"><button class="sm-text-link" @click="emit('more')">更多工单 <AppIcon name="arrow" /></button></SectionHeader>
         <DataTable :rows="error ? [] : currentTasks" :loading="loading" :error="error" :max-height="208" row-key="id" empty-title="暂无生产工单" empty-description="当前查询未返回工单，可调整条件或创建工单。">
+      <RecordIdColumn />
           <el-table-column prop="workOrderNo" label="工单号" min-width="120" show-overflow-tooltip />
           <el-table-column prop="skuCode" label="产品规格 (SKU)" min-width="95" show-overflow-tooltip />
           <el-table-column label="完工进度" min-width="90"><template #default="{ row }"><ProgressBar :value="percent(row)" /></template></el-table-column>
