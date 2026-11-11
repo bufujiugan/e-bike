@@ -32,7 +32,7 @@ public class PiDocumentService {
     private static final Color PALE = new Color(235, 241, 245);
 
     public byte[] excel(PiView pi) {
-        if(java.util.Set.of("PI_V4","PI_INVOICE_V1").contains(Objects.toString(pi.getDocumentRenderVersion(),"")))return new PiReferenceExcelRenderer().render(pi, this::thumbnail);
+        if(java.util.Set.of("PI_V4","PI_V5","PI_INVOICE_V1").contains(Objects.toString(pi.getDocumentRenderVersion(),"")))return new PiReferenceExcelRenderer().render(pi, this::thumbnail);
         if("PI_V1".equals(pi.getDocumentRenderVersion()))return legacy.excel(pi);
         try (XSSFWorkbook book = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Sheet sheet = book.createSheet("PI");
@@ -107,6 +107,7 @@ public class PiDocumentService {
     }
 
     public byte[] pdf(PiView pi) {
+        if("PI_V5".equals(pi.getDocumentRenderVersion())) return new PiReferencePdfRenderer().render(pi, this::thumbnail);
         if("PI_V1".equals(pi.getDocumentRenderVersion()))return legacy.pdf(pi);
         try (PDDocument document = new PDDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream();
              InputStream source = getClass().getResourceAsStream("/fonts/NotoSansSC-Regular.ttf")) {

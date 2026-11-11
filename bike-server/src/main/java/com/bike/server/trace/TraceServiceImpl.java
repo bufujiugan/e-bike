@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class TraceServiceImpl implements TraceService {
     private final TraceMapper mapper;
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.pi.PiPurchaseContractService purchaseContracts;
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.pi.PiDispatchMapper dispatch;
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.pi.PiLogisticsMapper logistics;
     public TraceServiceImpl(TraceMapper mapper){this.mapper=mapper;}
@@ -14,6 +15,16 @@ public class TraceServiceImpl implements TraceService {
     @Override public TraceResponse traceFrame(String frameSn){requireTrace();String normalized=normalize(frameSn);VehicleView vehicle=mapper.selectVehicleByFrame(normalized);if(vehicle==null)throw new BusinessException("VEHICLE_NOT_FOUND","整车不存在");return new TraceResponse(vehicle,mapper.selectBindingHistory(normalized),mapper.selectEvents(normalized),java.util.List.of(vehicle),mapper.selectStockInRecords(normalized),withDispatch(mapper.selectStockOutRecords(normalized)),mapper.selectReworkRecords(normalized));}
     @Override public TraceResponse tracePart(String partSn){requireTrace();String normalized=normalize(partSn);String frame=mapper.selectFrameByPart(normalized);if(frame==null)throw new BusinessException("PART_NOT_FOUND","零部件暂无绑定历史");TraceResponse trace=traceFrame(frame);return new TraceResponse(trace.vehicle(),trace.bindingHistory(),trace.events(),mapper.selectVehiclesByPart(normalized),mapper.selectStockInRecordsByPart(normalized),withDispatch(mapper.selectStockOutRecordsByPart(normalized)),mapper.selectReworkRecordsByPart(normalized));}
     private java.util.List<TraceStockOutRecord> withDispatch(java.util.List<TraceStockOutRecord> records) {
+        if (purchaseContracts != null) {
+            var contracts = purchaseContracts.findForStockRecords(records.stream().map(TraceStockOutRecord::getStockOutNo).toList());
+            for (var record : records) {
+                var contract = contracts.get(record.getStockOutNo());
+                if (contract != null) {
+                    record.setPurchaseContractParty(contract.purchaseContractParty());
+                    record.setPurchaseContractNo(contract.purchaseContractNo());
+                }
+            }
+        }
         if(dispatch!=null) for(var record:records) {
             var info=dispatch.trace(record.getStockOutNo());
             if(info!=null) {record.setPiNo(info.piNo());record.setExecutionRevision(info.executionRevision());record.setDispatchBatchNo(info.batchNo());record.setDispatchSourceType(info.sourceType());}

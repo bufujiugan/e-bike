@@ -64,10 +64,10 @@ public class PiTemplateService {
         return switch(template.layoutCode()) {
             case "DOMESTIC_V1","EXPORT_V1" -> "PI_V1";
             case "DOMESTIC_V2","EXPORT_V2" -> "PI_V2";
-            // 新导出使用参考发票版式；已入队的旧快照仍按原渲染版本生成。
-            case "DOMESTIC_V3","EXPORT_V3" -> "PI_V4";
+            // 新导出使用同步的 Excel 与 PDF 发票版式；已入队快照仍按原版本生成。
+            case "DOMESTIC_V3","EXPORT_V3" -> "PI_V5";
             case "STANDARD_V3" -> "PI_V3";
-            case "INVOICE_V1" -> "PI_INVOICE_V1";
+            case "INVOICE_V1" -> "PI_V5";
             default -> throw new BusinessException("PI_TEMPLATE_INVALID","无法识别历史模板版式，请核对模板数据");
         };
     }

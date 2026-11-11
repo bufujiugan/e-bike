@@ -27,6 +27,34 @@ class StockServiceTest {
     }
 
     @Test
+    void stockDetailsAndPagesIncludeExecutionContractsAndSkipInboundRecords() {
+        var mapper = Mockito.mock(StockMapper.class);
+        var contracts = Mockito.mock(com.bike.server.pi.PiPurchaseContractService.class);
+        var service = com.bike.server.common.CustomerScopeTestSupport.isolated(
+                new StockServiceImpl(mapper, Mockito.mock(OrderMapper.class)));
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "purchaseContracts", contracts);
+        var outbound = new StockRecordView();
+        outbound.setStockNo("OUT-1");
+        outbound.setType("OUT");
+        outbound.setCustomerId(1L);
+        var inbound = new StockRecordView();
+        inbound.setStockNo("IN-1");
+        inbound.setType("IN");
+        Mockito.when(mapper.selectStockOutByNo("OUT-1")).thenReturn(outbound);
+        Mockito.when(mapper.selectStockRecords("OUT", 0L, 20L)).thenReturn(List.of(outbound, inbound));
+        Mockito.when(mapper.countStockRecords("OUT")).thenReturn(2L);
+        Mockito.when(contracts.findForStockRecords(List.of("OUT-1"))).thenReturn(java.util.Map.of(
+                "OUT-1", new com.bike.server.pi.PiPurchaseContract("SAVA", "BUY-OLD")));
+
+        assertThat(service.getByNo("OUT", " OUT-1 " ).getPurchaseContractNo()).isEqualTo("BUY-OLD");
+        var page = service.list("OUT", 1, 20);
+        assertThat(page.total()).isEqualTo(2);
+        assertThat(page.records().getFirst().getPurchaseContractParty()).isEqualTo("SAVA");
+        assertThat(page.records().getLast().getPurchaseContractNo()).isNull();
+        Mockito.verify(contracts, Mockito.times(2)).findForStockRecords(List.of("OUT-1"));
+    }
+
+    @Test
     void stockOutRejectsDuplicateQrInOneBatch() {
         StockMapper stockMapper = Mockito.mock(StockMapper.class);
         OrderMapper orderMapper = Mockito.mock(OrderMapper.class);

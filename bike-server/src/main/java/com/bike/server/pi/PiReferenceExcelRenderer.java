@@ -114,14 +114,21 @@ final class PiReferenceExcelRenderer {
         write(sheet, metadataRow, 1, "Invoice no.", styles.metadata);
         merge(sheet, metadataRow, 2, 3, "Invoice date.", styles.metadata);
         write(sheet, metadataRow, 4, "Revision / Status", styles.metadata);
-        // 当前公开快照没有订单编号，不把数据库主键伪装为订单编号。
-        write(sheet, valuesRow, 0, "", styles.metadataValue);
+        // PI 无来源订单时保留空白，绝不以数据库主键代替业务单号。
+        boolean currentLayout = "PI_V5".equals(pi.getDocumentRenderVersion());
+        String orderNo = currentLayout ? text(pi.getSourceOrderNo()) : "";
+        write(sheet, valuesRow, 0, orderNo, styles.metadataValue);
         write(sheet, valuesRow, 1, pi.getPiNo(), styles.metadataValue);
         merge(sheet, valuesRow, 2, 3, "", styles.date);
         if (document != null && document.issueDate() != null)
             row(sheet, valuesRow).getCell(2).setCellValue(document.issueDate());
         write(sheet, valuesRow, 4, "R" + pi.getRevision() + " / " + text(pi.getStatus()), styles.metadataValue);
         row(sheet, valuesRow).setHeightInPoints(32);
+        if (currentLayout) {
+            int valueLines = Math.max(wrap(orderNo, 14).size(),
+                    Math.max(wrap(text(pi.getPiNo()), 47).size(), wrap("R" + pi.getRevision() + " / " + text(pi.getStatus()), 18).size()));
+            row(sheet, valuesRow).setHeightInPoints(Math.max(32, valueLines * 15 + 6));
+        }
         row(sheet, 5).setHeightInPoints(15 * Math.max(wrap("To: " + text(pi.getCustomerName()), 60).size(),
                 wrap(document == null ? "" : document.sellerName(), 32).size()) + 6);
         return TABLE_HEADER_ROW + shift;

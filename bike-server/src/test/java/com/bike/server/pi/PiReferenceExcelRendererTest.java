@@ -2,6 +2,7 @@ package com.bike.server.pi;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.util.CellRangeAddress;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.ByteArrayInputStream;
+import javax.imageio.ImageIO;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -69,11 +71,16 @@ class PiReferenceExcelRendererTest {
         var templates = mock(PiTemplateMapper.class); when(templates.find("EXPORT", "1")).thenReturn(template);
         var selector = new PiTemplateService(templates, null, null, null);
         var pi = referenceInvoice(); selector.selectRenderer(pi);
-        assertThat(pi.getDocumentRenderVersion()).isEqualTo("PI_V4");
+        pi.setSourceOrderNo("ORDER-SNAPSHOT-001");
+        assertThat(pi.getDocumentRenderVersion()).isEqualTo("PI_V5");
         var mapper = mock(PiMapper.class); when(mapper.selectItems(pi.getId())).thenReturn(pi.getItems());
         var archive = new PiExportArchive(null, mapper, null, new ObjectMapper().findAndRegisterModules(), null);
         ReflectionTestUtils.setField(archive, "templates", templates);
-        assertThat(archive.publicSnapshot(pi).getDocumentRenderVersion()).isEqualTo("PI_V4");
+        var captured = archive.publicSnapshot(pi);
+        assertThat(captured.getDocumentRenderVersion()).isEqualTo("PI_V5");
+        pi.setSourceOrderNo("ORDER-CHANGED-AFTER-CAPTURE");
+        var json = new ObjectMapper().findAndRegisterModules();
+        assertThat(json.readValue(json.writeValueAsString(captured), PiView.class).getSourceOrderNo()).isEqualTo("ORDER-SNAPSHOT-001");
         for (String version : new String[]{"PI_V2", "PI_V3"}) {
             pi.setDocumentRenderVersion(version);
             try (var book = new XSSFWorkbook(new ByteArrayInputStream(documents.excel(pi)))) {
@@ -180,10 +187,35 @@ class PiReferenceExcelRendererTest {
         }
     }
 
+    @Test void invoicePdfMatchesCustomerStructureAndKeepsBrandAndSinglePageLayout() throws Exception {
+        var pi = referenceInvoice();
+        pi.setDocumentRenderVersion("PI_V5"); pi.setSourceOrderNo("TW2026110701");
+        try (var workbook = new XSSFWorkbook(new ByteArrayInputStream(documents.excel(pi)))) {
+            assertThat(workbook.getSheetAt(0).getRow(14).getCell(0).getStringCellValue()).isEqualTo("TW2026110701");
+        }
+        try (var pdf = Loader.loadPDF(documents.pdf(pi))) {
+            assertThat(pdf.getNumberOfPages()).isEqualTo(1);
+            String text = new PDFTextStripper().getText(pdf).replaceAll("\\s+", " ");
+            assertThat(text).contains("Proforma Invoice", "To: Sample Buyer", "From: Teewing Mobility Co., Limited",
+                    "Order no.", "TW2026110701", "Invoice no.", "07.11.2026", "Revision / Status", "Products provided",
+                    "Quantity", "Unit Price (HKD)", "Total Amount (HKD)", "Net total", "FCA Shenzhen",
+                    "SAMPLE-ACCOUNT", "Page 1 / 1");
+            assertThat(pdf.getPage(0).getResources().getXObjectNames()).isNotEmpty();
+            String preview = System.getProperty("bike.pi.reference.preview.dir");
+            if (preview != null) {
+                Path folder = Path.of(preview); Files.createDirectories(folder);
+                Files.write(folder.resolve("pi-v5-invoice-preview.xlsx"), documents.excel(pi));
+                Files.write(folder.resolve("pi-v5-invoice-preview.pdf"), documents.pdf(pi));
+                ImageIO.write(new PDFRenderer(pdf).renderImageWithDPI(0, 130), "PNG", folder.resolve("pi-v5-invoice-preview.png").toFile());
+            }
+        }
+    }
+
     @Test void archiveWorkerStoresNewLayoutFromSavedSnapshot(@org.junit.jupiter.api.io.TempDir Path directory) throws Exception {
         var json = new ObjectMapper().findAndRegisterModules();
         var mapper = mock(PiExportMapper.class);
-        var job = new PiExportJob(1, "CONFIRMATION", json.writeValueAsString(referenceInvoice()),
+        var saved = referenceInvoice(); saved.setDocumentRenderVersion("PI_V5"); saved.setSourceOrderNo("SAVED-ORDER-001");
+        var job = new PiExportJob(1, "CONFIRMATION", json.writeValueAsString(saved),
                 "PROCESSING", 1, 1, "lease-token", null, null, null, null, null, null, null, null, null, null);
         when(mapper.next()).thenReturn(1L); when(mapper.claim(eq(1L), anyString())).thenReturn(1);
         when(mapper.get(1)).thenReturn(job);
@@ -199,12 +231,19 @@ class PiReferenceExcelRendererTest {
             assertThat(worker.processNext()).isTrue();
             verify(mapper).ready(1, "lease-token");
             verify(mapper, never()).fail(anyLong(), anyString(), anyString());
+            var pdfKey = org.mockito.ArgumentCaptor.forClass(String.class);
+            verify(mapper).saveFile(eq(1L), eq("lease-token"), eq("pdf"), pdfKey.capture(), anyString(), anyLong());
+            try (var input = store.read(pdfKey.getValue()).getInputStream(); var pdf = Loader.loadPDF(input.readAllBytes())) {
+                assertThat(new PDFTextStripper().getText(pdf).replaceAll("\\s+", ""))
+                        .contains("SAVED-ORDER-001", "Productsprovided", "Net total".replace(" ", ""));
+            }
             var key = org.mockito.ArgumentCaptor.forClass(String.class);
             verify(mapper).saveFile(eq(1L), eq("lease-token"), eq("xlsx"), key.capture(), anyString(), anyLong());
             try (var input = store.read(key.getValue()).getInputStream(); var book = new XSSFWorkbook(input)) {
                 assertThat(book.getSheetAt(0).getSheetName()).isEqualTo("INVOICE");
                 assertThat(book.getAllPictures()).hasSize(1);
                 assertThat(numberFor(book, "Net total")).isEqualTo(435);
+                assertThat(book.getSheetAt(0).getRow(14).getCell(0).getStringCellValue()).isEqualTo("SAVED-ORDER-001");
             }
         }
     }

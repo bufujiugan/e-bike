@@ -74,6 +74,29 @@ class TraceServiceTest {
     }
 
     @Test
+    void frameTraceLoadsPurchaseContractsForOutboundRecordsInOneBatch() {
+        var mapper = Mockito.mock(TraceMapper.class);
+        var contracts = Mockito.mock(com.bike.server.pi.PiPurchaseContractService.class);
+        var service = new TraceServiceImpl(mapper);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "purchaseContracts", contracts);
+        var vehicle = new VehicleView();
+        vehicle.setFrameSn("FRAME-1");
+        var first = new TraceStockOutRecord();
+        first.setStockOutNo("OUT-1");
+        var second = new TraceStockOutRecord();
+        second.setStockOutNo("OUT-2");
+        Mockito.when(mapper.selectVehicleByFrame("FRAME-1")).thenReturn(vehicle);
+        Mockito.when(mapper.selectStockOutRecords("FRAME-1")).thenReturn(List.of(first, second));
+        Mockito.when(contracts.findForStockRecords(List.of("OUT-1", "OUT-2"))).thenReturn(java.util.Map.of(
+                "OUT-1", new com.bike.server.pi.PiPurchaseContract("SAVA", "BUY-OLD"),
+                "OUT-2", new com.bike.server.pi.PiPurchaseContract("YINSANHUAN", "BUY-NEW")));
+        var response = service.traceFrame("FRAME-1");
+        assertThat(response.stockOutRecords()).extracting(TraceStockOutRecord::getPurchaseContractNo)
+                .containsExactly("BUY-OLD", "BUY-NEW");
+        Mockito.verify(contracts).findForStockRecords(List.of("OUT-1", "OUT-2"));
+    }
+
+    @Test
     void traceRejectsBlankIdentifierWithBusinessCode() {
         assertThatThrownBy(() -> new TraceServiceImpl(Mockito.mock(TraceMapper.class)).traceFrame("  "))
                 .isInstanceOf(BusinessException.class)

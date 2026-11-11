@@ -60,12 +60,26 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 List<String> roleCodes = userMapper == null ? List.of() : userMapper.selectRoleCodes(username);
                 // 空角色或全部角色已停用必须撤权，不能按账号类型恢复管理权限。
                 if (roleCodes.isEmpty()) throw new IllegalStateException("用户没有启用的角色");
+                if ("CUSTOMER".equals(user.userType())) {
+                    if (!roleCodes.contains("WEB_CUSTOMER")) throw new IllegalStateException("客户角色未启用");
+                    // 客户只能使用显式开放的接口，误分配内部角色也不能扩大访问范围。
+                    if (!isCustomerPath(request.getRequestURI())) {
+                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        response.setCharacterEncoding("UTF-8");
+                        response.setContentType("application/json");
+                        response.getWriter().write("{\"code\":\"PERMISSION_DENIED\",\"message\":\"客户账号不能访问内部业务接口\",\"data\":null}");
+                        return;
+                    }
+                    roleCodes = List.of("WEB_CUSTOMER");
+                }
                 roleCodes.forEach(code -> authorities.add(new SimpleGrantedAuthority("ROLE_" + code)));
                 // 数据范围和工位限制由账号类型兜底，避免自定义角色丢失隔离边界。
                 if ("AGENT".equals(user.userType())) authorities.add(new SimpleGrantedAuthority("ROLE_WEB_AGENT"));
                 if ("PDA_OPERATOR".equals(user.userType())) authorities.add(new SimpleGrantedAuthority("ROLE_PDA_OPERATOR"));
-                if (userMapper != null) userMapper.selectPermissionCodes(username).forEach(code -> authorities.add(new SimpleGrantedAuthority("PERM_" + code)));
-                if (userMapper != null) userMapper.selectWorkstationTypes(username).forEach(type -> authorities.add(new SimpleGrantedAuthority("WORKSTATION_" + type.toUpperCase(java.util.Locale.ROOT))));
+                if (userMapper != null && !"CUSTOMER".equals(user.userType())) {
+                    userMapper.selectPermissionCodes(username).forEach(code -> authorities.add(new SimpleGrantedAuthority("PERM_" + code)));
+                    userMapper.selectWorkstationTypes(username).forEach(type -> authorities.add(new SimpleGrantedAuthority("WORKSTATION_" + type.toUpperCase(java.util.Locale.ROOT))));
+                }
                 UsernamePasswordAuthenticationToken authentication =
                         UsernamePasswordAuthenticationToken.authenticated(username, null, authorities);
                 authentication.setDetails(user);
@@ -76,6 +90,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
         }
         filterChain.doFilter(request, response);
+    }
+
+    static boolean isCustomerPath(String path) {
+        return java.util.Set.of("/api/auth/login", "/api/auth/me", "/api/auth/context", "/api/auth/logout",
+                "/api/auth/password", "/api/auth/avatar", "/api/customer/company", "/api/customer/models",
+                "/api/customer/orders").contains(path);
     }
 
     private static boolean requiresPasswordChange(HttpServletRequest request) {

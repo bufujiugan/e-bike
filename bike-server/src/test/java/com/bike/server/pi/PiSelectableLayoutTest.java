@@ -7,6 +7,7 @@ import com.bike.server.common.BusinessException;
 import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Set;
 import javax.imageio.ImageIO;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.rendering.PDFRenderer;
@@ -29,16 +30,25 @@ class PiSelectableLayoutTest {
                 assertThatCode(() -> service.requirePublished(d, trade)).doesNotThrowAnyException();
                 assertThatThrownBy(() -> service.requirePublished(d, "DOMESTIC".equals(trade) ? "EXPORT" : "DOMESTIC"))
                         .isInstanceOf(BusinessException.class);
-                assertThat(PiTemplateService.renderVersion(template)).isEqualTo("INVOICE_V1".equals(layout) ? "PI_INVOICE_V1" : "PI_V3");
+                assertThat(PiTemplateService.renderVersion(template)).isEqualTo("INVOICE_V1".equals(layout) ? "PI_V5" : "PI_V3");
             }
         }
         assertThat(PiTemplateService.isSelectableLayout("COUNTRY_UNKNOWN")).isFalse();
         assertThat(PiTemplateService.isSelectableLayout(null)).isFalse();
     }
 
+    @Test void publishedReferenceLayoutsUseSynchronizedInvoicePdfVersion() {
+        for (String trade : new String[]{"DOMESTIC", "EXPORT"}) {
+            var layout = trade + "_V3";
+            var template = new PiTemplate(1, trade, "3", trade, layout, "Seller", "Address", "Contact", "Bank",
+                    "Account", "Beneficiary", "Reason", 1L, null, "CN", "Sales", "Phone", "sales@example.invalid");
+            assertThat(PiTemplateService.renderVersion(template)).isEqualTo("PI_V5");
+        }
+    }
+
     @Test void bothLayoutsPreserveFiftyProductsAmountsAndTermsAcrossPages() throws Exception {
         var service = new PiDocumentService();
-        for (String version : new String[]{"PI_V3", "PI_INVOICE_V1"}) {
+        for (String version : new String[]{"PI_V3", "PI_V5", "PI_INVOICE_V1"}) {
             var pi = PiDocumentServiceTest.sample(50);
             pi.setDocumentRenderVersion(version);
             byte[] pdfBytes = service.pdf(pi), excelBytes = service.excel(pi);
@@ -57,7 +67,7 @@ class PiSelectableLayoutTest {
                     assertThat(pdfText).contains(text);
                     assertThat(excelText).contains(text);
                 }
-                assertThat(book.getSheetAt(0).getSheetName()).isEqualTo("PI_INVOICE_V1".equals(version) ? "INVOICE" : "PI");
+                assertThat(book.getSheetAt(0).getSheetName()).isEqualTo(Set.of("PI_V5", "PI_INVOICE_V1").contains(version) ? "INVOICE" : "PI");
                 String preview = System.getProperty("bike.pi.layout.preview.dir");
                 if (preview != null) {
                     Path folder = Path.of(preview); Files.createDirectories(folder);

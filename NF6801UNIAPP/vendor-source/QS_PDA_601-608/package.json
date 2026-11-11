@@ -1,0 +1,11 @@
+{
+  "name": "QS_PDA",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "vue-i18n": "^9.2.2"
+  }
+}

@@ -6,6 +6,7 @@ import api from '../api'
 import { hasAnyPermission, hasPermission, hasRole, type PermissionContext } from '../permissions'
 import { reservationLabel } from '../pi-api'
 import RecordDetails from './RecordDetails.vue'
+import PurchaseContractNumber from './PurchaseContractNumber.vue'
 import PiWorkspace from './PiWorkspace.vue'
 import AppIcon from './AppIcon.vue'
 
@@ -76,6 +77,8 @@ watch(() => props.orderNo, () => { showPi.value = false; void load() }, { immedi
         <p v-if="['CONFIRMED','PARTIAL_SHIPPED'].includes(order.status)">PDA：进入「出库」，选择客户「{{ order.customerName }}」，搜索订单「{{ order.orderNo }}」，核对后扫描整车总码。关联 PI 的订单还需完成 PI 确认、到账登记与发货放行。</p>
         <PiWorkspace v-if="showPi" :context="context" :initial-keyword="order.orderNo" />
         <el-descriptions title="订单与来源" :column="1" border>
+          <el-descriptions-item v-if="internal" label="购销合同方">{{ order.purchaseContractParty === 'YINSANHUAN' ? '银三环' : order.purchaseContractParty || '未登记' }}</el-descriptions-item>
+          <el-descriptions-item v-if="internal" label="购销合同号"><PurchaseContractNumber :value="order.purchaseContractNo" /></el-descriptions-item>
           <el-descriptions-item label="来源锁定">{{ order.sourceLockNo || '无来源锁定' }}<span v-if="sourceLock"> · {{ sourceLock.skuCode || sourceLock.modelName }} · 锁定 {{ sourceLock.lockQty }} 台 · 已转 {{ sourceLock.convertedQty }} 台</span></el-descriptions-item>
           <el-descriptions-item label="计划出库日">{{ order.plannedShipDate || '—' }}</el-descriptions-item>
           <el-descriptions-item :label="order.status === 'CANCELLED' ? '取消说明 / 备注' : '备注'">{{ order.remark || '—' }}</el-descriptions-item>

@@ -141,9 +141,9 @@ class PiPublishingMysqlTest {
     @Test void v3SnapshotsCaptureCompleteSellerAndRemainIndependentOfNewTemplateVersions()throws Exception {
         try(var f=new Fixture();var store=f.store(directory)) {
             login("ROLE_SUPER_ADMIN");var service=f.templateService();service.publish(template("1"));
-            var p=f.pi();p.setDocument(document());service.selectRenderer(p);assertThat(p.getDocumentRenderVersion()).isEqualTo("PI_V4");
+            var p=f.pi();p.setDocument(document());service.selectRenderer(p);assertThat(p.getDocumentRenderVersion()).isEqualTo("PI_V5");
             var archive=f.archive(store);org.springframework.test.util.ReflectionTestUtils.setField(archive,"templates",f.templates);
-            archive.enqueue(p,"CONFIRMATION");String saved=f.exports.get(1).snapshotJson();assertThat(saved).contains("PI_V4","seller@example.invalid","卖方张经理");
+            archive.enqueue(p,"CONFIRMATION");String saved=f.exports.get(1).snapshotJson();assertThat(saved).contains("PI_V5","seller@example.invalid","卖方张经理");
             var next=(com.fasterxml.jackson.databind.node.ObjectNode)f.json.valueToTree(template("2"));next.put("sellerEmail","new@example.invalid");service.publish(f.json.treeToValue(next,PiTemplateRequest.class));
             try(var worker=new PiExportWorker(f.exports,new PiDocumentService(),store,f.json,f.manager)){assertThat(worker.processNext()).isTrue();}
             assertThat(f.exports.get(1).status()).isEqualTo("READY");assertThat(f.exports.get(1).snapshotJson()).isEqualTo(saved);

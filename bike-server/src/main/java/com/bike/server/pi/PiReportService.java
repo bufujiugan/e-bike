@@ -41,9 +41,13 @@ public class PiReportService {
     }
     @Transactional(isolation=Isolation.REPEATABLE_READ)
     public byte[] export(String keyword,String status) {
+        return export(keyword, status, null);
+    }
+    @Transactional(isolation=Isolation.REPEATABLE_READ)
+    public byte[] export(String keyword, String status, Long warehouseId) {
         CurrentOperator.requireWebAccess();CurrentOperator.requirePermission("PI_READ");CurrentOperator.requirePermission("PI_EXPORT");
         scope.lockForBusiness();String query=keyword(keyword);
-        var page=pis.list(query,status,1,100);long expected=page.total();
+        var page=listExportPage(query,status,warehouseId,1);long expected=page.total();
         if(expected>1_048_575)throw new BusinessException("EXPORT_LIMIT","PI列表超过Excel容量，请缩小查询范围");
         boolean finance=FinancialAuditAccess.allowed();
         try(var workbook=new SXSSFWorkbook(100);var output=new ByteArrayOutputStream()) {
@@ -67,7 +71,7 @@ public class PiReportService {
                     if(finance){text(row,col++,pi.getPaymentStatus());money(row,col,pi.getPaidAmount(),amount);}
                 }
                 if(written>=expected)break;
-                page=pis.list(query,status,++pageNumber,100);
+                page=listExportPage(query,status,warehouseId,++pageNumber);
                 if(page.records().isEmpty())throw new BusinessException("EXPORT_INCOMPLETE","PI导出不完整，请重新查询");
             }
             if(written!=expected)throw new BusinessException("EXPORT_INCOMPLETE","PI导出记录数不一致");
@@ -77,6 +81,10 @@ public class PiReportService {
                     "{\"rows\":"+written+"}",CurrentOperator.clientIp(),null)!=1)throw new BusinessException("EXPORT_AUDIT_FAILED","PI导出审计保存失败");
             return output.toByteArray();
         }catch(IOException error){throw new BusinessException("EXPORT_FAILED","PI列表导出失败");}
+    }
+    private PageResponse<PiView> listExportPage(String keyword, String status, Long warehouseId, long page) {
+        return warehouseId == null ? pis.list(keyword, status, page, 100)
+                : pis.listByWarehouse(keyword, status, warehouseId, page, 100);
     }
     private static void read(){CurrentOperator.requireInternalWebAccess();CurrentOperator.requirePermission("PI_READ");}
     private static boolean allowed(String queue) {

@@ -61,6 +61,8 @@ public class UserServiceImpl implements UserService {
         if (before == null) {
             throw new BusinessException("USER_NOT_FOUND", "用户不存在");
         }
+        if ("CUSTOMER".equals(before.getUserType()))
+            throw new BusinessException("CUSTOMER_ACCOUNT_PROTECTED", "客户账号不能转换为内部账号，请单独创建内部账号");
         String userType = normalizeUserType(request.userType(), before.getUserType());
         validateBindings(userType, request.agentId(), request.workstationId());
         UserUpdateRequest normalized = new UserUpdateRequest(request.displayName(), userType,

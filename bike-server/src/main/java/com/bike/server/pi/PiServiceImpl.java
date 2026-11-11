@@ -33,6 +33,7 @@ public class PiServiceImpl implements PiService {
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.stock.SkuInventoryMapper skuInventory;
     @org.springframework.beans.factory.annotation.Autowired private PiSeriesMapper series;
     @org.springframework.beans.factory.annotation.Autowired private PiDispatchMapper dispatch;
+    @org.springframework.beans.factory.annotation.Autowired private PiPurchaseContractService purchaseContracts;
     @org.springframework.beans.factory.annotation.Autowired private PiLogisticsService logisticsService;
     @org.springframework.beans.factory.annotation.Autowired private PiLogisticsMapper logisticsMapper;
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.order.OrderMapper fulfillmentOrders;
@@ -67,16 +68,31 @@ public class PiServiceImpl implements PiService {
 
     @Override
     public PageResponse<PiView> list(String keyword, String status, long page, long pageSize) {
+        return listByWarehouse(keyword, status, null, page, pageSize);
+    }
+
+    @Override
+    public List<Map<String, Object>> listWarehouseOptions() {
+        requireInternal("PI_READ");
+        return mapper.selectWarehouseOptions();
+    }
+
+    @Override
+    public PageResponse<PiView> listByWarehouse(String keyword, String status, Long warehouseId, long page, long pageSize) {
         requireRead();
+        if (warehouseId != null && warehouseId <= 0) fail("INVALID_PARAMETER", "请选择有效的出库仓库");
         customerScope.lockForBusiness();
         long p = Math.min(10_000_000, Math.max(1, page));
         long size = Math.min(100, Math.max(1, pageSize));
         Long agent = CurrentOperator.hasRole("WEB_AGENT") ? agentId() : null;
         String query = normalize(keyword), state = upper(status);
-        List<PiView> records = mapper.selectPage(query, state, agent, (p - 1) * size, size);
+        List<PiView> records = warehouseId == null
+                ? mapper.selectPage(query, state, agent, (p - 1) * size, size)
+                : mapper.selectPageByWarehouse(query, state, agent, warehouseId, (p - 1) * size, size);
         records.forEach(pi -> { enrichFulfillment(pi); redactFinance(pi); });
         return new PageResponse<>(records,
-                p, size, mapper.count(query, state, agent));
+                p, size, warehouseId == null ? mapper.count(query, state, agent)
+                        : mapper.countByWarehouse(query, state, agent, warehouseId));
     }
 
     @Override
@@ -85,6 +101,28 @@ public class PiServiceImpl implements PiService {
         PiView pi = require(id);
         checkReadScope(pi);
         return enrich(pi);
+    }
+
+    @Override
+    public Map<String, Object> getDispatchBatch(long piId, long batchId) {
+        var pi = get(piId);
+        var batch = dispatch.get(batchId);
+        if (batch == null || !Objects.equals(pi.getSeriesId(), batch.seriesId()))
+            fail("PI_BATCH_NOT_FOUND", "该PI没有此出库批次");
+        var vehicles = dispatch.vehicles(batchId);
+        if (!CurrentOperator.hasRole("WEB_AGENT") && purchaseContracts != null) {
+            var contracts = purchaseContracts.findForStockRecords(vehicles.stream().map(row -> (String) row.get("stockOutNo")).toList());
+            vehicles = vehicles.stream().map(row -> {
+                Map<String, Object> result = new LinkedHashMap<>(row);
+                var contract = contracts.get(row.get("stockOutNo"));
+                if (contract != null) {
+                    result.put("purchaseContractParty", contract.purchaseContractParty());
+                    result.put("purchaseContractNo", contract.purchaseContractNo());
+                }
+                return result;
+            }).toList();
+        }
+        return Map.of("batch", batch, "vehicles", vehicles);
     }
 
     @Override

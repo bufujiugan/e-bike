@@ -301,6 +301,71 @@ class PiServiceTest {
         verify(mapper, never()).insertLogistics(anyLong(), any(), any());
     }
 
+    @Test
+    void dispatchBatchReturnsExecutionContractsForInternalReaders() {
+        var pi = prepareLocked("CONFIRMED");
+        pi.setSeriesId(10L);
+        var dispatch = mock(PiDispatchMapper.class);
+        var contracts = mock(PiPurchaseContractService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "dispatch", dispatch);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "purchaseContracts", contracts);
+        when(dispatch.get(3L)).thenReturn(new PiDispatchBatch(3L, "BATCH-3", 10L, 1L, 7L,
+                "PDA", "ACTIVE", 1, 1, null));
+        when(dispatch.vehicles(3L)).thenReturn(List.of(java.util.Map.of("stockOutNo", "OUT-1")));
+        when(contracts.findForStockRecords(List.of("OUT-1"))).thenReturn(java.util.Map.of(
+                "OUT-1", new PiPurchaseContract("SAVA", "BUY-OLD")));
+
+        var result = service.getDispatchBatch(1L, 3L);
+        assertThat(result.get("vehicles")).isEqualTo(List.of(java.util.Map.of(
+                "stockOutNo", "OUT-1", "purchaseContractParty", "SAVA", "purchaseContractNo", "BUY-OLD")));
+        verify(contracts).findForStockRecords(List.of("OUT-1"));
+    }
+
+    @Test
+    void dispatchBatchFromAnotherSeriesIsRejectedBeforeContractLookup() {
+        prepareLocked("CONFIRMED").setSeriesId(10L);
+        var dispatch = mock(PiDispatchMapper.class);
+        var contracts = mock(PiPurchaseContractService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "dispatch", dispatch);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "purchaseContracts", contracts);
+        when(dispatch.get(3L)).thenReturn(new PiDispatchBatch(3L, "BATCH-OTHER", 20L, 2L, 8L,
+                "PDA", "ACTIVE", 1, 1, null));
+        assertCode(() -> service.getDispatchBatch(1L, 3L), "PI_BATCH_NOT_FOUND");
+        verify(dispatch, never()).vehicles(anyLong());
+        verifyNoInteractions(contracts);
+    }
+
+    @Test
+    void agentDispatchBatchDoesNotExposeInternalPurchaseContract() {
+        login("ROLE_WEB_AGENT", "PERM_PI_READ");
+        ((UsernamePasswordAuthenticationToken) SecurityContextHolder.getContext().getAuthentication())
+                .setDetails(new UserAuthRecord(3L, "agent", "", "WEB_AGENT", 9L, null, true));
+        var pi = prepareLocked("CONFIRMED");
+        pi.setAgentId(9L);
+        pi.setSeriesId(10L);
+        var dispatch = mock(PiDispatchMapper.class);
+        var contracts = mock(PiPurchaseContractService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "dispatch", dispatch);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "purchaseContracts", contracts);
+        when(dispatch.get(3L)).thenReturn(new PiDispatchBatch(3L, "BATCH-3", 10L, 1L, 7L,
+                "PDA", "ACTIVE", 1, 1, null));
+        var vehicles = List.<java.util.Map<String, Object>>of(java.util.Map.of("stockOutNo", "OUT-1"));
+        when(dispatch.vehicles(3L)).thenReturn(vehicles);
+        assertThat(service.getDispatchBatch(1L, 3L).get("vehicles")).isSameAs(vehicles);
+        verifyNoInteractions(contracts);
+    }
+
+    @Test
+    void dispatchBatchRequiresPiReadPermissionBeforeAccessingData() {
+        login("ROLE_WEB_OPERATOR", "PERM_STOCK_READ");
+        var dispatch = mock(PiDispatchMapper.class);
+        var contracts = mock(PiPurchaseContractService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "dispatch", dispatch);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "purchaseContracts", contracts);
+        assertCode(() -> service.getDispatchBatch(1L, 3L), "PERMISSION_DENIED");
+        verifyNoInteractions(mapper, dispatch, contracts);
+    }
+
     private void prepareCreate() {
         when(mapper.countEnabledCustomer(1L)).thenReturn(1);
         when(mapper.selectEnabledSku(10L)).thenReturn(new PiSkuSnapshot(10L, 4L, "RED", "红色电动车", "红色", "City"));

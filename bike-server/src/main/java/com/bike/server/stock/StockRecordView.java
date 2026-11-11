@@ -3,6 +3,12 @@ package com.bike.server.stock;
 import java.time.LocalDateTime;
 
 public class StockRecordView {
+    private String purchaseContractParty;
+    private String purchaseContractNo;
+    public String getPurchaseContractParty() { return purchaseContractParty; }
+    public void setPurchaseContractParty(String value) { purchaseContractParty = value; }
+    public String getPurchaseContractNo() { return purchaseContractNo; }
+    public void setPurchaseContractNo(String value) { purchaseContractNo = value; }
     private String remark;
     public String getRemark(){return remark;}
     public void setRemark(String value){remark=value;}

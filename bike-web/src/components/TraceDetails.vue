@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import PurchaseContractNumber from './PurchaseContractNumber.vue'
 type Row = Record<string, string | number | null | undefined>
 export type TraceData = {
   vehicle: Row; relatedVehicles: Row[]; bindingHistory: Row[]; events: Row[];
@@ -17,7 +18,7 @@ const sections = computed(() => [
   { title: '部件绑定历史', rows: props.data.bindingHistory, columns: [['partType','部件类型'],['partSn','部件 SN'],['action','动作'],['operationTime','时间'],['operatorName','操作人'],['reason','原因']] },
   { title: '生产与操作时间轴', rows: props.data.events, columns: [['operationTime','时间'],['action','操作'],['operatorName','操作人'],['partType','部件类型'],['partSn','部件 SN'],['reason','说明']] },
   { title: '入库记录', rows: props.data.stockInRecords, columns: [['stockInNo','入库单号'],['warehouseName','仓库'],['locationName','库位'],['operationTime','时间'],['status','状态'],['cancelReason','撤销原因']] },
-  { title: '出库记录', rows: props.data.stockOutRecords, columns: [['stockOutNo','出库单号'],['piNo','PI编号'],['executionRevision','执行版本'],['dispatchBatchNo','出库批次'],['dispatchSourceType','批次来源'],['logisticsCarrier','承运商'],['logisticsTrackingNo','运单号'],['logisticsStatus','物流状态'],['customerName','客户'],['orderNo','订单'],['operationTime','时间'],['status','状态'],['cancelReason','撤销原因']] },
+  { title: '出库记录', rows: props.data.stockOutRecords, columns: [['stockOutNo','出库单号'],['piNo','PI编号'],['purchaseContractParty','购销合同方'],['purchaseContractNo','购销合同号'],['executionRevision','执行版本'],['dispatchBatchNo','出库批次'],['dispatchSourceType','批次来源'],['logisticsCarrier','承运商'],['logisticsTrackingNo','运单号'],['logisticsStatus','物流状态'],['customerName','客户'],['orderNo','订单'],['operationTime','时间'],['status','状态'],['cancelReason','撤销原因']] },
   { title: '返工换件', rows: props.data.reworkRecords, columns: [['reworkNo','返工单号'],['partType','部件类型'],['oldPartSn','旧件 SN'],['newPartSn','新件 SN'],['operationTime','时间'],['operatorName','操作人'],['reason','原因'],['status','状态']] },
 ])
 const labels: Record<string,string> = { MOTOR:'电机', BATTERY:'电池', DISPLAY:'仪表', FRAME:'车架', COMPLETED:'已完成', CANCELLED:'已撤销', OPEN:'处理中', SHIPPED:'已发运', PLANNED:'计划中', WITHDRAWN:'已撤回', PI_COMMAND:'PI整批出库', ORDER_COMMAND:'订单批量出库', LEGACY_SINGLE:'历史单车记录（非原合批）' }
@@ -38,7 +39,7 @@ function display(value: Row[string]) { const text = value == null || value === '
     <section v-for="section in sections" :key="section.title" class="trace-block">
       <h2>{{ section.title }} <small>{{ section.rows?.length ?? 0 }} 条</small></h2>
       <p v-if="!section.rows?.length" class="trace-hint">暂无记录</p>
-      <div v-else class="trace-table"><table><thead><tr><th v-for="[key,label] in section.columns" :key="key">{{ label }}</th></tr></thead><tbody><tr v-for="(row,index) in section.rows" :key="index"><td v-for="[key] in section.columns" :key="key">{{ display(row[key]) }}</td></tr></tbody></table></div>
+      <div v-else class="trace-table"><table><thead><tr><th v-for="[key,label] in section.columns" :key="key">{{ label }}</th></tr></thead><tbody><tr v-for="(row,index) in section.rows" :key="index"><td v-for="[key] in section.columns" :key="key"><PurchaseContractNumber v-if="key === 'purchaseContractNo'" :value="row[key] == null ? null : String(row[key])" /><template v-else>{{ key === 'purchaseContractParty' && row[key] === 'YINSANHUAN' ? '银三环' : display(row[key]) }}</template></td></tr></tbody></table></div>
     </section>
   </div>
 </template>

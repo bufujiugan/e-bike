@@ -21,6 +21,7 @@ public final class CurrentOperator {
     public static boolean hasRole(String role) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && authentication.getDetails() instanceof com.bike.server.auth.UserAuthRecord user) {
+            if (role.equals("WEB_CUSTOMER") && user.userType().equals("CUSTOMER")) return true;
             if (role.equals("WEB_AGENT") && user.userType().equals("AGENT")) return true;
             if (role.equals("PDA_OPERATOR") && user.userType().equals("PDA_OPERATOR")) return true;
         }
@@ -54,6 +55,7 @@ public final class CurrentOperator {
 
     public static void requireInternalWebAccess() {
         requireWebAccess();
+        if (hasRole("WEB_CUSTOMER")) throw new BusinessException("FORBIDDEN", "客户账号不能访问内部业务资料");
         if (hasRole("WEB_AGENT")) throw new BusinessException("FORBIDDEN", "代理商账号不能访问内部业务资料");
     }
 

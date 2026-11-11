@@ -32,6 +32,8 @@ class OrderServiceTest {
             OrderMapper mapper = Mockito.mock(OrderMapper.class);
             SalesOrderView order = order(7L, "SO-7", "CONFIRMED", 0, 2);
             order.setReservationHoldMode(mode);
+            order.setPurchaseContractParty("内部合同方");
+            order.setPurchaseContractNo("INTERNAL-BUY-7");
             order.setReservationStatus("PAID".equals(mode) ? "PAID_HELD" : "TIMED_ACTIVE");
             order.setReservationExpiresAt(java.time.LocalDateTime.of(2020, 1, 1, 0, 0));
             order.setReservationHeldAt(java.time.LocalDateTime.of(2019, 12, 31, 0, 0));
@@ -42,6 +44,8 @@ class OrderServiceTest {
             assertThat(response.getReservationExpiresAt()).isNull();
             assertThat(response.getReservationHoldMode()).isNull();
             assertThat(response.getReservationHeldAt()).isNull();
+            assertThat(response.getPurchaseContractParty()).isNull();
+            assertThat(response.getPurchaseContractNo()).isNull();
         }
     }
 
@@ -57,6 +61,19 @@ class OrderServiceTest {
         assertThat(result).isSameAs(order);
         Mockito.verify(mapper).insertOperationLog("ORDER_UPDATE", "SO-7", "作废订单", null,
                 "test-admin", "DRAFT", "CANCELLED", null, "客户取消");
+    }
+
+    @Test
+    void orderDetailIncludesSavedPurchaseContractForInternalUsers() {
+        var mapper = Mockito.mock(OrderMapper.class);
+        var contracts = Mockito.mock(com.bike.server.pi.PiPurchaseContractService.class);
+        var service = com.bike.server.common.CustomerScopeTestSupport.isolated(new OrderServiceImpl(mapper));
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "purchaseContracts", contracts);
+        Mockito.when(mapper.selectByNo("SO-7")).thenReturn(order(7L, "SO-7", "CONFIRMED", 0, 2));
+        Mockito.when(contracts.findForOrder(7L)).thenReturn(new com.bike.server.pi.PiPurchaseContract("供应方", "BUY-7"));
+        var response = service.getByNo("SO-7");
+        assertThat(response.getPurchaseContractParty()).isEqualTo("供应方");
+        assertThat(response.getPurchaseContractNo()).isEqualTo("BUY-7");
     }
 
     @Test

@@ -22,15 +22,17 @@ import type { PiTemplate } from '../pi-api'
 import { customerProfileApi } from '../customer-profile-api'
 import PiTemplatePicker from './PiTemplatePicker.vue'
 import PiWorkflowPanel from './PiWorkflowPanel.vue'
+import PiFeeInput from './PiFeeInput.vue'
+import PurchaseContractNumber from './PurchaseContractNumber.vue'
 import '../styles/pi-draft.css'
 
-const props = defineProps<{ context: (PermissionContext & { userType?: string; username?: string }) | null; initialKeyword?: string }>()
+const props = defineProps<{ context: (PermissionContext & { userType?: string; username?: string }) | null; initialKeyword?: string; europe?: boolean }>()
 const emit = defineEmits<{ navigate: [view: string] }>()
 const isAgent = computed(() => hasRole(props.context, 'WEB_AGENT') || props.context?.userType === 'AGENT')
 const isPda = computed(() => hasRole(props.context, 'PDA_OPERATOR') || props.context?.userType === 'PDA_OPERATOR')
 const internal = computed(() => !isAgent.value && !isPda.value)
 const allowed = (permission: string) => internal.value && hasPermission(props.context, permission)
-const canRead = computed(() => !isPda.value && hasPermission(props.context, 'PI_READ'))
+const canRead = computed(() => !isPda.value && (!props.europe || internal.value) && hasPermission(props.context, 'PI_READ'))
 const canWrite = computed(() => allowed('PI_WRITE'))
 const canManageTemplates = computed(() => allowed('PI_TEMPLATE_MANAGE'))
 const templateVisible = ref(false), profilesVisible = ref(false)
@@ -79,6 +81,41 @@ const logisticsAttachment = ref<PiLogistics | null>(null)
 const logisticsAttachmentVisible = ref(false)
 function openLogisticsAttachment(row: PiLogistics) { logisticsAttachment.value = row; logisticsAttachmentVisible.value = true }
 const canExport = computed(() => hasPermission(props.context, 'PI_EXPORT'))
+const europeWarehouseId = ref<number | undefined>()
+const europeWarehouses = ref<Awaited<ReturnType<typeof piApi.warehouseOptions>>>([])
+const europeWarehousesBusy = ref(false), europeWarehouseError = ref(''), europePreferenceError = ref('')
+const europeWarehouse = computed(() => europeWarehouses.value.find(item => item.id === europeWarehouseId.value))
+const europeScopeReady = computed(() => !props.europe || Boolean(europeWarehouse.value))
+const canCreateInScope = computed(() => !props.europe || europeWarehouse.value?.status === 'ENABLED')
+function europePreferenceKey() { return `bike:europe-warehouse:${encodeURIComponent(props.context?.username || '')}` }
+let europeWarehouseLoadVersion = 0
+async function loadEuropeWarehouses() {
+  if (!props.europe || !internal.value || !canRead.value) return
+  const version = ++europeWarehouseLoadVersion
+  const preferenceKey = europePreferenceKey()
+  europeWarehousesBusy.value = true; europeWarehouseError.value = ''
+  try {
+    const warehouses = await piApi.warehouseOptions()
+    if (version !== europeWarehouseLoadVersion || preferenceKey !== europePreferenceKey()) return
+    europeWarehouses.value = warehouses
+    try {
+      const saved = Number(localStorage.getItem(preferenceKey))
+      europeWarehouseId.value = europeWarehouses.value.some(item => item.id === saved) ? saved : undefined
+    } catch { europePreferenceError.value = '无法读取本机仓库偏好，请重新选择出货仓。' }
+    refreshLocalDrafts(); await load()
+  } catch (error) { if (version === europeWarehouseLoadVersion) europeWarehouseError.value = message(error, '出货仓加载失败，请重试') }
+  finally { if (version === europeWarehouseLoadVersion) europeWarehousesBusy.value = false }
+}
+function selectEuropeWarehouse() {
+  europePreferenceError.value = ''
+  try { localStorage.setItem(europePreferenceKey(), String(europeWarehouseId.value)) }
+  catch { europePreferenceError.value = '本次选择已生效，但无法保存到本机；下次进入需要重新选择。' }
+  rows.value = []; total.value = 0
+  refreshLocalDrafts(); search()
+}
+const selectableProfiles = computed(() => fulfillmentProfiles.value.filter(profile =>
+  (profile.enabled || profile.id === draft.document.business?.fulfillmentProfileId) &&
+  (!props.europe || !profile.rules.warehouseIds.length || profile.rules.warehouseIds.includes(europeWarehouseId.value!))))
 const reportRefresh = ref(0), exportBusy = ref(false)
 const showFinance = computed(() => canPay.value || canRelease.value || canReversePayment.value)
 const rows = ref<PiView[]>([]), total = ref(0), page = ref(1), pageSize = ref(20)
@@ -141,7 +178,7 @@ const localSaveStatus = computed(() => localSaveError.value ? '本机草稿保�
 function localStore(username = props.context?.username || '') { return createPiLocalDraftStore(window.localStorage, username) }
 function refreshLocalDrafts() {
   if (!canWrite.value || !props.context?.username) { localDrafts.value = []; return }
-  try { const result = localStore().list(); localDrafts.value = result.records; localDraftError.value = result.errors.join('；') }
+  try { const result = localStore().list(); localDrafts.value = props.europe ? result.records.filter(saved => europeWarehouseId.value != null && saved.content.form.document.business?.warehouseId === europeWarehouseId.value) : result.records; localDraftError.value = result.errors.join('；') }
   catch { localDraftError.value = '无法读取本机草稿，请检查浏览器存储设置' }
 }
 function beginLocalDraft() {
@@ -210,6 +247,8 @@ async function restoreLocalDraft(record: PiLocalDraft) {
     const saved = localStore().read(record.id)
     if (!saved) throw new Error('这份本机草稿已删除，请刷新列表')
     const content = saved.content
+    if (props.europe && content.form.document.business?.warehouseId !== europeWarehouseId.value)
+      throw new Error('这份草稿的出货仓已变更，请在对应仓库或 PI 与履约入口继续填写')
     if (content.fromLocks && !canManageReservation.value) throw new Error('当前账号没有来源锁定操作权限')
     if (content.editingId != null) {
       const current = await piApi.get(content.editingId)
@@ -478,18 +517,19 @@ function message(error: unknown, fallback: string) { return api.isAxiosError(err
 let listVersion = 0, detailVersion = 0
 async function load() {
   if (!canRead.value) return
+  if (!europeScopeReady.value) { ++listVersion; rows.value = []; total.value = 0; busy.value = false; return }
   const version = ++listVersion; busy.value = true; loadError.value = ''
-  try { const result = await piApi.list({ keyword: keyword.value.trim() || undefined, status: status.value || undefined, page: page.value, pageSize: pageSize.value }); if (version === listVersion) { rows.value = result.records; total.value = result.total; reportRefresh.value++ } }
+  try { const result = await piApi.list({ keyword: keyword.value.trim() || undefined, status: status.value || undefined, warehouseId: props.europe ? europeWarehouseId.value : undefined, page: page.value, pageSize: pageSize.value }); if (version === listVersion) { rows.value = result.records; total.value = result.total; reportRefresh.value++ } }
   catch (error) { if (version === listVersion) { rows.value = []; total.value = 0; loadError.value = message(error, 'PI 列表加载失败') } }
   finally { if (version === listVersion) busy.value = false }
 }
 function search() { page.value = 1; void load() }
 async function exportList() {
-  if (exportBusy.value) return
+  if (exportBusy.value || !europeScopeReady.value) return
   exportBusy.value = true; loadError.value = ''
   try {
-    const blob = await piApi.exportList({ keyword: keyword.value.trim() || undefined, status: status.value || undefined })
-    const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = 'PI列表.xlsx'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
+    const blob = await piApi.exportList({ keyword: keyword.value.trim() || undefined, status: status.value || undefined, warehouseId: props.europe ? europeWarehouseId.value : undefined })
+    const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = props.europe ? '欧洲订单.xlsx' : 'PI列表.xlsx'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
   } catch (e) {
     if (api.isAxiosError(e) && e.response?.data instanceof Blob) { try { loadError.value = JSON.parse(await e.response.data.text()).message || 'PI列表导出失败' } catch { loadError.value = 'PI列表导出失败' } }
     else loadError.value = message(e, 'PI列表导出失败')
@@ -549,12 +589,13 @@ async function loadOptions() {
   finally { if (version === optionLoadVersion) optionsBusy.value = false }
 }
 async function openCreate(mode: 'new' | 'locks' = 'new') {
-  if (!canWrite.value || restoringDraft.value || createVisible.value) return
+  if (!canWrite.value || !canCreateInScope.value || restoringDraft.value || createVisible.value) return
   initializingDraft = true
   customerLoadVersion++; customerBusy.value = false; customerLoadFailed.value = false
   editingId.value = null
   fromLocks.value = mode === 'locks'; selectedLocks.value = []; conversionKey = ''; conversionFingerprint = ''
   Object.assign(draft, { customerId: undefined, agentId: undefined, sourceOrderId: undefined, tradeType: 'DOMESTIC', currencyCode: 'CNY', plannedShipDate: '', discountAmount: '0.00', taxAmount: '0.00', freightAmount: '0.00', otherFeeAmount: '0.00', depositRequiredAmount: '', shipmentRequiredAmount: '', remark: '', document: emptyDocument(), items: [newItem()] })
+  if (props.europe && draft.document.business) { draft.document.business.warehouseId = europeWarehouseId.value!; draft.document.business.domesticShipment = false }
   if (fromLocks.value) draft.items = []
   resetDraftWizard(); beginLocalDraft(); createError.value = ''; optionKeyword.value = ''; createVisible.value = true
   await nextTick(); initializingDraft = false; await loadOptions()
@@ -793,10 +834,11 @@ async function download(format: 'pdf' | 'xlsx') {
     else operationError.value = message(error, '文件下载失败')
   } finally { actionBusy.value = false }
 }
-watch(canRead, value => { if (value) void load(); else { rows.value = []; detail.value = null; detailVisible.value = false } })
+watch(canRead, value => { if (value) { if (props.europe) void loadEuropeWarehouses(); else void load(); void loadProfiles() } else { ++listVersion; rows.value = []; detail.value = null; detailVisible.value = false } })
 watch([draft, selectedLocks, draftStep, customerBusy, customerLoadFailed], () => { persistLocalDraft() }, { deep: true, flush: 'post' })
 watch(() => props.context?.username, () => {
   if (createVisible.value && localDraftOwner !== props.context?.username) { persistLocalDraft(); finishClosingDraft() }
+  if (props.europe) { ++europeWarehouseLoadVersion; ++listVersion; europeWarehouseId.value = undefined; europeWarehouses.value = []; rows.value = []; total.value = 0; detail.value = null; detailVisible.value = false; void loadEuropeWarehouses() }
   refreshLocalDrafts()
 })
 function beforePageUnload(event: BeforeUnloadEvent) {
@@ -808,10 +850,10 @@ onMounted(() => {
   window.addEventListener('beforeunload', beforePageUnload)
   window.addEventListener('pagehide', saveOnPageHide)
   window.addEventListener('storage', refreshLocalDrafts)
-  if (canRead.value) { void load(); void loadProfiles(); if (internal.value && new URLSearchParams(window.location.search).get('panel') === 'profiles') profilesVisible.value = true }
+  if (canRead.value) { if (props.europe) void loadEuropeWarehouses(); else void load(); void loadProfiles(); if (internal.value && new URLSearchParams(window.location.search).get('panel') === 'profiles') profilesVisible.value = true }
 })
 onBeforeUnmount(() => {
-  persistLocalDraft(); customerLoadVersion++; lockVersion++; profileSelectionVersion++; optionLoadVersion++
+  persistLocalDraft(); customerLoadVersion++; lockVersion++; profileSelectionVersion++; optionLoadVersion++; listVersion++; detailVersion++; europeWarehouseLoadVersion++
   window.removeEventListener('beforeunload', beforePageUnload)
   window.removeEventListener('pagehide', saveOnPageHide)
   window.removeEventListener('storage', refreshLocalDrafts)
@@ -824,9 +866,19 @@ onBeforeUnmount(() => {
   <section class="pi-workspace">
     <el-empty v-if="!canRead" description="当前账号没有 PI 查看权限" />
     <template v-else>
-      <div class="pi-heading"><div><h2>{{ isAgent ? '我的 PI 单据' : 'PI 与销售履约' }}</h2><p>{{ isAgent ? '查看已发布的单据、商品和物流进度。' : '维护商品与交易条款，跟进收款、放行和物流。' }}</p></div></div>
-      <PiBusinessDashboard v-if="internal" :refresh="reportRefresh" @open-pi="id => openDetail({ id })" />
-      <form class="pi-filters list-toolbar" @submit.prevent="search"><el-input v-model="keyword" aria-label="搜索PI、客户、SKU、订单、出库单或物流单号" placeholder="PI / 客户 / SKU / 订单 / 出库单 / 物流单号" clearable /><el-select v-model="status" aria-label="PI 状态" clearable placeholder="全部状态"><el-option v-for="s in states" :key="s" :value="s" :label="stateNames[s]" /></el-select><el-button native-type="submit" type="primary" :loading="busy">查询</el-button><el-button @click="keyword = ''; status = ''; search()">重置</el-button><el-button v-if="canExport" :loading="exportBusy" @click="exportList">导出当前查询全部 PI</el-button><el-button v-if="internal" @click="profilesVisible = true">履约配置</el-button><el-button v-if="canManageTemplates" @click="templateVisible = true">模板与银行资料</el-button><el-button v-if="canWrite && canManageReservation" @click="openConversion">从 SKU 锁定生成 PI</el-button><el-button v-if="canWrite" type="primary" @click="openCreate()">新建 PI</el-button></form>
+      <div class="pi-heading"><div><h2>{{ europe ? '欧洲订单' : isAgent ? '我的 PI 单据' : 'PI 与销售履约' }}</h2><p>{{ europe ? '按捷克出货仓集中办理 PI、备货、运输、收款和单据。' : isAgent ? '查看已发布的单据、商品和物流进度。' : '维护商品与交易条款，跟进收款、放行和物流。' }}</p></div></div>
+      <section v-if="europe" class="europe-order-scope" aria-label="欧洲订单出货仓">
+        <label for="europe-warehouse">捷克出货仓</label>
+        <el-select id="europe-warehouse" v-model="europeWarehouseId" aria-label="捷克出货仓" filterable :loading="europeWarehousesBusy" placeholder="请选择实际的捷克出货仓" @change="selectEuropeWarehouse">
+          <el-option v-for="warehouse in europeWarehouses" :key="warehouse.id" :value="warehouse.id" :label="`${warehouse.name}（${warehouse.code}）${warehouse.status === 'ENABLED' ? '' : ' · 已停用'}`" />
+        </el-select>
+        <p>仅显示所选出货仓的订单；选择会保存在当前浏览器、当前账号。新建 PI 自动带入该仓库。</p>
+        <el-alert v-if="europeWarehouseError" :title="europeWarehouseError" type="error" :closable="false"><el-button text @click="loadEuropeWarehouses">重试</el-button></el-alert>
+        <el-alert v-if="europePreferenceError" :title="europePreferenceError" type="warning" :closable="false" />
+        <el-alert v-if="europeWarehouse && !canCreateInScope" title="该仓库已停用，仅可查看历史订单；新建 PI 请选用启用仓库。" type="warning" :closable="false" />
+      </section>
+      <PiBusinessDashboard v-if="internal && !europe" :refresh="reportRefresh" @open-pi="id => openDetail({ id })" />
+      <form class="pi-filters list-toolbar" @submit.prevent="search"><el-input v-model="keyword" aria-label="搜索PI、客户、SKU、订单、出库单或物流单号" placeholder="PI / 客户 / SKU / 订单 / 出库单 / 物流单号" clearable /><el-select v-model="status" aria-label="PI 状态" clearable placeholder="全部状态"><el-option v-for="s in states" :key="s" :value="s" :label="stateNames[s]" /></el-select><el-button native-type="submit" type="primary" :loading="busy" :disabled="!europeScopeReady">查询</el-button><el-button @click="keyword = ''; status = ''; search()">重置</el-button><el-button v-if="canExport" :loading="exportBusy" :disabled="!europeScopeReady" @click="exportList">导出当前查询全部 PI</el-button><el-button v-if="internal" @click="profilesVisible = true">履约配置</el-button><el-button v-if="canManageTemplates" @click="templateVisible = true">模板与银行资料</el-button><el-button v-if="canWrite && canManageReservation" :disabled="!canCreateInScope" @click="openConversion">从 SKU 锁定生成 PI</el-button><el-button v-if="canWrite" type="primary" :disabled="!canCreateInScope" @click="openCreate()">新建 PI</el-button></form>
 <el-alert v-if="internal && profilesError" :title="profilesError" type="error" :closable="false"><el-button text @click="loadProfiles">重试加载履约配置</el-button></el-alert>
       <el-alert v-if="canWrite && localDraftError" :title="localDraftError" type="error" :closable="false"><el-button text @click="refreshLocalDrafts">重新读取</el-button></el-alert>
       <section v-if="canWrite && localDrafts.length" class="pi-local-drafts" aria-label="本机草稿">
@@ -837,7 +889,7 @@ onBeforeUnmount(() => {
         </article>
       </section>
       <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false" />
-      <el-table v-loading="busy" :data="rows" empty-text="没有符合条件的 PI" row-key="id">
+      <el-table v-loading="busy" :data="rows" :empty-text="europe && !europeScopeReady ? '请先选择捷克出货仓' : '没有符合条件的 PI'" row-key="id">
       <RecordIdColumn />
         <el-table-column prop="piNo" label="PI 编号" min-width="200"><template #default="scope"><el-button link type="primary" @click="openDetail(scope.row)">{{ scope.row.piNo }}</el-button></template></el-table-column>
         <el-table-column prop="revision" label="版本" width="70" /><el-table-column prop="customerName" label="客户" min-width="150" />
@@ -875,12 +927,12 @@ onBeforeUnmount(() => {
                 <div class="pi-draft-grid">
                   <el-form-item label="客户" required data-draft-field="customer" :error="fieldError('customer')"><el-select v-model="draft.customerId" aria-label="客户" :loading="customerBusy || optionsBusy" @change="chooseCustomer" :disabled="editingRevision || fixedItems && !fromLocks" filterable placeholder="搜索或选择客户"><el-option v-for="customer in options.customers" :key="customer.id" :value="customer.id" :label="customer.code + ' · ' + customer.name" /></el-select></el-form-item>
                   <div v-if="draft.document.business" class="pi-draft-grid" data-draft-field="warehouse">
-                  <el-form-item label="出库仓库（不同仓库分别开 PI）" required :error="fieldError('warehouse')"><el-select v-model="draft.document.business.warehouseId" :disabled="editingRevision && Boolean(detail?.document?.business)" filterable placeholder="选择本单出库仓库"><el-option v-for="warehouse in options.warehouses || []" :key="warehouse.id" :value="warehouse.id" :label="warehouse.name" /></el-select></el-form-item>
-                  <el-form-item label="履约配置" :required="requiresProfile" data-draft-field="fulfillmentProfile" :error="fieldError('fulfillmentProfile')"><el-select :model-value="draft.document.business.fulfillmentProfileId" :clearable="!requiresProfile" filterable :disabled="editingRevision || optionsBusy" :placeholder="requiresProfile ? '请选择履约配置（必填）' : '历史单据可沿用原规则'" @change="chooseProfile"><el-option v-for="p in fulfillmentProfiles.filter(p => p.enabled || p.id === draft.document.business?.fulfillmentProfileId)" :key="p.id" :value="p.id" :label="`${p.name} · ${p.version}`" /></el-select></el-form-item>
+                  <el-form-item label="出库仓库（不同仓库分别开 PI）" required :error="fieldError('warehouse')"><el-select v-model="draft.document.business.warehouseId" :disabled="europe || editingRevision && Boolean(detail?.document?.business)" filterable placeholder="选择本单出库仓库"><el-option v-for="warehouse in options.warehouses || []" :key="warehouse.id" :value="warehouse.id" :label="warehouse.name" /></el-select></el-form-item>
+                  <el-form-item label="履约配置" :required="requiresProfile" data-draft-field="fulfillmentProfile" :error="fieldError('fulfillmentProfile')"><el-select :model-value="draft.document.business.fulfillmentProfileId" :clearable="!requiresProfile" filterable :disabled="editingRevision || optionsBusy" :placeholder="requiresProfile ? '请选择履约配置（必填）' : '历史单据可沿用原规则'" @change="chooseProfile"><el-option v-for="p in selectableProfiles" :key="p.id" :value="p.id" :label="`${p.name} · ${p.version}`" /></el-select></el-form-item>
                   <el-alert v-if="profilesError" :title="profilesError" type="error" :closable="false"><el-button text @click="loadProfiles">重试</el-button></el-alert>
                   <el-form-item v-if="draftProfile?.rules.paymentMode === 'CREDIT'" label="付款到期日" required data-draft-field="paymentDueDate" :error="fieldError('paymentDueDate')"><el-date-picker v-model="draft.document.business.paymentDueDate" value-format="YYYY-MM-DD" :disabled="editingRevision" /></el-form-item>
                   <p v-if="draftProfile" class="pi-field-help">{{ draftProfile.rules.paymentMode === 'CREDIT' ? '后付款须逐单授权；真实收款另行登记。' : '按约定收款金额保留库存与放行。' }}交付：{{ draftProfile.rules.deliveryMode === 'CUSTOMER_PICKUP' ? '客户货代提货' : '我方安排运输' }}。所需单据：{{ draftProfile.rules.requiredDocuments.join('、') || '按配置办理' }}。</p>
-                  <el-form-item label="是否从国内出货" required><el-select v-model="draft.document.business.domesticShipment" :disabled="editingRevision && Boolean(detail?.document?.business)"><el-option :value="true" :label="draftProfile ? '是（合同要求以履约配置为准）' : '是，须办理 SAVA／银三环购销合同'" /><el-option :value="false" :label="draftProfile ? '否（合同要求以履约配置为准）' : '否，不适用国内购销合同'" /></el-select></el-form-item>
+                  <el-form-item label="是否从国内出货" required><el-select v-model="draft.document.business.domesticShipment" :disabled="europe || editingRevision && Boolean(detail?.document?.business)"><el-option :value="true" :label="draftProfile ? '是（合同要求以履约配置为准）' : '是，须办理 SAVA／银三环购销合同'" /><el-option :value="false" :label="draftProfile ? '否（合同要求以履约配置为准）' : '否，不适用国内购销合同'" /></el-select></el-form-item>
                 </div><div class="pi-draft-grid pi-trade-fields"><el-form-item label="贸易类型" required><el-select v-model="draft.tradeType" aria-label="贸易类型" :disabled="editingRevision" @change="changeTradeType"><el-option value="DOMESTIC" label="内销" /><el-option value="EXPORT" label="外销" /></el-select></el-form-item><el-form-item label="币种" required data-draft-field="currency" :error="fieldError('currency')"><el-input v-model="draft.currencyCode" aria-label="币种" :disabled="editingRevision" maxlength="3" placeholder="CNY / USD / EUR" /></el-form-item></div>
                 </div>
                 <div v-if="customerBusy" class="pi-field-help" role="status">正在带入客户商务资料…</div>
@@ -947,7 +999,7 @@ onBeforeUnmount(() => {
                 <el-form-item label="交付条款" required data-draft-field="deliveryTerms" :error="fieldError('deliveryTerms')"><el-input v-model="draft.document.deliveryTerms" aria-label="交付条款" type="textarea" :rows="3" maxlength="2000" placeholder="填写交货地点、交付责任及其他约定" /></el-form-item>
                 <div class="pi-draft-grid"><el-form-item label="计划发货日期"><el-date-picker v-model="draft.plannedShipDate" aria-label="计划发货日期" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" /></el-form-item><el-form-item label="运输方式" required data-draft-field="transportMode" :error="fieldError('transportMode')"><el-input v-model="draft.document.transportMode" aria-label="运输方式" maxlength="100" placeholder="填写实际运输方式" /></el-form-item><el-form-item label="开单日期" required data-draft-field="issueDate" :error="fieldError('issueDate')"><el-date-picker v-model="draft.document.issueDate" aria-label="开单日期" type="date" value-format="YYYY-MM-DD" /></el-form-item><el-form-item label="有效期至" required data-draft-field="validUntil" :error="fieldError('validUntil')"><el-date-picker v-model="draft.document.validUntil" aria-label="有效期至" type="date" value-format="YYYY-MM-DD" /></el-form-item><el-form-item v-if="draft.tradeType === 'EXPORT' || draft.document.tradeTerms" label="贸易术语（外销）" :required="draft.tradeType === 'EXPORT'" data-draft-field="tradeTerms" :error="fieldError('tradeTerms')" class="pi-span-two"><el-input v-model="draft.document.tradeTerms" aria-label="贸易术语" maxlength="100" placeholder="按实际约定填写" /></el-form-item><el-form-item label="收货地址" required data-draft-field="shippingAddress" :error="fieldError('shippingAddress')" class="pi-span-two"><el-input v-model="draft.document.shippingAddress" aria-label="收货地址" type="textarea" :rows="2" maxlength="1000" placeholder="从客户资料带入，可针对本单修改" /></el-form-item></div>
               </section>
-              <section class="pi-form-card"><details class="pi-disclosure pi-fees-disclosure" data-draft-field="fees" :open="feesExpanded" @toggle="feesExpanded = ($event.target as HTMLDetailsElement).open"><summary><span><strong>整单折扣与费用</strong><small>有运费、税费或额外折扣时填写</small></span><span>按需展开</span></summary><div class="pi-draft-grid"><el-form-item label="全单追加折扣"><el-input v-model="draft.discountAmount" aria-label="全单追加折扣" inputmode="decimal" /></el-form-item><el-form-item label="全单追加税费"><el-input v-model="draft.taxAmount" aria-label="全单追加税费" inputmode="decimal" /></el-form-item><el-form-item label="运费"><el-input v-model="draft.freightAmount" aria-label="运费" inputmode="decimal" /></el-form-item><el-form-item label="其他费用"><el-input v-model="draft.otherFeeAmount" aria-label="其他费用" inputmode="decimal" /></el-form-item></div></details><el-form-item label="备注（选填）"><el-input v-model="draft.remark" aria-label="PI 备注" type="textarea" :rows="2" maxlength="1000" show-word-limit /></el-form-item></section>
+              <section class="pi-form-card"><details class="pi-disclosure pi-fees-disclosure" data-draft-field="fees" :open="feesExpanded" @toggle="feesExpanded = ($event.target as HTMLDetailsElement).open"><summary><span><strong>整单折扣与费用</strong><small>有运费、税费或额外折扣时填写</small></span><span>按需展开</span></summary><div class="pi-draft-grid"><el-form-item label="全单追加折扣"><PiFeeInput v-model="draft.discountAmount" aria-label="全单追加折扣" /></el-form-item><el-form-item label="全单追加税费"><PiFeeInput v-model="draft.taxAmount" aria-label="全单追加税费" /></el-form-item><el-form-item label="运费"><PiFeeInput v-model="draft.freightAmount" aria-label="运费" /></el-form-item><el-form-item label="其他费用"><PiFeeInput v-model="draft.otherFeeAmount" aria-label="其他费用" /></el-form-item></div></details><el-form-item label="备注（选填）"><el-input v-model="draft.remark" aria-label="PI 备注" type="textarea" :rows="2" maxlength="1000" show-word-limit /></el-form-item></section>
             </section>
             <section v-if="draftStep === 2" class="pi-draft-step">
               <div class="pi-step-heading"><span class="pi-eyebrow">STEP 03</span><h2>最后，核对一下。</h2><p>本次仅保存草稿，不会发布单据或触发收款、放行。</p></div>
@@ -1045,7 +1097,7 @@ onBeforeUnmount(() => {
     </el-dialog>
     <el-dialog v-model="logisticsHistoryVisible" title="物流修订历史" width="min(1000px, 94vw)"><el-alert v-if="logisticsHistoryError" :title="logisticsHistoryError" type="error" :closable="false" /><el-table :data="logisticsHistory" v-loading="logisticsHistoryBusy"><el-table-column prop="revision" label="版本" width="70" /><el-table-column prop="createdAt" label="记录时间" min-width="180" /><el-table-column label="动作"><template #default="{ row }">{{ ({ CREATE: '创建', UPDATE: '更新', WITHDRAW: '撤回', MIGRATED_CURRENT: '迁移当时快照' } as Record<string,string>)[row.action] || row.action }}</template></el-table-column><el-table-column prop="carrier" label="承运商" /><el-table-column prop="trackingNo" label="运单号" /><el-table-column label="状态"><template #default="{ row }">{{ logisticsStates[row.status] || row.status }}</template></el-table-column><el-table-column prop="shippedQtySnapshot" label="发运数量" /><el-table-column prop="revokeReason" label="撤回原因" min-width="200" /></el-table></el-dialog>
     <el-dialog v-model="batchVisible" title="出库批次车辆" width="min(1000px, 94vw)"><el-alert v-if="batchError" :title="batchError" type="error" :closable="false" /><el-table v-loading="batchBusy" :data="batchVehicles">
-      <RecordIdColumn prop="stockOutId" label="出库记录 ID" /><el-table-column prop="vehicleQrCode" label="聚合码" min-width="240" show-overflow-tooltip /><el-table-column prop="frameSn" label="车架码" min-width="180" /><el-table-column prop="skuCode" label="SKU" /><el-table-column prop="orderNo" label="履约订单" min-width="180" /><el-table-column prop="stockOutNo" label="出库单" min-width="180" /><el-table-column label="状态"><template #default="{ row }">{{ row.status === 'COMPLETED' ? '已出库' : '已撤销' }}</template></el-table-column><el-table-column prop="cancelReason" label="撤销原因" /></el-table></el-dialog>
+      <RecordIdColumn prop="stockOutId" label="出库记录 ID" /><el-table-column prop="vehicleQrCode" label="聚合码" min-width="240" show-overflow-tooltip /><el-table-column prop="frameSn" label="车架码" min-width="180" /><el-table-column prop="skuCode" label="SKU" /><el-table-column prop="orderNo" label="履约订单" min-width="180" /><el-table-column prop="stockOutNo" label="出库单" min-width="180" /><el-table-column v-if="internal" label="购销合同方" min-width="160"><template #default="{ row }">{{ row.purchaseContractParty === 'YINSANHUAN' ? '银三环' : row.purchaseContractParty || '未登记' }}</template></el-table-column><el-table-column v-if="internal" label="购销合同号" min-width="260"><template #default="{ row }"><PurchaseContractNumber :value="row.purchaseContractNo" /></template></el-table-column><el-table-column label="状态"><template #default="{ row }">{{ row.status === 'COMPLETED' ? '已出库' : '已撤销' }}</template></el-table-column><el-table-column prop="cancelReason" label="撤销原因" /></el-table></el-dialog>
     <el-dialog v-model="reservationVisible" title="核对库存并重新占用" width="540px" :close-on-click-modal="false" :close-on-press-escape="!actionBusy">
       <p>提交时重新检查可用库存。已经到期的占用不会因登记收款而自动恢复；库存不足时本次操作会被拒绝。</p>
       <p class="pi-hint">如关联的已确认 PI 已达到保留库存门槛，成功占用后将按收款达标规则保留，待履约或人工关闭。</p>
@@ -1060,5 +1112,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.europe-order-scope{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:16px 18px;margin-bottom:18px;border:1px solid #dbe4ee;border-radius:10px;background:#f6f9fc}.europe-order-scope label{font-weight:600;white-space:nowrap}.europe-order-scope .el-select{width:320px;max-width:100%}.europe-order-scope p{flex-basis:100%;margin:0;color:#65758a;font-size:13px;line-height:1.7}.europe-order-scope .el-alert{width:100%;margin:0}
 .pi-workspace{padding:28px 32px;min-width:0;max-width:1500px;margin:auto}.pi-heading{display:flex;justify-content:space-between;gap:20px;align-items:center;margin-bottom:24px}.pi-heading h2{margin:0 0 7px;font-size:24px}.pi-heading p,.pi-hint{color:#65758a;font-size:13px;line-height:1.7}.pi-heading p{margin:0}.pi-filters{display:flex;gap:12px;align-items:center;margin-bottom:18px}.pi-filters>.el-input{max-width:340px}.pi-filters>.el-select{width:160px}.el-pagination{margin-top:20px;justify-content:flex-end;flex-wrap:wrap}.el-alert{margin:12px 0}.pi-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 18px}.pi-form .el-select,.pi-form .el-date-editor,.el-form-item .el-date-editor{width:100%}.pi-form h3{font-size:16px;margin:22px 0 14px}.pi-items-scroll{overflow-x:auto;margin-bottom:12px}.pi-draft-items{min-width:1020px}.pi-draft-items th,.pi-draft-items td{padding:10px 6px}.pi-draft-items th:first-child{width:340px}.pi-draft-items .el-input-number{width:108px}.pi-draft-items .el-input{min-width:98px}.pi-draft-items .el-select{min-width:320px}.pi-amounts{margin-top:24px}.pi-preview{background:#f1f7fc;border-radius:8px;padding:14px 18px;display:flex;flex-direction:column;gap:7px;align-self:start}.pi-preview span{font-size:12px;color:#52687d}.pi-preview strong{font-size:23px;color:#1677c8}.pi-preview small{font-size:11px;line-height:1.6;color:#748196}.pi-detail{min-height:140px}.pi-detail-heading{display:flex;justify-content:space-between;align-items:center;gap:20px;margin:8px 0 18px}.pi-detail-heading>div{display:flex;gap:12px;flex-wrap:wrap;align-items:center}.pi-detail-heading span{font-size:13px;color:#65758a}.pi-grand-total{font-size:24px;color:#1677c8}.pi-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}.pi-actions .el-button+.el-button{margin-left:0}.pi-tab-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.pi-totals{display:flex;justify-content:flex-end;gap:22px;flex-wrap:wrap;background:#f6f9fc;padding:18px;margin-top:16px}.pi-totals span{display:flex;flex-direction:column;gap:8px;color:#65758a;font-size:12px}.pi-totals b{font-size:15px;color:#23364d}.pi-prewrap{white-space:pre-wrap;overflow-wrap:anywhere}.el-tabs{margin-top:18px}@media(max-width:900px){.pi-workspace{padding:22px 18px}.pi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.pi-filters{flex-wrap:wrap}}@media(max-width:580px){.pi-grid{grid-template-columns:1fr}.pi-heading{align-items:flex-start;flex-direction:column}.pi-detail-heading{align-items:flex-start;flex-direction:column}.pi-filters>.el-input{max-width:none;width:100%}.pi-grand-total{font-size:21px}}
 </style>

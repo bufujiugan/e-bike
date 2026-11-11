@@ -3,6 +3,12 @@ package com.bike.server.trace;
 import java.time.LocalDateTime;
 
 public class TraceStockOutRecord {
+    private String purchaseContractParty;
+    private String purchaseContractNo;
+    public String getPurchaseContractParty() { return purchaseContractParty; }
+    public void setPurchaseContractParty(String value) { purchaseContractParty = value; }
+    public String getPurchaseContractNo() { return purchaseContractNo; }
+    public void setPurchaseContractNo(String value) { purchaseContractNo = value; }
     private String piNo,dispatchBatchNo,dispatchSourceType;
     private Integer executionRevision;
     private String logisticsCarrier,logisticsTrackingNo,logisticsStatus;

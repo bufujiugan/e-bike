@@ -1,0 +1,46 @@
+{
+    "name": "Qs601Module",
+    "id": "Qs601Module",
+    "version": "1.0.1",
+    "description": "群索产品打印扫码SDK",
+    "_dp_type":"nativeplugin",
+    "_dp_nativeplugin":{
+        "android": {
+            "plugins": [
+                {
+                    "type": "module",
+					"name": "Qs601Module",
+                    "class": "com.qs.n601.UpdateModule"
+                }
+            ],
+            "hooksClass": "",
+            "integrateType": "aar",
+            "dependencies": [
+                ""
+            ],
+            "excludeDependencies": [
+                ""  
+            ],
+            "compileOptions": {
+                "sourceCompatibility": "1.8",
+                "targetCompatibility": "1.8"
+            },
+            "abis": [
+                "armeabi-v7a|arm64-v8a|x86"
+            ],
+            "minSdkVersion": "21",
+			 "targetSdkVersion": 30,
+            "useAndroidX": false,  
+            "permissions": [
+                ""
+            ],
+            "parameters": {
+                "appid": {
+                    "des": "",
+                    "key": "AndroidManifest.xml中添加meta-data节点！对应android:name属性值, 如GETUI_APPID",
+                    "placeholder": "build.gradle中添加到manifestPlaceholders中的字段名"
+                }
+            }
+        }
+    }
+}

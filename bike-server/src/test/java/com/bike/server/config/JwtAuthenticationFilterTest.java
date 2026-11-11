@@ -22,7 +22,11 @@ class JwtAuthenticationFilterTest {
     @AfterEach void clear() { SecurityContextHolder.clearContext(); }
 
     private void authenticate(String username) throws Exception {
-        var request = new MockHttpServletRequest("GET", "/api/vehicles");
+        authenticate(username, "/api/vehicles");
+    }
+
+    private void authenticate(String username, String path) throws Exception {
+        var request = new MockHttpServletRequest("GET", path);
         request.addHeader("Authorization", "Bearer " + tokens.issue(username).value());
         new JwtAuthenticationFilter(tokens, users).doFilter(request, new MockHttpServletResponse(), (req, res) -> {});
     }
@@ -65,5 +69,20 @@ class JwtAuthenticationFilterTest {
         assertThat(SecurityContextHolder.getContext().getAuthentication().getAuthorities())
                 .extracting("authority").contains("ROLE_WEB_AGENT", "PERM_ORDER_READ")
                 .doesNotContain("ROLE_SUPER_ADMIN");
+    }
+
+    @Test void customerHasOnlyCustomerRoleAndCannotReachInternalApis() throws Exception {
+        when(users.selectAuthByUsername("customer")).thenReturn(
+                new UserAuthRecord(4, "customer", "hash", "CUSTOMER", null, null, true));
+        when(users.selectRoleCodes("customer")).thenReturn(List.of("WEB_CUSTOMER", "SUPER_ADMIN"));
+        when(users.selectPermissionCodes("customer")).thenReturn(List.of("ORDER_WRITE"));
+        authenticate("customer", "/api/customer/orders");
+        assertThat(SecurityContextHolder.getContext().getAuthentication().getAuthorities())
+                .extracting("authority").containsExactly("ROLE_WEB_CUSTOMER")
+                .doesNotContain("ROLE_SUPER_ADMIN", "PERM_ORDER_WRITE");
+        SecurityContextHolder.clearContext();
+
+        authenticate("customer", "/api/orders");
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
     }
 }

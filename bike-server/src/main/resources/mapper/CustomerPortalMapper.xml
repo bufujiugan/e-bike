@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.customer.CustomerPortalMapper">
+  <select id="selectCompanies" resultType="com.bike.server.customer.CustomerPortalService$Company">SELECT c.id,c.customer_name name FROM bike_customer c JOIN bike_user_customer_scope s ON s.customer_id=c.id WHERE s.user_id=#{userId} AND c.status='ENABLED'</select>
+  <select id="selectCompany" resultType="com.bike.server.customer.CustomerPortalService$Company">SELECT id,customer_name name FROM bike_customer WHERE id=#{customerId} AND status='ENABLED'</select>
+  <select id="selectModels" resultType="com.bike.server.customer.CustomerPortalService$Model">
+    SELECT m.id,m.model_name name,
+      GREATEST(0,
+        (SELECT COUNT(*) FROM bike_vehicle v WHERE v.model_id=m.id AND v.status=2
+          AND NOT <include refid="com.bike.server.stock.InventoryPolicyMapper.quarantined"/>)
+        - COALESCE((SELECT SUM(c.qty) FROM (<include refid="com.bike.server.stock.InventoryPolicyMapper.commitments"/>) c WHERE c.model_id=m.id),0)
+      ) available_qty
+    FROM bike_product_model m WHERE m.enabled=1 ORDER BY m.model_name,m.id
+  </select>
+  <sql id="orderSelect">SELECT o.id,o.order_no,o.customer_id,c.customer_name,i.model_id,i.model_name,i.order_qty,i.shipped_qty,o.status,o.planned_ship_date,o.remark,o.created_at FROM bike_sales_order o JOIN bike_customer c ON c.id=o.customer_id JOIN (SELECT oi.order_id,MIN(oi.product_model_id) model_id,GROUP_CONCAT(m.model_name ORDER BY m.model_name SEPARATOR '、') model_name,SUM(oi.ordered_qty) order_qty,SUM(oi.shipped_qty) shipped_qty FROM bike_sales_order_item oi JOIN bike_product_model m ON m.id=oi.product_model_id GROUP BY oi.order_id) i ON i.order_id=o.id</sql>
+  <select id="selectOrders" resultType="com.bike.server.customer.CustomerPortalService$Order"><include refid="orderSelect"/> WHERE o.customer_id=#{customerId} ORDER BY o.created_at DESC,o.id DESC LIMIT #{offset},20</select>
+  <select id="countOrders" resultType="long">SELECT COUNT(*) FROM bike_sales_order WHERE customer_id=#{customerId}</select>
+  <select id="selectOrder" resultType="com.bike.server.customer.CustomerPortalService$Order"><include refid="orderSelect"/> WHERE o.id=#{orderId}</select>
+  <!-- 保存原始提交内容，内部后续修改订单不影响重试判断。 -->
+  <select id="selectSubmission" resultType="com.bike.server.customer.CustomerPortalService$Submission">
+    SELECT CAST(business_id AS UNSIGNED) order_id,
+      JSON_EXTRACT(after_data,'$.customerId') customer_id, JSON_EXTRACT(after_data,'$.modelId') model_id,
+      JSON_EXTRACT(after_data,'$.quantity') quantity,
+      CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(after_data,'$.plannedShipDate')),'null') AS DATE) planned_ship_date,
+      NULLIF(JSON_UNQUOTE(JSON_EXTRACT(after_data,'$.remark')),'null') remark
+    FROM bike_operation_log WHERE business_type='CUSTOMER_ORDER_SUBMIT' AND operator_id=#{userId}
+      AND JSON_UNQUOTE(JSON_EXTRACT(after_data,'$.requestId'))=#{requestId}
+  </select>
+  <insert id="insertSubmission">INSERT INTO bike_operation_log(business_type,business_id,action,operator_id,after_data) VALUES('CUSTOMER_ORDER_SUBMIT',#{orderId},'客户下单幂等记录',#{userId},JSON_OBJECT('requestId',#{request.requestId},'customerId',#{customerId},'modelId',#{request.modelId},'quantity',#{request.quantity},'plannedShipDate',#{request.plannedShipDate},'remark',#{remark}))</insert>
+  <insert id="insertCompany">INSERT INTO bike_customer(customer_code,customer_name,status) VALUES(#{code},#{name},'ENABLED')</insert>
+  <select id="selectCompanyId" resultType="long">SELECT id FROM bike_customer WHERE customer_code=#{code}</select>
+  <insert id="insertCustomerRole">INSERT INTO bike_sys_role(role_code,role_name,enabled) VALUES('WEB_CUSTOMER','客户',1) ON DUPLICATE KEY UPDATE role_code=VALUES(role_code)</insert>
+  <insert id="insertUser">INSERT INTO bike_sys_user(username,password_hash,display_name,user_type,must_change_password) VALUES(#{request.username},#{passwordHash},#{request.displayName},'CUSTOMER',1)</insert>
+  <insert id="insertUserRole">INSERT INTO bike_sys_user_role(user_id,role_id) SELECT #{userId},id FROM bike_sys_role WHERE role_code='WEB_CUSTOMER' AND enabled=1</insert>
+  <insert id="insertCustomerBinding">INSERT INTO bike_user_customer_scope(user_id,customer_id,updated_by) VALUES(#{userId},#{customerId},#{operatorId})</insert>
+  <select id="selectUnreadOrders" resultType="com.bike.server.customer.CustomerPortalService$Order">
+    <include refid="orderSelect"/> WHERE o.status='PENDING'
+    AND EXISTS(SELECT 1 FROM bike_operation_log l WHERE l.business_type='CUSTOMER_ORDER_SUBMIT' AND CAST(l.business_id AS UNSIGNED)=o.id)
+    AND NOT EXISTS(SELECT 1 FROM bike_operation_log r WHERE r.business_type='CUSTOMER_ORDER_READ' AND CAST(r.business_id AS UNSIGNED)=o.id AND r.operator_id=#{userId})
+    <if test="scopeUserId != null">AND EXISTS(SELECT 1 FROM bike_user_customer_scope s WHERE s.customer_id=o.customer_id AND s.user_id=#{scopeUserId})</if>
+    ORDER BY o.created_at,o.id LIMIT 50
+  </select>
+  <select id="countSubmission" resultType="int">SELECT COUNT(*) FROM bike_operation_log WHERE business_type='CUSTOMER_ORDER_SUBMIT' AND CAST(business_id AS UNSIGNED)=#{orderId}</select>
+  <insert id="insertAcknowledgement">INSERT INTO bike_operation_log(business_type,business_id,action,operator_id) SELECT 'CUSTOMER_ORDER_READ',#{orderId},'已读客户订单提醒',#{userId} WHERE NOT EXISTS(SELECT 1 FROM bike_operation_log WHERE business_type='CUSTOMER_ORDER_READ' AND CAST(business_id AS UNSIGNED)=#{orderId} AND operator_id=#{userId})</insert>
+</mapper>

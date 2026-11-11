@@ -44,6 +44,7 @@ public class PiView {
     private Long agentId;
     private String agentName;
     private Long sourceOrderId;
+    private String sourceOrderNo;
     private String tradeType;
     private String currencyCode;
     private String status;
@@ -103,6 +104,9 @@ public class PiView {
 
     public Long getSourceOrderId() { return sourceOrderId; }
     public void setSourceOrderId(Long value) { sourceOrderId = value; }
+
+    public String getSourceOrderNo() { return sourceOrderNo; }
+    public void setSourceOrderNo(String value) { sourceOrderNo = value; }
 
     public String getTradeType() { return tradeType; }
     public void setTradeType(String value) { tradeType = value; }

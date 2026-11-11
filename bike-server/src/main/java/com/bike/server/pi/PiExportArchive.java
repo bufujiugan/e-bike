@@ -34,6 +34,7 @@ public class PiExportArchive {
         // Copy an explicit allowlist. Never serialize enriched finance, orders, internal release gates or receipts.
         PiView p=new PiView();p.setId(pi.getId());p.setPiNo(pi.getPiNo());p.setRevision(pi.getRevision());
         p.setCustomerCode(pi.getCustomerCode());p.setCustomerName(pi.getCustomerName());p.setTradeType(pi.getTradeType());
+        p.setSourceOrderNo(pi.getSourceOrderNo());
         p.setCurrencyCode(pi.getCurrencyCode());p.setStatus("CONFIRMED");p.setPlannedShipDate(pi.getPlannedShipDate());
         p.setSubtotal(pi.getSubtotal());p.setDiscountAmount(pi.getDiscountAmount());p.setTaxAmount(pi.getTaxAmount());
         p.setFreightAmount(pi.getFreightAmount());p.setTotalAmount(pi.getTotalAmount());p.setRemark(pi.getRemark());

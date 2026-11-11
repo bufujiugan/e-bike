@@ -25,6 +25,7 @@ public class ModuleServiceImpl implements ModuleService {
 
     private static final Map<String, ModuleDefinition> DEFINITIONS = definitions();
     private final ModuleMapper moduleMapper;
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.pi.PiPurchaseContractService purchaseContracts;
 
     public ModuleServiceImpl(ModuleMapper moduleMapper) {
         this.moduleMapper = moduleMapper;
@@ -58,10 +59,29 @@ public class ModuleServiceImpl implements ModuleService {
                 .stream().filter(definition.columns()::contains).findFirst().orElse(definition.columns().getFirst());
         boolean financialAudit = com.bike.server.common.FinancialAuditAccess.allowed();
         long total = moduleMapper.countRows(normalize(module), agentId, definition.columns(), normalizedKeyword, financialAudit);
-        List<List<String>> rows = moduleMapper.selectRowsPage(normalize(module), agentId, definition.columns(), normalizedKeyword,
-                        sortColumn, (normalizedPage - 1) * normalizedSize, normalizedSize, financialAudit).stream()
-                .map(row -> definition.columns().stream().map(column -> display(row.get(column))).toList()).toList();
-        return new ModulePageResponse(definition.subtitle(), definition.stats(total), definition.columns(), rows, definition.action(), normalizedPage, normalizedSize, total);
+        var records = moduleMapper.selectRowsPage(normalize(module), agentId, definition.columns(), normalizedKeyword,
+                sortColumn, (normalizedPage - 1) * normalizedSize, normalizedSize, financialAudit);
+        var columns = new java.util.ArrayList<>(definition.columns());
+        if ("stock-out".equals(module)) {
+            columns.addAll(List.of("购销合同方", "购销合同号"));
+            records = enrichStockContracts(records);
+        }
+        List<List<String>> rows = records.stream().map(row -> columns.stream().map(column -> display(row.get(column))).toList()).toList();
+        return new ModulePageResponse(definition.subtitle(), definition.stats(total), columns, rows, definition.action(), normalizedPage, normalizedSize, total);
+    }
+
+    private List<Map<String, Object>> enrichStockContracts(List<Map<String, Object>> records) {
+        if (purchaseContracts == null) return records;
+        var contracts = purchaseContracts.findForStockRecords(records.stream().map(row -> (String) row.get("业务单号")).toList());
+        return records.stream().map(row -> {
+            Map<String, Object> result = new LinkedHashMap<>(row);
+            var contract = contracts.get(row.get("业务单号"));
+            if (contract != null) {
+                result.put("购销合同方", "YINSANHUAN".equals(contract.purchaseContractParty()) ? "银三环" : contract.purchaseContractParty());
+                result.put("购销合同号", contract.purchaseContractNo());
+            }
+            return result;
+        }).toList();
     }
 
     private static void requireModuleAccess(String module) {

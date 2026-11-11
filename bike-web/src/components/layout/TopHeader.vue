@@ -7,7 +7,6 @@ const props = defineProps<{ groups: NavGroup[]; username: string; role: string; 
 const emit = defineEmits<{ navigate: [key: string]; guide: []; settings: []; logout: [] }>()
 function flatten(items: NavItem[]): NavItem[] { return items.flatMap(item => [...(item.path ? [item] : []), ...flatten(item.children ?? [])]) }
 const searchGroups = computed(() => props.groups.map(group => ({ ...group, items: flatten(group.items) })))
-const afterSalesEntry = computed(() => searchGroups.value.flatMap(group => group.items).find(item => item.key === 'after-sales'))
 function refreshPage() { window.location.reload() }
 </script>
 <template>
@@ -18,12 +17,9 @@ function refreshPage() { window.location.reload() }
     </div>
     <el-select model-value="" filterable placeholder="搜索功能页面…" aria-label="搜索功能页面" class="workspace-global-search" @change="emit('navigate', $event)"><template #prefix><AppIcon name="search" /></template><el-option-group v-for="group in searchGroups" :key="group.label" :label="group.label"><el-option v-for="item in group.items" :key="item.key" :label="item.label" :value="item.key" /></el-option-group></el-select>
     <div class="workspace-header-tools">
-      <button type="button" class="workspace-tool-button" title="生产到出库操作说明" aria-label="操作说明" @click="emit('guide')"><AppIcon name="layers" /></button>
+      <button v-if="role !== '客户'" type="button" class="workspace-tool-button" title="生产到出库操作说明" aria-label="操作说明" @click="emit('guide')"><AppIcon name="layers" /></button>
       <button type="button" class="workspace-tool-button" aria-label="刷新当前页面" :title="`刷新当前页面 · 最近加载 ${lastLoaded}`" @click="refreshPage"><AppIcon name="refresh" /></button>
-      <el-popover trigger="click" placement="bottom-end" :width="280" popper-class="workspace-notifications">
-        <template #reference><button type="button" class="workspace-tool-button" title="通知" aria-label="通知"><AppIcon name="bell" /></button></template>
-        <div class="notification-content"><strong>通知</strong><p>业务通知随记录查看，当前未提供汇总通知列表。</p><el-button v-if="afterSalesEntry" link type="primary" @click="emit('navigate', afterSalesEntry.key)">前往售后案例</el-button></div>
-      </el-popover>
+      <slot name="notifications" />
       <span class="workspace-tools-divider" aria-hidden="true"></span>
       <AccountMenu :username="username" :role="role" @settings="emit('settings')" @logout="emit('logout')" />
     </div>

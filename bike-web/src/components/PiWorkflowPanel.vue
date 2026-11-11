@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
+import PurchaseContractNumber from './PurchaseContractNumber.vue'
 import type { FulfillmentRules } from '../fulfillment-api'
 import { piApi, type PiWorkflow, type PiWorkflowComplete, type PiWorkflowStep, type PiLogistics } from '../pi-api'
 const props = defineProps<{ workflow: PiWorkflow | null; rules?: FulfillmentRules; busy: boolean; error: string; actionBusy: boolean; canWrite: boolean; canPay: boolean; canRelease: boolean; canLogistics: boolean; canAfterSales: boolean; piStatus: string; currencyCode: string; gateMet: boolean; reservationBlocked: boolean; piId: number; logistics: PiLogistics[]; domesticShipment?: boolean | null }>()
 const emit = defineEmits<{ action: [action: 'CONFIRM_PI' | 'REGISTER_PAYMENT' | 'RELEASE_PI' | 'REGISTER_LOGISTICS']; complete: [stepCode: string, body: PiWorkflowComplete]; productionUpdate: [body: PiWorkflowComplete]; afterSales: [] }>()
 const current = computed(() => props.workflow?.steps.find(s => s.code === props.workflow?.currentStep && s.status !== 'COMPLETED') || null)
 const completed = computed(() => props.workflow?.steps.filter(s => s.status === 'COMPLETED') || [])
+const purchaseContract = computed(() => props.workflow?.steps.find(step => step.code === 'PURCHASE_CONTRACT_READY')?.details)
+const purchaseContractParty = computed(() => purchaseContract.value?.purchaseContractParty === 'YINSANHUAN' ? '银三环' : purchaseContract.value?.purchaseContractParty)
 const customerForwarder = computed(() => props.rules?.deliveryMode === 'CUSTOMER_PICKUP' || props.workflow?.steps.find(s => s.code === 'FORWARDER_SELECTED')?.details?.forwarderResponsibility === 'CUSTOMER')
 const progress = computed(() => props.workflow?.totalCount ? Math.round(props.workflow.completedCount * 100 / props.workflow.totalCount) : 0)
 const dialogVisible = ref(false), formError = ref(''), activeCode = ref(''), attachmentsBusy = ref(false)
@@ -31,6 +34,10 @@ async function openForm(code: string) {
   activeCode.value = code; formError.value = ''; proofs.value = []
   Object.assign(form, { note: '', contractNo: '', contractReady: false, paymentTableReady: false, purchaseContractNo: '', purchaseContractParty: '', forwarderResponsibility: 'SELLER', forwarderName: '', forwarderAddress: '', forwarderContact: '', domesticCarrier: '', domesticPrice: '', domesticTrackingNo: '', warehouseArrivalDate: '', arrivalProof: '', internationalTrackingNo: '', internationalPrice: '', internationalCurrency: props.currencyCode, receivedDate: '' })
   Object.assign(production, { productionStatus: '', expectedCompletionDate: '', materialStatus: '' })
+  if (code === 'PURCHASE_CONTRACT_READY') {
+    const saved = props.workflow?.steps.find(step => step.code === code)
+    Object.assign(form, { purchaseContractNo: saved?.details?.purchaseContractNo || '', purchaseContractParty: saved?.details?.purchaseContractParty || '', note: saved?.note || '' })
+  }
   form.forwarderResponsibility = props.rules?.deliveryMode === 'CUSTOMER_PICKUP' ? 'CUSTOMER' : 'SELLER'
   dialogVisible.value = true
   if (documentSteps.includes(code)) {
@@ -72,8 +79,8 @@ function submit() {
     if (((props.rules?.salesContractRequired ?? true) && (!form.contractNo.trim() || !form.contractReady)) || !form.paymentTableReady) { formError.value = '请填写销售合同号，并确认合同及收付款表'; return }
     Object.assign(body, { contractNo: form.contractNo.trim() || null, contractReady: form.contractReady, paymentTableReady: true })
   } else if (code === 'PURCHASE_CONTRACT_READY') {
-    if (!form.purchaseContractNo.trim() || !form.purchaseContractParty) { formError.value = '请填写购销合同号并选择合同方'; return }
-    Object.assign(body, { purchaseContractNo: form.purchaseContractNo.trim(), purchaseContractParty: form.purchaseContractParty })
+    if (!form.purchaseContractNo.trim() || !form.purchaseContractParty.trim()) { formError.value = '请填写购销合同号和合同方'; return }
+    Object.assign(body, { purchaseContractNo: form.purchaseContractNo.trim(), purchaseContractParty: form.purchaseContractParty.trim() })
   } else if (code === 'FORWARDER_SELECTED') {
     if (![form.forwarderName, form.forwarderAddress, form.forwarderContact].every(v => v.trim())) { formError.value = '请填写货代、仓库地址及收货信息'; return }
     Object.assign(body, { forwarderResponsibility: form.forwarderResponsibility, forwarderName: form.forwarderName.trim(), forwarderAddress: form.forwarderAddress.trim(), forwarderContact: form.forwarderContact.trim() })
@@ -109,6 +116,7 @@ defineExpose({ closeAfterSuccess })
     <div v-else-if="workflow" class="workflow-complete"><strong>{{ rules ? '交付、结算及所需单据已核对，业务已结案' : '全部货物签收，订单流程完成' }}</strong><el-button v-if="canAfterSales" @click="emit('afterSales')">进入售后</el-button></div>
     <div v-if="rules && canWrite && !['DRAFT','CANCELLED','SUPERSEDED'].includes(piStatus)" class="workflow-actions"><span>其他待办（按实际进度办理）：</span><el-button v-for="step in workflow?.steps.filter(s => s.status !== 'COMPLETED' && ['PURCHASE_CONTRACT_READY','FORWARDER_SELECTED','CI_SENT','RD_SENT','RD_SIGNED','CMR_COLLECTED'].includes(s.code))" :key="step.code" link :disabled="actionBusy" @click="openForm(step.code)">{{ step.name }}</el-button><el-button v-if="canPay" link @click="emit('action','REGISTER_PAYMENT')">登记到账</el-button></div>
     <div class="workflow-actions"><el-button v-if="canWrite && !['CANCELLED','SUPERSEDED'].includes(piStatus)" link @click="openForm('PRODUCTION_FOLLOW_UP')">记录生产跟进（可选）</el-button><el-button v-if="!rules && domesticShipment && canWrite && workflow?.steps.find(s => s.code === 'DOCUMENTS_READY')?.status === 'COMPLETED' && workflow?.steps.find(s => s.code === 'PURCHASE_CONTRACT_READY')?.status !== 'COMPLETED'" link @click="openForm('PURCHASE_CONTRACT_READY')">提前登记国内购销合同</el-button><el-button v-if="canLogistics && ['WAREHOUSE_ARRIVED','TRACKING_RECORDED'].includes(current?.code || '')" link @click="emit('action', 'REGISTER_LOGISTICS')">登记批次物流 / 上传到仓凭证请使用物流附件</el-button></div>
+    <el-descriptions v-if="purchaseContract?.purchaseContractNo || purchaseContractParty" title="本单购销合同" :column="1" border class="workflow-contract"><el-descriptions-item label="购销合同方">{{ purchaseContractParty || '未登记' }}</el-descriptions-item><el-descriptions-item label="购销合同号"><PurchaseContractNumber :value="purchaseContract?.purchaseContractNo" /></el-descriptions-item></el-descriptions>
     <details v-if="workflow?.updates.length" class="workflow-history"><summary>生产跟进记录（可选）</summary><ol><li v-for="update in workflow.updates" :key="update.id"><div><strong>{{ update.details?.productionStatus }}</strong><small>{{ update.createdAt }} · {{ update.details?.materialStatus }} {{ update.note }}</small></div></li></ol></details>
     <details v-if="completed.length" class="workflow-history"><summary>查看已完成步骤（{{ completed.length }}）</summary><ol><li v-for="step in completed" :key="step.code"><span>{{ step.order }}</span><div><strong>{{ step.name }}</strong><small>{{ summary(step) || '已完成' }}</small></div></li></ol></details>
   </section>

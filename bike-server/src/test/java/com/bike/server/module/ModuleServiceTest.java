@@ -125,6 +125,32 @@ class ModuleServiceTest {
         assertThat(page.rows().getFirst().get(5)).isEqualTo("2026-10-20");
     }
 
+    @Test
+    void stockOutContractsAreLoadedInBatchWithoutChangingExistingColumnsOrPagination() {
+        SecurityContextHolder.getContext().setAuthentication(authentication("WEB_OPERATOR", "PERM_STOCK_READ"));
+        var mapper = mock(ModuleMapper.class);
+        var contracts = mock(com.bike.server.pi.PiPurchaseContractService.class);
+        var service = com.bike.server.common.CustomerScopeTestSupport.isolated(new ModuleServiceImpl(mapper));
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "purchaseContracts", contracts);
+        when(mapper.countRows(eq("stock-out"), isNull(), anyList(), isNull(), eq(false))).thenReturn(42L);
+        when(mapper.selectRowsPage(eq("stock-out"), isNull(), anyList(), isNull(), eq("创建时间"),
+                eq(20L), eq(20L), eq(false))).thenReturn(List.of(
+                Map.of("业务单号", "OUT-1", "类型", "出库", "ID", 101L),
+                Map.of("业务单号", "OUT-LEGACY", "类型", "出库", "ID", 102L)));
+        when(contracts.findForStockRecords(List.of("OUT-1", "OUT-LEGACY"))).thenReturn(Map.of(
+                "OUT-1", new com.bike.server.pi.PiPurchaseContract("YINSANHUAN", "BUY-1")));
+
+        var page = service.list("stock-out", null, 2, 20);
+
+        assertThat(page.total()).isEqualTo(42);
+        assertThat(page.page()).isEqualTo(2);
+        assertThat(page.columns()).endsWith("ID", "购销合同方", "购销合同号");
+        assertThat(page.rows().getFirst().getFirst()).isEqualTo("OUT-1");
+        assertThat(page.rows().getFirst()).endsWith("101", "银三环", "BUY-1");
+        assertThat(page.rows().getLast()).endsWith("102", "-", "-");
+        verify(contracts).findForStockRecords(List.of("OUT-1", "OUT-LEGACY"));
+    }
+
     private static UsernamePasswordAuthenticationToken authentication(String role, String... permissions) {
         List<SimpleGrantedAuthority> authorities = new java.util.ArrayList<>();
         authorities.add(new SimpleGrantedAuthority("ROLE_" + role));

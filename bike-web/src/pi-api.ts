@@ -88,7 +88,8 @@ export type PiLogisticsCreate = { batchNo: string; carrier?: string; trackingNo?
 export const piApi = {
   async dashboard() { return (await api.get<{ data: Record<string, number | null> }>('/api/pis/dashboard')).data.data },
   async queue(queue: string, params: { keyword?: string; page: number; pageSize: number }) { return (await api.get<{ data: { total: number; records: PiQueueRow[] } }>(`/api/pis/dashboard/${queue}`, { params })).data.data },
-  async exportList(params: { keyword?: string; status?: string }) { return (await api.get<Blob>('/api/pis/export.xlsx', { params, responseType: 'blob' })).data },
+  async exportList(params: { keyword?: string; status?: string; warehouseId?: number }) { return (await api.get<Blob>('/api/pis/export.xlsx', { params, responseType: 'blob' })).data },
+  async warehouseOptions() { return (await api.get<{ data: (PiMasterOption & { status: string })[] }>('/api/pis/warehouse-options')).data.data },
   async revisions(id: number) { return (await api.get<{ data: PiView[] }>(`/api/pis/${id}/revisions`)).data.data },
   async createRevision(id: number, body: { requestId: string; expectedRevision: number; reason: string }) { return (await api.post<{ data: PiView }>(`/api/pis/${id}/revisions`, body)).data.data },
   async logisticsAttachments(piId: number, logisticsId: number) { return (await api.get<{ data: PiLogisticsAttachment[] }>(`/api/pis/${piId}/logistics/${logisticsId}/attachments`)).data.data },
@@ -105,7 +106,7 @@ export const piApi = {
   async retryExport(id: number, revision: number, reason: string) { return (await api.post<{ data: PiExportJob }>(`/api/pis/${id}/export-task/retry`, { revision, reason })).data.data },
   async templates(tradeType: string | undefined, page: number) { return (await api.get<{ data: { records: PiTemplate[]; total: number } }>('/api/pi-templates', { params: { tradeType, page, pageSize: 20 } })).data.data },
   async publishTemplate(body: PiTemplatePublish) { return (await api.post<{ data: PiTemplate }>('/api/pi-templates', body)).data.data },
-  async list(params: { keyword?: string; status?: string; page: number; pageSize: number }) {
+  async list(params: { keyword?: string; status?: string; warehouseId?: number; page: number; pageSize: number }) {
     return (await api.get<{ data: { records: PiView[]; total: number } }>('/api/pis', { params })).data.data
   },
   async get(id: number) { return (await api.get<{ data: PiView }>(`/api/pis/${id}`)).data.data },
@@ -116,7 +117,7 @@ export const piApi = {
   async recordProductionUpdate(id: number, body: PiWorkflowComplete) {
     return (await api.post<{ data: PiWorkflow }>(`/api/pis/${id}/workflow/production-updates`, body)).data.data
   },
-  async batch(id: number, batchId: number) { return (await api.get<{ data: { vehicles: { stockOutId: number; stockOutNo: string; vehicleQrCode: string | null; frameSn: string; skuCode: string; orderNo: string; status: string; cancelReason?: string }[] } }>(`/api/pis/${id}/dispatch-batches/${batchId}`)).data.data },
+  async batch(id: number, batchId: number) { return (await api.get<{ data: { vehicles: { stockOutId: number; stockOutNo: string; vehicleQrCode: string | null; frameSn: string; skuCode: string; orderNo: string; status: string; cancelReason?: string; purchaseContractParty?: string | null; purchaseContractNo?: string | null }[] } }>(`/api/pis/${id}/dispatch-batches/${batchId}`)).data.data },
   async options(keyword?: string) { return (await api.get<{ data: PiOptions }>('/api/pis/options', { params: { keyword: keyword || undefined } })).data.data },
   async create(body: PiCreate) { return (await api.post<{ data: PiView }>('/api/pis', body)).data.data },
   async convert(body: { requestId: string; sources: { lockId: number; quantity: number }[]; pi: PiCreate }) { return (await api.post<{ data: PiView }>('/api/pis/from-locks', body)).data.data },

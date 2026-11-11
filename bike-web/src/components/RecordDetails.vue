@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import PurchaseContractNumber from './PurchaseContractNumber.vue'
 import { reservationLabel, type ReservationStatus } from '../pi-api'
 const props = defineProps<{ value: unknown }>()
 const labels: Record<string, string> = {
+  purchaseContractParty: '购销合同方', purchaseContractNo: '购销合同号',
   vehicleQrCode: '聚合码', currentVehicleQrCode: '当前关联车辆聚合码', qrCode: '聚合码', frameSn: '车架码', currentFrameSn: '当前关联车架码',
   motorSn: '电机码', batterySn: '电池码', displaySn: '仪表码', partSn: '部件码', partType: '部件类型',
   modelName: '车型', productName: '商品名称', skuCode: '商品规格（SKU）', batchNo: '批次', specification: '规格',
@@ -44,6 +46,7 @@ function label(key: string) { return labels[key] ?? key }
 function display(value: unknown, key = '') {
   if (value === null || value === undefined || value === '') return '—'
   if (key === 'reservationStatus') return reservationLabel(value as ReservationStatus)
+  if (key === 'purchaseContractParty' && value === 'YINSANHUAN') return '银三环'
   if (typeof value === 'boolean') return value ? '是' : '否'
   if (['status', 'qcStatus', 'bindStatus', 'partType', 'holdMode', 'reservationHoldMode', 'type'].includes(key)) return statusLabels[String(value)] ?? String(value)
   return String(value).replace(/^(\d{4}-\d\d-\d\d)T/, '$1 ')
@@ -59,7 +62,7 @@ const tableArray = computed(() => arrayRows.value.length > 0 && arrayRows.value.
     <template v-if="Array.isArray(value)">
       <el-table v-if="tableArray" :data="arrayRows" max-height="320" stripe>
         <el-table-column v-for="key in arrayColumns" :key="key" :label="label(key)" :min-width="/QrCode|qrCode/.test(key) ? 240 : 140">
-          <template #default="{ row }"><RecordDetails v-if="nested(row[key])" :value="row[key]" /><span v-else class="record-value">{{ display(row[key], key) }}</span></template>
+          <template #default="{ row }"><RecordDetails v-if="nested(row[key])" :value="row[key]" /><PurchaseContractNumber v-else-if="key === 'purchaseContractNo'" :value="row[key] == null ? null : String(row[key])" /><span v-else class="record-value">{{ display(row[key], key) }}</span></template>
         </el-table-column>
       </el-table>
       <p v-else-if="!arrayRows.length" class="record-empty">暂无明细</p>
@@ -67,7 +70,7 @@ const tableArray = computed(() => arrayRows.value.length > 0 && arrayRows.value.
     </template>
     <dl v-else-if="record(value)" class="record-facts">
       <div v-for="entry in entries" :key="entry.key" :class="{ 'record-wide': nested(entry.value) || /QrCode|qrCode/.test(entry.key), 'record-aggregate': /QrCode|qrCode/.test(entry.key) }">
-        <dt>{{ label(entry.key) }}</dt><dd><RecordDetails v-if="nested(entry.value)" :value="entry.value" /><span v-else>{{ display(entry.value, entry.key) }}</span></dd>
+        <dt>{{ label(entry.key) }}</dt><dd><RecordDetails v-if="nested(entry.value)" :value="entry.value" /><PurchaseContractNumber v-else-if="entry.key === 'purchaseContractNo'" :value="entry.value == null ? null : String(entry.value)" /><span v-else>{{ display(entry.value, entry.key) }}</span></dd>
       </div>
     </dl>
     <span v-else>{{ display(value) }}</span>

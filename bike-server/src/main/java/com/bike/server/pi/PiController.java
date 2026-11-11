@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.*;
 public class PiController {
     private final PiService service;
     @org.springframework.beans.factory.annotation.Autowired private PiConversionService conversions;
-    @org.springframework.beans.factory.annotation.Autowired private PiDispatchMapper dispatch;
     @org.springframework.beans.factory.annotation.Autowired private PiLogisticsService logisticsService;
     @org.springframework.beans.factory.annotation.Autowired private PiRevisionService revisions;
     @org.springframework.beans.factory.annotation.Autowired private PiExportArchive archives;
@@ -51,8 +50,14 @@ public class PiController {
     @GetMapping
     public ApiResponse<PageResponse<PiView>> list(@RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status, @RequestParam(defaultValue = "1") long page,
-            @RequestParam(defaultValue = "20") long pageSize) {
-        return ApiResponse.success("查询成功", service.list(keyword, status, page, pageSize));
+            @RequestParam(defaultValue = "20") long pageSize, @RequestParam(required = false) Long warehouseId) {
+        return ApiResponse.success("查询成功", warehouseId == null ? service.list(keyword, status, page, pageSize)
+                : service.listByWarehouse(keyword, status, warehouseId, page, pageSize));
+    }
+
+    @GetMapping("/warehouse-options")
+    public ApiResponse<java.util.List<java.util.Map<String, Object>>> warehouseOptions() {
+        return ApiResponse.success("查询成功", service.listWarehouseOptions());
     }
 
     @GetMapping("/options")
@@ -88,10 +93,7 @@ public class PiController {
 
     @GetMapping("/{id}/dispatch-batches/{batchId}")
     public ApiResponse<java.util.Map<String,Object>> batch(@PathVariable long id,@PathVariable long batchId) {
-        var pi=service.get(id);var batch=dispatch.get(batchId);
-        if(batch==null||!java.util.Objects.equals(pi.getSeriesId(),batch.seriesId()))
-            throw new com.bike.server.common.BusinessException("PI_BATCH_NOT_FOUND","该PI没有此出库批次");
-        return ApiResponse.success("查询成功",java.util.Map.of("batch",batch,"vehicles",dispatch.vehicles(batchId)));
+        return ApiResponse.success("查询成功",service.getDispatchBatch(id,batchId));
     }
 
     @PostMapping

@@ -109,6 +109,11 @@ public class AuthServiceImpl implements AuthService {
         if (user == null || !user.enabled()) throw new BusinessException("UNAUTHORIZED", "账号不存在或已停用");
         var roles = new java.util.ArrayList<>(userMapper.selectRoleCodes(username));
         if (roles.isEmpty()) throw new BusinessException("PERMISSION_DENIED", "账号没有启用的角色");
+        if ("CUSTOMER".equals(user.userType())) {
+            if (!roles.contains("WEB_CUSTOMER")) throw new BusinessException("PERMISSION_DENIED", "客户角色未启用");
+            return new AuthContextResponse(username, "CUSTOMER", null, java.util.List.of("WEB_CUSTOMER"),
+                    java.util.List.of(), java.util.List.of(), user.mustChangePassword());
+        }
         if ("AGENT".equals(user.userType()) && !roles.contains("WEB_AGENT")) roles.add("WEB_AGENT");
         if ("PDA_OPERATOR".equals(user.userType()) && !roles.contains("PDA_OPERATOR")) roles.add("PDA_OPERATOR");
         return new AuthContextResponse(username, user.userType(), user.agentId(),

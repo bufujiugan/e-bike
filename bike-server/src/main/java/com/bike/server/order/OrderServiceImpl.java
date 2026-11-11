@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class OrderServiceImpl implements OrderService {
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.common.CustomerScopeAccess customerScope;
     private final OrderMapper orderMapper;
+    @Autowired private com.bike.server.pi.PiPurchaseContractService purchaseContracts;
     @Autowired private ProductionGuard guard;
     @Autowired private OrderInventoryGuard inventoryGuard;
     @Autowired private OrderReservationCoordinator reservations;
@@ -148,6 +149,8 @@ public class OrderServiceImpl implements OrderService {
 
     public static void redactReservationForAgent(SalesOrderView order) {
         if (!CurrentOperator.hasRole("WEB_AGENT")) return;
+        order.setPurchaseContractParty(null);
+        order.setPurchaseContractNo(null);
         order.setReservationHoldMode(null);
         order.setReservationHeldAt(null);
         order.setReservationExpiresAt(null);
@@ -167,6 +170,13 @@ public class OrderServiceImpl implements OrderService {
 
     private SalesOrderView enrichDetails(SalesOrderView order) {
         order.setShippedVehicles(orderMapper.selectShippedVehicles(order.getId()));
+        if (!CurrentOperator.hasRole("WEB_AGENT") && purchaseContracts != null) {
+            var contract = purchaseContracts.findForOrder(order.getId());
+            if (contract != null) {
+                order.setPurchaseContractParty(contract.purchaseContractParty());
+                order.setPurchaseContractNo(contract.purchaseContractNo());
+            }
+        }
         redactReservationForAgent(order);
         return order;
     }

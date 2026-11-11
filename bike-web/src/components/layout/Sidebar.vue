@@ -9,6 +9,7 @@ const collapsedGroups = ref(new Set(['生产作业', '仓储管理', '销售与�
 const expandedSubmenus = ref(new Set<string>())
 const navigation = ref<HTMLElement | null>(null)
 const groupPresentation: Record<string, { id: string; icon: string }> = {
+  客户工作台: { id: 'customer', icon: 'orders' },
   工作台: { id: 'workbench', icon: 'home' },
   销售与交付: { id: 'sales', icon: 'orders' },
   生产作业: { id: 'manufacturing', icon: 'production' },
@@ -19,7 +20,7 @@ const groupPresentation: Record<string, { id: string; icon: string }> = {
 }
 
 // 只归并已通过原权限过滤的菜单，不增删或重新授权业务入口。
-const displayGroups = computed(() => ['工作台', '生产作业', '仓储管理', '销售与交付', '售后与追溯', '资料与设置', '代理商工作台'].flatMap(label => {
+const displayGroups = computed(() => ['客户工作台', '工作台', '生产作业', '仓储管理', '销售与交付', '售后与追溯', '资料与设置', '代理商工作台'].flatMap(label => {
   const group = props.groups.find(entry => entry.label === label)
   return group?.items.length ? [{ ...group, ...groupPresentation[label] }] : []
 }))

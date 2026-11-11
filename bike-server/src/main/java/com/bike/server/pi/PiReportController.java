@@ -14,8 +14,9 @@ public class PiReportController {
     @GetMapping("/dashboard/{queue}") public ApiResponse<PageResponse<Map<String,Object>>> queue(@PathVariable String queue,
             @RequestParam(required=false) String keyword,@RequestParam(defaultValue="1") long page,@RequestParam(defaultValue="20") long pageSize){return ApiResponse.success(service.queue(queue,keyword,page,pageSize));}
     @GetMapping(value="/export.xlsx",produces="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    public ResponseEntity<byte[]> export(@RequestParam(required=false) String keyword,@RequestParam(required=false) String status) {
+    public ResponseEntity<byte[]> export(@RequestParam(required=false) String keyword,@RequestParam(required=false) String status,
+            @RequestParam(required=false) Long warehouseId) {
         return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=pi-list.xlsx")
-                .header(HttpHeaders.CACHE_CONTROL,"no-store").header("X-Content-Type-Options","nosniff").body(service.export(keyword,status));
+                .header(HttpHeaders.CACHE_CONTROL,"no-store").header("X-Content-Type-Options","nosniff").body(service.export(keyword,status,warehouseId));
     }
 }

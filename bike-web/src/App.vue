@@ -37,6 +37,9 @@ const CustomerScopeEditor = defineAsyncComponent(() => import('./components/Cust
 const CustomerScopeManager = defineAsyncComponent(() => import('./components/CustomerScopeManager.vue'))
 const FileReviewManager = defineAsyncComponent(() => import('./components/FileReviewManager.vue'))
 const CustomerProfiles = defineAsyncComponent(() => import('./components/CustomerProfiles.vue'))
+const CustomerWorkspace = defineAsyncComponent(() => import('./components/CustomerWorkspace.vue'))
+const CustomerAccountCreate = defineAsyncComponent(() => import('./components/CustomerAccountCreate.vue'))
+const CustomerOrderNotifications = defineAsyncComponent(() => import('./components/CustomerOrderNotifications.vue'))
 
 
 function flattenNavItems(items: NavItem[]): NavItem[] {
@@ -50,6 +53,8 @@ const loggedIn = ref(Boolean(localStorage.getItem('bike_access_token')))
 type AuthContext = { username: string; userType: string; agentId: number | null; roles: string[]; permissions: string[]; workstations: string[]; mustChangePassword: boolean }
 const authContext = ref<AuthContext | null>(null)
 const isAgentAccount = computed(() => hasRole(authContext.value, 'WEB_AGENT'))
+const isCustomerAccount = computed(() => authContext.value?.userType === 'CUSTOMER')
+const canReceiveCustomerOrders = computed(() => !!authContext.value && !authContext.value.mustChangePassword && !isCustomerAccount.value && !isAgentAccount.value && !hasRole(authContext.value, 'PDA_OPERATOR') && hasPermission(authContext.value, 'ORDER_READ') && hasPermission(authContext.value, 'ORDER_WRITE'))
 const passwordChangeVisible = ref(false)
 const accountSettingsVisible = ref(false)
 const currentPassword = ref('')
@@ -70,6 +75,7 @@ type ModulePage = { subtitle: string; stats: { label: string; value: string; ton
 const modulePageData = ref<Record<string, ModulePage>>({})
 
 const navGroups: NavGroup[] = [
+  { label: '客户工作台', items: [{ key: 'customer-orders', label: '我的订单', shortLabel: '订单', path: '/customer/orders', icon: 'orders' }] },
   { label: '工作台', items: [{ key: 'workflow', label: '我的工作台', shortLabel: '工作台', path: '/workflow', icon: 'home' }, { key: 'dashboard', label: '运营概览', shortLabel: '总览', path: '/dashboard' }] },
   {
     label: '生产作业',
@@ -110,6 +116,7 @@ const navGroups: NavGroup[] = [
     items: [
       { key: 'orders', label: '销售订单', shortLabel: '订单', path: '/orders' },
       { key: 'pis', label: 'PI 与履约', shortLabel: 'PI', path: '/pis' },
+      { key: 'europe-orders', label: '欧洲订单', shortLabel: '欧洲', path: '/europe-orders', icon: 'orders' },
       { key: 'customers', label: '客户管理', shortLabel: '客户', path: '/master/customers' },
       { key: 'agents', label: '代理商管理', shortLabel: '代理商', path: '/master/agents' },
       { key: 'inventory-locks', label: '客户锁定记录', shortLabel: '锁库', path: '/inventory-locks' },
@@ -157,6 +164,7 @@ const navPermissionMap: Record<string, string[]> = {
   'file-reviews': ['FILE_REVIEW_MANAGE'],
   'customer-scopes': ['CUSTOMER_SCOPE_MANAGE'],
   pis: ['PI_READ'],
+  'europe-orders': ['PI_READ'],
   'sku-inventory': ['INVENTORY_READ', 'AGENT_INVENTORY_READ'],
   'after-sales': ['AFTER_SALES_READ'],
   production: ['ASSEMBLY_OPERATE', 'REWORK_OPERATE', 'VEHICLE_READ', 'PRODUCTION_MANAGE'],
@@ -183,7 +191,7 @@ function filterVisibleNavItems(items: NavItem[], context: AuthContext): NavItem[
   const isAgent = hasRole(context, 'WEB_AGENT')
   return items.flatMap(item => {
     const children = filterVisibleNavItems(item.children ?? [], context)
-    const excluded = (['customer-scopes', 'file-reviews'].includes(item.key) && (isAgent || hasRole(context, 'PDA_OPERATOR')))
+    const excluded = (['customer-scopes', 'file-reviews', 'europe-orders'].includes(item.key) && (isAgent || hasRole(context, 'PDA_OPERATOR')))
       || (isAgent && agentExcludedViews.has(item.key))
       || (!isAgent && agentOnlyViews.has(item.key))
     const allowed = !excluded && (navPermissionMap[item.key] ?? []).some(permission => permissions.has(permission))
@@ -192,7 +200,9 @@ function filterVisibleNavItems(items: NavItem[], context: AuthContext): NavItem[
 }
 const visibleNavGroups = computed(() => {
   const context = authContext.value
-  if (!context || isSuperAdmin(context)) return navGroups
+  if (!context) return []
+  if (isCustomerAccount.value) return navGroups.filter(group => group.label === '客户工作台')
+  if (isSuperAdmin(context)) return navGroups.filter(group => group.label !== '客户工作台')
   return navGroups.map(group => ({
     ...group,
     items: filterVisibleNavItems(group.items, context),
@@ -210,7 +220,7 @@ function toggleNavGroup(label: string) {
   else next.add(label)
   expandedNavGroups.value = next
 }
-const userRoleLabel = computed(() => hasRole(authContext.value, 'WEB_AGENT') ? '代理商' : hasRole(authContext.value, 'PDA_OPERATOR') ? 'PDA操作员' : isSuperAdmin(authContext.value) ? '超级管理员' : 'Web业务员')
+const userRoleLabel = computed(() => isCustomerAccount.value ? '客户' : hasRole(authContext.value, 'WEB_AGENT') ? '代理商' : hasRole(authContext.value, 'PDA_OPERATOR') ? 'PDA操作员' : isSuperAdmin(authContext.value) ? '超级管理员' : 'Web业务员')
 const canCreateProductionTask = computed(() => !isAgentAccount.value && hasPermission(authContext.value, 'ASSEMBLY_OPERATE') &&
   (isSuperAdmin(authContext.value) || authContext.value?.workstations.some(type => ['ASSEMBLY', 'FRAME', 'MOTOR', 'BATTERY', 'DISPLAY'].includes(type))))
 
@@ -220,6 +230,7 @@ const initialKey = routeKeyMap.get(initialPath) ?? initialPath.slice(1)
 if (allNavItems.some(item => item.key === initialKey)) activeView.value = initialKey
 
 function defaultViewForContext(context: AuthContext) {
+  if (context.userType === 'CUSTOMER') return 'customer-orders'
   const visibleKeys = new Set(visibleNavItems.value.map(item => item.key))
   if (hasRole(context, 'WEB_AGENT') && visibleKeys.has('agent-dashboard')) return 'agent-dashboard'
   if ((isSuperAdmin(context) || context.userType === 'WEB_ADMIN') && visibleKeys.has('dashboard')) return 'dashboard'
@@ -547,7 +558,8 @@ let moduleRequestVersion = 0
 async function loadModule(module: string) {
   const requestVersion = ++moduleRequestVersion
   dataLoading.value = false
-  if (module.startsWith('production') || ['workflow', 'trace', 'pis', 'after-sales', 'sku-inventory', 'customer-scopes', 'file-reviews'].includes(module)) return
+  if (!authContext.value || authContext.value.mustChangePassword || isCustomerAccount.value || module === 'customer-orders') return
+  if (module.startsWith('production') || ['workflow', 'trace', 'pis', 'europe-orders', 'after-sales', 'sku-inventory', 'customer-scopes', 'file-reviews'].includes(module)) return
   if (module === 'dashboard') return loadDashboard(requestVersion)
   dataLoading.value = true
   dataError.value = ''
@@ -570,8 +582,10 @@ async function login() {
   try {
     const response = await axios.post('/api/auth/login', { username: username.value, password: password.value })
     localStorage.setItem('bike_access_token', response.data.data.accessToken)
-    loggedIn.value = true
     await loadAuthContext()
+    loggedIn.value = true
+    password.value = ''
+    applyAuthorizedLandingView()
     if (authContext.value?.mustChangePassword) {
       passwordChangeVisible.value = true
       return
@@ -644,9 +658,11 @@ function syncRouteFromLocation() {
 
 function handlePopState() {
   syncRouteFromLocation()
+  applyAuthorizedLandingView()
 }
 
 function navigate(key: string) {
+  if (!visibleNavItems.value.some(item => item.key === key)) return
   activeView.value = key
   const group = navGroups.find(group => flattenNavItems(group.items).some(item => item.key === key))
   if (group) expandedNavGroups.value.add(group.label)
@@ -1145,7 +1161,7 @@ async function submitPrimaryAction() {
       <div class="login-brand"><span class="brand-mark">B</span><div><strong>BIKE</strong><small>OPERATIONS PLATFORM</small></div></div>
       <p class="eyebrow">欢迎回来</p>
       <h2>E-BIKE 智慧管理系统</h2>
-      <p class="description">使用业务账号进入生产与库存管理系统</p>
+      <p class="description">使用您的账号登录，自动进入对应工作台</p>
       <el-form @submit.prevent="login">
         <el-form-item label="用户名"><el-input v-model="username" autocomplete="username" placeholder="请输入用户名" /></el-form-item>
         <el-form-item label="密码"><el-input v-model="password" type="password" show-password autocomplete="current-password" placeholder="请输入密码" /></el-form-item>
@@ -1157,25 +1173,29 @@ async function submitPrimaryAction() {
 
   <AppLayout v-else :groups="visibleNavGroups" :active="activeView" :title="activeNav?.label ?? '工作台'" :group="activeGroupLabel" :username="username" :role="userRoleLabel" :last-loaded="lastLoadedAt" @navigate="navigate" @guide="operationGuideVisible = true" @settings="openAccountSettings" @logout="logout">
 
-      <BusinessWorkspace v-if="activeView === 'workflow' && !passwordChangeVisible" :context="authContext" :username="username" :refresh-key="workflowRefreshKey" @navigate="navigate" @guide="operationGuideVisible = true" @convert="changeInventoryLock([$event], 'convert')" @order="journeyOrderNo = $event" />
+    <template #notifications><CustomerOrderNotifications v-if="canReceiveCustomerOrders" :key="username" @order="journeyOrderNo = $event" /></template>
+    <el-empty v-if="!authContext" description="正在加载账号信息…" />
+    <el-empty v-else-if="passwordChangeVisible" description="请先修改初始密码" />
+    <CustomerWorkspace v-else-if="isCustomerAccount" :key="username" />
+      <BusinessWorkspace v-else-if="activeView === 'workflow' && !passwordChangeVisible" :context="authContext" :username="username" :refresh-key="workflowRefreshKey" @navigate="navigate" @guide="operationGuideVisible = true" @convert="changeInventoryLock([$event], 'convert')" @order="journeyOrderNo = $event" />
 
       <DashboardPage v-else-if="activeView === 'dashboard'" :metrics="metrics" :status-rows="statusRows" :points="trendRows" :operations="recentOperations" :actions="quickActions" :allowed-views="visibleNavItems.map(item => item.key)" :context="authContext" :loading="dataLoading" :error="dataError" @refresh="loadModule('dashboard')" @navigate="navigate" />
 
       <ProductionManager v-else-if="productionViewByNavKey[activeView] && !passwordChangeVisible" :key="activeView" :view="productionViewByNavKey[activeView]" :username="username" :context="authContext" @continue="continueProduction" :can-create-task="canCreateProductionTask" @loaded="lastLoadedAt = new Date().toLocaleString()" @navigate="navigate" @order="journeyOrderNo = $event" :can-manage="!isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'PRODUCTION_MANAGE')" :can-operate="hasPermission(authContext, 'ASSEMBLY_OPERATE')" :can-report-issue="hasAnyPermission(authContext, ['ASSEMBLY_OPERATE','REWORK_OPERATE'])" />
       <TraceQuery v-else-if="activeView === 'trace' && !passwordChangeVisible" />
       <SkuInventoryPanel v-else-if="activeView === 'sku-inventory' && !passwordChangeVisible" :context="authContext" @navigate="navigate" @convert="changeInventoryLock([$event], 'convert')" />
-      <PiWorkspace v-else-if="activeView === 'pis' && !passwordChangeVisible" :context="authContext" @navigate="navigate" />
+      <PiWorkspace v-else-if="['pis', 'europe-orders'].includes(activeView) && !passwordChangeVisible" :key="activeView" :context="authContext" :europe="activeView === 'europe-orders'" @navigate="navigate" />
       <CustomerScopeManager v-else-if="activeView === 'customer-scopes' && !passwordChangeVisible && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'CUSTOMER_SCOPE_MANAGE')" />
       <FileReviewManager v-else-if="activeView === 'file-reviews' && !passwordChangeVisible && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'FILE_REVIEW_MANAGE')" />
       <AfterSalesWorkspace v-else-if="activeView === 'after-sales' && !passwordChangeVisible" :auth-context="authContext" />
       <BusinessModulePage v-else :module-key="activeView" :module="activeModule" :title="activeNav?.label ?? '业务记录'" v-model:search="moduleSearch" v-model:page="modulePage" v-model:page-size="modulePageSize" :loading="dataLoading" :error="dataError" :context="authContext" :column-width="moduleColumnWidth" @refresh="loadModule(activeView)" @reset="moduleSearch = ''" @page-change="loadModule(activeView)" @size-change="modulePage = 1; loadModule(activeView)">
         <template #before-list><CustomerProfiles v-if="activeView === 'customers' && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR')" :can-write="hasPermission(authContext, 'CUSTOMER_PROFILE_WRITE')" /></template>
-        <template #actions><div class="module-actions"><button v-if="hasPermission(authContext, 'DATA_EXPORT') && ['parts','inventory','stock-in','stock-out','stock','orders','rework'].includes(activeView)" class="secondary-action" @click="downloadModule(activeView === 'operation-logs' ? 'logs' : activeView)">导出当前查询</button><button v-if="activeView === 'parts' && canImportActiveModule" class="secondary-action" @click="downloadPartsTemplate">下载部件导入模板</button></div><PermissionGate :allowed="canShowPrimaryAction"><div class="module-actions"><button v-if="canImportActiveModule" class="secondary-action" @click="chooseImport(activeView)">导入 Excel</button><button class="primary-action" @click="openPrimaryAction">＋ {{ activeModule?.action }}</button><input ref="importInput" class="hidden-file-input" type="file" accept=".xlsx,.xls" @change="importModule" /></div></PermissionGate></template>
-        <template #row-actions="{ row }"><button v-if="activeView === 'orders'" class="row-action" @click="journeyOrderNo = row[0]">订单办理</button><button v-if="['inventory-locks', 'agent-locks', 'agent-dashboard'].includes(activeView) && hasPermission(authContext, 'ORDER_READ')" class="row-action" @click="openLinkedOrders(row)">关联订单</button><button v-if="activeView === 'orders' && canRenewOrderReservation(row)" class="row-action" @click="manageOrderReservation(row, 'renew')">{{ ['FULFILLED', '已履约'].includes(row[9]) ? '续占用以撤销出库' : '重新占用' }}</button><button v-if="activeView === 'orders' && canWriteActiveModule && ['PARTIAL_SHIPPED', '部分出库'].includes(row[6])" class="row-action" @click="manageOrderReservation(row, 'close')">关闭剩余</button><button v-if="activeView === 'agents' && isSuperAdmin(authContext)" class="row-action" @click="editAgentAccess(row)">车型授权</button><CustomerScopeEditor v-if="activeView === 'users' && hasPermission(authContext, 'CUSTOMER_SCOPE_MANAGE') && ['WEB_ADMIN', 'WEB_OPERATOR'].includes(row[2])" :username="row[0]" /><button class="row-action" @click="openRowAction(row)">{{ activeView === 'orders' && ((row[7] && row[7] !== '-') || !['DRAFT','PENDING','草稿','待确认'].includes(row[6])) ? '查看详情' : rowActionLabel }}</button><button v-if="canWriteActiveModule && ['users', 'roles', 'workstations', 'locations'].includes(activeView)" class="row-action" @click="toggleSystemStatus(row)">{{ row[activeView === 'locations' ? 4 : 3] === '启用' ? '停用' : '启用' }}</button><button v-if="canWriteActiveModule && activeView === 'orders' && ['DRAFT', 'PENDING', '草稿', '待确认'].includes(row[6])" class="row-action" @click="changeOrderStatus(row, 'confirm')">确认</button><button v-if="canWriteActiveModule && activeView === 'orders' && !['SHIPPED', 'PARTIAL_SHIPPED', 'CANCELLED', 'CLOSED', '已完成', '部分出库', '已作废', '已关闭'].includes(row[6])" class="row-action danger-action" @click="changeOrderStatus(row, 'cancel')">作废</button><button v-if="canWriteActiveModule && ['inventory-locks', 'agent-locks'].includes(activeView) && ['锁定中', '部分转订单', 'LOCKED', 'PARTIAL_CONVERTED'].includes(row[7])" class="row-action" @click="changeInventoryLock(row, 'release')">释放</button><button v-if="canWriteActiveModule && ['inventory-locks', 'agent-locks'].includes(activeView) && ['锁定中', '部分转订单', 'LOCKED', 'PARTIAL_CONVERTED'].includes(row[7]) && canConvertLock && Number(row[3]) - Number(row[4]) - Number(row[5]) > 0" class="row-action" @click="changeInventoryLock(row, 'convert')">转订单</button><button v-if="canWriteActiveModule && ['stock-in', 'stock-out'].includes(activeView) && ['已完成', 'COMPLETED'].includes(row[6])" class="row-action danger-action" @click="cancelStockRecord(row)">撤销</button></template>
+        <template #actions><CustomerAccountCreate v-if="activeView === 'users' && isSuperAdmin(authContext)" @created="loadModule('users')" /><div class="module-actions"><button v-if="hasPermission(authContext, 'DATA_EXPORT') && ['parts','inventory','stock-in','stock-out','stock','orders','rework'].includes(activeView)" class="secondary-action" @click="downloadModule(activeView === 'operation-logs' ? 'logs' : activeView)">导出当前查询</button><button v-if="activeView === 'parts' && canImportActiveModule" class="secondary-action" @click="downloadPartsTemplate">下载部件导入模板</button></div><PermissionGate :allowed="canShowPrimaryAction"><div class="module-actions"><button v-if="canImportActiveModule" class="secondary-action" @click="chooseImport(activeView)">导入 Excel</button><button class="primary-action" @click="openPrimaryAction">＋ {{ activeModule?.action }}</button><input ref="importInput" class="hidden-file-input" type="file" accept=".xlsx,.xls" @change="importModule" /></div></PermissionGate></template>
+        <template #row-actions="{ row }"><button v-if="activeView === 'orders'" class="row-action" @click="journeyOrderNo = row[0]">订单办理</button><button v-if="['inventory-locks', 'agent-locks', 'agent-dashboard'].includes(activeView) && hasPermission(authContext, 'ORDER_READ')" class="row-action" @click="openLinkedOrders(row)">关联订单</button><button v-if="activeView === 'orders' && canRenewOrderReservation(row)" class="row-action" @click="manageOrderReservation(row, 'renew')">{{ ['FULFILLED', '已履约'].includes(row[9]) ? '续占用以撤销出库' : '重新占用' }}</button><button v-if="activeView === 'orders' && canWriteActiveModule && ['PARTIAL_SHIPPED', '部分出库'].includes(row[6])" class="row-action" @click="manageOrderReservation(row, 'close')">关闭剩余</button><button v-if="activeView === 'agents' && isSuperAdmin(authContext)" class="row-action" @click="editAgentAccess(row)">车型授权</button><CustomerScopeEditor v-if="activeView === 'users' && hasPermission(authContext, 'CUSTOMER_SCOPE_MANAGE') && ['WEB_ADMIN', 'WEB_OPERATOR'].includes(row[2])" :username="row[0]" /><button v-if="!(activeView === 'users' && row[2] === 'CUSTOMER')" class="row-action" @click="openRowAction(row)">{{ activeView === 'orders' && ((row[7] && row[7] !== '-') || !['DRAFT','PENDING','草稿','待确认'].includes(row[6])) ? '查看详情' : rowActionLabel }}</button><button v-if="canWriteActiveModule && ['users', 'roles', 'workstations', 'locations'].includes(activeView)" class="row-action" @click="toggleSystemStatus(row)">{{ row[activeView === 'locations' ? 4 : 3] === '启用' ? '停用' : '启用' }}</button><button v-if="canWriteActiveModule && activeView === 'orders' && ['DRAFT', 'PENDING', '草稿', '待确认'].includes(row[6])" class="row-action" @click="changeOrderStatus(row, 'confirm')">确认</button><button v-if="canWriteActiveModule && activeView === 'orders' && !['SHIPPED', 'PARTIAL_SHIPPED', 'CANCELLED', 'CLOSED', '已完成', '部分出库', '已作废', '已关闭'].includes(row[6])" class="row-action danger-action" @click="changeOrderStatus(row, 'cancel')">作废</button><button v-if="canWriteActiveModule && ['inventory-locks', 'agent-locks'].includes(activeView) && ['锁定中', '部分转订单', 'LOCKED', 'PARTIAL_CONVERTED'].includes(row[7])" class="row-action" @click="changeInventoryLock(row, 'release')">释放</button><button v-if="canWriteActiveModule && ['inventory-locks', 'agent-locks'].includes(activeView) && ['锁定中', '部分转订单', 'LOCKED', 'PARTIAL_CONVERTED'].includes(row[7]) && canConvertLock && Number(row[3]) - Number(row[4]) - Number(row[5]) > 0" class="row-action" @click="changeInventoryLock(row, 'convert')">转订单</button><button v-if="canWriteActiveModule && ['stock-in', 'stock-out'].includes(activeView) && ['已完成', 'COMPLETED'].includes(row[6])" class="row-action danger-action" @click="cancelStockRecord(row)">撤销</button></template>
       </BusinessModulePage>
     <template #dialogs>
-    <OrderJourney v-if="journeyOrderNo && !passwordChangeVisible" :order-no="journeyOrderNo" :context="authContext" @close="journeyOrderNo = ''" @changed="refreshOrderJourney" />
-    <ProductionFulfillmentGuide v-model="operationGuideVisible" :context="authContext" initial-view="flow" @navigate="navigate" @stage="openOperationGuideStage" />
+    <OrderJourney v-if="journeyOrderNo && !passwordChangeVisible && !isCustomerAccount" :order-no="journeyOrderNo" :context="authContext" @close="journeyOrderNo = ''" @changed="refreshOrderJourney" />
+    <ProductionFulfillmentGuide v-if="authContext && !isCustomerAccount" v-model="operationGuideVisible" :context="authContext" initial-view="flow" @navigate="navigate" @stage="openOperationGuideStage" />
     <el-dialog v-model="importDetailsVisible" title="导入结果" width="min(720px, 95vw)">
       <template v-if="importDetails"><p>成功 {{ importDetails.successRows }} 条，失败 {{ importDetails.failureRows }} 条。请按错误行修正后重新导入。</p>
         <el-table :data="importDetails.failures"><el-table-column prop="rowNumber" label="Excel 行号" width="120" /><el-table-column prop="reason" label="错误原因" /></el-table>

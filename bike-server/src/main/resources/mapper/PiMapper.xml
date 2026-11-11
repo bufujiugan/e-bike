@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.bike.server.pi.PiMapper">
+    <select id="selectWarehouseOptions" resultType="map">
+        SELECT id,warehouse_code code,warehouse_name name,status FROM bike_warehouse ORDER BY warehouse_name,id
+    </select>
     <select id="selectCustomerOptions" resultType="map">
         SELECT id,customer_code code,customer_name name FROM bike_customer WHERE status='ENABLED' <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=bike_customer.id)</if>
         <if test="keyword != null">AND (customer_code LIKE CONCAT('%',#{keyword},'%') OR customer_name LIKE CONCAT('%',#{keyword},'%'))</if>
@@ -34,7 +37,7 @@
     </select>
     <sql id="base">
         SELECT p.id,p.pi_no,p.revision,p.series_id,p.previous_revision_id,p.customer_id,p.customer_code,p.customer_name,
-               p.agent_id,a.agent_name,p.source_order_id,p.trade_type,p.currency_code,p.status,
+               p.agent_id,a.agent_name,p.source_order_id,o.order_no source_order_no,p.trade_type,p.currency_code,p.status,
                p.payment_status,p.release_status,p.planned_ship_date,p.subtotal,p.discount_amount,
                <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationStatus"/> reservation_status,
                p.tax_amount,p.freight_amount,p.other_fee_amount,p.total_amount,p.deposit_required_amount,p.shipment_required_amount,
@@ -63,6 +66,9 @@
                       AND (lg.tracking_no LIKE CONCAT('%',#{keyword},'%') OR lg.batch_no LIKE CONCAT('%',#{keyword},'%'))))
             </if>
             <if test="status != null and status != ''">AND p.status=#{status}</if>
+            <if test="_parameter.containsKey('warehouseId') and warehouseId != null">
+                AND JSON_UNQUOTE(JSON_EXTRACT(p.document_snapshot,'$.business.warehouseId'))=CAST(#{warehouseId} AS CHAR)
+            </if>
             <if test="agentId != null">AND p.agent_id=#{agentId} AND p.status IN ('CONFIRMED','RELEASED')</if>
         </where>
     </sql>
@@ -71,6 +77,11 @@
         ORDER BY p.created_at DESC,p.id DESC LIMIT #{offset},#{limit}
     </select>
     <select id="count" resultType="long">SELECT COUNT(*) FROM bike_pi p <include refid="where"/></select>
+    <select id="selectPageByWarehouse" resultType="com.bike.server.pi.PiView">
+        <include refid="base"/><include refid="where"/>
+        ORDER BY p.created_at DESC,p.id DESC LIMIT #{offset},#{limit}
+    </select>
+    <select id="countByWarehouse" resultType="long">SELECT COUNT(*) FROM bike_pi p <include refid="where"/></select>
     <select id="selectById" resultType="com.bike.server.pi.PiView"><include refid="base"/> WHERE p.id=#{id}</select>
     <select id="selectForUpdate" resultType="com.bike.server.pi.PiView"><include refid="base"/> WHERE p.id=#{id} FOR UPDATE</select>
     <select id="selectRevisions" resultType="com.bike.server.pi.PiView"><include refid="base"/> WHERE p.series_id=#{seriesId} ORDER BY p.revision</select>

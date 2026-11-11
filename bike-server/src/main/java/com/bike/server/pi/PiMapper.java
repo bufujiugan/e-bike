@@ -8,6 +8,12 @@ import org.apache.ibatis.annotations.Param;
 
 @Mapper
 public interface PiMapper {
+    List<Map<String, Object>> selectWarehouseOptions();
+    List<PiView> selectPageByWarehouse(@Param("keyword") String keyword, @Param("status") String status,
+            @Param("agentId") Long agentId, @Param("warehouseId") long warehouseId,
+            @Param("offset") long offset, @Param("limit") long limit);
+    long countByWarehouse(@Param("keyword") String keyword, @Param("status") String status,
+            @Param("agentId") Long agentId, @Param("warehouseId") long warehouseId);
     List<Map<String, Object>> selectCustomerOptions(@Param("keyword") String keyword);
     List<Map<String, Object>> selectAgentOptions(@Param("keyword") String keyword);
     List<Map<String, Object>> selectSkuOptions(@Param("keyword") String keyword);

@@ -19,6 +19,7 @@ public class StockServiceImpl implements StockService {
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.pi.PiBusinessService piBusiness;
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.common.CustomerScopeAccess customerScope;
     private final StockMapper stockMapper;
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.pi.PiPurchaseContractService purchaseContracts;
     private final OrderMapper orderMapper;
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.production.ProductionGuard productionGuard;
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.order.OrderInventoryGuard inventoryGuard;
@@ -201,9 +202,21 @@ public class StockServiceImpl implements StockService {
         StockRecordView record = "IN".equals(type) ? stockMapper.selectStockInByNo(stockNo.trim()) : stockMapper.selectStockOutByNo(stockNo.trim());
         if(record!=null && !"IN".equals(type))customerScope.requireCustomer(record.getCustomerId());
         if (record == null) throw new BusinessException("STOCK_RECORD_NOT_FOUND", "出入库记录不存在");
+        enrichPurchaseContracts(java.util.List.of(record));
         return record;
     }
-    @Override public PageResponse<StockRecordView> list(String type, long page, long pageSize) { CurrentOperator.requireAnyPermission("STOCK_READ", "INVENTORY_READ"); CurrentOperator.requireInternalWebAccess(); long p=Math.max(1,page), s=Math.min(100,Math.max(1,pageSize)); return new PageResponse<>(stockMapper.selectStockRecords(type,(p-1)*s,s),p,s,stockMapper.countStockRecords(type)); }
+    @Override public PageResponse<StockRecordView> list(String type, long page, long pageSize) { CurrentOperator.requireAnyPermission("STOCK_READ", "INVENTORY_READ"); CurrentOperator.requireInternalWebAccess(); long p=Math.max(1,page), s=Math.min(100,Math.max(1,pageSize)); var records=stockMapper.selectStockRecords(type,(p-1)*s,s); enrichPurchaseContracts(records); return new PageResponse<>(records,p,s,stockMapper.countStockRecords(type)); }
+    private void enrichPurchaseContracts(java.util.List<StockRecordView> records) {
+        if (purchaseContracts == null) return;
+        var contracts = purchaseContracts.findForStockRecords(records.stream().filter(record -> "OUT".equals(record.getType())).map(StockRecordView::getStockNo).toList());
+        for (var record : records) {
+            var contract = contracts.get(record.getStockNo());
+            if (contract != null) {
+                record.setPurchaseContractParty(contract.purchaseContractParty());
+                record.setPurchaseContractNo(contract.purchaseContractNo());
+            }
+        }
+    }
     @Override @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ) public PageResponse<InventoryRow> inventory(Long modelId, Long warehouseId, long page, long pageSize) { CurrentOperator.requireAnyPermission("INVENTORY_READ", "AGENT_INVENTORY_READ"); Long scopedAgent = null; if (CurrentOperator.hasRole("WEB_AGENT")) { scopedAgent = CurrentOperator.agentId(); if (scopedAgent == null || (modelId != null && stockMapper.countAuthorizedModel(scopedAgent, modelId) == 0)) throw new BusinessException("FORBIDDEN", "无权查看该车型库存"); } long p=Math.min(10000000,Math.max(1,page)),s=Math.min(100,Math.max(1,pageSize)); return new PageResponse<>(stockMapper.selectInventory(modelId,warehouseId,scopedAgent,(p-1)*s,s),p,s,stockMapper.countInventory(modelId,warehouseId,scopedAgent)); }
     @Override public Map<String, Long> inventorySummary() { CurrentOperator.requirePermission("INVENTORY_READ"); CurrentOperator.requireInternalWebAccess(); var result=new java.util.LinkedHashMap<String,Long>(); stockMapper.selectInventorySummary().forEach((key,value)->result.put(key,((Number)value).longValue())); return result; }
 

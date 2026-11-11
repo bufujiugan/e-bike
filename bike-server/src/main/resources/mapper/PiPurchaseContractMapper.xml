@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.pi.PiPurchaseContractMapper">
+    <select id="selectRevisionContracts" resultType="com.bike.server.pi.PiPurchaseContractMapper$RevisionContract">
+        WITH RECURSIVE revision_chain AS (
+            SELECT id pi_id,id source_pi_id,previous_revision_id,0 depth FROM bike_pi
+            WHERE id IN <foreach collection="piIds" item="piId" open="(" close=")" separator=",">#{piId}</foreach>
+            UNION ALL
+            SELECT chain.pi_id,previous.id,previous.previous_revision_id,chain.depth+1
+            FROM revision_chain chain JOIN bike_pi previous ON previous.id=chain.previous_revision_id
+            WHERE chain.depth &lt; 99
+        )
+        SELECT chain.pi_id,chain.source_pi_id,chain.depth,step.status,step.detail_json
+        FROM revision_chain chain
+        JOIN bike_pi_workflow_step step ON step.pi_id=chain.source_pi_id AND step.step_code='PURCHASE_CONTRACT_READY'
+        ORDER BY chain.pi_id,chain.depth
+    </select>
+    <select id="selectStockExecutions" resultType="com.bike.server.pi.PiPurchaseContractMapper$StockExecution">
+        SELECT so.stock_out_no stock_no,batch.execution_pi_id
+        FROM bike_stock_out_record so
+        JOIN bike_stock_out_batch_item item ON item.stock_out_id=so.id
+        JOIN bike_stock_out_batch batch ON batch.id=item.batch_id
+        WHERE so.stock_out_no IN <foreach collection="stockNos" item="stockNo" open="(" close=")" separator=",">#{stockNo}</foreach>
+    </select>
+</mapper>
