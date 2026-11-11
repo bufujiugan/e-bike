@@ -19,7 +19,6 @@ public record PiCreateRequest(
         @DecimalMin("0.00") @Digits(integer = 16, fraction = 2) BigDecimal freightAmount,
         @NotNull(message = "请明确填写保留库存所需收款金额")
         @DecimalMin("0.00") @Digits(integer = 16, fraction = 2) BigDecimal depositRequiredAmount,
-        @NotNull(message = "请明确填写放行发货所需收款金额")
         @DecimalMin("0.00") @Digits(integer = 16, fraction = 2) BigDecimal shipmentRequiredAmount,
         @Size(max = 1000, message = "备注长度不能超过1000") String remark,
         @Valid PiDocumentSnapshot document,

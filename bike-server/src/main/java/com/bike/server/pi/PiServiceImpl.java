@@ -225,9 +225,10 @@ public class PiServiceImpl implements PiService {
         if (discount.compareTo(subtotal) > 0) fail("AMOUNT_INVALID", "总折扣不能大于商品金额");
         BigDecimal total = money(subtotal.subtract(discount).add(tax).add(freight).add(optionalMoney(request.otherFeeAmount())));
         BigDecimal deposit = money(request.depositRequiredAmount());
-        BigDecimal shipment = money(request.shipmentRequiredAmount());
-        if (deposit.compareTo(total) > 0 || shipment.compareTo(total) > 0) {
-            fail("AMOUNT_INVALID", "保留库存及放行发货所需收款金额不能大于应付总额");
+        // 发货放行门槛仅保留为可选记录；空值按零兼容现有非空金额列。
+        BigDecimal shipment = optionalMoney(request.shipmentRequiredAmount());
+        if (deposit.compareTo(total) > 0) {
+            fail("AMOUNT_INVALID", "保留库存所需收款金额不能大于应付总额");
         }
         PiDocumentSnapshot document=existing==null && customerSnapshots!=null ? customerSnapshots.capture(request.customerId(),request.document()) : request.document();
         if(business!=null) {
@@ -416,12 +417,8 @@ public class PiServiceImpl implements PiService {
         validate(request);
         PiView pi = lockOrderAndPi(id);
         if (!"CONFIRMED".equals(pi.getStatus())) fail("INVALID_STATUS_TRANSITION", "只有已确认且未放行的 PI 可以放行");
-        BigDecimal required = pi.getShipmentRequiredAmount();
+        BigDecimal required = optionalMoney(pi.getShipmentRequiredAmount());
         BigDecimal paid = mapper.paymentTotal(id);
-        var profile=fulfillmentProfiles==null?null:fulfillmentProfiles.resolveProfile(business.document(id));
-        if ((profile==null||!profile.rules().credit())&&(required == null || paid.compareTo(required) < 0)) {
-            fail("PAYMENT_GATE_NOT_MET", "未达到该 PI 约定的发货收款条件，不能放行发货");
-        }
         if(business!=null) {
             business.requirePaymentAuthorization(id);
             business.requireContract(id);

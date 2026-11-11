@@ -79,7 +79,7 @@ export type PiCreate = {
   customerId: number; agentId?: number | null; sourceOrderId?: number | null; tradeType: string; currencyCode: string
   plannedShipDate?: string | null; discountAmount: string; taxAmount: string; freightAmount: string
   otherFeeAmount?: string
-  depositRequiredAmount: string; shipmentRequiredAmount: string; remark?: string; document: PiDocument
+  depositRequiredAmount: string; shipmentRequiredAmount?: string | null; remark?: string; document: PiDocument
   items: { skuId: number; quantity: number; unitPrice: string; discountAmount: string; taxAmount: string; unit?: string; imageAttachmentId?: string | null }[]
 }
 export type PiPaymentCreate = { requestId: string; amount: string; currencyCode: string; receivedAt?: string | null; remark?: string; paymentMethod?: string; paymentMethodNote?: string }

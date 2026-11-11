@@ -145,7 +145,7 @@ class PiBusinessServiceTest {
         verify(series).link(1L,4L,"PAID_PI");
         verify(priority).cancelUnfulfillableUnpaidOrders(pi);
     }
-    @Test void depositReservesBeforeShipmentThresholdWithoutPermittingShipment() {
+    @Test void reservedDepositAllowsShipmentWithoutReachingShipmentAmount() {
         when(series.fulfillment(1L)).thenReturn(List.of(line(5,0,"TIMED_ACTIVE")));
         when(mapper.countWarehouseStock(2L,20L)).thenReturn(5);
         when(reservations.selectForUpdate(4L)).thenReturn(new OrderReservationView(4L,"SO4","CONFIRMED","TIMED","TIMED_ACTIVE",LocalDateTime.now(),5,0,null,null,null));
@@ -164,7 +164,11 @@ class PiBusinessServiceTest {
         documents();
         String shipmentDocument=mapper.selectDocument(1L).replace("true","false");
         when(mapper.selectDocument(1L)).thenReturn(shipmentDocument);
-        assertThatThrownBy(()->service.requireShipment(1L)).hasMessageContaining("出货付款门槛");
+        assertThatCode(()->service.requireShipment(1L)).doesNotThrowAnyException();
+        pi.setShipmentRequiredAmount(null);
+        assertThatCode(()->service.requireShipment(1L)).doesNotThrowAnyException();
+        when(mapper.countPaymentsWithoutReceipt(1L)).thenReturn(1);
+        assertThatThrownBy(()->service.requireShipment(1L)).hasMessageContaining("收款凭证");
     }
     @Test void otherPaidOrdersCannotBeDisplacedAndShortageNeverCancelsCompetitors() {
         when(mapper.countWarehouseStock(2L,20L)).thenReturn(5);

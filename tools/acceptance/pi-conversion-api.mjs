@@ -335,15 +335,14 @@ try {
   assert(retained.fulfillment.every(line => line.reservationStatus === 'PAID_HELD'));
   const agentPi = await req(`/api/pis/${pi.id}`, undefined, { token: external });
   assert(agentPi.fulfillment.every(line => line.reservationStatus === 'ACTIVE')); assert.equal(agentPi.paidAmount, null); assert.deepEqual(agentPi.payments, []);
-  await req(`/api/pis/${pi.id}/release`, { reason: '未收足拒放行' }, { token: finance, code: 'PAYMENT_GATE_NOT_MET' });
-  await req(`/api/pis/${pi.id}/payments`, { requestId: randomUUID(), amount: '150.00', currencyCode: 'CNY' }, { token: finance });
   await req('/api/stock-out', redShipment, { token: warehouseOperator, code: 'PI_SHIPMENT_NOT_RELEASED' });
-  await req(`/api/pis/${pi.id}/release`, { reason: '财务核实200元，准许发货' }, { token: finance });
+  await req(`/api/pis/${pi.id}/release`, { reason: '核对定金、库存及合同后授权发货，发货金额仅作记录' }, { token: finance });
+  await req(`/api/pis/${pi.id}/payments`, { requestId: randomUUID(), amount: '150.00', currencyCode: 'CNY' }, { token: finance });
   for (const format of ['pdf', 'xlsx']) {
     const response = await fetch(`${base}/api/pis/${pi.id}/export.${format}`, { headers: { Authorization: `Bearer ${external}` }, signal: AbortSignal.timeout(30000) });
     assert.equal(response.status, 200); assert.equal(createHash('sha256').update(Buffer.from(await response.arrayBuffer())).digest('hex'), exported[format]);
   }
-  pass('定金逐分门槛同时保留两车型，代理所有子单隐藏付款方式，足额收款仍须授权放行');
+  pass('定金逐分门槛同时保留两车型，代理所有子单隐藏付款方式，记录的发货金额不影响授权放行');
 
   let redOut;
   if (process.env.BIKE_ACCEPTANCE_DISPATCH_MODE === 'batch') {

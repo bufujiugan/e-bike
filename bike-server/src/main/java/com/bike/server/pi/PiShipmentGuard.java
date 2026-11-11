@@ -24,10 +24,8 @@ public class PiShipmentGuard {
         if (!Objects.equals(pi.customerId(), order.getCustomerId())) {
             throw new BusinessException("PI_CUSTOMER_MISMATCH", "PI 与出库订单客户不一致");
         }
-        if (!"RELEASED".equals(pi.status()) || !"RELEASED".equals(pi.releaseStatus())
-                || business == null && (pi.shipmentRequiredAmount() == null || pi.paidAmount() == null
-                || pi.paidAmount().compareTo(pi.shipmentRequiredAmount()) < 0)) {
-            throw new BusinessException("PI_SHIPMENT_NOT_RELEASED", "关联 PI 尚未达到发货收款条件并完成授权放行");
+        if (!"RELEASED".equals(pi.status()) || !"RELEASED".equals(pi.releaseStatus())) {
+            throw new BusinessException("PI_SHIPMENT_NOT_RELEASED", "关联 PI 尚未完成授权放行");
         }
         if(business!=null)business.requireShipment(pi.id());
         return pi;

@@ -78,7 +78,6 @@ try {
   const repeated = await req(`/api/pis/${pi.id}/payments`, payment); assert.equal(repeated.paidAmount, '50.00'); assert.equal(repeated.payments.length, 1);
   await req(`/api/pis/${pi.id}/payments`, { ...payment, amount: '51.00' }, { code: 'PAYMENT_REQUEST_CONFLICT' });
   await req(`/api/pis/${pi.id}/cancel`, { reason: '付款后不得直接取消' }, { code: 'PI_HAS_PAYMENTS' });
-  await req(`/api/pis/${pi.id}/release`, { reason: '定金不足发货款' }, { code: 'PAYMENT_GATE_NOT_MET' });
   await ship([vehicles[0]], 'PI_SHIPMENT_NOT_RELEASED');
   const agentView = await req(`/api/pis/${pi.id}`, undefined, { token: ownAgent }); assert.equal(agentView.payments.length, 0);
   for (const field of ['paidAmount', 'paymentStatus', 'depositRequiredAmount', 'shipmentRequiredAmount', 'releaseStatus']) assert.equal(agentView[field], null);
@@ -100,14 +99,14 @@ try {
   await req(`/api/orders/${cancelledOrder.id}/confirm`, {});
   await req('/api/stock-out', { customerId: customer.id, orderId: cancelledOrder.id, vehicleQrCodes: [vehicles[0].qrCode] }, { code: 'PI_SHIPMENT_NOT_RELEASED' });
   pass('未付款PI可取消且保留来源关联，重建PI或旧订单出库均不能绕过取消门槛');
-  await req(`/api/pis/${pi.id}/payments`, { requestId: randomUUID(), amount: '150.00', currencyCode: 'CNY' });
   await ship([vehicles[0]], 'PI_SHIPMENT_NOT_RELEASED');
-  await req(`/api/pis/${pi.id}/release`, { reason: '专用测试：达到约定发货门槛' });
+  await req(`/api/pis/${pi.id}/release`, { reason: '专用测试：发货金额仅作记录，核对条件后授权放行' });
+  await req(`/api/pis/${pi.id}/payments`, { requestId: randomUUID(), amount: '150.00', currencyCode: 'CNY' });
   await ship([vehicles[3]], 'PI_SKU_MISMATCH');
   await ship([vehicles[0], vehicles[1]], 'PI_SKU_QTY_EXCEEDED');
   const rolledBack = await req(`/api/orders/${order.id}`); assert.equal(rolledBack.shippedQty, 0); assert.equal(rolledBack.shippedVehicles.length, 0);
   const stock = await req(`/api/production/inventory?skuId=${skus[0].id}`); assert.equal(stock.reduce((sum, x) => sum + Number(x.physicalQty), 0), 2);
-  pass('足额收款仍需放行；同车型错误SKU被拒绝；批次第二车超SKU数量时整批库存和订单回滚');
+  pass('未达到记录的发货金额也可授权放行；同车型错误SKU被拒绝；批次第二车超SKU数量时整批库存和订单回滚');
   const firstShipment = await ship([vehicles[0], vehicles[2]]);
   assert.equal((await req(`/api/orders/${order.id}`)).status, 'SHIPPED');
   await req(`/api/stock-out/${firstShipment.id}/cancel?reason=${encodeURIComponent('PI测试撤销')}`, {});

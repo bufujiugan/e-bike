@@ -157,12 +157,6 @@
         <if test="status == 'CANCELLED'">,release_status='BLOCKED'</if>
         <if test="released">,release_status='RELEASED',released_by=#{operatorId},released_at=CURRENT_TIMESTAMP(3)</if>
         WHERE id=#{id} AND status=#{from}
-        <if test="released">
-            AND shipment_required_amount IS NOT NULL
-            AND (SELECT q.paid FROM (SELECT COALESCE(SUM(pay.amount),0) paid FROM bike_pi_payment pay JOIN bike_pi p0 ON p0.id=pay.pi_id
-                 JOIN bike_pi p1 ON (p1.series_id=p0.series_id OR (p1.series_id IS NULL AND p0.series_id IS NULL AND p1.id=p0.id))
-                 WHERE p1.id=#{id} AND pay.status='CONFIRMED') q) &gt;= shipment_required_amount
-        </if>
     </update>
     <insert id="insertPayment">
         INSERT INTO bike_pi_payment(pi_id,request_id,amount,currency_code,voucher_object_key,status,received_at,confirmed_by,remark,payment_method,payment_method_note,recorded_at)

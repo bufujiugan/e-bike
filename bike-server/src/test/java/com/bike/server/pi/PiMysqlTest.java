@@ -174,12 +174,23 @@ class PiMysqlTest {
     }
 
     @Test
+    void shipmentAmountDoesNotPreventPersistingAuthorizedRelease() throws Exception {
+        try (var f = new Fixture()) {
+            long id = f.confirmed();
+            f.transaction(() -> f.service.recordPayment(id, PiServiceTest.payment("deposit", "30.00")));
+            var released = f.transaction(() -> f.service.release(id, new PiReleaseRequest("核对条件后授权放行")));
+            assertThat(released.getStatus()).isEqualTo("RELEASED");
+            assertThat(released.getReleaseStatus()).isEqualTo("RELEASED");
+            assertThat(released.getPaidAmount()).isEqualByComparingTo("30.00");
+            assertThat(released.getShipmentRequiredAmount()).isEqualByComparingTo("100.00");
+        }
+    }
+
+    @Test
     void releaseWaitsForPaymentCommitThenUsesFreshActualTotal() throws Exception {
         try (var f = new Fixture(); var pool = Executors.newFixedThreadPool(2)) {
             long id = f.confirmed();
             f.transaction(() -> f.service.recordPayment(id, PiServiceTest.payment("deposit", "30.00")));
-            assertThatThrownBy(() -> f.transaction(() -> f.service.release(id, new PiReleaseRequest("核对条件"))))
-                    .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getCode()).isEqualTo("PAYMENT_GATE_NOT_MET"));
             var inserted = new CountDownLatch(1);
             var commit = new CountDownLatch(1);
             var releaseStarted = new CountDownLatch(1);

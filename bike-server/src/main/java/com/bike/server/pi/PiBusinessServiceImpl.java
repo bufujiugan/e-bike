@@ -179,8 +179,6 @@ public class PiBusinessServiceImpl implements PiBusinessService {
         requireContract(piId);var pi=pis.selectById(piId);
         if (orderBinding != null) orderBinding.requireConsistentFulfillment(pi);
         requirePaymentAuthorization(piId);
-        if(!creditApproved(piId,document(piId))&&(pi.getPaidAmount()==null||pi.getShipmentRequiredAmount()==null||pi.getPaidAmount().compareTo(pi.getShipmentRequiredAmount())<0))
-            fail("PI_PAYMENT_INSUFFICIENT","累计收款未达到PI约定出货付款门槛，不能出库");
         if (mapper.countPaymentsWithoutReceipt(piId) > 0)
             fail("PI_RECEIPT_REQUIRED", "请为已确认收款上传收款凭证后再放行出库");
         var profile=profile(document(piId));

@@ -17,6 +17,9 @@ import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -151,7 +154,7 @@ class PiServiceTest {
     }
 
     @Test
-    void rejectsFractionalCentsNegativeValuesAndMissingExplicitGatesBeforeInsert() {
+    void rejectsFractionalCentsNegativeValuesAndMissingDepositBeforeInsert() {
         prepareCreate();
         for (String invalid : List.of("0.001", "-1.00", "10000000000000000.00")) {
             assertThatThrownBy(() -> service.create(request(List.of(item(10L, 1, invalid, null, null)),
@@ -160,6 +163,33 @@ class PiServiceTest {
         assertThatThrownBy(() -> service.create(request(List.of(item(10L, 1, "1.00", null, null)),
                 null, null, null, null, "0.00"))).isInstanceOf(BusinessException.class);
         verify(mapper, never()).insertItems(anyLong(), any());
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"0.00", "10.00", "150.00", "9999999999999999.99"})
+    void shipmentAmountIsOptionalAndIndependentOfDepositAndTotal(String shipment) {
+        prepareCreate();
+        var request = request(List.of(item(10L, 1, "100.00", null, null)),
+                null, null, null, "30.00", shipment);
+        service.create(request);
+        BigDecimal expectedShipment = money(shipment == null ? "0.00" : shipment);
+        verify(mapper).insertPi(anyString(), eq(request), eq("DOMESTIC"), eq("CNY"),
+                eq(money("100.00")), eq(money("0.00")), eq(money("0.00")), eq(money("0.00")),
+                eq(money("100.00")), eq(money("30.00")), eq(expectedShipment), any(), isNull(), isNull());
+    }
+
+    @Test
+    void existingDraftCanClearShipmentAmount() {
+        prepareCreate();
+        prepareLocked("DRAFT");
+        when(mapper.updatePi(anyLong(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(1);
+        var request = request(List.of(item(10L, 1, "100.00", null, null)),
+                null, null, null, "30.00", null);
+        service.update(1, request);
+        verify(mapper).updatePi(eq(1L), eq(request), eq("DOMESTIC"), eq("CNY"),
+                eq(money("100.00")), eq(money("0.00")), eq(money("0.00")), eq(money("0.00")),
+                eq(money("100.00")), eq(money("30.00")), eq(money("0.00")), any(), isNull());
     }
 
     @Test
@@ -254,12 +284,23 @@ class PiServiceTest {
     }
 
     @Test
-    void reachingDepositDoesNotSatisfyIndependentShipmentGate() {
+    void shipmentAmountDoesNotBlockReleaseAfterDeposit() {
         PiView pi = prepareLocked("CONFIRMED");
         pi.setPaymentStatus("DEPOSIT_MET");
         when(mapper.paymentTotal(1L)).thenReturn(money("30.00"));
-        assertCode(() -> service.release(1, new PiReleaseRequest("已核对订单条件")), "PAYMENT_GATE_NOT_MET");
-        verify(mapper, never()).updateStatus(anyLong(), any(), any(), any(), anyBoolean());
+        when(mapper.updateStatus(1L, "CONFIRMED", "RELEASED", null, true)).thenReturn(1);
+        service.release(1, new PiReleaseRequest("已核对订单条件"));
+        verify(mapper).updateStatus(1L, "CONFIRMED", "RELEASED", null, true);
+    }
+
+    @Test
+    void missingLegacyShipmentAmountDoesNotBlockReleaseOrAudit() {
+        PiView pi = prepareLocked("CONFIRMED");
+        pi.setShipmentRequiredAmount(null);
+        when(mapper.paymentTotal(1L)).thenReturn(money("0.00"));
+        when(mapper.updateStatus(1L, "CONFIRMED", "RELEASED", null, true)).thenReturn(1);
+        service.release(1, new PiReleaseRequest("已核对订单条件"));
+        verify(mapper).updateStatus(1L, "CONFIRMED", "RELEASED", null, true);
     }
 
     @Test

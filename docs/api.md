@@ -88,14 +88,14 @@ V22 增加 PRODUCTION_MANAGE 生产管理功能权限。生产管理写接口按
 
 - `GET /api/pis`：按 keyword/status 分页；`GET /api/pis/{id}`：明细。要求 `PI_READ`；代理商仅可读取自己的已发布单据，财务金额和收款记录另行脱敏。
 - `GET /api/pis/options?keyword=`：业务员搜索客户、代理商、SKU 和来源订单，要求 `PI_WRITE`。
-- `POST /api/pis`、`PUT /api/pis/{id}`：创建及完整编辑草稿，要求内部 Web 与 `PI_WRITE`。商品必须关联真实 SKU；价格和金额使用最多两位小数的十进制字符串，保存客户、商品和条款快照。关联来源订单不可改绑，也不能从旧订单接口改数量绕过 PI。
+- `POST /api/pis`、`PUT /api/pis/{id}`：创建及完整编辑草稿，要求内部 Web 与 `PI_WRITE`。商品必须关联真实 SKU；价格和金额使用最多两位小数的十进制字符串，保存客户、商品和条款快照。关联来源订单不可改绑，也不能从旧订单接口改数量绕过 PI。`shipmentRequiredAmount` 可省略或传 `null`，按 `0.00` 保存；填写时仅校验非负金额格式及存储精度，不与定金、总额或累计到账比较。
 - `POST /api/pis/{id}/confirm`：校验必要单据资料后确认；`POST /api/pis/{id}/cancel`：`{reason}`，有收款或实际出库时拒绝直接取消。
 - `POST /api/pis/{id}/payments`：`{requestId,amount,currencyCode,receivedAt?,voucherObjectKey?,remark?}`。要求独立 `PI_PAYMENT_CONFIRM`；同一 requestId 的相同请求返回原结果，冲突内容拒绝。V24 的 voucherObjectKey 仅为引用字段，不代表已有收款凭证上传能力。
-- `POST /api/pis/{id}/release`：`{reason}`，要求独立 `PI_RELEASE` 且累计到账满足 `shipmentRequiredAmount`。足额到账不会自行发货；定金门槛 `depositRequiredAmount` 与发货门槛分开。
+- `POST /api/pis/{id}/release`：`{reason}`，要求独立 `PI_RELEASE`，仍校验合同、有效库存占用和后付款授权。`shipmentRequiredAmount` 为选填记录，不再作为放行条件；人工放行流程保留。
 - `POST /api/pis/{id}/logistics`：物流登记，要求 `PI_LOGISTICS_WRITE`；当前 V24 物流批次是业务录入，尚未关联实际出库批次。
 - `GET /api/pis/{id}/export.pdf`、`GET /api/pis/{id}/export.xlsx`：按读取范围与财务脱敏规则导出。PDF 使用随包中文字体；Excel 金额以精确十进制文本保存。当前为通用版式，正式客户模板待配置和确认。
 
-已关联 PI 的 `/api/stock-out[/validate]` 同时检查人工放行、发货款门槛、真实 SKU 和剩余数量；批量失败整笔回滚。来源订单在 V24 仍是单车型，可以包含该车型下多个 SKU。
+已关联 PI 的 `/api/stock-out[/validate]` 同时检查人工放行、合同及库存条件、真实 SKU 和剩余数量；批量失败整笔回滚。来源订单在 V24 仍是单车型，可以包含该车型下多个 SKU。
 
 ## 售后基础（V23）
 
@@ -155,7 +155,7 @@ PI 列表、详情、确认和收款响应增加 `reservationStatus`。订单查
 
 重新占用沿用 `POST /api/orders/{id}/reservation/renew` 和 `{hours,reason}`，要求内部 Web、`ORDER_WRITE`、`AGENT_LOCK_WRITE`。接口按当前合格库存重新校验，关联已确认 PI 且收款达标时转为 `PAID`；已是 `PAID` 则保持原样。已主动释放、PI 已取消、订单已取消或关闭时拒绝重新打开。`SHIPPED` 的限时占用可续期供受控撤销出库使用，当前未发量仍为零。
 
-`POST /api/pis/{id}/release` 增加来源占用有效性检查：来源占用失效时返回 `ORDER_RESERVATION_EXPIRED`，即使发货收款门槛已达成也不能放行。没有来源订单占用的 PI 仍遵循原发货门槛与人工放行规则。
+`POST /api/pis/{id}/release` 增加来源占用有效性检查：来源占用失效时返回 `ORDER_RESERVATION_EXPIRED`，不因记录的发货金额或实际到账而豁免。没有来源订单占用的 PI 仍遵循合同、按仓库存占用与人工放行规则。
 
 通用操作日志、追溯列表、看板最近操作及相应 Excel 搜索/导出也执行财务事件权限过滤。没有内部 `PI_PAYMENT_CONFIRM` 或 `PI_RELEASE` 权限的岗位不能从这些入口搜索收款备注、放行理由或收款保留事件；管理员可审计完整记录。
 

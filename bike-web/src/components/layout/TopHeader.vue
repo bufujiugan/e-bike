@@ -17,7 +17,7 @@ function refreshPage() { window.location.reload() }
     </div>
     <el-select model-value="" filterable placeholder="搜索功能页面…" aria-label="搜索功能页面" class="workspace-global-search" @change="emit('navigate', $event)"><template #prefix><AppIcon name="search" /></template><el-option-group v-for="group in searchGroups" :key="group.label" :label="group.label"><el-option v-for="item in group.items" :key="item.key" :label="item.label" :value="item.key" /></el-option-group></el-select>
     <div class="workspace-header-tools">
-      <button v-if="role !== '客户'" type="button" class="workspace-tool-button" title="生产到出库操作说明" aria-label="操作说明" @click="emit('guide')"><AppIcon name="layers" /></button>
+      <button v-if="role !== '客户'" type="button" class="workspace-tool-button" title="操作说明" aria-label="操作说明" @click="emit('guide')"><AppIcon name="layers" /></button>
       <button type="button" class="workspace-tool-button" aria-label="刷新当前页面" :title="`刷新当前页面 · 最近加载 ${lastLoaded}`" @click="refreshPage"><AppIcon name="refresh" /></button>
       <slot name="notifications" />
       <span class="workspace-tools-divider" aria-hidden="true"></span>

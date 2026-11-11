@@ -21,13 +21,15 @@ class PiShipmentGuardTest {
         when(mapper.selectForOrder(5)).thenReturn(List.of(gate("CONFIRMED", "BLOCKED", "100", "100")));
         assertThatThrownBy(() -> guard.requireReleased(order())).isInstanceOf(BusinessException.class).hasMessageContaining("授权放行");
     }
-    @Test void depositPaymentCannotBypassShippingThreshold() {
-        when(mapper.selectForOrder(5)).thenReturn(List.of(gate("RELEASED", "RELEASED", "100", "30")));
-        assertThatThrownBy(() -> guard.requireReleased(order())).isInstanceOf(BusinessException.class);
+    @Test void authorizedReleaseDoesNotRequireShipmentAmountToBePaid() {
+        var pi = gate("RELEASED", "RELEASED", "100", "30");
+        when(mapper.selectForOrder(5)).thenReturn(List.of(pi));
+        assertThat(guard.requireReleased(order())).isEqualTo(pi);
     }
-    @Test void missingShippingRuleFailsClosed() {
-        when(mapper.selectForOrder(5)).thenReturn(List.of(gate("RELEASED", "RELEASED", null, "100")));
-        assertThatThrownBy(() -> guard.requireReleased(order())).isInstanceOf(BusinessException.class);
+    @Test void authorizedReleaseAcceptsMissingShipmentAmount() {
+        var pi = gate("RELEASED", "RELEASED", null, "0");
+        when(mapper.selectForOrder(5)).thenReturn(List.of(pi));
+        assertThat(guard.requireReleased(order())).isEqualTo(pi);
     }
     @Test void releasedPaidPiAllowsOnlyItsRemainingSkuQuantity() {
         var p = gate("RELEASED", "RELEASED", "100", "100");

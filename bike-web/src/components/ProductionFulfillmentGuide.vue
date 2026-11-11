@@ -3,10 +3,11 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { hasAnyPermission, hasPermission, hasRole, type PermissionContext } from '../permissions'
 import AppIcon from './AppIcon.vue'
 import ProductionFulfillmentDiagrams from './ProductionFulfillmentDiagrams.vue'
+import RoleAccountGuide from './RoleAccountGuide.vue'
 
-const props = defineProps<{ modelValue: boolean; context: PermissionContext | null; initialView?: 'flow' | 'sequence' | 'steps' }>()
+const props = defineProps<{ modelValue: boolean; context: PermissionContext | null; initialView?: 'flow' | 'sequence' | 'steps' | 'accounts' }>()
 const emit = defineEmits<{ 'update:modelValue': [value: boolean]; stage: [value: string]; navigate: [value: string] }>()
-const activeView = ref<'flow' | 'sequence' | 'steps'>(props.initialView ?? 'flow')
+const activeView = ref<'flow' | 'sequence' | 'steps' | 'accounts'>(props.initialView ?? 'flow')
 const selectedStep = ref<number | null>(null)
 const guideBody = ref<HTMLElement>()
 async function showStep(index: number) {
@@ -179,17 +180,18 @@ function close() { emit('update:modelValue', false) }
 </script>
 
 <template>
-  <el-dialog :model-value="modelValue" title="生产到出库操作说明" width="min(1240px, 96vw)" top="4vh" :append-to-body="true" body-class="production-fulfillment-guide-body" @close="close">
-    <div class="guide-view-switch" role="group" aria-label="操作说明视图">
+  <el-dialog :model-value="modelValue" title="操作说明" width="min(1240px, 96vw)" top="4vh" :append-to-body="true" body-class="production-fulfillment-guide-body" @close="close">
+    <div class="guide-view-switch" role="group" aria-label="操作说明栏目">
       <el-button :type="activeView === 'flow' ? 'primary' : 'default'" :aria-pressed="activeView === 'flow'" @click="activeView = 'flow'">业务流程图</el-button>
       <el-button :type="activeView === 'sequence' ? 'primary' : 'default'" :aria-pressed="activeView === 'sequence'" @click="activeView = 'sequence'">角色时序图</el-button>
       <el-button :type="activeView === 'steps' ? 'primary' : 'default'" :aria-pressed="activeView === 'steps'" @click="selectedStep = null; activeView = 'steps'">逐步操作</el-button>
+      <el-button :type="activeView === 'accounts' ? 'primary' : 'default'" :aria-pressed="activeView === 'accounts'" @click="activeView = 'accounts'">角色与账户</el-button>
     </div>
     <div ref="guideBody" class="guide-body">
-      <div v-if="activeView !== 'sequence'" class="guide-intro"><strong>从车型准备到订单出库，按顺序逐步办理</strong><span>首次开单前由管理员完成文末的统一履约配置；Web 后台负责资料、生产、库存及履约；业务入口在新标签页打开，本说明保留供对照。已有库存可从库存与 PI 环节开始。</span></div>
-      <div v-if="activeView !== 'sequence'" class="guide-entry"><span>当前 Web：工作台 → 我的工作台；页面右上角可随时重新打开本说明。正式环境请使用已配置的 PDA/H5 地址；本机联调地址：<a v-if="pdaUrl" :href="pdaUrl" target="_blank" rel="noopener noreferrer">{{ pdaUrl }}</a><span v-else>请联系管理员获取</span></span></div>
-      <ProductionFulfillmentDiagrams v-if="activeView !== 'steps'" :mode="activeView" @select="showStep" />
-      <ol v-else class="guide-steps">
+      <div v-if="activeView === 'flow' || activeView === 'steps'" class="guide-intro"><strong>从车型准备到订单出库，按顺序逐步办理</strong><span>首次开单前由管理员完成文末的统一履约配置；Web 后台负责资料、生产、库存及履约；业务入口在新标签页打开，本说明保留供对照。已有库存可从库存与 PI 环节开始。</span></div>
+      <div v-if="activeView === 'flow' || activeView === 'steps'" class="guide-entry"><span>当前 Web：工作台 → 我的工作台；页面右上角可随时重新打开本说明。正式环境请使用已配置的 PDA/H5 地址；本机联调地址：<a v-if="pdaUrl" :href="pdaUrl" target="_blank" rel="noopener noreferrer">{{ pdaUrl }}</a><span v-else>请联系管理员获取</span></span></div>
+      <ProductionFulfillmentDiagrams v-if="activeView === 'flow' || activeView === 'sequence'" :mode="activeView" @select="showStep" />
+      <ol v-else-if="activeView === 'steps'" class="guide-steps">
         <li v-for="(step, index) in steps" :key="step.title" class="guide-step" :class="{ 'is-selected': selectedStep === index }" :data-guide-step="index" tabindex="-1">
           <div class="step-index" :class="`tone-${index % 4}`">{{ String(index + 1).padStart(2, '0') }}</div>
           <div class="step-content">
@@ -200,7 +202,8 @@ function close() { emit('update:modelValue', false) }
           </div>
         </li>
       </ol>
-      <el-alert title="边界提醒" type="warning" :closable="false" show-icon>
+      <RoleAccountGuide v-else />
+      <el-alert v-if="activeView !== 'accounts'" title="边界提醒" type="warning" :closable="false" show-icon>
         建生产单不会逐车建单；Web 或 PDA 的首码会自动建立单车记录。第四码自动生成总码和打印任务，但打印核对、入库、锁定转订单、订单确认和 PDA 出库都必须由对应岗位实际操作。
       </el-alert>
     </div>
