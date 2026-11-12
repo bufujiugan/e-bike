@@ -26,6 +26,23 @@ class OrderInventoryGuardTest {
         snapshot(1,10,0,0,1);
         assertThatThrownBy(()->guard.requireShipment(order(),1)).isInstanceOf(BusinessException.class).hasMessageContaining("到期");
     }
+    @Test void activeTimedReservationAllowsOwnShipmentAndPreservesOtherCommitments(){
+        var timedOrder=order();timedOrder.setReservationHoldMode("TIMED");
+        var snapshot=new OrderInventorySnapshot();snapshot.setPhysicalQty(3);snapshot.setCommittedQty(3);
+        snapshot.setOwnedQty(1);snapshot.setReservationCount(1);
+        when(mapper.snapshot(27,1)).thenReturn(snapshot);
+        assertThatCode(()->guard.requireShipment(timedOrder,1)).doesNotThrowAnyException();
+        assertThatThrownBy(()->guard.requireShipment(timedOrder,2)).isInstanceOf(BusinessException.class);
+        snapshot.setCommittedQty(4);
+        assertThatThrownBy(()->guard.requireShipment(timedOrder,1)).hasMessageContaining("其他锁定");
+        verify(mapper,never()).selectFulfillmentSnapshot(anyLong(),anyLong());
+    }
+    @Test void expiredTimedReservationCannotUseUnreservedPhysicalStock(){
+        var timedOrder=order();timedOrder.setReservationHoldMode("TIMED");
+        var snapshot=new OrderInventorySnapshot();snapshot.setPhysicalQty(10);snapshot.setReservationCount(1);
+        when(mapper.snapshot(27,1)).thenReturn(snapshot);
+        assertThatThrownBy(()->guard.requireShipment(timedOrder,1)).hasMessageContaining("已到期");
+    }
     @Test void cancellationOfStockInMustPreserveCommitmentBacking(){
         when(mapper.vehicleModel(5)).thenReturn(27L);snapshot(0,3,3,0,0);
         assertThatThrownBy(()->guard.requireUnreservedRemoval(5)).isInstanceOf(BusinessException.class);

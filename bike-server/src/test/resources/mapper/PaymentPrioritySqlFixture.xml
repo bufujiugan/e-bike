@@ -8,5 +8,7 @@
   </update>
   <select id="paymentCount" resultType="long">SELECT COUNT(*) FROM bike_pi_payment</select>
   <update id="markPaidOrder">UPDATE bike_order_reservation SET hold_mode='PAID' WHERE order_id=#{orderId}</update>
+  <update id="expireOrder">UPDATE bike_order_reservation SET expires_at=DATE_SUB(NOW(3),INTERVAL 1 HOUR) WHERE order_id=#{orderId}</update>
+  <update id="releaseOrder">UPDATE bike_order_reservation SET hold_mode='RELEASED' WHERE order_id=#{orderId}</update>
   <select id="cancellationAuditCount" resultType="long">SELECT COUNT(*) FROM bike_operation_log WHERE action='付款优先占库自动取消'</select>
 </mapper>

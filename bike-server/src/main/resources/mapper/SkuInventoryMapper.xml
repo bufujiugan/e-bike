@@ -3,6 +3,7 @@
 <mapper namespace="com.bike.server.stock.SkuInventoryMapper">
   <select id="lockSkuModel" resultType="long">SELECT s.model_id FROM bike_production_sku s JOIN bike_product_model m ON m.id=s.model_id WHERE s.id=#{skuId} AND s.enabled=1 AND m.enabled=1 FOR UPDATE</select>
   <select id="vehicleSku" resultType="long">SELECT sku_id FROM bike_production_vehicle WHERE vehicle_id=#{vehicleId}</select>
+  <select id="selectReservationHoldMode" resultType="string">SELECT hold_mode FROM bike_order_reservation WHERE order_id=#{orderId}</select>
   <select id="snapshot" resultType="com.bike.server.stock.SkuInventorySnapshot">
     SELECT (SELECT COUNT(*) FROM bike_vehicle v JOIN bike_production_vehicle pv ON pv.vehicle_id=v.id
       WHERE pv.sku_id=#{skuId} AND v.status=2 AND NOT <include refid="com.bike.server.stock.InventoryPolicyMapper.quarantined"/>) physical_qty,

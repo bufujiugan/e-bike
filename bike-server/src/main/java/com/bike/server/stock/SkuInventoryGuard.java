@@ -13,8 +13,13 @@ public class SkuInventoryGuard {
         var items = mapper.reservationItems(orderId);
         if (!items.isEmpty() && (sku == null || items.stream().noneMatch(i -> i.skuId() == sku && i.remainingQty() > 0)))
             throw new BusinessException("ORDER_SKU_MISMATCH", "整车SKU与订单固定SKU不匹配或该SKU已发完");
-        if (sku != null && mapper.selectFulfillmentSnapshot(sku, orderId).availableForOrder() < 1)
-            throw new BusinessException("SKU_INVENTORY_LOCK_CONFLICT", "该SKU库存已被其他锁定或订单占用");
+        if (sku != null) {
+            // 与车型校验使用相同口径，避免限时订单出库挤占其他订单的同SKU库存。
+            var snapshot = "TIMED".equals(mapper.selectReservationHoldMode(orderId))
+                    ? mapper.snapshot(sku, orderId) : mapper.selectFulfillmentSnapshot(sku, orderId);
+            if (snapshot.availableForOrder() < 1)
+                throw new BusinessException("SKU_INVENTORY_LOCK_CONFLICT", "该SKU库存已被其他锁定或订单占用");
+        }
     }
 
     public void requireUnreservedRemoval(long vehicleId) {

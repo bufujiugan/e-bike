@@ -16,7 +16,12 @@ public class PiShipmentGuard {
     public PiShipmentGate requireReleased(SalesOrderView order) {
         var linked = series == null ? mapper.selectForOrder(order.getId()) : series.gates(order.getId());
         if (linked.isEmpty()) {
-            if(business!=null)throw new BusinessException("PI_REQUIRED","销售出库须先建立PI并完成收款、锁库及合同放行");
+            // 未关联PI的普通订单须有本单有效占用，库存数量由出库事务中的库存校验再次确认。
+            String reservationStatus = order.getReservationStatus();
+            boolean hasActiveReservation = "TIMED_ACTIVE".equals(reservationStatus)
+                    || "PAID_HELD".equals(reservationStatus) || "CREDIT_HELD".equals(reservationStatus);
+            if (business != null && !hasActiveReservation)
+                throw new BusinessException("ORDER_RESERVATION_REQUIRED", "未关联PI的订单须先确认本单有效库存占用后出库");
             return null;
         }
         if (linked.size() != 1) throw new BusinessException("PI_ORDER_CONFLICT", "订单关联多个 PI，须先核对后出库");

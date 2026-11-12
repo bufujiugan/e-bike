@@ -268,6 +268,7 @@ class PiMysqlTest {
                 System.getenv("BIKE_MYSQL_TEST_URL"), System.getenv("BIKE_MYSQL_TEST_USER"), System.getenv("BIKE_MYSQL_TEST_PASSWORD"));
         final TransactionTemplate tx = new TransactionTemplate(new DataSourceTransactionManager(source));
         final List<String> tables = new ArrayList<>();
+        final SqlSessionTemplate session;
         final PiMapper mapper;
         final PiShipmentMapper shipments;
         final OperationLogMapper logs;
@@ -284,13 +285,13 @@ class PiMysqlTest {
         Fixture() throws Exception {
             var config = new Configuration(new Environment("pi-business", new SpringManagedTransactionFactory(), source));
             config.setMapUnderscoreToCamelCase(true);
-            for (String name : List.of("InventoryPolicyMapper", "OrderMapper", "OrderReservationMapper", "ProductionMapper", "PiMapper", "PiShipmentMapper", "OperationLogMapper")) {
+            for (String name : List.of("InventoryPolicyMapper", "OrderMapper", "OrderReservationMapper", "ProductionMapper", "PiMapper", "PiShipmentMapper", "OperationLogMapper", "PiReservationSchemaFixtureMapper")) {
                 try (var input = Resources.getResourceAsStream("mapper/" + name + ".xml")) {
                     String xml = new String(input.readAllBytes(), StandardCharsets.UTF_8).replace("bike_", prefix);
                     new XMLMapperBuilder(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)), config, name, config.getSqlFragments()).parse();
                 }
             }
-            var session = new SqlSessionTemplate(new SqlSessionFactoryBuilder().build(config));
+            session = new SqlSessionTemplate(new SqlSessionFactoryBuilder().build(config));
             mapper = session.getMapper(PiMapper.class);
             shipments = session.getMapper(PiShipmentMapper.class);
             logs = session.getMapper(OperationLogMapper.class);
@@ -348,6 +349,12 @@ class PiMysqlTest {
                 execute("INSERT INTO " + prefix + "vehicle VALUES(100,4,2,'F100','BIKE:100:test'),(101,4,2,'F101','BIKE:101:test')");
                 execute("INSERT INTO " + prefix + "production_vehicle VALUES(100,10),(101,11),(102,12),(103,10)");
             } catch (Exception error) { close(); throw error; }
+        }
+
+        void prepareFulfillmentSchema() {
+            // 历史夹具使用车型占用，履约快照需要明确其范围，保持与当前数据库结构一致。
+            session.update("piReservationSchemaFixture.addLockScope");
+            session.update("piReservationSchemaFixture.addReservationScope");
         }
 
         PiServiceImpl service(PiMapper selectedMapper) {

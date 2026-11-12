@@ -11,9 +11,12 @@ public class OrderInventoryGuard {
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.stock.SkuInventoryGuard skuInventoryGuard;
     public OrderInventoryGuard(OrderReservationMapper mapper){this.mapper=mapper;}
     public void requireShipment(SalesOrderView order,int quantity){
-        var snapshot=mapper.selectFulfillmentSnapshot(order.getModelId(),order.getId());
+        // 限时占用可供本单出库，但必须保留其他有效锁定；已付款订单沿用付款优先口径。
+        var snapshot="TIMED".equals(order.getReservationHoldMode())
+                ? mapper.snapshot(order.getModelId(),order.getId())
+                : mapper.selectFulfillmentSnapshot(order.getModelId(),order.getId());
         if(snapshot.getReservationCount()>0 && snapshot.getOwnedQty()<quantity)
-            throw new BusinessException("ORDER_RESERVATION_EXPIRED","订单尚未付款确认占库、占用已到期或不足，须确认有效占用后出库");
+            throw new BusinessException("ORDER_RESERVATION_EXPIRED","订单占用已到期、已释放或剩余数量不足，请核对有效占用后出库");
         if(snapshot.availableForOrder()<quantity)
             throw new BusinessException("INVENTORY_LOCK_CONFLICT","库存已被其他锁定或订单占用，不能出库");
     }

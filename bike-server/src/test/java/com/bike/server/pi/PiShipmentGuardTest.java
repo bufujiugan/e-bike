@@ -42,10 +42,26 @@ class PiShipmentGuardTest {
         when(mapper.remainingForVehicle(1, 5, 9)).thenReturn(null);
         assertThatThrownBy(() -> guard.requireVehicle(p, 5, 9)).isInstanceOf(BusinessException.class).hasMessageContaining("不能按同车型替代");
     }
-    @Test void configuredBusinessFlowRejectsSalesDispatchWithoutPi() {
+    @Test void configuredBusinessFlowAllowsSalesDispatchWithoutPi() {
+        var business=mock(PiBusinessService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(guard,"business",business);
+        when(mapper.selectForOrder(5)).thenReturn(List.of());
+        for (String state : List.of("TIMED_ACTIVE", "PAID_HELD", "CREDIT_HELD")) {
+            var reservedOrder = order();
+            reservedOrder.setReservationStatus(state);
+            assertThat(guard.requireReleased(reservedOrder)).isNull();
+        }
+        verifyNoInteractions(business);
+    }
+    @Test void configuredBusinessFlowRequiresOwnActiveReservationWithoutPi() {
         org.springframework.test.util.ReflectionTestUtils.setField(guard,"business",mock(PiBusinessService.class));
         when(mapper.selectForOrder(5)).thenReturn(List.of());
-        assertThatThrownBy(()->guard.requireReleased(order())).hasMessageContaining("销售出库须先建立PI");
+        for (String state : List.of("NONE", "RELEASED", "EXPIRED_REQUIRES_REACQUIRE")) {
+            var unreservedOrder = order();unreservedOrder.setReservationStatus(state);
+            assertThatThrownBy(() -> guard.requireReleased(unreservedOrder))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            error -> assertThat(error.getCode()).isEqualTo("ORDER_RESERVATION_REQUIRED"));
+        }
     }
     @Test void legacyConstructorRemainsCompatibleWithoutBusinessDependency() {
         when(mapper.selectForOrder(5)).thenReturn(List.of()); assertThat(guard.requireReleased(order())).isNull();

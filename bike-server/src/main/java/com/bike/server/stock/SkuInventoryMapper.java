@@ -8,6 +8,7 @@ import org.apache.ibatis.annotations.Param;
 public interface SkuInventoryMapper {
     Long lockSkuModel(@Param("skuId") long skuId);
     Long vehicleSku(@Param("vehicleId") long vehicleId);
+    String selectReservationHoldMode(@Param("orderId") long orderId);
     SkuInventorySnapshot snapshot(@Param("skuId") long skuId, @Param("orderId") long orderId);
     SkuInventorySnapshot selectFulfillmentSnapshot(@Param("skuId") long skuId, @Param("orderId") long orderId);
     List<SkuInventoryRow> list(@Param("modelId") Long modelId, @Param("agentId") Long agentId,

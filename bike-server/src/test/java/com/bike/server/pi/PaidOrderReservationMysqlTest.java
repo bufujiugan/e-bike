@@ -118,6 +118,7 @@ class PaidOrderReservationMysqlTest {
     void PartialAndCompleteShipmentsPreservePaidModeForControlledRestorationThenClosingReleasesRemainder() throws Exception {
         try (var f = new PiMysqlTest.Fixture()) {
             long id = reservedPi(f, "30.00", true);
+            f.prepareFulfillmentSchema();
             f.at(DEADLINE - 1, () -> f.service.recordPayment(id, PiServiceTest.payment("deposit", "30.00")));
             f.at(DEADLINE + 1, () -> {
                 var inventory = new OrderInventoryGuard(f.reservations);

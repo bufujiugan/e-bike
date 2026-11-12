@@ -206,7 +206,8 @@ class SkuCommitmentMysqlTest {
             assertThat(number(summary,"shortageQty")).isZero();
             assertThat(f.dashboard.selectInventorySummary()).isEqualTo(summary);
             var page=f.tx(()->com.bike.server.common.CustomerScopeTestSupport.isolated(new com.bike.server.module.ModuleServiceImpl(f.modules)).list("inventory"));
-            assertThat(page.columns()).endsWith("车型SKU缺口（不累计）","历史车型承诺（不累计）","车型可新增上限（不累计）");
+            assertThat(page.columns()).endsWith("车型SKU缺口（不累计）","历史车型承诺（不累计）","车型可新增上限（不累计）",
+                    "车型 ID","仓库 ID","库位 ID");
             assertThat(page.rows()).hasSize(2).allSatisfy(row->assertThat(row.subList(12,15)).containsExactly("1","1","1"));
             assertThat(f.modules.selectRows("agent-inventory",9L,false)).hasSize(2)
                     .allSatisfy(row->assertThat(number(row,"车型SKU缺口（不累计）")).isEqualTo(1));
