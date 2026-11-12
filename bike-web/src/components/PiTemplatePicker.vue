@@ -4,7 +4,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import api from '../api'
 import { piApi, type PiDocument, type PiTemplate } from '../pi-api'
 
-const props = defineProps<{ tradeType: string; document: PiDocument; canManage: boolean; disabled: boolean; refreshKey: number }>()
+const props = defineProps<{ tradeType: string; document: PiDocument; canManage: boolean; disabled: boolean; manageDisabled?: boolean; refreshKey: number }>()
 const emit = defineEmits<{ select: [template: PiTemplate]; manage: [] }>()
 const templates = ref<PiTemplate[]>([]), page = ref(1), total = ref(0), busy = ref(false), error = ref('')
 const hasSelection = computed(() => Boolean(props.document.templateCode && props.document.templateVersion))
@@ -34,13 +34,13 @@ function isSelected(template: PiTemplate) {
   <section class="pi-template-picker" aria-label="选择单据模板">
     <div class="pi-section-heading">
       <div><h3>单据模板 <span class="pi-required">*</span></h3><p>选一次模板，自动带入卖方与收款银行，无需重复填写。</p></div>
-      <div class="pi-inline-actions"><el-button text :loading="busy" :disabled="disabled" @click="load">刷新</el-button><el-button v-if="canManage" text :disabled="disabled" @click="emit('manage')">管理模板</el-button></div>
+      <div class="pi-inline-actions"><el-button text :loading="busy" :disabled="manageDisabled" @click="load">刷新</el-button><el-button v-if="canManage" text :disabled="manageDisabled" @click="emit('manage')">管理模板</el-button></div>
     </div>
     <el-alert v-if="error" :title="error" type="error" show-icon :closable="false"><el-button text :disabled="disabled" @click="load">重新加载模板</el-button></el-alert>
     <div v-else-if="!busy && !templates.length" class="pi-template-empty">
       <strong>{{ hasSelection ? '当前查询未返回可替换的模板' : '暂无已发布的' + (tradeType === 'EXPORT' ? '外销' : '内销') + '模板' }}</strong>
       <p>{{ hasSelection ? '已保留单据中的模板快照；保存时仍由服务端校验模板有效性。' : '可先填写其他资料；保存前需要选用已发布的完整模板。' }}</p>
-      <el-button v-if="canManage" :disabled="disabled" @click="emit('manage')">前往模板管理</el-button><span v-else>请联系模板管理员发布。</span>
+      <el-button v-if="canManage" :disabled="manageDisabled" @click="emit('manage')">前往模板管理</el-button><span v-else>请联系模板管理员发布。</span>
     </div>
     <div v-loading="busy" class="pi-template-options" :aria-busy="busy">
       <button v-for="template in templates" :key="template.id" type="button" class="pi-template-option" :class="{ selected: isSelected(template) }" :aria-pressed="isSelected(template)" :disabled="disabled || busy || !isSelectablePiLayout(template.layoutCode)" @click="emit('select', template)">
@@ -63,7 +63,7 @@ function isSelected(template: PiTemplate) {
         <div><dt>收款银行</dt><dd>{{ document.bankName || '未记录' }}</dd></div>
         <div><dt>收款账号</dt><dd>{{ document.bankAccount || '未记录' }}</dd></div>
       </dl>
-      <p class="pi-field-help">以上内容随模板固定带入。如需修改，请由模板管理员发布新版本。</p>
+      <p class="pi-field-help">如需调整卖方资料或默认银行信息，可在“管理模板”中选择“调整模板”，保存为新版本。</p>
     </details>
   </section>
 </template>

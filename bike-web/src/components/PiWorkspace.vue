@@ -862,7 +862,12 @@ onBeforeUnmount(() => {
 
 <template>
   <el-dialog v-model="profilesVisible" title="统一履约配置" width="min(1100px,96vw)" append-to-body destroy-on-close><PiFulfillmentProfiles v-if="profilesVisible" :can-manage="canManageTemplates" @changed="loadProfiles" /></el-dialog>
-  <el-dialog v-model="templateVisible" title="PI模板与银行资料" width="min(900px, 94vw)" append-to-body destroy-on-close><PiTemplates v-if="templateVisible" :can-manage="canManageTemplates" /></el-dialog>
+  <el-dialog v-model="templateVisible" title="PI模板与银行资料" width="min(1100px, 94vw)" append-to-body destroy-on-close>
+    <el-alert v-if="createVisible && draftProfile" type="info" :closable="false" title="当前单据的模板由履约配置指定。调整模板后，请在履约配置中复制新版本并选用新模板，再回到单据重新选择配置。">
+      <el-button v-if="canManageTemplates" text type="primary" @click="templateVisible = false; profilesVisible = true">调整履约配置</el-button>
+    </el-alert>
+    <PiTemplates v-if="templateVisible" :can-manage="canManageTemplates" :trade-type="createVisible ? draft.tradeType : undefined" :selectable="createVisible && !draftProfile && !actionBusy" @select="chooseTemplate($event); templateVisible = false" />
+  </el-dialog>
   <section class="pi-workspace">
     <el-empty v-if="!canRead" description="当前账号没有 PI 查看权限" />
     <template v-else>
@@ -989,7 +994,7 @@ onBeforeUnmount(() => {
             </section>
             <section v-show="draftStep === 1" class="pi-draft-step">
               <div class="pi-step-heading"><span class="pi-eyebrow">STEP 02</span><h2>把交易约定说清楚。</h2><p>模板负责固定资料，你只需填写这笔订单的实际约定。</p></div>
-              <section class="pi-form-card" data-draft-field="template"><PiTemplatePicker :trade-type="draft.tradeType" :document="draft.document" :can-manage="canManageTemplates" :disabled="actionBusy || Boolean(draftProfile)" :refresh-key="templateRefreshKey" @select="chooseTemplate" @manage="templateVisible = true" /></section>
+              <section class="pi-form-card" data-draft-field="template"><PiTemplatePicker :trade-type="draft.tradeType" :document="draft.document" :can-manage="canManageTemplates" :disabled="actionBusy || Boolean(draftProfile)" :manage-disabled="actionBusy" :refresh-key="templateRefreshKey" @select="chooseTemplate" @manage="templateVisible = true" /></section>
               <section class="pi-form-card" data-draft-field="bank"><div class="pi-section-heading"><h3>收款信息 · {{ draft.document.business?.collectionEntity || '待选择' }}</h3></div><p class="pi-field-help">模板带入账户后可按本单更新；保存为本单快照，已确认单据须通过修订调整。</p><div class="pi-draft-grid"><el-form-item label="收款银行" required><el-input v-model="draft.document.bankName" maxlength="200" /></el-form-item><el-form-item label="收款账户" required><el-input v-model="draft.document.bankAccount" maxlength="200" /></el-form-item><el-form-item label="收款人 / 公司全称" required><el-input v-model="draft.document.beneficiary" maxlength="200" /></el-form-item></div></section>
               <section class="pi-form-card"><div class="pi-section-heading"><div><h3>付款约定</h3><p>收款门槛不会自动填写比例；请按实际约定确认。</p></div></div>
                 <el-form-item label="付款条款" required data-draft-field="paymentTerms" :error="fieldError('paymentTerms')"><el-input v-model="draft.document.paymentTerms" aria-label="付款条款" type="textarea" :rows="3" maxlength="2000" placeholder="填写双方约定的付款方式、时间及条件" /></el-form-item>
