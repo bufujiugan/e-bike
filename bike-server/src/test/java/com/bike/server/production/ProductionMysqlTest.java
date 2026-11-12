@@ -49,7 +49,9 @@ class ProductionMysqlTest {
       }
       session=new SqlSessionFactoryBuilder().build(config).openSession();connection=session.getConnection();mapper=session.getMapper(ProductionMapper.class);
       execute("CREATE TABLE "+prefix+"production_sku(id BIGINT PRIMARY KEY,sku_code VARCHAR(64),product_name VARCHAR(128))");
-      execute("CREATE TABLE "+prefix+"vehicle(id BIGINT PRIMARY KEY,frame_sn VARCHAR(128),vehicle_qr_code VARCHAR(255))");
+      execute(ProductionFixtureSql.statement("createStockStatusVehicle", prefix));
+      execute(ProductionFixtureSql.statement("createStockStatusWarehouse", prefix));
+      execute(ProductionFixtureSql.statement("createStockStatusLocation", prefix));
       execute(ProductionFixtureSql.statement("createTask", prefix));
       execute("CREATE TABLE "+prefix+"production_scan(task_id VARCHAR(64),code_type VARCHAR(20),code VARCHAR(128),active TINYINT,UNIQUE KEY(task_id,code_type))");
       execute("INSERT INTO "+prefix+"production_sku VALUES(1,'SKU-TEST','商品规格测试')");
@@ -66,8 +68,32 @@ class ProductionMysqlTest {
       }
     }
     public void close() throws Exception {
-      try {for(String table:java.util.List.of("production_scan","production_task","vehicle","production_sku"))execute("DROP TABLE "+prefix+table);}
+      try {for(String table:java.util.List.of("production_scan","production_task","vehicle","production_sku","warehouse_location","warehouse"))execute("DROP TABLE "+prefix+table);}
       finally {session.close();}
+    }
+  }
+
+  @Test void taskInventoryFollowsVehicleStockTransitionsWithoutChangingProductionStatus() throws Exception {
+    try(var f=new TaskFixture()) {
+      f.execute(ProductionFixtureSql.statement("insertCompletedVehicle", f.prefix));
+      f.execute(ProductionFixtureSql.statement("insertStockStatusWarehouse", f.prefix));
+      f.execute(ProductionFixtureSql.statement("insertStockStatusLocation", f.prefix));
+      f.task("done","COMPLETED","2026-11-12 10:00:00",1L);
+      f.execute(ProductionFixtureSql.statement("assignStockStatusWorkOrder", f.prefix));
+      assertThat(f.mapper.selectTask("done")).containsEntry("vehicleStatus",1).containsEntry("status","COMPLETED");
+      f.execute(ProductionFixtureSql.statement("receiveStockStatusVehicle", f.prefix));
+      // 同一生产任务已完成后，库存信息仍须跟随车辆的实际入出库变化。
+      f.session.clearCache();
+      assertThat(f.mapper.selectTask("done")).containsEntry("vehicleStatus",2)
+          .containsEntry("warehouseName","测试仓库").containsEntry("locationName","测试库位")
+          .containsKey("stockInTime").containsEntry("status","COMPLETED");
+      assertThat(f.mapper.selectWorkOrderTasks(7L,0).getFirst()).containsEntry("vehicleStatus",2);
+      f.execute(ProductionFixtureSql.statement("shipStockStatusVehicle", f.prefix));
+      f.session.clearCache();
+      var shipped=f.mapper.selectTask("done");
+      assertThat(shipped).containsEntry("vehicleStatus",3).containsKey("stockOutTime").containsEntry("status","COMPLETED");
+      assertThat(shipped.get("warehouseName")).isNull();
+      assertThat(shipped.get("locationName")).isNull();
     }
   }
 
@@ -98,7 +124,7 @@ class ProductionMysqlTest {
 
   @Test void taskCodesIncludePartialScansAndRetainReleasedScanHistory() throws Exception {
     try(var f=new TaskFixture()) {
-      f.execute("INSERT INTO "+f.prefix+"vehicle VALUES(1,'FRAME-DONE','BIKE:1:AGGREGATE')");
+      f.execute(ProductionFixtureSql.statement("insertCompletedVehicle", f.prefix));
       f.task("done","COMPLETED","2026-09-01 00:00:00",1L);
       for(String type:java.util.List.of("FRAME","MOTOR","BATTERY","DISPLAY"))f.scan("done",type,type+"-DONE",0);
       f.task("partial","OPEN","2026-09-02 00:00:00",null);

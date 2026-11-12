@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <mapper namespace="ProductionRegressionFixture">
+    <update id="createStockStatusVehicle">CREATE TABLE bike_vehicle(id BIGINT PRIMARY KEY,frame_sn VARCHAR(128),vehicle_qr_code VARCHAR(255),status INT,current_warehouse_id BIGINT,current_location_id BIGINT,stock_in_time DATETIME(3),stock_out_time DATETIME(3))</update>
+    <update id="createStockStatusWarehouse">CREATE TABLE bike_warehouse(id BIGINT PRIMARY KEY,warehouse_name VARCHAR(128))</update>
+    <update id="createStockStatusLocation">CREATE TABLE bike_warehouse_location(id BIGINT PRIMARY KEY,location_name VARCHAR(128))</update>
+    <insert id="insertCompletedVehicle">INSERT INTO bike_vehicle(id,frame_sn,vehicle_qr_code,status) VALUES(1,'FRAME-DONE','BIKE:1:AGGREGATE',1)</insert>
+    <insert id="insertStockStatusWarehouse">INSERT INTO bike_warehouse VALUES(2,'测试仓库')</insert>
+    <insert id="insertStockStatusLocation">INSERT INTO bike_warehouse_location VALUES(3,'测试库位')</insert>
+    <update id="assignStockStatusWorkOrder">UPDATE bike_production_task SET work_order_id=7 WHERE id='done'</update>
+    <update id="receiveStockStatusVehicle">UPDATE bike_vehicle SET status=2,current_warehouse_id=2,current_location_id=3,stock_in_time='2026-11-12 10:55:03' WHERE id=1</update>
+    <update id="shipStockStatusVehicle">UPDATE bike_vehicle SET status=3,current_warehouse_id=NULL,current_location_id=NULL,stock_out_time='2026-11-12 14:00:00' WHERE id=1</update>
     <update id="createTask">CREATE TABLE bike_production_task(id VARCHAR(64) PRIMARY KEY,sku_id BIGINT,batch_no VARCHAR(64),status VARCHAR(20),vehicle_id BIGINT,created_by VARCHAR(64),created_at DATETIME(3),updated_at DATETIME(3),work_order_id BIGINT NULL)</update>
     <insert id="insertTask">INSERT INTO bike_production_task(id,sku_id,batch_no,status,vehicle_id,created_by,created_at,updated_at) VALUES(?,1,'BATCH-TEST',?,?,'tester','2026-09-01 00:00:00',?)</insert>
     <update id="addFailureUpdatedAt">ALTER TABLE bike_production_scan_failure ADD COLUMN updated_at DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3)</update>

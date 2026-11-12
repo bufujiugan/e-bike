@@ -68,9 +68,13 @@
       SELECT t.id,t.work_order_id workOrderId,t.sku_id skuId,t.batch_no batchNo,t.status,t.vehicle_id vehicleId,t.created_by createdBy,
         t.created_at createdAt,t.updated_at updatedAt,s.sku_code skuCode,s.product_name productName,
         COALESCE(fs.code,v.frame_sn) frameSn,v.vehicle_qr_code qrCode,
+        v.status vehicleStatus,w.warehouse_name warehouseName,l.location_name locationName,
+        v.stock_in_time stockInTime,v.stock_out_time stockOutTime,
         ms.code motorSn,bs.code batterySn,ds.code displaySn
       FROM bike_production_task t JOIN bike_production_sku s ON s.id=t.sku_id
       LEFT JOIN bike_vehicle v ON v.id=t.vehicle_id
+      LEFT JOIN bike_warehouse w ON w.id=v.current_warehouse_id
+      LEFT JOIN bike_warehouse_location l ON l.id=v.current_location_id
       LEFT JOIN bike_production_scan fs ON fs.task_id=t.id AND fs.code_type='FRAME'
       LEFT JOIN bike_production_scan ms ON ms.task_id=t.id AND ms.code_type='MOTOR'
       LEFT JOIN bike_production_scan bs ON bs.task_id=t.id AND bs.code_type='BATTERY'
