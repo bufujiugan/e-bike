@@ -34,6 +34,7 @@ const scanInput = ref<{ focus: () => void }>()
 const warehouses = ref<LocationOption[]>([]), locations = ref<LocationOption[]>([])
 const warehouseId = ref<number>(), locationId = ref<number>(), physicalQrCode = ref('')
 const locationsLoading = ref(false), warehouseError = ref(''), stockReceipt = ref<StockReceipt>()
+const copyingQrCode = ref(false)
 const codes = [
   { type: 'FRAME', key: 'frameSn', label: '车架码' }, { type: 'MOTOR', key: 'motorSn', label: '电机码' },
   { type: 'BATTERY', key: 'batterySn', label: '电池码' }, { type: 'DISPLAY', key: 'displaySn', label: '仪表码' },
@@ -76,6 +77,30 @@ function failureMessage(cause: unknown, fallback: string) {
 }
 function boundCode(key: typeof codes[number]['key'], type: string) {
   return selectedTask.value?.[key] || selectedTask.value?.scans?.find(scan => scan.codeType === type)?.code
+}
+async function copyVehicleQrCode() {
+  const qrCode = selectedTask.value?.qrCode
+  if (!qrCode || copyingQrCode.value) return
+  copyingQrCode.value = true
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(qrCode)
+    } else {
+      // 线上 HTTP 页面使用兼容复制方式，并恢复原来的焦点。
+      const previous = document.activeElement as HTMLElement | null
+      const input = document.createElement('textarea')
+      input.value = qrCode; input.setAttribute('readonly', '')
+      input.style.cssText = 'position:fixed;left:-9999px;top:0'
+      const container = previous?.closest('[role="dialog"]') || document.body
+      container.appendChild(input)
+      try {
+        input.select()
+        if (!document.execCommand('copy')) throw new Error('复制未成功')
+      } finally { input.remove(); previous?.focus({ preventScroll: true }) }
+    }
+    ElMessage.success('本车总码已复制')
+  } catch { ElMessage.error('复制失败，请选中总码手动复制') }
+  finally { copyingQrCode.value = false }
 }
 async function loadWorkOrder() {
   const version = ++listVersion
@@ -204,6 +229,9 @@ async function changeStatus() {
   finally { if (!disposed) saving.value = false }
 }
 watch(operation, next => { if (next === 'prints') void loadPrints(); if (next === 'stock') void loadWarehouses() })
+watch(() => [selectedTask.value?.id, selectedTask.value?.qrCode], () => {
+  physicalQrCode.value = selectedTask.value?.qrCode || ''
+}, { flush: 'sync' })
 watch(warehouseId, () => { void loadLocations() })
 watch(() => props.printRefreshKey, () => { if (operation.value === 'prints') void loadPrints() })
 onMounted(() => { void loadWorkOrder() })
@@ -220,8 +248,8 @@ onBeforeUnmount(() => { disposed = true; listVersion++; taskVersion++; printVers
       <div class="order-body">
         <aside class="order-vehicles"><div class="vehicles-heading"><h3>本单车辆 <small>{{ workOrder.tasks?.total ?? 0 }}</small></h3><el-button v-if="canScan" link type="primary" :disabled="operationLocked || workOrder.status !== 'RELEASED'" @click="startNextVehicle">＋ 开始新车</el-button></div><p>选择一台车，右侧连续办理。</p><el-button :loading="listLoading" :disabled="saving" size="small" @click="loadWorkOrder">刷新车辆列表</el-button><div class="vehicle-choices"><button v-for="vehicle in workOrder.tasks?.records ?? []" :key="vehicle.id" :disabled="operationLocked" :class="{ selected: selectedTask?.id === vehicle.id }" @click="selectVehicle(vehicle.id)"><strong>{{ vehicle.frameSn || vehicle.motorSn || vehicle.batterySn || vehicle.displaySn || vehicle.id }}</strong><small>任务 ID：{{ vehicle.id }}</small><el-tag class="inventory-tag" :type="inventoryTagType(vehicle)" size="small">{{ inventoryLabel(vehicle) }}</el-tag><span>生产：{{ statusNames[vehicle.status] || vehicle.status }} <i>{{ vehicle.qrCode ? '已生成总码' : '待绑定完整' }}</i></span></button><p v-if="!workOrder.tasks?.total" class="vehicle-empty">尚未开始生产。首码扫描后自动生成本单车辆，无需逐车建单。</p></div><Pagination v-model:page="taskPage" :total="workOrder.tasks?.total ?? 0" :page-size="50" :disabled="saving || listLoading" @change="loadWorkOrder" /></aside>
         <section class="order-action-panel" v-loading="taskLoading">
-          <div class="current-vehicle"><div><span>{{ selectedTask ? '当前办理车辆' : canScan && operation === 'scan' ? '准备开始新车' : '请选择本单车辆' }}</span><strong>{{ selectedTask?.frameSn || selectedTask?.id || (canScan && operation === 'scan' ? '扫描第一个部件码，自动建立单车记录' : '选择一台车，继续办理当前环节') }}</strong><small v-if="selectedTask?.qrCode">总码：{{ selectedTask.qrCode }}</small></div><div v-if="selectedTask" class="vehicle-status-tags"><el-tag :type="inventoryTagType(selectedTask)">库存：{{ inventoryLabel(selectedTask) }}</el-tag><el-tag type="info">生产：{{ statusNames[selectedTask.status] || selectedTask.status }}</el-tag></div></div>
-          <el-button v-if="selectedTask" class="vehicle-history" link :disabled="operationLocked" @click="emit('inspect', selectedTask)">查看本车生产与流转履历</el-button>
+          <div class="current-vehicle"><div><span>{{ selectedTask ? '当前办理车辆' : canScan && operation === 'scan' ? '准备开始新车' : '请选择本单车辆' }}</span><strong>{{ selectedTask?.frameSn || selectedTask?.id || (canScan && operation === 'scan' ? '扫描第一个部件码，自动建立单车记录' : '选择一台车，继续办理当前环节') }}</strong><div v-if="selectedTask?.qrCode" class="vehicle-qr-code"><small>总码：{{ selectedTask.qrCode }}</small><el-button size="small" plain :loading="copyingQrCode" :disabled="operationLocked" @click="copyVehicleQrCode">复制总码</el-button></div></div><div v-if="selectedTask" class="vehicle-status-tags"><el-tag :type="inventoryTagType(selectedTask)">库存：{{ inventoryLabel(selectedTask) }}</el-tag><el-tag type="info">生产：{{ statusNames[selectedTask.status] || selectedTask.status }}</el-tag></div></div>
+          <el-button v-if="selectedTask" class="vehicle-history" size="small" plain :disabled="operationLocked" @click="emit('inspect', selectedTask)">查看本车生产与流转履历</el-button>
           <el-alert v-if="taskError" :title="taskError" type="error" :closable="false" show-icon />
           <el-alert v-if="actionError" :title="actionError" type="error" :closable="false" show-icon />
           <el-alert v-if="actionMessage" :title="actionMessage" type="success" :closable="false" show-icon />
@@ -230,10 +258,10 @@ onBeforeUnmount(() => { disposed = true; listVersion++; taskVersion++; printVers
             <el-alert v-if="!canScan" title="当前账号没有生产扫码权限或未配置生产工位，可在本页查看进度。" type="info" :closable="false" />
             <el-alert v-else-if="workOrder.status !== 'RELEASED'" :title="workOrder.status === 'PAUSED' ? '生产单已暂停，恢复后才能继续扫码。' : '本单四码生产已完成，可以继续标签打印和入库。'" type="info" :closable="false" />
             <form v-if="canScan && workOrder.status === 'RELEASED' && (!selectedTask || selectedTask.status === 'OPEN')" class="scan-form" @submit.prevent="scanVehicle"><label>本次扫描类型</label><el-select v-model="expectedType" aria-label="本次扫描类型" placeholder="自动识别部件类型" :disabled="operationLocked || scanOutcomeUnknown"><el-option label="自动识别部件类型" value="" /><el-option v-for="code in permittedCodes" :key="code.type" :label="code.label" :value="code.type" /></el-select><label>扫描部件码</label><el-input ref="scanInput" v-model="scanCode" aria-label="扫描部件码" placeholder="使用扫码枪扫描，或输入编码后按回车" maxlength="255" :disabled="operationLocked || scanOutcomeUnknown" /><el-button type="primary" native-type="submit" :loading="saving" :disabled="!canSubmitScan || !scanCode.trim() || taskLoading">确认本次扫描</el-button><p>四码可按工位任意顺序绑定；同一台车完成前，请勿混入下一台的部件。</p></form>
-            <div v-if="selectedTask?.qrCode" class="next-operation"><div><strong>本车已生成总码</strong><p>{{ awaitingStockIn ? '下一步核对标签并打印，再办理实物入库。' : '当前库存状态：' + inventoryLabel(selectedTask) + '，可查看标签与打印记录。' }}</p></div><el-button type="primary" :disabled="operationLocked" @click="operation = 'prints'">{{ awaitingStockIn ? '继续：标签打印 →' : '查看标签与打印记录' }}</el-button></div>
+            <div v-if="selectedTask?.qrCode" class="next-operation"><div><strong>本车已生成总码</strong><p>{{ awaitingStockIn ? '下一步核对标签并打印，再办理实物入库。' : '当前库存状态：' + inventoryLabel(selectedTask) + '，可查看标签与打印记录。' }}</p></div><el-button type="primary" :disabled="operationLocked" @click="operation = 'prints'">{{ awaitingStockIn ? '继续标签打印' : '查看标签与打印记录' }}<AppIcon name="arrow" /></el-button></div>
           </template>
           <template v-else-if="operation === 'prints'">
-            <div class="panel-heading"><h3>本车打印任务</h3><el-button :disabled="!selectedTask || operationLocked" :loading="printLoading" @click="loadPrints">刷新打印记录</el-button></div><el-alert v-if="printError" :title="printError" type="error" :closable="false" /><el-empty v-if="!selectedTask" description="先在左侧选择本单车辆，再查看它的标签。" :image-size="70" /><template v-else><el-table v-loading="printLoading" :data="printJobs" empty-text="暂无打印任务，四码完成后自动生成。"><el-table-column prop="id" label="ID" min-width="140" show-overflow-tooltip /><el-table-column label="状态" width="115"><template #default="{ row }">{{ printNames[row.status] || row.status }}</template></el-table-column><el-table-column prop="reason" label="原因" min-width="100" /><el-table-column label="操作" width="120"><template #default="{ row }"><el-button link type="primary" :disabled="operationLocked" @click="emit('preview', row.id)">预览 / 打印</el-button></template></el-table-column></el-table><p class="panel-note">打印状态以任务回报为准。提交打印后仍需核对实物标签。</p><div v-if="selectedTask.qrCode" class="next-operation"><div><strong>{{ awaitingStockIn ? '核对实物标签后继续' : '当前库存状态：' + inventoryLabel(selectedTask) }}</strong><p>{{ awaitingStockIn ? '当前车辆会自动带入入库环节。' : '查看本车仓库、库位及入出库时间。' }}</p></div><el-button type="primary" :disabled="operationLocked" @click="operation = 'stock'">{{ awaitingStockIn ? '继续：办理入库 →' : '查看库存状态 →' }}</el-button></div></template>
+            <div class="panel-heading"><h3>本车打印任务</h3><el-button :disabled="!selectedTask || operationLocked" :loading="printLoading" @click="loadPrints">刷新打印记录</el-button></div><el-alert v-if="printError" :title="printError" type="error" :closable="false" /><el-empty v-if="!selectedTask" description="先在左侧选择本单车辆，再查看它的标签。" :image-size="70" /><template v-else><el-table v-loading="printLoading" :data="printJobs" empty-text="暂无打印任务，四码完成后自动生成。"><el-table-column prop="id" label="ID" min-width="140" show-overflow-tooltip /><el-table-column label="状态" width="115"><template #default="{ row }">{{ printNames[row.status] || row.status }}</template></el-table-column><el-table-column prop="reason" label="原因" min-width="100" /><el-table-column label="操作" width="120"><template #default="{ row }"><el-button link type="primary" :disabled="operationLocked" @click="emit('preview', row.id)">预览 / 打印</el-button></template></el-table-column></el-table><p class="panel-note">打印状态以任务回报为准。提交打印后仍需核对实物标签。</p><div v-if="selectedTask.qrCode" class="next-operation"><div><strong>{{ awaitingStockIn ? '核对实物标签后继续' : '当前库存状态：' + inventoryLabel(selectedTask) }}</strong><p>{{ awaitingStockIn ? '当前车辆会自动带入入库环节。' : '查看本车仓库、库位及入出库时间。' }}</p></div><el-button type="primary" :disabled="operationLocked" @click="operation = 'stock'">{{ awaitingStockIn ? '继续办理入库' : '查看库存状态' }}<AppIcon name="arrow" /></el-button></div></template>
           </template>
           <template v-else>
             <div class="panel-heading"><h3>{{ awaitingStockIn ? '本车待入库' : '本车库存状态' }}</h3><el-button :disabled="operationLocked || !selectedTask" @click="loadWorkOrder">刷新库存状态</el-button></div>
@@ -249,11 +277,11 @@ onBeforeUnmount(() => { disposed = true; listVersion++; taskVersion++; printVers
                 <div v-if="selectedTask.stockInTime"><dt>最近入库时间</dt><dd>{{ formatStockTime(selectedTask.stockInTime) }}</dd></div>
                 <div v-if="selectedTask.stockOutTime"><dt>最近出库时间</dt><dd>{{ formatStockTime(selectedTask.stockOutTime) }}</dd></div>
               </dl>
-              <el-button link type="primary" @click="emit('inspect', selectedTask)">查看本车入出库与流转记录</el-button>
+              <div class="next-operation"><div><strong>本车生产与流转记录</strong><p>查看本车的生产、入库、出库及后续流转履历。</p></div><el-button type="primary" :disabled="operationLocked" @click="emit('inspect', selectedTask)">查看本车流转记录<AppIcon name="arrow" /></el-button></div>
               <el-alert v-if="awaitingStockIn && !canStockIn" title="本车待入库，当前账号没有入库权限或入库工位，请由入库人员继续办理。" type="info" :closable="false" />
               <template v-else-if="canStockIn && canShowStockForm">
                 <p class="panel-note">本车已完成组装，尚未入库。请核对实物标签并选择实际仓库、库位。</p>
-                <el-alert v-if="warehouseError" :title="warehouseError" type="error" :closable="false" /><el-button v-if="warehouseError" :disabled="saving" @click="loadWarehouses(); loadLocations()">重试仓库与库位</el-button><el-form label-position="top" class="stock-in-form" @submit.prevent="stockInVehicle"><el-form-item label="入库仓库" required><el-select v-model="warehouseId" aria-label="入库仓库" placeholder="选择仓库" :disabled="operationLocked || !!stockReceipt"><el-option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id" :label="warehouse.name" /></el-select></el-form-item><el-form-item label="入库库位" required><el-select v-model="locationId" aria-label="入库库位" placeholder="选择库位" :loading="locationsLoading" :disabled="operationLocked || !warehouseId || locationsLoading || !!stockReceipt"><el-option v-for="location in locations" :key="location.id" :value="location.id" :label="location.name" /></el-select></el-form-item><el-form-item label="核对实物总码" required><el-input v-model="physicalQrCode" aria-label="核对实物总码" placeholder="扫描实物标签，必须与当前车辆总码一致" :disabled="operationLocked || !!stockReceipt" /></el-form-item><el-button type="primary" native-type="submit" :loading="saving" :disabled="!warehouseId || !locationId || locationsLoading || !physicalQrCode.trim() || !!stockReceipt || taskLoading">确认本车入库</el-button></el-form>
+                <el-alert v-if="warehouseError" :title="warehouseError" type="error" :closable="false" /><el-button v-if="warehouseError" :disabled="saving" @click="loadWarehouses(); loadLocations()">重试仓库与库位</el-button><el-form label-position="top" class="stock-in-form" @submit.prevent="stockInVehicle"><el-form-item label="入库仓库" required><el-select v-model="warehouseId" aria-label="入库仓库" placeholder="选择仓库" :disabled="operationLocked || !!stockReceipt"><el-option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id" :label="warehouse.name" /></el-select></el-form-item><el-form-item label="入库库位" required><el-select v-model="locationId" aria-label="入库库位" placeholder="选择库位" :loading="locationsLoading" :disabled="operationLocked || !warehouseId || locationsLoading || !!stockReceipt"><el-option v-for="location in locations" :key="location.id" :value="location.id" :label="location.name" /></el-select></el-form-item><el-form-item label="入库车辆总码" required><el-input v-model="physicalQrCode" aria-label="入库车辆总码" placeholder="已带入本车总码，也可扫描标签替换" :disabled="operationLocked || !!stockReceipt" /><p class="qr-field-help">已自动带入当前车辆总码，请核对实物车辆；也可扫描标签替换。</p></el-form-item><el-button type="primary" native-type="submit" :loading="saving" :disabled="!warehouseId || !locationId || locationsLoading || !physicalQrCode.trim() || !!stockReceipt || taskLoading">确认本车入库</el-button></el-form>
               </template>
             </template>
           </template>
@@ -264,6 +292,14 @@ onBeforeUnmount(() => { disposed = true; listVersion++; taskVersion++; printVers
 </template>
 
 <style scoped>
+.vehicle-qr-code{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:8px}
+.current-vehicle .vehicle-qr-code small{margin-top:0;min-width:0;overflow-wrap:anywhere}
+.vehicle-qr-code .el-button{flex-shrink:0;margin:0}
+.next-operation>.el-button{width:190px;height:36px;margin:0;flex-shrink:0;border-radius:8px}
+.next-operation>.el-button :deep(>span){display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%}
+.next-operation>.el-button .app-icon{width:16px;height:16px;flex-shrink:0}
+.qr-field-help{margin:6px 0 0;font-size:12px;line-height:1.7;color:#7a91aa}
+@media(max-width:600px){.next-operation>.el-button{width:100%}}
 .vehicle-status-tags{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;flex-shrink:0}
 .vehicle-choices .inventory-tag{justify-self:start;font-size:12px;font-weight:600}
 .vehicle-stock-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin:20px 0;padding:18px;background:#f6f9fc;border-radius:8px}
