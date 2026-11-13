@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { createUuid } from '../utils/uuid'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useAutoVehicleScan } from '../composables/useAutoVehicleScan'
 import { showConfirmDialog, showFailToast, showSuccessToast } from 'vant'
 import api from '../api'
 
-const props = defineProps<{ username: string }>()
+const props = withDefaults(defineProps<{ username: string; active?: boolean }>(), { active: true })
 type Option = { id: number; piNo: string; customerName: string; customerId: number }
 type Order = { orderId: number; orderNo: string; skuId?: number; skuCode?: string; status: string; orderedQty: number; shippedQty: number; closedQty: number; remainingQty: number }
 type Detail = Option & { orders: Order[] }
@@ -12,6 +13,10 @@ type Scan = { orderId: number; vehicleQrCode: string; frameSn: string }
 type Batch = { id: number; batchNo: string; status: string; originalQty: number; activeQty: number }
 const rows = ref<Option[]>([]), total = ref(0), page = ref(1), keyword = ref(''), loading = ref(false), busy = ref(false), error = ref('')
 const detail = ref<Detail>(), orderId = ref<number>(), qr = ref(''), queue = ref<Scan[]>([]), result = ref<Batch>()
+const qrField = ref<{ focus: () => void } | null>(null)
+let scanVersion = 0
+const autoScan = useAutoVehicleScan(qr, () => props.active !== false && !busy.value && !!detail.value && !!orderId.value, scan)
+watch([orderId, () => props.active], () => { ++scanVersion; autoScan.cancel(); qr.value = '' }, { flush: 'sync' })
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / 20)))
 const orderOptions = computed(() => (detail.value?.orders || []).filter(order => ['CONFIRMED', 'PARTIAL_SHIPPED'].includes(order.status) && order.remainingQty > 0).map(order => ({ text: `${order.skuCode || '历史车型单'} · 待发${order.remainingQty} · ${order.orderNo}`, value: order.orderId })))
 let listVersion = 0, detailVersion = 0, disposed = false, requestId = '', fingerprint = ''
@@ -42,7 +47,9 @@ async function select(id: number, restoring = false) {
 }
 function remember() { if (detail.value) sessionStorage.setItem(storageKey, JSON.stringify({ piId: detail.value.id, queue: queue.value, requestId, fingerprint })) }
 async function scan() {
-  if (busy.value || !detail.value || !orderId.value || !qr.value.trim()) return
+  autoScan.cancel()
+  if (busy.value || props.active === false || !detail.value || !orderId.value || !qr.value.trim()) return
+  const version = scanVersion
   const code = qr.value.trim(), order = detail.value.orders.find(item => item.orderId === orderId.value)
   if (!order) return
   if (queue.value.some(item => item.vehicleQrCode === code)) { showFailToast('同一整车不能重复扫码'); return }
@@ -50,17 +57,22 @@ async function scan() {
   busy.value = true; error.value = ''
   try {
     const response = await api.post('/api/stock-out/validate', { customerId: detail.value.customerId, orderId: order.orderId, vehicleQrCode: code })
-    if (disposed) return
+    if (disposed || version !== scanVersion) return
     const checked = response.data.data
     if (!checked.valid) throw new Error(checked.message || '车辆不可出库')
     if (queue.value.some(item => item.frameSn === checked.frameSn)) throw new Error('该车已通过其他二维码加入本批次')
     queue.value.push({ orderId: order.orderId, vehicleQrCode: code, frameSn: checked.frameSn }); qr.value = ''; remember(); showSuccessToast('已加入批次')
-  } catch (cause) { if (!disposed) { error.value = message(cause); showFailToast(error.value) } }
-  finally { if (!disposed) busy.value = false }
+  } catch (cause) { if (!disposed && version === scanVersion) { error.value = message(cause); showFailToast(error.value) } }
+  finally {
+    if (!disposed) {
+      busy.value = false
+      if (version === scanVersion) void nextTick(() => qrField.value?.focus())
+    }
+  }
 }
 function remove(index: number) { if (!busy.value) { queue.value.splice(index, 1); remember() } }
 async function submit() {
-  if (busy.value || !detail.value || !queue.value.length) return
+  if (busy.value || qr.value.trim() || !detail.value || !queue.value.length) return
   busy.value = true; error.value = ''
   const piId = detail.value.id
   const vehicles = queue.value.map(({ orderId, vehicleQrCode }) => ({ orderId, vehicleQrCode })).sort((a,b) => a.orderId - b.orderId || a.vehicleQrCode.localeCompare(b.vehicleQrCode))
@@ -100,10 +112,11 @@ onUnmounted(() => { disposed = true; ++listVersion; ++detailVersion })
       <van-cell :title="detail.piNo" :label="detail.customerName" />
       <van-cell v-for="order in detail.orders" :key="order.orderId" :title="order.skuCode || order.orderNo" :label="order.orderNo" :value="`已发${order.shippedQty} / 关闭${order.closedQty} / 待发${order.remainingQty}`" />
       <van-dropdown-menu :overlay="false"><van-dropdown-item v-model="orderId" :title="orderId ? undefined : '选择本次扫描SKU订单'" :options="orderOptions" :disabled="busy" /></van-dropdown-menu>
-      <van-field v-model="qr" label="整车总码" placeholder="选SKU订单后连续扫码" :disabled="busy || !orderId" @keyup.enter="scan"><template #button><van-button size="small" :loading="busy" :disabled="!orderId" @click="scan">加入</van-button></template></van-field>
+      <van-field ref="qrField" v-model="qr" label="整车总码" placeholder="扫码或粘贴总码，自动加入" :disabled="busy || !orderId" @keyup.enter="scan"><template #button><van-button size="small" :loading="busy" :disabled="!orderId || !qr.trim()" @click="scan">加入</van-button></template></van-field>
+      <p>完整总码扫码后自动校验加入，无需回车；核对清单后再确认出库。</p>
       <van-cell :title="`本批次已扫 ${queue.length} 台`" label="可以切换上方SKU订单继续加入另一车型，提交时一起出库。" />
       <van-cell v-for="(item,index) in queue" :key="item.vehicleQrCode" :title="item.vehicleQrCode" :label="detail.orders.find(order => order.orderId === item.orderId)?.orderNo"><template #right-icon><van-button size="mini" :disabled="busy" @click="remove(index)">移除</van-button></template></van-cell>
-      <van-button block type="primary" :disabled="!queue.length" :loading="busy" @click="submit">确认 PI 整批出库（{{ queue.length }} 台）</van-button>
+      <van-button block type="primary" :disabled="!queue.length || !!qr.trim()" :loading="busy" @click="submit">确认 PI 整批出库（{{ queue.length }} 台）</van-button>
     </template>
     <van-notice-bar v-if="error" :text="error" color="#c62828" background="#fff0f0" wrapable />
     <van-cell v-if="result" title="已保存真实出库批次" :label="result.batchNo" :value="`有效${result.activeQty} / 原${result.originalQty}台`" />

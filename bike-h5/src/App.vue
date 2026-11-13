@@ -6,6 +6,7 @@ import { showFailToast, showSuccessToast } from 'vant'
 import { hasPermission, isSuperAdmin } from './permissions'
 import ProductionStation from './components/ProductionStation.vue'
 import PiDispatchPanel from './components/PiDispatchPanel.vue'
+import { useAutoVehicleScan } from './composables/useAutoVehicleScan'
 
 const username = ref('admin')
 const password = ref('')
@@ -66,6 +67,12 @@ const reworkReason = ref('')
 const resultMessage = ref('')
 const resultSuccess = ref(false)
 const busy = ref(false)
+const stockOutScanBusy = ref(false)
+let stockOutScanVersion = 0
+const stockOutAutoScan = useAutoVehicleScan(vehicleQrCode,
+  () => loggedIn.value && !passwordChangeVisible.value && mode.value === 'stockOut' && dispatchMode.value === 'order'
+    && !busy.value && !stockOutScanBusy.value && customerId.value !== null && orderId.value !== null,
+  scanStockOutVehicle)
 // 每次请求读取当前凭证，避免重新登录后继续使用 computed 缓存的旧 token。
 const tokenHeaders = { get value() { return { Authorization: `Bearer ${localStorage.getItem('bike_access_token')}` } } }
 const customerOptions = computed(() => customers.value.map(customer => ({ text: `${customer.name} (${customer.code})`, value: customer.id })))
@@ -224,6 +231,13 @@ async function submitStockIn() {
 }
 
 async function submitStockOut() {
+  if (busy.value || stockOutScanBusy.value) return
+  if (vehicleQrCode.value.trim()) {
+    resultMessage.value = '请先将输入的整车总码校验加入清单，再确认出库'
+    resultSuccess.value = false
+    showFailToast(resultMessage.value)
+    return
+  }
   if (customerId.value === null || orderId.value === null) {
     resultMessage.value = '请选择客户和可出库订单'
     showFailToast(resultMessage.value)
@@ -250,6 +264,8 @@ async function submitStockOut() {
 }
 
 async function scanStockOutVehicle() {
+  stockOutAutoScan.cancel()
+  if (busy.value || stockOutScanBusy.value || mode.value !== 'stockOut' || dispatchMode.value !== 'order' || !loggedIn.value) return
   if (customerId.value === null || orderId.value === null) {
     resultMessage.value = '请先选择客户和可出库订单'
     resultSuccess.value = false
@@ -271,22 +287,28 @@ async function scanStockOutVehicle() {
     vehicleQrCode.value = ''
     return
   }
+  const version = stockOutScanVersion
+  stockOutScanBusy.value = true
   try {
     const response = await axios.post('/api/stock-out/validate', {
       vehicleQrCode: qr,
       customerId: customerId.value,
       orderId: orderId.value,
     }, { headers: tokenHeaders.value })
+    if (version !== stockOutScanVersion) return
     if (!response.data.data.valid) throw new Error(response.data.data.message)
     scannedVehicleQrs.value.push(qr)
     resultMessage.value = `已扫描 ${scannedVehicleQrs.value.length} 台，订单剩余 ${orderRemainingQty.value} 台`
     resultSuccess.value = true
-    vehicleQrCode.value = ''
-    focusField(vehicleQrField)
+    if (vehicleQrCode.value.trim() === qr) vehicleQrCode.value = ''
   } catch (error) {
+    if (version !== stockOutScanVersion) return
     resultMessage.value = error instanceof Error && !(axios.isAxiosError(error)) ? error.message : axios.isAxiosError(error) ? error.response?.data?.message ?? '二维码校验失败' : '二维码校验失败'
     resultSuccess.value = false
     showFailToast(resultMessage.value)
+  } finally {
+    stockOutScanBusy.value = false
+    if (version === stockOutScanVersion) focusField(vehicleQrField)
   }
 }
 
@@ -409,11 +431,19 @@ watch(orderId, (nextOrderId, previousOrderId) => {
 
 watch(warehouseId, () => { void loadLocations() })
 
+// 切换作业上下文后，尚未返回的扫码校验结果不能加入新订单。
+watch([customerId, orderId, mode, dispatchMode, loggedIn, passwordChangeVisible], () => {
+  ++stockOutScanVersion
+  stockOutAutoScan.cancel()
+  vehicleQrCode.value = ''
+}, { flush: 'sync' })
+
 onMounted(() => {
   window.addEventListener('bike-auth-expired', handleAuthExpired)
 })
 
 onUnmounted(() => {
+  ++stockOutScanVersion
   window.removeEventListener('bike-auth-expired', handleAuthExpired)
 })
 
@@ -523,7 +553,7 @@ if (loggedIn.value) {
       <section v-else-if="mode === 'stockOut'" class="form-section">
         <van-field v-model="stockOutRemark" label="出库备注" type="textarea" maxlength="400" placeholder="填写本次出库说明" />
         <van-tabs v-model:active="dispatchMode"><van-tab name="order" title="按订单出库" /><van-tab name="pi" title="PI 多车型整批出库" /></van-tabs>
-        <PiDispatchPanel v-if="authContext && !passwordChangeVisible" v-show="dispatchMode === 'pi'" :key="authContext.username" :username="authContext.username" />
+        <PiDispatchPanel v-if="authContext && !passwordChangeVisible" v-show="dispatchMode === 'pi'" :key="authContext.username" :username="authContext.username" :active="dispatchMode === 'pi'" />
         <template v-if="dispatchMode === 'order'">
         <van-field v-model="orderKeyword" label="查找订单" placeholder="输入订单号或车型" maxlength="100" clearable :disabled="customerId === null" @keyup.enter="searchStockOutOrders">
           <template #button><van-button size="small" type="primary" :loading="orderOptionsLoading" :disabled="customerId === null" @click="searchStockOutOrders">查询</van-button></template>
@@ -542,10 +572,13 @@ if (loggedIn.value) {
           <van-cell title="已出库数量" :value="`${orderShippedQty} 台`" />
           <van-cell title="本次剩余可出库" :value="`${orderRemainingQty} 台`" />
         </div>
-        <van-field ref="vehicleQrField" v-model="vehicleQrCode" label="聚合码" placeholder="连续扫描整车聚合码" clearable autofocus :disabled="customerId === null || orderId === null || orderRemainingQty <= 0" @keyup.enter="scanStockOutVehicle" />
+        <van-field ref="vehicleQrField" v-model="vehicleQrCode" label="聚合码" placeholder="扫码或粘贴总码，自动加入" clearable autofocus :disabled="busy || stockOutScanBusy || customerId === null || orderId === null || orderRemainingQty <= 0" @keyup.enter="scanStockOutVehicle">
+          <template #button><van-button size="small" type="primary" :loading="stockOutScanBusy" :disabled="busy || !vehicleQrCode.trim() || customerId === null || orderId === null || orderRemainingQty <= 0" @click="scanStockOutVehicle">加入</van-button></template>
+        </van-field>
+        <p class="pda-field-hint">完整总码扫码后自动校验加入，无需回车；核对清单后再确认出库。</p>
         <van-cell title="已扫描数量" :value="`${scannedVehicleQrs.length} 台`" />
         <van-tag v-for="qr in scannedVehicleQrs" :key="qr" type="success" size="large" closeable @close="scannedVehicleQrs = scannedVehicleQrs.filter(item => item !== qr)">{{ qr }}</van-tag>
-        <van-button block type="primary" :loading="busy" @click="submitStockOut">确认批量出库</van-button>
+        <van-button block type="primary" :loading="busy" :disabled="stockOutScanBusy || !!vehicleQrCode.trim() || !scannedVehicleQrs.length" @click="submitStockOut">确认批量出库</van-button>
         </template>
       </section>
       <section v-else-if="mode === 'rework'" class="form-section operation-section rework-section">
