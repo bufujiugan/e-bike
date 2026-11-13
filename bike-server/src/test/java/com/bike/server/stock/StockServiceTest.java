@@ -15,6 +15,58 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class StockServiceTest {
+    @Test
+    void validateReleasedPiWithinTransactionWithoutChangingStock() {
+        var stockMapper = Mockito.mock(StockMapper.class);
+        var orderMapper = Mockito.mock(OrderMapper.class);
+        var productionGuard = Mockito.mock(com.bike.server.production.ProductionGuard.class);
+        var shipmentGuard = Mockito.mock(com.bike.server.pi.PiShipmentGuard.class);
+        var service = com.bike.server.common.CustomerScopeTestSupport.isolated(new StockServiceImpl(stockMapper, orderMapper));
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "productionGuard", productionGuard);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "piShipmentGuard", shipmentGuard);
+        var vehicle = new VehicleView();
+        vehicle.setId(20L); vehicle.setStatus(2); vehicle.setModelId(10L); vehicle.setFrameSn("FRAME-20");
+        var order = new SalesOrderView();
+        order.setId(2L); order.setCustomerId(1L); order.setModelId(10L);
+        order.setStatus("CONFIRMED"); order.setOrderQty(1); order.setShippedQty(0);
+        Mockito.when(stockMapper.selectVehicleByQrForUpdate("QR-20")).thenReturn(vehicle);
+        Mockito.when(orderMapper.selectById(2L)).thenReturn(order);
+
+        var manager = new ValidationTransactionManager();
+        var required = new org.springframework.transaction.support.DefaultTransactionDefinition();
+        required.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_MANDATORY);
+        var mandatory = new org.springframework.transaction.support.TransactionTemplate(manager, required);
+        Mockito.doAnswer(invocation -> mandatory.execute(status -> {
+            assertThat(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()).isTrue();
+            return null;
+        })).when(productionGuard).lock();
+        Mockito.when(shipmentGuard.requireReleased(order)).thenAnswer(invocation -> mandatory.execute(status -> null));
+        var factory = new org.springframework.aop.framework.ProxyFactory(service);
+        factory.addAdvice(new org.springframework.transaction.interceptor.TransactionInterceptor(manager,
+                new org.springframework.transaction.annotation.AnnotationTransactionAttributeSource()));
+        var transactionalService = (StockService) factory.getProxy();
+
+        assertThat(transactionalService.validateStockOut(new StockValidationRequest("QR-20", 1L, 2L)).valid()).isTrue();
+        var sequence = Mockito.inOrder(productionGuard, stockMapper, shipmentGuard);
+        sequence.verify(productionGuard).lock();
+        sequence.verify(stockMapper).selectVehicleByQrForUpdate("QR-20");
+        sequence.verify(shipmentGuard).requireReleased(order);
+        Mockito.verify(stockMapper, Mockito.never()).updateVehicleStockOut(Mockito.anyLong(), Mockito.anyLong(), Mockito.anyLong());
+        assertThat(manager.commits).isEqualTo(1);
+        assertThat(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+    }
+
+    private static class ValidationTransactionManager extends org.springframework.transaction.support.AbstractPlatformTransactionManager {
+        private final java.util.concurrent.atomic.AtomicBoolean active = new java.util.concurrent.atomic.AtomicBoolean();
+        private int commits;
+        @Override protected Object doGetTransaction() { return active; }
+        @Override protected boolean isExistingTransaction(Object transaction) { return active.get(); }
+        @Override protected void doBegin(Object transaction, org.springframework.transaction.TransactionDefinition definition) { active.set(true); }
+        @Override protected void doCommit(org.springframework.transaction.support.DefaultTransactionStatus status) { commits++; }
+        @Override protected void doRollback(org.springframework.transaction.support.DefaultTransactionStatus status) { }
+        @Override protected void doCleanupAfterCompletion(Object transaction) { active.set(false); }
+    }
+
     @org.junit.jupiter.api.BeforeEach
     void setAuthenticatedAdmin() {
         org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(

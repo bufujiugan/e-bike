@@ -37,9 +37,12 @@ public class StockServiceImpl implements StockService {
         return new StockValidationResult(vehicle.getStatus() != null && vehicle.getStatus() == 1, vehicle.getFrameSn(), vehicle.getStatus(), vehicle.getStatus() != null && vehicle.getStatus() == 1 ? "可办理入库" : "只有组装完成的整车才能入库");
     }
 
-    @Override public StockValidationResult validateStockOut(StockValidationRequest request) {
+    @Override @Transactional
+    public StockValidationResult validateStockOut(StockValidationRequest request) {
         CurrentOperator.requirePermission("STOCK_OUT_OPERATE");
         CurrentOperator.requireWorkstation("STOCK_OUT");
+        // PI 履约一致性检查要求已有事务；与正式出库采用相同的锁顺序，避免扫码校验和出库互相等待。
+        if (productionGuard != null) productionGuard.lock();
         VehicleView vehicle = stockMapper.selectVehicleByQrForUpdate(request.vehicleQrCode().trim());
         if (vehicle == null) return new StockValidationResult(false, null, null, "整车不存在");
         if (productionGuard != null) productionGuard.requireVehicleReleased(vehicle.getId());
