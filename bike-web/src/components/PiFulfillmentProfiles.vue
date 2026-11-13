@@ -6,8 +6,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
 import { fulfillmentApi, type FulfillmentProfile, type FulfillmentProfileDraft } from '../fulfillment-api'
 import { piApi, type PiTemplate } from '../pi-api'
-const props = defineProps<{ canManage: boolean }>()
-const emit = defineEmits<{ changed: [] }>()
+const props = defineProps<{ canManage: boolean; seedProfileId?: number; seedWarehouseId?: number; seedTradeType?: string; autoOpen?: boolean }>()
+const emit = defineEmits<{ changed: []; published: [profile: FulfillmentProfile] }>()
 const rows = ref<FulfillmentProfile[]>([]), busy = ref(false), error = ref(''), editing = ref(false)
 const templates = ref<PiTemplate[]>([]), warehouses = ref<{ id: number; name: string }[]>([])
 const empty = (): FulfillmentProfileDraft => ({ profileCode: '', version: '', name: '', tradeType: 'EXPORT', collectionEntity: '', templateCode: '', templateVersion: '', reason: '', rules: { paymentMode: 'PREPAY', deliveryMode: 'SELLER_TRANSPORT', viaForwarderWarehouse: false, salesContractRequired: true, purchaseContractRequired: false, dispatchSheetRequired: true, preparationRequired: true, settlementRequired: true, requiredDocuments: [], warehouseIds: [] } })
@@ -15,14 +15,29 @@ const draft = reactive(empty())
 const flags = [['salesContractRequired', '要求销售合同'], ['purchaseContractRequired', '要求购销合同'], ['dispatchSheetRequired', '要求同步出货表'], ['preparationRequired', '要求确认备货'], ['settlementRequired', '要求款项结清后结案']] as const
 const message = (e: unknown) => api.isAxiosError(e) ? e.response?.data?.message || '操作失败，请重试' : e instanceof Error ? e.message : '操作失败，请重试'
 async function load() { busy.value = true; error.value = ''; try { rows.value = await fulfillmentApi.list() } catch(e) { error.value = message(e) } finally { busy.value = false } }
+async function loadReferenceData() {
+  warehouses.value = await piApi.warehouseOptions()
+  if (!props.canManage) return
+  const all: PiTemplate[] = []; let page = 1
+  while (true) { const result = await piApi.templates(undefined, page++); all.push(...result.records); if (all.length >= result.total || !result.records.length) break }
+  templates.value = all.filter(t => isSelectablePiLayout(t.layoutCode))
+}
+function fillDraft(source?: FulfillmentProfile) {
+  const next = source ? {
+    profileCode: source.profileCode, version: '', name: source.name, tradeType: source.tradeType,
+    collectionEntity: source.collectionEntity, templateCode: source.templateCode, templateVersion: source.templateVersion,
+    reason: '', rules: structuredClone(toRaw(source.rules)),
+  } : { ...empty(), tradeType: props.seedTradeType || 'EXPORT' }
+  const warehouseId = props.seedWarehouseId
+  if (warehouseId && !next.rules.warehouseIds.includes(warehouseId)) next.rules.warehouseIds.push(warehouseId)
+  Object.assign(draft, next)
+}
 async function begin(source?: FulfillmentProfile) {
-  Object.assign(draft, source ? { ...structuredClone(toRaw(source)), version: '', reason: '' } : empty()); editing.value = true
+  if (!props.canManage) return
   busy.value = true; error.value = ''
   try {
-    const options = await piApi.options(); warehouses.value = options.warehouses || []
-    const all: PiTemplate[] = []; let page = 1
-    while (true) { const result = await piApi.templates(undefined, page++); all.push(...result.records); if (all.length >= result.total || !result.records.length) break }
-    templates.value = all.filter(t => isSelectablePiLayout(t.layoutCode))
+    if (!warehouses.value.length || !templates.value.length) await loadReferenceData()
+    fillDraft(source); editing.value = true
   } catch(e) { error.value = message(e) } finally { busy.value = false }
 }
 function selectTemplate(identity: string) {
@@ -31,7 +46,7 @@ function selectTemplate(identity: string) {
 }
 async function publish() {
   busy.value = true; error.value = ''
-  try { await fulfillmentApi.publish(draft); editing.value=false; await load(); emit('changed'); ElMessage.success('配置版本已发布') } catch(e) { error.value=message(e) } finally { busy.value=false }
+  try { const published = await fulfillmentApi.publish(draft); editing.value=false; await load(); emit('published', published); ElMessage.success('配置版本已发布') } catch(e) { error.value=message(e) } finally { busy.value=false }
 }
 async function availability(row: FulfillmentProfile) {
   try {
@@ -39,7 +54,15 @@ async function availability(row: FulfillmentProfile) {
     await fulfillmentApi.availability(row.id, !row.enabled, value); await load(); emit('changed')
   } catch(e) { if(e!=='cancel' && e!=='close') error.value=message(e) }
 }
-onMounted(load)
+function warehouseNames(row: FulfillmentProfile) {
+  if (!row.rules.warehouseIds.length) return '全部已启用仓库'
+  return row.rules.warehouseIds.map(id => warehouses.value.find(item => item.id === id)?.name || `仓库 ${id}`).join('、')
+}
+onMounted(async () => {
+  await load()
+  try { await loadReferenceData() } catch(e) { error.value = message(e) }
+  if (props.autoOpen && props.canManage) await begin(rows.value.find(row => row.id === props.seedProfileId))
+})
 </script>
 <template>
   <section v-loading="busy" class="fulfillment-profiles">
@@ -52,7 +75,7 @@ onMounted(load)
       <el-table-column label="付款 / 交付" min-width="200"><template #default="{row}">{{ row.rules.paymentMode === 'CREDIT' ? '后付款（须授权）' : '预付' }} · {{ row.rules.deliveryMode === 'CUSTOMER_PICKUP' ? '客户货代提货' : '我方安排运输' }}</template></el-table-column>
       <el-table-column prop="collectionEntity" label="收款主体" min-width="150" />
       <el-table-column label="状态" width="80"><template #default="{row}">{{ row.enabled ? '启用' : '停用' }}</template></el-table-column>
-      <el-table-column type="expand"><template #default="{row}"><p>模板：{{ row.templateCode }} · {{ row.templateVersion }}；适用仓库：{{ row.rules.warehouseIds.length ? row.rules.warehouseIds.join('、') : '全部已启用仓库' }}；所需单据：{{ row.rules.requiredDocuments.join('、') || '无额外单据' }}</p><p>{{ flags.filter(([key]) => row.rules[key]).map(([,label]) => label).join('；') }}{{ row.rules.viaForwarderWarehouse ? '；需送货代仓' : '' }}</p></template></el-table-column>
+      <el-table-column type="expand"><template #default="{row}"><p>模板：{{ row.templateCode }} · {{ row.templateVersion }}；适用仓库：{{ warehouseNames(row) }}；所需单据：{{ row.rules.requiredDocuments.join('、') || '无额外单据' }}</p><p>{{ flags.filter(([key]) => row.rules[key]).map(([,label]) => label).join('；') }}{{ row.rules.viaForwarderWarehouse ? '；需送货代仓' : '' }}</p></template></el-table-column>
       <el-table-column v-if="canManage" label="操作" width="170"><template #default="{row}"><el-button link @click="begin(row)">复制新版本</el-button><el-button link @click="availability(row)">{{ row.enabled ? '停用' : '启用' }}</el-button></template></el-table-column>
     </el-table>
     <el-dialog v-model="editing" title="发布履约配置版本" width="min(780px,95vw)" append-to-body :close-on-click-modal="false">

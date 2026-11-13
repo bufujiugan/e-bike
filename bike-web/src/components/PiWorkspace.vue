@@ -36,32 +36,44 @@ const canRead = computed(() => !isPda.value && (!props.europe || internal.value)
 const canWrite = computed(() => allowed('PI_WRITE'))
 const canManageTemplates = computed(() => allowed('PI_TEMPLATE_MANAGE'))
 const templateVisible = ref(false), profilesVisible = ref(false)
-const fulfillmentProfiles = ref<FulfillmentProfile[]>([]), profilesError = ref('')
+const fulfillmentProfiles = ref<FulfillmentProfile[]>([]), profilesError = ref(''), profilesLoading = ref(false)
+const profileDialogSeedId = ref<number>(), profileDialogWarehouseId = ref<number>(), profileDialogTradeType = ref<string>(), profileDialogAutoOpen = ref(false)
+const profileRepairSeedId = ref<number>()
 const requiresProfile = computed(() => editingId.value == null || Boolean(detail.value?.document?.business?.fulfillmentProfileId))
 const draftProfile = computed(() => fulfillmentProfiles.value.find(p => p.id === draft.document.business?.fulfillmentProfileId))
 const detailProfile = computed(() => fulfillmentProfiles.value.find(p => p.id === detail.value?.document?.business?.fulfillmentProfileId))
 let profileSelectionVersion = 0
 async function loadProfiles() {
   if (!internal.value) return
-  profilesError.value = ''
+  profilesLoading.value = true; profilesError.value = ''
   try { fulfillmentProfiles.value = await fulfillmentApi.list() } catch(e) { profilesError.value = message(e, '履约配置加载失败，请重试') }
+  finally { profilesLoading.value = false }
+}
+function profileSupportsWarehouse(profile: FulfillmentProfile, warehouseId?: number | null) {
+  return Boolean(warehouseId) && (!profile.rules.warehouseIds.length || profile.rules.warehouseIds.includes(warehouseId!))
 }
 async function chooseProfile(id?: number) {
   const selectionVersion = ++profileSelectionVersion, sessionId = localDraftId
   if (!draft.document.business) return
   const profile = fulfillmentProfiles.value.find(p => p.id === id)
   if (!profile) { draft.document.business.fulfillmentProfileId = null; draft.document.business.paymentDueDate = null; draft.document.business.collectionEntity = draft.tradeType === 'EXPORT' ? 'HONG_KONG' : 'GUANGTA'; return }
+  const warehouseId = draft.document.business.warehouseId
+  if (!warehouseId || profile.tradeType !== draft.tradeType || !profileSupportsWarehouse(profile, warehouseId)) {
+    profileRepairSeedId.value = profile.id
+    draft.document.business.fulfillmentProfileId = null
+    createError.value = !warehouseId ? '请先选择出库仓库，再选择适用于该仓库的履约配置' : '该履约配置不适用于当前贸易类型或出库仓库，请选择兼容版本'
+    return
+  }
   optionsBusy.value = true; createError.value = ''
   try {
     let page = 1, found: PiTemplate | undefined
     while (!found) { const result = await piApi.templates(profile.tradeType, page++); found = result.records.find(t => t.templateCode === profile.templateCode && t.templateVersion === profile.templateVersion); if (found || !result.records.length || (page - 1) * 20 >= result.total) break }
     if (selectionVersion !== profileSelectionVersion || sessionId !== localDraftId || !createVisible.value) return
     if (!found) throw new Error('配置对应的模板未找到，请核对配置')
-    draft.tradeType = profile.tradeType
     draft.document.business.fulfillmentProfileId = id
     draft.document.business.collectionEntity = profile.collectionEntity
-    if (profile.rules.warehouseIds.length === 1) draft.document.business.warehouseId = profile.rules.warehouseIds[0]!
     if (profile.rules.paymentMode === 'CREDIT') draft.depositRequiredAmount = '0.00'
+    profileRepairSeedId.value = undefined
     chooseTemplate(found)
   } catch(e) { if (selectionVersion === profileSelectionVersion && sessionId === localDraftId && createVisible.value) { createError.value = message(e, '选用配置失败'); draft.document.business.fulfillmentProfileId = null } }
   finally { if (selectionVersion === profileSelectionVersion && sessionId === localDraftId) optionsBusy.value = false }
@@ -113,9 +125,54 @@ function selectEuropeWarehouse() {
   rows.value = []; total.value = 0
   refreshLocalDrafts(); search()
 }
+const selectedWarehouseId = computed(() => draft.document.business?.warehouseId)
+const selectedWarehouse = computed(() => options.value.warehouses?.find(warehouse => warehouse.id === selectedWarehouseId.value))
 const selectableProfiles = computed(() => fulfillmentProfiles.value.filter(profile =>
   (profile.enabled || profile.id === draft.document.business?.fulfillmentProfileId) &&
-  (!props.europe || !profile.rules.warehouseIds.length || profile.rules.warehouseIds.includes(europeWarehouseId.value!))))
+  profile.tradeType === draft.tradeType && profileSupportsWarehouse(profile, selectedWarehouseId.value)))
+const showProfileGap = computed(() => Boolean(
+  requiresProfile.value && selectedWarehouseId.value && !editingRevision.value &&
+  !profilesLoading.value && !profilesError.value && !selectableProfiles.value.length))
+const profileRepairSource = computed(() => fulfillmentProfiles.value.find(profile => profile.id === profileRepairSeedId.value && profile.tradeType === draft.tradeType)
+  || (draftProfile.value?.tradeType === draft.tradeType ? draftProfile.value : undefined)
+  || fulfillmentProfiles.value.find(profile => profile.enabled && profile.tradeType === draft.tradeType))
+function changeWarehouse(warehouseId?: number) {
+  if (!draft.document.business) return
+  const profile = draftProfile.value
+  if (!warehouseId || profile && !profileSupportsWarehouse(profile, warehouseId)) {
+    if (profile) profileRepairSeedId.value = profile.id
+    draft.document.business.fulfillmentProfileId = null
+    draft.document.business.paymentDueDate = null
+    draft.document.business.collectionEntity = draft.tradeType === 'EXPORT' ? 'HONG_KONG' : 'GUANGTA'
+    if (profile && warehouseId) ElMessage.warning('仓库已切换，原履约配置不适用，已清除；请选用或发布适用当前仓库的版本')
+  }
+}
+function openProfiles() {
+  profileDialogSeedId.value = undefined; profileDialogWarehouseId.value = undefined
+  profileDialogTradeType.value = undefined; profileDialogAutoOpen.value = false; profilesVisible.value = true
+}
+function openProfileRepair() {
+  profileDialogSeedId.value = profileRepairSource.value?.id
+  profileDialogWarehouseId.value = selectedWarehouseId.value ?? undefined
+  profileDialogTradeType.value = draft.tradeType
+  profileDialogAutoOpen.value = true
+  profilesVisible.value = true
+}
+function resetProfileDialogContext() {
+  profileDialogSeedId.value = undefined; profileDialogWarehouseId.value = undefined
+  profileDialogTradeType.value = undefined; profileDialogAutoOpen.value = false
+}
+async function handleProfilePublished(profile: FulfillmentProfile) {
+  await loadProfiles()
+  const warehouseId = selectedWarehouseId.value
+  if (createVisible.value && warehouseId && profile.tradeType === draft.tradeType && profileSupportsWarehouse(profile, warehouseId)) {
+    await chooseProfile(profile.id)
+    if (draft.document.business?.fulfillmentProfileId === profile.id) {
+      profilesVisible.value = false
+      ElMessage.success('新履约配置已带入当前 PI 草稿，可以继续开单')
+    }
+  }
+}
 const reportRefresh = ref(0), exportBusy = ref(false)
 const showFinance = computed(() => canPay.value || canRelease.value || canReversePayment.value)
 const rows = ref<PiView[]>([]), total = ref(0), page = ref(1), pageSize = ref(20)
@@ -184,6 +241,7 @@ function refreshLocalDrafts() {
 function beginLocalDraft() {
   localDraftId = createUuid(); localDraftOwner = props.context?.username || ''
   activeLocalDraft = null; lastLocalContent = ''; localSavedAt.value = ''; localSaveError.value = ''
+  profileRepairSeedId.value = undefined
   baseUpdatedAt = editingId.value == null ? null : detail.value?.updatedAt ?? null
 }
 function localDraftContent(): PiLocalDraftContent {
@@ -318,8 +376,10 @@ function resetDraftWizard() {
 function changeTradeType() {
   // 模板与贸易类型绑定；保留客户、商品和条款，只清除不能继续使用的受控资料。
   const hadTemplate = Boolean(draft.document.templateCode)
+  const previousProfileId = draft.document.business?.fulfillmentProfileId ?? undefined
   for (const key of fixedDocumentFields) Object.assign(draft.document, { [key]: '' })
   if (draft.document.business) { draft.document.business.collectionEntity = draft.tradeType === 'EXPORT' ? 'HONG_KONG' : 'GUANGTA'; draft.document.business.fulfillmentProfileId = null }
+  profileRepairSeedId.value = previousProfileId
   if (hadTemplate) ElMessage.info('贸易类型已切换，请在第二步重新选用匹配模板')
 }
 watch(templateVisible, (visible, previous) => { if (previous && !visible && createVisible.value) templateRefreshKey.value++ })
@@ -333,11 +393,12 @@ function stepIssue(step: number): { step: number; field: string; message: string
   const issue = (field: string, message: string) => ({ step, field, message })
   if (step === 0) {
     if (optionsError.value) return issue('options', '基础资料尚未加载成功，请重试')
-    if (requiresProfile.value && !draft.document.business?.fulfillmentProfileId) return issue('fulfillmentProfile', '请选择已发布的履约配置；新单不能沿用历史规则')
     if (!draft.document.business?.warehouseId) return issue('warehouse', '请先选择出库仓库，不同仓库分别建立 PI')
+    if (requiresProfile.value && !draft.document.business?.fulfillmentProfileId) return issue('fulfillmentProfile', selectableProfiles.value.length ? '请选择适用于当前仓库和贸易类型的履约配置' : '当前仓库没有可用履约配置，请先发布适用版本')
     if (draft.document.business.fulfillmentProfileId && !draftProfile.value) return issue('fulfillmentProfile', '请先成功加载本单履约配置')
+    if (draftProfile.value && draftProfile.value.tradeType !== draft.tradeType) return issue('fulfillmentProfile', '当前履约配置与贸易类型不一致，请重新选择适用版本')
     if (draftProfile.value?.rules.paymentMode === 'CREDIT' && !draft.document.business.paymentDueDate) return issue('paymentDueDate', '后付款订单须填写付款到期日')
-    if (draftProfile.value?.rules.warehouseIds.length && !draftProfile.value.rules.warehouseIds.includes(draft.document.business.warehouseId)) return issue('warehouse', '所选仓库不适用此履约配置')
+    if (draftProfile.value && !profileSupportsWarehouse(draftProfile.value, draft.document.business.warehouseId)) return issue('fulfillmentProfile', '当前履约配置不适用于所选仓库，请选择或发布兼容版本')
     if (draft.document.business.domesticShipment == null) return issue('warehouse', '请明确是否从国内出货')
     if (!draft.customerId) return issue('customer', '请先选择客户')
     if (!fromLocks.value && !hasBoundOrders.value) {
@@ -861,10 +922,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <el-dialog v-model="profilesVisible" title="统一履约配置" width="min(1100px,96vw)" append-to-body destroy-on-close><PiFulfillmentProfiles v-if="profilesVisible" :can-manage="canManageTemplates" @changed="loadProfiles" /></el-dialog>
+  <el-dialog v-model="profilesVisible" title="统一履约配置" width="min(1100px,96vw)" append-to-body destroy-on-close @closed="resetProfileDialogContext"><PiFulfillmentProfiles v-if="profilesVisible" :can-manage="canManageTemplates" :seed-profile-id="profileDialogSeedId" :seed-warehouse-id="profileDialogWarehouseId" :seed-trade-type="profileDialogTradeType" :auto-open="profileDialogAutoOpen" @changed="loadProfiles" @published="handleProfilePublished" /></el-dialog>
   <el-dialog v-model="templateVisible" title="PI模板与银行资料" width="min(1100px, 94vw)" append-to-body destroy-on-close>
     <el-alert v-if="createVisible && draftProfile" type="info" :closable="false" title="当前单据的模板由履约配置指定。调整模板后，请在履约配置中复制新版本并选用新模板，再回到单据重新选择配置。">
-      <el-button v-if="canManageTemplates" text type="primary" @click="templateVisible = false; profilesVisible = true">调整履约配置</el-button>
+      <el-button v-if="canManageTemplates" text type="primary" @click="templateVisible = false; openProfiles()">调整履约配置</el-button>
     </el-alert>
     <PiTemplates v-if="templateVisible" :can-manage="canManageTemplates" :trade-type="createVisible ? draft.tradeType : undefined" :selectable="createVisible && !draftProfile && !actionBusy" @select="chooseTemplate($event); templateVisible = false" />
   </el-dialog>
@@ -883,7 +944,7 @@ onBeforeUnmount(() => {
         <el-alert v-if="europeWarehouse && !canCreateInScope" title="该仓库已停用，仅可查看历史订单；新建 PI 请选用启用仓库。" type="warning" :closable="false" />
       </section>
       <PiBusinessDashboard v-if="internal && !europe" :refresh="reportRefresh" @open-pi="id => openDetail({ id })" />
-      <form class="pi-filters list-toolbar" @submit.prevent="search"><el-input v-model="keyword" aria-label="搜索PI、客户、SKU、订单、出库单或物流单号" placeholder="PI / 客户 / SKU / 订单 / 出库单 / 物流单号" clearable /><el-select v-model="status" aria-label="PI 状态" clearable placeholder="全部状态"><el-option v-for="s in states" :key="s" :value="s" :label="stateNames[s]" /></el-select><el-button native-type="submit" type="primary" :loading="busy" :disabled="!europeScopeReady">查询</el-button><el-button @click="keyword = ''; status = ''; search()">重置</el-button><el-button v-if="canExport" :loading="exportBusy" :disabled="!europeScopeReady" @click="exportList">导出当前查询全部 PI</el-button><el-button v-if="internal" @click="profilesVisible = true">履约配置</el-button><el-button v-if="canManageTemplates" @click="templateVisible = true">模板与银行资料</el-button><el-button v-if="canWrite && canManageReservation" :disabled="!canCreateInScope" @click="openConversion">从 SKU 锁定生成 PI</el-button><el-button v-if="canWrite" type="primary" :disabled="!canCreateInScope" @click="openCreate()">新建 PI</el-button></form>
+      <form class="pi-filters list-toolbar" @submit.prevent="search"><el-input v-model="keyword" aria-label="搜索PI、客户、SKU、订单、出库单或物流单号" placeholder="PI / 客户 / SKU / 订单 / 出库单 / 物流单号" clearable /><el-select v-model="status" aria-label="PI 状态" clearable placeholder="全部状态"><el-option v-for="s in states" :key="s" :value="s" :label="stateNames[s]" /></el-select><el-button native-type="submit" type="primary" :loading="busy" :disabled="!europeScopeReady">查询</el-button><el-button @click="keyword = ''; status = ''; search()">重置</el-button><el-button v-if="canExport" :loading="exportBusy" :disabled="!europeScopeReady" @click="exportList">导出当前查询全部 PI</el-button><el-button v-if="internal" @click="openProfiles">履约配置</el-button><el-button v-if="canManageTemplates" @click="templateVisible = true">模板与银行资料</el-button><el-button v-if="canWrite && canManageReservation" :disabled="!canCreateInScope" @click="openConversion">从 SKU 锁定生成 PI</el-button><el-button v-if="canWrite" type="primary" :disabled="!canCreateInScope" @click="openCreate()">新建 PI</el-button></form>
 <el-alert v-if="internal && profilesError" :title="profilesError" type="error" :closable="false"><el-button text @click="loadProfiles">重试加载履约配置</el-button></el-alert>
       <el-alert v-if="canWrite && localDraftError" :title="localDraftError" type="error" :closable="false"><el-button text @click="refreshLocalDrafts">重新读取</el-button></el-alert>
       <section v-if="canWrite && localDrafts.length" class="pi-local-drafts" aria-label="本机草稿">
@@ -932,9 +993,14 @@ onBeforeUnmount(() => {
                 <div class="pi-draft-grid">
                   <el-form-item label="客户" required data-draft-field="customer" :error="fieldError('customer')"><el-select v-model="draft.customerId" aria-label="客户" :loading="customerBusy || optionsBusy" @change="chooseCustomer" :disabled="editingRevision || fixedItems && !fromLocks" filterable placeholder="搜索或选择客户"><el-option v-for="customer in options.customers" :key="customer.id" :value="customer.id" :label="customer.code + ' · ' + customer.name" /></el-select></el-form-item>
                   <div v-if="draft.document.business" class="pi-draft-grid" data-draft-field="warehouse">
-                  <el-form-item label="出库仓库（不同仓库分别开 PI）" required :error="fieldError('warehouse')"><el-select v-model="draft.document.business.warehouseId" :disabled="europe || editingRevision && Boolean(detail?.document?.business)" filterable placeholder="选择本单出库仓库"><el-option v-for="warehouse in options.warehouses || []" :key="warehouse.id" :value="warehouse.id" :label="warehouse.name" /></el-select></el-form-item>
-                  <el-form-item label="履约配置" :required="requiresProfile" data-draft-field="fulfillmentProfile" :error="fieldError('fulfillmentProfile')"><el-select :model-value="draft.document.business.fulfillmentProfileId" :clearable="!requiresProfile" filterable :disabled="editingRevision || optionsBusy" :placeholder="requiresProfile ? '请选择履约配置（必填）' : '历史单据可沿用原规则'" @change="chooseProfile"><el-option v-for="p in selectableProfiles" :key="p.id" :value="p.id" :label="`${p.name} · ${p.version}`" /></el-select></el-form-item>
+                  <el-form-item label="出库仓库（不同仓库分别开 PI）" required :error="fieldError('warehouse')"><el-select v-model="draft.document.business.warehouseId" :disabled="europe || editingRevision && Boolean(detail?.document?.business)" filterable placeholder="先选择实际出库仓库" @change="changeWarehouse"><el-option v-for="warehouse in options.warehouses || []" :key="warehouse.id" :value="warehouse.id" :label="warehouse.name" /></el-select></el-form-item>
+                  <el-form-item label="履约配置" :required="requiresProfile" data-draft-field="fulfillmentProfile" :error="fieldError('fulfillmentProfile')"><el-select :model-value="draft.document.business.fulfillmentProfileId" :clearable="!requiresProfile" filterable :loading="profilesLoading" :disabled="!selectedWarehouseId || editingRevision || optionsBusy || profilesLoading" :placeholder="!selectedWarehouseId ? '请先选择出库仓库' : requiresProfile ? '选择适用于当前仓库和贸易类型的配置' : '历史单据可沿用原规则'" @change="chooseProfile"><el-option v-for="p in selectableProfiles" :key="p.id" :value="p.id" :label="`${p.name} · ${p.version}`" /></el-select></el-form-item>
                   <el-alert v-if="profilesError" :title="profilesError" type="error" :closable="false"><el-button text @click="loadProfiles">重试</el-button></el-alert>
+                  <el-alert v-else-if="showProfileGap" :title="`${selectedWarehouse?.name || '当前仓库'}没有适用于${draft.tradeType === 'EXPORT' ? '外销' : '内销'}的履约配置`" type="warning" :closable="false">
+                    <p>不能继续选用其他仓库的配置。请在当前 PI 内发布覆盖该仓库的新版本，发布后系统会自动带回本草稿。</p>
+                    <el-button v-if="canManageTemplates" type="primary" plain @click="openProfileRepair">基于现有配置发布适用版本</el-button>
+                    <span v-else>请联系有“PI 模板管理”权限的人员发布适用版本。</span>
+                  </el-alert>
                   <el-form-item v-if="draftProfile?.rules.paymentMode === 'CREDIT'" label="付款到期日" required data-draft-field="paymentDueDate" :error="fieldError('paymentDueDate')"><el-date-picker v-model="draft.document.business.paymentDueDate" value-format="YYYY-MM-DD" :disabled="editingRevision" /></el-form-item>
                   <p v-if="draftProfile" class="pi-field-help">{{ draftProfile.rules.paymentMode === 'CREDIT' ? '后付款须逐单授权；真实收款另行登记。' : '按约定收款金额保留库存与放行。' }}交付：{{ draftProfile.rules.deliveryMode === 'CUSTOMER_PICKUP' ? '客户货代提货' : '我方安排运输' }}。所需单据：{{ draftProfile.rules.requiredDocuments.join('、') || '按配置办理' }}。</p>
                   <el-form-item label="是否从国内出货" required><el-select v-model="draft.document.business.domesticShipment" :disabled="europe || editingRevision && Boolean(detail?.document?.business)"><el-option :value="true" :label="draftProfile ? '是（合同要求以履约配置为准）' : '是，须办理 SAVA／银三环购销合同'" /><el-option :value="false" :label="draftProfile ? '否（合同要求以履约配置为准）' : '否，不适用国内购销合同'" /></el-select></el-form-item>

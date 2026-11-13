@@ -48,7 +48,11 @@ class PiFulfillmentProfileTest {
     }
     @Test void warehouseAndDueDateAreEnforced() throws Exception {
         stored(true);var node=json.valueToTree(document());((com.fasterxml.jackson.databind.node.ObjectNode)node.get("business")).put("warehouseId",3);
-        var changed=json.treeToValue(node,PiDocumentSnapshot.class);assertThatThrownBy(()->service.validateSelection(changed,"EXPORT",true)).hasMessageContaining("仓库");
+        var changed=json.treeToValue(node,PiDocumentSnapshot.class);
+        assertThatThrownBy(()->service.validateSelection(changed,"EXPORT",true)).isInstanceOfSatisfying(BusinessException.class,error->{
+            assertThat(error.getCode()).isEqualTo("PI_PROFILE_WAREHOUSE_MISMATCH");
+            assertThat(error).hasMessageContaining("发布覆盖该仓库的新版本");
+        });
         ((com.fasterxml.jackson.databind.node.ObjectNode)node.get("business")).put("warehouseId",2).remove("paymentDueDate");
         var noDate=json.treeToValue(node,PiDocumentSnapshot.class);assertThatThrownBy(()->service.validateSelection(noDate,"EXPORT",true)).hasMessageContaining("到期日");
     }

@@ -67,7 +67,7 @@ public class PiFulfillmentProfileServiceImpl implements PiFulfillmentProfileServ
                 ||!Objects.equals(p.templateCode(),d.templateCode())||!Objects.equals(p.templateVersion(),d.templateVersion()))
             fail("PI_PROFILE_MISMATCH","贸易类型、收款主体和PI模板须与所选配置版本一致");
         if(!p.rules().warehouseIds().isEmpty()&&!p.rules().warehouseIds().contains(d.business().warehouseId()))
-            fail("PI_PROFILE_WAREHOUSE_MISMATCH","出库仓库不在此配置的适用范围");
+            fail("PI_PROFILE_WAREHOUSE_MISMATCH","所选履约配置不适用于当前出库仓库，请选择适用版本，或复制配置并发布覆盖该仓库的新版本");
         if(p.rules().credit()&&d.business().paymentDueDate()==null)fail("PI_PAYMENT_DUE_REQUIRED","后付款订单须明确付款到期日");
     }
     private PiFulfillmentProfile decode(PiFulfillmentProfileMapper.StoredProfile row) {
