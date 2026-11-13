@@ -79,6 +79,53 @@ class PiWorkflowServiceTest {
         when(mapper.selectStepsForUpdate(1L)).thenReturn(rows);
         assertThatThrownBy(()->service.complete(1L,"DOMESTIC_EXPRESS_BOOKED",new PiWorkflowRequest("待安排"))).hasMessageContaining("承运商、单号及运费");
     }
+    @Test void warehouseArrivalStoresTrackingNumberWithoutAttachment() throws Exception {
+        prepareWarehouseArrival();
+        var request=json.readValue("""
+            {"warehouseArrivalDate":"2026-01-01","domesticTrackingNo":"  SF-ARRIVAL-001  "}
+            """,PiWorkflowRequest.class);
+        service.complete(1L,"WAREHOUSE_ARRIVED",request);
+        var saved=org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(mapper).complete(eq(1L),eq(12),any(),any(),saved.capture());
+        var details=json.readValue(saved.getValue(),PiWorkflowDetails.class);
+        assertThat(details.domesticTrackingNo()).isEqualTo("SF-ARRIVAL-001");
+        assertThat(details.warehouseArrivalDate()).isEqualTo(LocalDate.of(2026,1,1));
+        assertThat(details.arrivalProof()).isNull();
+        verify(business,never()).requireArrivalProof(anyLong(),any());
+    }
+    @Test void warehouseArrivalRejectsMissingOrBlankTrackingEvenWithAttachment() throws Exception {
+        prepareWarehouseArrival();
+        for(String trackingNumber:new String[]{null,"","   "}) {
+            var payload=json.createObjectNode().put("warehouseArrivalDate","2026-01-01")
+                .put("domesticTrackingNo",trackingNumber).put("arrivalProof","old-attachment");
+            var request=json.treeToValue(payload,PiWorkflowRequest.class);
+            assertThatThrownBy(()->service.complete(1L,"WAREHOUSE_ARRIVED",request))
+                .isInstanceOfSatisfying(BusinessException.class,error->assertThat(error.getCode()).isEqualTo("PI_WORKFLOW_ARRIVAL_TRACKING_REQUIRED"));
+        }
+        verify(mapper,never()).complete(anyLong(),anyInt(),any(),any(),any());
+    }
+    @Test void warehouseArrivalStillRequiresActualArrivalDate() throws Exception {
+        prepareWarehouseArrival();
+        for(String arrivalDate:new String[]{null,LocalDate.now().plusDays(1).toString()}) {
+            var payload=json.createObjectNode().put("warehouseArrivalDate",arrivalDate).put("domesticTrackingNo","SF-ARRIVAL-001");
+            var request=json.treeToValue(payload,PiWorkflowRequest.class);
+            assertThatThrownBy(()->service.complete(1L,"WAREHOUSE_ARRIVED",request))
+                .isInstanceOfSatisfying(BusinessException.class,error->assertThat(error.getCode()).isEqualTo("PI_WORKFLOW_ARRIVAL_REQUIRED"));
+        }
+        verify(mapper,never()).complete(anyLong(),anyInt(),any(),any(),any());
+    }
+    @Test void historicalWarehouseArrivalWithAttachmentRemainsCompleted() {
+        when(mapper.selectSteps(1L)).thenReturn(List.of(row("WAREHOUSE_ARRIVED","""
+            {"warehouseArrivalDate":"2026-01-01","arrivalProof":"old-attachment"}
+            """)));
+        var arrival=service.get(1L).steps().stream().filter(step->step.code().equals("WAREHOUSE_ARRIVED")).findFirst().orElseThrow();
+        assertThat(arrival.status()).isEqualTo("COMPLETED");
+        assertThat(arrival.details().arrivalProof()).isEqualTo("old-attachment");
+    }
+    private void prepareWarehouseArrival() {
+        paid();when(business.allDispatched(1L)).thenReturn(true);
+        when(mapper.selectStepsForUpdate(1L)).thenReturn(rows("DOCUMENTS_READY","PURCHASE_CONTRACT_READY","FORWARDER_SELECTED","DOMESTIC_EXPRESS_BOOKED"));
+    }
     @Test void receiptRequiresAllBatchesAndExplicitDate() {
         paid();when(business.allDispatched(1L)).thenReturn(true);when(business.allTracked(1L)).thenReturn(true);
         when(mapper.selectStepsForUpdate(1L)).thenReturn(rows("DOCUMENTS_READY","PURCHASE_CONTRACT_READY","FORWARDER_SELECTED","DOMESTIC_EXPRESS_BOOKED","WAREHOUSE_ARRIVED","TRACKING_RECORDED"));

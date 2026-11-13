@@ -104,10 +104,11 @@
 .pi-draft-dialog .pi-footer-actions .el-button--primary span[aria-hidden] { margin-left: 15px; }
 .pi-draft-dialog .pi-draft-error { padding: 10px 13px; margin: 0 0 12px; background: #fff3f2; border: 1px solid #f8dcd8; border-radius: 7px; text-align: left; font-size: 12px; line-height: 1.5; color: #bd5350; }
 .pi-draft-dialog .pi-template-options { display: grid; gap: 10px; }
-.pi-draft-dialog .pi-template-option { display: grid; gap: 8px; width: 100%; text-align: left; border: 1px solid #dfe7f1; border-radius: 8px; padding: 14px; cursor: pointer; background: #fff; color: #5f7088; font: inherit; font-size: 12px; }
+.pi-draft-dialog .pi-template-option { display: grid; gap: 8px; min-width: 0; text-align: left; border: 1px solid #dfe7f1; border-radius: 8px; padding: 14px; background: #fff; color: #5f7088; font: inherit; font-size: 12px; overflow-wrap: anywhere; }
 .pi-draft-dialog .pi-template-option:hover { border-color: #78a3e1; }
 .pi-draft-dialog .pi-template-option.selected { background: #f2f7ff; border-color: #4e8cde; }
-.pi-draft-dialog .pi-template-option:disabled { cursor: not-allowed; opacity: .55; }
+.pi-draft-dialog .pi-template-option-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.pi-draft-dialog .pi-template-option-actions .el-button + .el-button { margin-left: 0; }
 .pi-draft-dialog .pi-template-option-title { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .pi-draft-dialog .pi-template-option-title strong { color: #28466d; }
 .pi-draft-dialog .pi-template-option-title b { margin-left: auto; font-size: 11px; font-weight: 500; color: #3272cb; }

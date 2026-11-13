@@ -162,7 +162,8 @@ public class PiWorkflowServiceImpl implements PiWorkflowService {
         if(step==PiWorkflowStepCode.WAREHOUSE_ARRIVED) {
             if(r==null||r.warehouseArrivalDate()==null||r.warehouseArrivalDate().isAfter(LocalDate.now()))
                 fail("PI_WORKFLOW_ARRIVAL_REQUIRED","请填写实际到达货代仓库日期");
-            business.requireArrivalProof(pi.getId(),r.arrivalProof());
+            if(blank(r.domesticTrackingNo()))
+                fail("PI_WORKFLOW_ARRIVAL_TRACKING_REQUIRED","请填写送达货代仓库的物流单号");
         }
         if(step==PiWorkflowStepCode.TRACKING_RECORDED) {
             if(business==null||!business.allTracked(pi.getId()))fail("PI_WORKFLOW_TRACKING_REQUIRED","请为全部实际出库批次登记发运信息");

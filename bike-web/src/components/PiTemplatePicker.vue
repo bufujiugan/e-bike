@@ -4,8 +4,8 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import api from '../api'
 import { piApi, type PiDocument, type PiTemplate } from '../pi-api'
 
-const props = defineProps<{ tradeType: string; document: PiDocument; canManage: boolean; disabled: boolean; manageDisabled?: boolean; refreshKey: number }>()
-const emit = defineEmits<{ select: [template: PiTemplate]; manage: [] }>()
+const props = defineProps<{ tradeType: string; document: PiDocument; canManage: boolean; disabled: boolean; manageDisabled?: boolean; profileBound?: boolean; refreshKey: number }>()
+const emit = defineEmits<{ select: [template: PiTemplate]; manage: []; adjust: [template: PiTemplate] }>()
 const templates = ref<PiTemplate[]>([]), page = ref(1), total = ref(0), busy = ref(false), error = ref('')
 const hasSelection = computed(() => Boolean(props.document.templateCode && props.document.templateVersion))
 let requestVersion = 0
@@ -36,6 +36,7 @@ function isSelected(template: PiTemplate) {
       <div><h3>单据模板 <span class="pi-required">*</span></h3><p>选一次模板，自动带入卖方与收款银行，无需重复填写。</p></div>
       <div class="pi-inline-actions"><el-button text :loading="busy" :disabled="manageDisabled" @click="load">刷新</el-button><el-button v-if="canManage" text :disabled="manageDisabled" @click="emit('manage')">管理模板</el-button></div>
     </div>
+    <p v-if="profileBound" class="pi-field-help">当前模板由履约配置指定。可直接调整模板；保存新版本后，需在履约配置中选用新模板，再应用到本单。</p>
     <el-alert v-if="error" :title="error" type="error" show-icon :closable="false"><el-button text :disabled="disabled" @click="load">重新加载模板</el-button></el-alert>
     <div v-else-if="!busy && !templates.length" class="pi-template-empty">
       <strong>{{ hasSelection ? '当前查询未返回可替换的模板' : '暂无已发布的' + (tradeType === 'EXPORT' ? '外销' : '内销') + '模板' }}</strong>
@@ -43,10 +44,14 @@ function isSelected(template: PiTemplate) {
       <el-button v-if="canManage" :disabled="manageDisabled" @click="emit('manage')">前往模板管理</el-button><span v-else>请联系模板管理员发布。</span>
     </div>
     <div v-loading="busy" class="pi-template-options" :aria-busy="busy">
-      <button v-for="template in templates" :key="template.id" type="button" class="pi-template-option" :class="{ selected: isSelected(template) }" :aria-pressed="isSelected(template)" :disabled="disabled || busy || !isSelectablePiLayout(template.layoutCode)" @click="emit('select', template)">
-        <span class="pi-template-option-title"><strong>{{ template.templateCode }}</strong><span>{{ template.templateVersion }}</span><b>{{ isSelected(template) ? '已选用' : isSelectablePiLayout(template.layoutCode) ? '选用' : '历史版式 · 不可选用' }}</b></span>
+      <article v-for="template in templates" :key="template.id" class="pi-template-option" :class="{ selected: isSelected(template) }" :aria-label="`${template.templateCode} · ${template.templateVersion}`">
+        <div class="pi-template-option-title"><strong>{{ template.templateCode }}</strong><span>{{ template.templateVersion }}</span><b v-if="isSelected(template)">{{ profileBound ? '配置指定 · 已选用' : '已选用' }}</b><b v-else-if="!isSelectablePiLayout(template.layoutCode)">历史版式 · 不可选用</b></div>
         <small>模板 ID：{{ template.id }}</small><span>{{ template.sellerName }}</span><small>{{ template.bankName }}</small>
-      </button>
+        <div class="pi-template-option-actions">
+          <el-button v-if="canManage" plain type="primary" :disabled="manageDisabled || busy" @click="emit('adjust', template)">调整模板</el-button>
+          <el-button :disabled="disabled || busy || !isSelectablePiLayout(template.layoutCode)" :type="isSelected(template) ? 'primary' : 'default'" :aria-pressed="isSelected(template)" @click="emit('select', template)">{{ isSelected(template) ? '已选用' : '选用模板' }}</el-button>
+        </div>
+      </article>
     </div>
     <el-pagination v-if="total > 20" v-model:current-page="page" :disabled="disabled || busy" :page-size="20" :total="total" layout="prev, pager, next" @current-change="load" />
     <details v-if="hasSelection" class="pi-disclosure pi-template-snapshot">
@@ -63,7 +68,7 @@ function isSelected(template: PiTemplate) {
         <div><dt>收款银行</dt><dd>{{ document.bankName || '未记录' }}</dd></div>
         <div><dt>收款账号</dt><dd>{{ document.bankAccount || '未记录' }}</dd></div>
       </dl>
-      <p class="pi-field-help">如需调整卖方资料或默认银行信息，可在“管理模板”中选择“调整模板”，保存为新版本。</p>
+      <p class="pi-field-help">如需调整卖方资料、默认银行信息或 PI 版式，可点击模板卡片上的“调整模板”，保存为新版本。</p>
     </details>
   </section>
 </template>

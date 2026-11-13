@@ -11,7 +11,7 @@ public enum PiWorkflowStepCode {
     STOCK_DISPATCHED(11, "等待并办理出库"),
     FORWARDER_SELECTED(5, "确认货代责任方及收货信息"),
     DOMESTIC_EXPRESS_BOOKED(6, "登记送仓承运商、单号及运费"),
-    WAREHOUSE_ARRIVED(12, "确认到达货代仓库并保留凭证"),
+    WAREHOUSE_ARRIVED(12, "确认到达货代仓库并登记物流单号"),
     TRACKING_RECORDED(7, "登记货代发货号、费用并跟踪运输"),
     CUSTOMER_RECEIVED(8, "确认全部货物签收，完成订单"),
     PRODUCTION_FOLLOW_UP(4, "生产跟进（可选）"),

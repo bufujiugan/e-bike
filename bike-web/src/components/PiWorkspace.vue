@@ -36,6 +36,12 @@ const canRead = computed(() => !isPda.value && (!props.europe || internal.value)
 const canWrite = computed(() => allowed('PI_WRITE'))
 const canManageTemplates = computed(() => allowed('PI_TEMPLATE_MANAGE'))
 const templateVisible = ref(false), profilesVisible = ref(false)
+const templateAdjustmentSource = ref<PiTemplate>()
+function openTemplates(source?: PiTemplate) {
+  if (!canManageTemplates.value || actionBusy.value) return
+  templateAdjustmentSource.value = source
+  templateVisible.value = true
+}
 const fulfillmentProfiles = ref<FulfillmentProfile[]>([]), profilesError = ref(''), profilesLoading = ref(false)
 const profileDialogSeedId = ref<number>(), profileDialogWarehouseId = ref<number>(), profileDialogTradeType = ref<string>(), profileDialogAutoOpen = ref(false)
 const profileRepairSeedId = ref<number>()
@@ -925,9 +931,9 @@ onBeforeUnmount(() => {
   <el-dialog v-model="profilesVisible" title="统一履约配置" width="min(1100px,96vw)" append-to-body destroy-on-close @closed="resetProfileDialogContext"><PiFulfillmentProfiles v-if="profilesVisible" :can-manage="canManageTemplates" :seed-profile-id="profileDialogSeedId" :seed-warehouse-id="profileDialogWarehouseId" :seed-trade-type="profileDialogTradeType" :auto-open="profileDialogAutoOpen" @changed="loadProfiles" @published="handleProfilePublished" /></el-dialog>
   <el-dialog v-model="templateVisible" title="PI模板与银行资料" width="min(1100px, 94vw)" append-to-body destroy-on-close>
     <el-alert v-if="createVisible && draftProfile" type="info" :closable="false" title="当前单据的模板由履约配置指定。调整模板后，请在履约配置中复制新版本并选用新模板，再回到单据重新选择配置。">
-      <el-button v-if="canManageTemplates" text type="primary" @click="templateVisible = false; openProfiles()">调整履约配置</el-button>
+      <el-button v-if="canManageTemplates" text type="primary" @click="templateVisible = false; openProfileRepair()">调整履约配置</el-button>
     </el-alert>
-    <PiTemplates v-if="templateVisible" :can-manage="canManageTemplates" :trade-type="createVisible ? draft.tradeType : undefined" :selectable="createVisible && !draftProfile && !actionBusy" @select="chooseTemplate($event); templateVisible = false" />
+    <PiTemplates v-if="templateVisible" :can-manage="canManageTemplates" :initial-template="templateAdjustmentSource" :trade-type="createVisible ? draft.tradeType : undefined" :selectable="createVisible && !draftProfile && !actionBusy" @select="chooseTemplate($event); templateVisible = false" />
   </el-dialog>
   <section class="pi-workspace">
     <el-empty v-if="!canRead" description="当前账号没有 PI 查看权限" />
@@ -944,7 +950,7 @@ onBeforeUnmount(() => {
         <el-alert v-if="europeWarehouse && !canCreateInScope" title="该仓库已停用，仅可查看历史订单；新建 PI 请选用启用仓库。" type="warning" :closable="false" />
       </section>
       <PiBusinessDashboard v-if="internal && !europe" :refresh="reportRefresh" @open-pi="id => openDetail({ id })" />
-      <form class="pi-filters list-toolbar" @submit.prevent="search"><el-input v-model="keyword" aria-label="搜索PI、客户、SKU、订单、出库单或物流单号" placeholder="PI / 客户 / SKU / 订单 / 出库单 / 物流单号" clearable /><el-select v-model="status" aria-label="PI 状态" clearable placeholder="全部状态"><el-option v-for="s in states" :key="s" :value="s" :label="stateNames[s]" /></el-select><el-button native-type="submit" type="primary" :loading="busy" :disabled="!europeScopeReady">查询</el-button><el-button @click="keyword = ''; status = ''; search()">重置</el-button><el-button v-if="canExport" :loading="exportBusy" :disabled="!europeScopeReady" @click="exportList">导出当前查询全部 PI</el-button><el-button v-if="internal" @click="openProfiles">履约配置</el-button><el-button v-if="canManageTemplates" @click="templateVisible = true">模板与银行资料</el-button><el-button v-if="canWrite && canManageReservation" :disabled="!canCreateInScope" @click="openConversion">从 SKU 锁定生成 PI</el-button><el-button v-if="canWrite" type="primary" :disabled="!canCreateInScope" @click="openCreate()">新建 PI</el-button></form>
+      <form class="pi-filters list-toolbar" @submit.prevent="search"><el-input v-model="keyword" aria-label="搜索PI、客户、SKU、订单、出库单或物流单号" placeholder="PI / 客户 / SKU / 订单 / 出库单 / 物流单号" clearable /><el-select v-model="status" aria-label="PI 状态" clearable placeholder="全部状态"><el-option v-for="s in states" :key="s" :value="s" :label="stateNames[s]" /></el-select><el-button native-type="submit" type="primary" :loading="busy" :disabled="!europeScopeReady">查询</el-button><el-button @click="keyword = ''; status = ''; search()">重置</el-button><el-button v-if="canExport" :loading="exportBusy" :disabled="!europeScopeReady" @click="exportList">导出当前查询全部 PI</el-button><el-button v-if="internal" @click="openProfiles">履约配置</el-button><el-button v-if="canManageTemplates" @click="openTemplates()">模板与银行资料</el-button><el-button v-if="canWrite && canManageReservation" :disabled="!canCreateInScope" @click="openConversion">从 SKU 锁定生成 PI</el-button><el-button v-if="canWrite" type="primary" :disabled="!canCreateInScope" @click="openCreate()">新建 PI</el-button></form>
 <el-alert v-if="internal && profilesError" :title="profilesError" type="error" :closable="false"><el-button text @click="loadProfiles">重试加载履约配置</el-button></el-alert>
       <el-alert v-if="canWrite && localDraftError" :title="localDraftError" type="error" :closable="false"><el-button text @click="refreshLocalDrafts">重新读取</el-button></el-alert>
       <section v-if="canWrite && localDrafts.length" class="pi-local-drafts" aria-label="本机草稿">
@@ -1060,7 +1066,7 @@ onBeforeUnmount(() => {
             </section>
             <section v-show="draftStep === 1" class="pi-draft-step">
               <div class="pi-step-heading"><span class="pi-eyebrow">STEP 02</span><h2>把交易约定说清楚。</h2><p>模板负责固定资料，你只需填写这笔订单的实际约定。</p></div>
-              <section class="pi-form-card" data-draft-field="template"><PiTemplatePicker :trade-type="draft.tradeType" :document="draft.document" :can-manage="canManageTemplates" :disabled="actionBusy || Boolean(draftProfile)" :manage-disabled="actionBusy" :refresh-key="templateRefreshKey" @select="chooseTemplate" @manage="templateVisible = true" /></section>
+              <section class="pi-form-card" data-draft-field="template"><PiTemplatePicker :trade-type="draft.tradeType" :document="draft.document" :can-manage="canManageTemplates" :disabled="actionBusy || Boolean(draftProfile)" :profile-bound="Boolean(draftProfile)" :manage-disabled="actionBusy" :refresh-key="templateRefreshKey" @select="chooseTemplate" @manage="openTemplates()" @adjust="openTemplates" /></section>
               <section class="pi-form-card" data-draft-field="bank"><div class="pi-section-heading"><h3>收款信息 · {{ draft.document.business?.collectionEntity || '待选择' }}</h3></div><p class="pi-field-help">模板带入账户后可按本单更新；保存为本单快照，已确认单据须通过修订调整。</p><div class="pi-draft-grid"><el-form-item label="收款银行" required><el-input v-model="draft.document.bankName" maxlength="200" /></el-form-item><el-form-item label="收款账户" required><el-input v-model="draft.document.bankAccount" maxlength="200" /></el-form-item><el-form-item label="收款人 / 公司全称" required><el-input v-model="draft.document.beneficiary" maxlength="200" /></el-form-item></div></section>
               <section class="pi-form-card"><div class="pi-section-heading"><div><h3>付款约定</h3><p>收款门槛不会自动填写比例；请按实际约定确认。</p></div></div>
                 <el-form-item label="付款条款" required data-draft-field="paymentTerms" :error="fieldError('paymentTerms')"><el-input v-model="draft.document.paymentTerms" aria-label="付款条款" type="textarea" :rows="3" maxlength="2000" placeholder="填写双方约定的付款方式、时间及条件" /></el-form-item>
