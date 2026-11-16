@@ -1,6 +1,6 @@
 # 欧洲销售三场景与本地实现说明
 
-更新日期：2026-11-16。按客户确认口径，Totem／工厂直签的当地内销和外销都先付款后提货。本说明记录本地实现，未发布到生产。
+更新日期：2026-11-16。按客户确认口径，Totem／工厂直签的当地内销和外销都先付款后提货。已于当日 20:18（Asia/Shanghai）发布生产，版本及验收详见 [部署记录](deployment-europe-sales-20261116.md)。
 
 ## 操作入口
 
@@ -76,6 +76,6 @@ V58 Java 迁移由 `ProductionMigrationConfig` 注册，结构 SQL 位于 `Europ
 - 本地独立 MySQL 库 `bike_europe_migration_test_20261116`：V58 迁移、Flyway 校验、订单读写／版本冲突、关联查询、精确金额、款项补录和重复撤回通过；夹具与流水事务回滚，不写真实业务库。
 - 前端 `vue-tsc --noEmit && vite build` 通过；原 PI 本地草稿 9 项测试通过。
 - Codex 内置浏览器、模拟 API：三入口、无附件推进、直签先款后提货、完整结案、款项补录、撤回同步并保留未保存说明、原操作说明新栏目、390px 页面与表单宽度已检查。
-- 浏览器使用模拟接口，未声称完成真实后端 HTTP 全流程、生产验收或实体 PDA/扫码设备验收。未提交、推送或发布。
+- 开发阶段浏览器使用模拟接口；发布后另完成真实生产入口、直签列表、空白表单与操作说明只读验收，未创建真实业务记录。未进行完整真实收付款／出库流程或实体 PDA/扫码设备验收。
 
 日志位于 `output/europe-sales-backend-final-tests-20261116.log`、`output/europe-sales-mysql-tests-20261116.log`、`output/europe-sales-web-build-20261116.log`。截图在 `output/playwright/europe-*-final-20261116.jpg`；客户确认图为 `output/europe-sales-sequence-20261116-v3/`，第二、第三种已改为先付款后提货。
