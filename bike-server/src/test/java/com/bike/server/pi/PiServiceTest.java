@@ -153,6 +153,18 @@ class PiServiceTest {
         assertThatCode(()->service.create(correct)).doesNotThrowAnyException();
     }
 
+    @Test void factoryLinkedOrderCannotBecomePiDraft() {
+        prepareCreate();
+        var europe=mock(com.bike.server.europe.EuropeSalesMapper.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"europeSales",europe);
+        when(mapper.lockOrder(7L)).thenReturn(7L);
+        when(europe.selectFactoryOrderForSalesOrder(7)).thenReturn(9L);
+        var request=new PiCreateRequest(1L,null,7L,"DOMESTIC","CNY",null,null,null,null,
+                money("0"),money("0"),null,null,List.of(item(10L,1,"100",null,null)));
+        assertCode(()->service.create(request),"PI_FACTORY_ORDER_CONFLICT");
+        verify(mapper,never()).insertItems(anyLong(),any());
+    }
+
     @Test
     void rejectsFractionalCentsNegativeValuesAndMissingDepositBeforeInsert() {
         prepareCreate();

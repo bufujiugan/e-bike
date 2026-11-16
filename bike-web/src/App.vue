@@ -32,6 +32,7 @@ function continueProduction(stage: string, sku: { id: number; skuCode: string; m
 }
 function refreshOrderJourney() { workflowRefreshKey.value++; void loadModule(activeView.value) }
 const PiWorkspace = defineAsyncComponent(() => import('./components/PiWorkspace.vue'))
+const EuropeSalesWorkspace = defineAsyncComponent(() => import('./components/EuropeSalesWorkspace.vue'))
 const AfterSalesWorkspace = defineAsyncComponent(() => import('./components/AfterSalesWorkspace.vue'))
 const CustomerScopeEditor = defineAsyncComponent(() => import('./components/CustomerScopeEditor.vue'))
 const CustomerScopeManager = defineAsyncComponent(() => import('./components/CustomerScopeManager.vue'))
@@ -116,7 +117,7 @@ const navGroups: NavGroup[] = [
     items: [
       { key: 'orders', label: '销售订单', shortLabel: '订单', path: '/orders' },
       { key: 'pis', label: 'PI 与履约', shortLabel: 'PI', path: '/pis' },
-      { key: 'europe-orders', label: '欧洲订单', shortLabel: '欧洲', path: '/europe-orders', icon: 'orders' },
+      { key: 'europe-orders', label: '欧洲销售与交付', shortLabel: '欧洲', path: '/europe-orders', icon: 'orders' },
       { key: 'customers', label: '客户管理', shortLabel: '客户', path: '/master/customers' },
       { key: 'agents', label: '代理商管理', shortLabel: '代理商', path: '/master/agents' },
       { key: 'inventory-locks', label: '客户锁定记录', shortLabel: '锁库', path: '/inventory-locks' },
@@ -1184,7 +1185,8 @@ async function submitPrimaryAction() {
       <ProductionManager v-else-if="productionViewByNavKey[activeView] && !passwordChangeVisible" :key="activeView" :view="productionViewByNavKey[activeView]" :username="username" :context="authContext" @continue="continueProduction" :can-create-task="canCreateProductionTask" @loaded="lastLoadedAt = new Date().toLocaleString()" @navigate="navigate" @order="journeyOrderNo = $event" :can-manage="!isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'PRODUCTION_MANAGE')" :can-operate="hasPermission(authContext, 'ASSEMBLY_OPERATE')" :can-report-issue="hasAnyPermission(authContext, ['ASSEMBLY_OPERATE','REWORK_OPERATE'])" />
       <TraceQuery v-else-if="activeView === 'trace' && !passwordChangeVisible" />
       <SkuInventoryPanel v-else-if="activeView === 'sku-inventory' && !passwordChangeVisible" :context="authContext" @navigate="navigate" @convert="changeInventoryLock([$event], 'convert')" />
-      <PiWorkspace v-else-if="['pis', 'europe-orders'].includes(activeView) && !passwordChangeVisible" :key="activeView" :context="authContext" :europe="activeView === 'europe-orders'" @navigate="navigate" />
+      <EuropeSalesWorkspace v-else-if="activeView === 'europe-orders' && !passwordChangeVisible" :context="authContext" @navigate="navigate" />
+      <PiWorkspace v-else-if="activeView === 'pis' && !passwordChangeVisible" :context="authContext" @navigate="navigate" />
       <CustomerScopeManager v-else-if="activeView === 'customer-scopes' && !passwordChangeVisible && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'CUSTOMER_SCOPE_MANAGE')" />
       <FileReviewManager v-else-if="activeView === 'file-reviews' && !passwordChangeVisible && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'FILE_REVIEW_MANAGE')" />
       <AfterSalesWorkspace v-else-if="activeView === 'after-sales' && !passwordChangeVisible" :auth-context="authContext" />

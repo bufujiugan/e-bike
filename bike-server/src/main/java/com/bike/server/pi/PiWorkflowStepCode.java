@@ -15,7 +15,7 @@ public enum PiWorkflowStepCode {
     TRACKING_RECORDED(7, "登记货代发货号、费用并跟踪运输"),
     CUSTOMER_RECEIVED(8, "确认全部货物签收，完成订单"),
     PRODUCTION_FOLLOW_UP(4, "生产跟进（可选）"),
-    CREDIT_APPROVED(13, "批准后付款及库存保留"),
+    CREDIT_APPROVED(13, "批准客户收到货后付款及库存保留"),
     DISPATCH_SHEET_SENT(14, "同步出货表并登记接收情况"),
     GOODS_PREPARED(15, "确认备货完成"),
     CI_SENT(16, "登记 CI 已发送"),

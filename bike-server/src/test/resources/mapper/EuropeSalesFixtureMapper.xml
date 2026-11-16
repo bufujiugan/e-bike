@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="europeSalesFixture">
+  <update id="createDatabase">CREATE DATABASE IF NOT EXISTS bike_europe_migration_test_20261116 CHARACTER SET utf8mb4</update>
+  <insert id="customer">INSERT INTO bike_customer(id,customer_code,customer_name) VALUES(980001,'EUROPE_QA','欧洲验收客户')</insert>
+  <insert id="model">INSERT INTO bike_product_model(id,model_code,model_name) VALUES(980001,'EUROPE_QA','测试车型')</insert>
+  <insert id="order">INSERT INTO bike_sales_order(id,order_no,customer_id) VALUES(980001,'EUROPE_SO_QA',980001)</insert>
+  <insert id="item">INSERT INTO bike_sales_order_item(order_id,product_model_id,ordered_qty,shipped_qty) VALUES(980001,980001,2,0)</insert>
+</mapper>

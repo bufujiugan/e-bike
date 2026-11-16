@@ -62,6 +62,7 @@ public class PiBusinessServiceImpl implements PiBusinessService {
         return null;
     }
     public void requireDocuments(long piId) {
+        if(PiManualWorkflow.enabled(document(piId))) return;
         var d=step(piId,"DOCUMENTS_READY");
         var p=profile(document(piId));
         if(d==null||((p==null||p.rules().salesContractRequired())&&(blank(d.contractNo())||!Boolean.TRUE.equals(d.contractReady())))||!Boolean.TRUE.equals(d.paymentTableReady()))
@@ -69,6 +70,7 @@ public class PiBusinessServiceImpl implements PiBusinessService {
     }
     public void requireContract(long piId) {
         var pi=pis.selectById(piId);var d=document(piId);validateTerms(d,pi.getTradeType());requireDocuments(piId);
+        if(PiManualWorkflow.enabled(d)) return;
         var p=profile(d);
         if(p==null?Boolean.TRUE.equals(d.business().domesticShipment()):p.rules().purchaseContractRequired()) {
             var contract=step(piId,"PURCHASE_CONTRACT_READY");
@@ -79,7 +81,7 @@ public class PiBusinessServiceImpl implements PiBusinessService {
     @Transactional(propagation=Propagation.MANDATORY)
     public boolean reserveAfterPayment(PiView pi,BigDecimal paid) {
         var d=document(pi.getId());
-        boolean credit=creditApproved(pi.getId(),d);
+        boolean credit=PiManualWorkflow.enabled(d)||creditApproved(pi.getId(),d);
         if(profile(d)!=null&&profile(d).rules().credit()&&!credit)return false;
         if(!credit&&(d==null||d.business()==null||pi.getDepositRequiredAmount()==null||paid==null||paid.signum()<=0||paid.compareTo(pi.getDepositRequiredAmount())<0))return false;
         validateTerms(d,pi.getTradeType());
@@ -140,7 +142,7 @@ public class PiBusinessServiceImpl implements PiBusinessService {
         var lines=series.fulfillment(pi.getId());
         var document = document(pi.getId());
         return document != null && document.business() != null && document.business().warehouseId() != null
-                && (creditApproved(pi.getId(),document) || pi.getPaidAmount() != null && pi.getPaidAmount().signum() > 0 && pi.getDepositRequiredAmount() != null
+                && (PiManualWorkflow.enabled(document) || creditApproved(pi.getId(),document) || pi.getPaidAmount() != null && pi.getPaidAmount().signum() > 0 && pi.getDepositRequiredAmount() != null
                 && pi.getPaidAmount().compareTo(pi.getDepositRequiredAmount()) >= 0)
                 && !lines.isEmpty() && matchesFulfillment(pis.selectItems(pi.getId()), lines)
                 && lines.stream().allMatch(l -> l.remainingQty() == 0
@@ -179,10 +181,11 @@ public class PiBusinessServiceImpl implements PiBusinessService {
         requireContract(piId);var pi=pis.selectById(piId);
         if (orderBinding != null) orderBinding.requireConsistentFulfillment(pi);
         requirePaymentAuthorization(piId);
-        if (mapper.countPaymentsWithoutReceipt(piId) > 0)
+        boolean manual=PiManualWorkflow.enabled(document(piId));
+        if (!manual && mapper.countPaymentsWithoutReceipt(piId) > 0)
             fail("PI_RECEIPT_REQUIRED", "请为已确认收款上传收款凭证后再放行出库");
         var profile=profile(document(piId));
-        if(profile!=null) {
+        if(profile!=null && !manual) {
             if(profile.rules().dispatchSheetRequired()&&step(piId,"DISPATCH_SHEET_SENT")==null)fail("PI_PREPARATION_REQUIRED","请先同步出货表");
             if(profile.rules().preparationRequired()&&step(piId,"GOODS_PREPARED")==null)fail("PI_PREPARATION_REQUIRED","请先确认备货完成");
             if(step(piId,"FORWARDER_SELECTED")==null)fail("PI_DELIVERY_REQUIRED","请先确认提货或运输安排");
@@ -191,6 +194,7 @@ public class PiBusinessServiceImpl implements PiBusinessService {
     }
     public void requirePaymentAuthorization(long piId) {
         var document=document(piId);var configured=profile(document);
+        if(PiManualWorkflow.enabled(document)) return;
         if(configured!=null&&configured.rules().credit()&&!creditApproved(piId,document))
             fail("PI_CREDIT_APPROVAL_REQUIRED","后付款订单须先完成本修订的授权");
     }

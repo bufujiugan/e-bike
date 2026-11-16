@@ -4,10 +4,11 @@ import { hasAnyPermission, hasPermission, hasRole, type PermissionContext } from
 import AppIcon from './AppIcon.vue'
 import ProductionFulfillmentDiagrams from './ProductionFulfillmentDiagrams.vue'
 import RoleAccountGuide from './RoleAccountGuide.vue'
+import EuropeSalesGuide from './EuropeSalesGuide.vue'
 
 const props = defineProps<{ modelValue: boolean; context: PermissionContext | null; initialView?: 'flow' | 'sequence' | 'steps' | 'accounts' }>()
 const emit = defineEmits<{ 'update:modelValue': [value: boolean]; stage: [value: string]; navigate: [value: string] }>()
-const activeView = ref<'flow' | 'sequence' | 'steps' | 'accounts'>(props.initialView ?? 'flow')
+const activeView = ref<'flow' | 'sequence' | 'steps' | 'accounts' | 'europe'>(props.initialView ?? 'flow')
 const selectedStep = ref<number | null>(null)
 const guideBody = ref<HTMLElement>()
 async function showStep(index: number) {
@@ -110,8 +111,8 @@ const steps: GuideStep[] = [
   },
   {
     title: '确认订单与 PI 放行', owner: '销售/订单管理员', menu: 'Web 后台 → 我的工作台 → 订单与出库',
-    actions: ['打开目标订单，核对客户、数量、库存占用和计划出库日。', '点击“确认订单，继续出库”。', '销售出库必须关联 PI。打开 PI 与履约，选择已发布的履约配置、实际仓库和对应模板。', '预付业务登记真实到账；后付款业务填写到期日，由有放行权限的人员批准后保留库存。', '按本单配置完成出货表、备货和提货安排；条件齐全后授权放行。客户货代提货也必须登记实际出库。'],
-    result: '库存按仓库和 SKU 保留；真实到账与后付款授权分别记录，放行后才能出库。', next: 'PDA 按客户和订单扫描实际要发出的整车总码。',
+    actions: ['打开目标订单，核对客户、数量、库存占用和计划出库日。', '点击“确认订单，继续出库”。', '正常 PI 销售从 PI 与履约办理；欧洲工厂直签不做 PI，从“欧洲销售与交付”登记合同，再关联普通销售订单出库。详见“外销／欧洲销售”栏目。', '发出 PI 后付款的业务登记真实到账；客户收到货后付款的业务按 PI 付款条款核对，由有放行权限的人员批准后保留库存。系统不固定付款日期。', '按本单配置完成出货表、备货和提货安排；条件齐全后授权放行。客户货代提货也必须登记实际出库。'],
+    result: '库存按仓库和 SKU 保留；真实到账与“客户收到货后付款”授权分别记录，放行后才能出库。', next: 'PDA 按客户和订单扫描实际要发出的整车总码。',
     destination: { label: '打开订单与出库', kind: 'stage', key: 'orders' },
   },
   {
@@ -122,7 +123,7 @@ const steps: GuideStep[] = [
   },
   {
     title: '管理员配置（首次开单前）', owner: '模板／业务管理员', menu: 'PI 与履约 → 履约配置',
-    actions: ['先在模板与银行资料中选择“标准明细表”或“双栏发票”版式，发布真实卖方及银行资料；版式独立于国家。', '在履约配置中选择模板、收款主体、适用仓库、付款方式和交付方式，并选择所需合同、备货及单据。新建 PI 必须选择已发布配置；历史无配置单据按原规则办理。', '发布版本后不可覆盖；调整时复制为新版本。停用仅限制新选用，历史单据仍使用原版本。后付款 PI 修订确认后须重新授权，原到账记录仍保留。'],
+    actions: ['先在模板与银行资料中选择“标准明细表”或“双栏发票”版式，发布真实卖方及银行资料；版式独立于国家。', '在履约配置中选择模板、收款主体、适用仓库、付款方式和交付方式，并选择所需合同、备货及单据。新建 PI 必须选择已发布配置；历史无配置单据按原规则办理。', '发布版本后不可覆盖；调整时复制为新版本。停用仅限制新选用，历史单据仍使用原版本。客户收到货后付款的 PI 修订确认后须重新授权，原到账记录仍保留。'],
     result: '不同国家共用配置能力；新国家或仓库不需要新增专用流程。', next: '开单时选用适合本笔业务的配置，确认前核对版本。',
     destination: { label: '打开履约配置', kind: 'module', key: 'fulfillment-profiles' },
   },
@@ -186,6 +187,7 @@ function close() { emit('update:modelValue', false) }
       <el-button :type="activeView === 'sequence' ? 'primary' : 'default'" :aria-pressed="activeView === 'sequence'" @click="activeView = 'sequence'">角色时序图</el-button>
       <el-button :type="activeView === 'steps' ? 'primary' : 'default'" :aria-pressed="activeView === 'steps'" @click="selectedStep = null; activeView = 'steps'">逐步操作</el-button>
       <el-button :type="activeView === 'accounts' ? 'primary' : 'default'" :aria-pressed="activeView === 'accounts'" @click="activeView = 'accounts'">角色与账户</el-button>
+      <el-button :type="activeView === 'europe' ? 'primary' : 'default'" :aria-pressed="activeView === 'europe'" @click="activeView = 'europe'">外销／欧洲销售</el-button>
     </div>
     <div ref="guideBody" class="guide-body">
       <div v-if="activeView === 'flow' || activeView === 'steps'" class="guide-intro"><strong>从车型准备到订单出库，按顺序逐步办理</strong><span>首次开单前由管理员完成文末的统一履约配置；Web 后台负责资料、生产、库存及履约；业务入口在新标签页打开，本说明保留供对照。已有库存可从库存与 PI 环节开始。</span></div>
@@ -202,8 +204,9 @@ function close() { emit('update:modelValue', false) }
           </div>
         </li>
       </ol>
+      <EuropeSalesGuide v-else-if="activeView === 'europe'" />
       <RoleAccountGuide v-else />
-      <el-alert v-if="activeView !== 'accounts'" title="边界提醒" type="warning" :closable="false" show-icon>
+      <el-alert v-if="activeView !== 'accounts' && activeView !== 'europe'" title="边界提醒" type="warning" :closable="false" show-icon>
         建生产单不会逐车建单；Web 或 PDA 的首码会自动建立单车记录。第四码自动生成总码和打印任务，但打印核对、入库、锁定转订单、订单确认和 PDA 出库都必须由对应岗位实际操作。
       </el-alert>
     </div>
@@ -212,6 +215,6 @@ function close() { emit('update:modelValue', false) }
 </template>
 
 <style scoped>
-.guide-view-switch{display:flex;flex-shrink:0;gap:8px;padding:0 0 14px}.guide-view-switch .el-button{margin:0}.guide-step.is-selected{background:#f0f6ff;border-radius:9px;outline:2px solid #a8cdf9;outline-offset:-2px}.guide-step{scroll-margin-top:8px}.guide-step:focus-visible{outline:2px solid #1677ff;outline-offset:-2px}@media(max-width:600px){.guide-view-switch{gap:6px}.guide-view-switch .el-button{flex:1;padding:8px 6px;font-size:12px}}
+.guide-view-switch{display:flex;flex-wrap:wrap;flex-shrink:0;gap:8px;padding:0 0 14px}.guide-view-switch .el-button{margin:0}.guide-step.is-selected{background:#f0f6ff;border-radius:9px;outline:2px solid #a8cdf9;outline-offset:-2px}.guide-step{scroll-margin-top:8px}.guide-step:focus-visible{outline:2px solid #1677ff;outline-offset:-2px}@media(max-width:600px){.guide-view-switch{gap:6px}.guide-view-switch .el-button{flex:1;padding:8px 6px;font-size:12px}}
 :global(.el-dialog > .el-dialog__body.production-fulfillment-guide-body){display:flex;flex-direction:column;min-height:0;overflow:hidden}.guide-body{flex:1 1 auto;min-height:0;max-height:none;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding:0 6px 8px 0}.guide-intro{display:grid;gap:7px;padding:16px 18px;background:#f1f7fc;border-left:4px solid #1767ad;border-radius:5px}.guide-intro strong{font-size:16px;color:#173a5b}.guide-intro span,.guide-entry{font-size:13px;color:#60758a;line-height:1.7}.guide-entry{padding:12px 18px;border-bottom:1px solid #e4ebf1}.guide-entry a{color:#1767ad;overflow-wrap:anywhere}.guide-steps{list-style:none;margin:0;padding:4px 0 8px}.guide-step{display:grid;grid-template-columns:42px minmax(0,1fr);gap:14px;padding:17px 4px;border-bottom:1px solid #e9eef3}.step-index{width:34px;height:34px;display:grid;place-items:center;border-radius:50%;font-size:12px;font-weight:700;background:#e8f1fb;color:#1767ad}.tone-1{background:#eaf5ed;color:#35814c}.tone-2{background:#fff2e4;color:#b66821}.tone-3{background:#e8f3f2;color:#247c75}.step-content{min-width:0}.step-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.step-heading>div{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.step-heading h3{margin:0;font-size:15px;color:#243d54}.step-owner{font-size:12px;color:#6b7d8e;background:#f2f5f8;padding:4px 8px;border-radius:4px}.step-menu{margin:9px 0;font-size:13px;color:#1767ad;overflow-wrap:anywhere}.step-menu strong{color:#425a70}.step-actions{margin:8px 0;padding-left:20px;color:#394d60;font-size:13px;line-height:1.8}.step-outcomes{display:grid;gap:4px;padding:9px 12px;background:#f8fafc;border-radius:5px}.step-outcomes p{margin:0;font-size:12px;line-height:1.7;color:#53677a}.step-outcomes strong{color:#244b68}.step-links{display:flex!important;align-items:center;gap:12px;flex-wrap:wrap}.step-heading a{display:inline-flex;align-items:center;gap:5px;font-size:13px;color:#1767ad;text-decoration:none;white-space:nowrap}.step-heading a:hover{text-decoration:underline}.step-heading :deep(.app-icon){width:15px;height:15px}.guide-body :deep(.el-alert){margin-top:10px}@media(max-width:600px){.guide-step{grid-template-columns:30px minmax(0,1fr);gap:9px;padding:14px 0}.step-index{width:28px;height:28px;font-size:11px}.step-heading{align-items:flex-start}.step-menu,.step-actions{font-size:12px}.guide-intro{padding:13px}.guide-entry{padding:10px 12px}}
 </style>

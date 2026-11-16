@@ -23,7 +23,7 @@ const actionLabel = computed(() => {
   switch (current.value?.code) {
     case 'DOCUMENTS_READY': return props.piStatus === 'DRAFT' ? '确认并发布 PI' : '确认销售合同与收付款表'
     case 'PAYMENT_CONFIRMED': case 'PAYMENT_SETTLED': return '登记实际到账'
-    case 'CREDIT_APPROVED': return '确认后付款授权'
+    case 'CREDIT_APPROVED': return '确认收到货后付款授权'
     case 'INVENTORY_RESERVED': return '重试按仓锁库'
     case 'STOCK_DISPATCHED': return props.piStatus === 'RELEASED' ? '等待仓库办理出库' : '放行出库'
     case 'TRACKING_RECORDED': return '登记发货号及实际费用'
@@ -119,7 +119,7 @@ defineExpose({ closeAfterSuccess })
   </section>
   <el-dialog v-model="dialogVisible" :title="activeCode === 'PRODUCTION_FOLLOW_UP' ? '记录生产跟进' : workflow?.steps.find(s => s.code === activeCode)?.name || '业务确认'" width="min(600px,94vw)" :close-on-click-modal="false">
     <el-form label-position="top">
-      <template v-if="configurableSteps.includes(activeCode)"><p v-if="activeCode === 'CREDIT_APPROVED'">批准后按本单约定保留库存，实际到账仍需单独登记。请核对客户、金额、付款期限并填写授权依据。</p><template v-if="documentSteps.includes(activeCode)"><p>先在 PI 详情“业务单据附件”上传对应文件。发送节点记录经办人实际发送情况，不会自动向客户或工厂发送。</p><el-form-item label="本PI业务单据附件" required><el-select v-model="form.arrivalProof" :loading="attachmentsBusy"><el-option v-for="proof in proofs" :key="proof.id" :value="proof.id" :label="proof.fileName" /></el-select></el-form-item><el-form-item label="实际发送 / 回收日期" required><el-date-picker v-model="form.receivedDate" value-format="YYYY-MM-DD" /></el-form-item></template></template>
+      <template v-if="configurableSteps.includes(activeCode)"><p v-if="activeCode === 'CREDIT_APPROVED'">批准后按本单约定保留库存，实际到账仍需单独登记。请核对客户、金额、PI 付款条款并填写授权依据。</p><template v-if="documentSteps.includes(activeCode)"><p>先在 PI 详情“业务单据附件”上传对应文件。发送节点记录经办人实际发送情况，不会自动向客户或工厂发送。</p><el-form-item label="本PI业务单据附件" required><el-select v-model="form.arrivalProof" :loading="attachmentsBusy"><el-option v-for="proof in proofs" :key="proof.id" :value="proof.id" :label="proof.fileName" /></el-select></el-form-item><el-form-item label="实际发送 / 回收日期" required><el-date-picker v-model="form.receivedDate" value-format="YYYY-MM-DD" /></el-form-item></template></template>
       <template v-if="activeCode === 'PRODUCTION_FOLLOW_UP'"><el-form-item label="生产进度" required><el-input v-model="production.productionStatus" type="textarea" maxlength="500" /></el-form-item><el-form-item label="预计完成日期"><el-date-picker v-model="production.expectedCompletionDate" value-format="YYYY-MM-DD" /></el-form-item><el-form-item label="材料情况"><el-input v-model="production.materialStatus" maxlength="500" /></el-form-item></template>
       <template v-else-if="activeCode === 'DOCUMENTS_READY'"><el-form-item label="销售合同号" :required="rules?.salesContractRequired ?? true"><el-input v-model="form.contractNo" maxlength="128" /></el-form-item><el-checkbox v-model="form.contractReady">PI、销售合同及付款信息已确认</el-checkbox><el-checkbox v-model="form.paymentTableReady">收付款表已建立（应收金额、币种、收款主体已核对）</el-checkbox></template>
       <template v-else-if="activeCode === 'PURCHASE_CONTRACT_READY'"><el-form-item label="购销合同方" required><el-select v-if="!rules" v-model="form.purchaseContractParty"><el-option value="SAVA" label="SAVA" /><el-option value="YINSANHUAN" label="银三环" /></el-select><el-input v-else v-model="form.purchaseContractParty" maxlength="200" placeholder="实际合同方" /></el-form-item><el-form-item label="购销合同号" required><el-input v-model="form.purchaseContractNo" maxlength="128" /></el-form-item></template>

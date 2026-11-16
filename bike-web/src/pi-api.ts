@@ -10,7 +10,7 @@ export function reservationLabel(status: ReservationStatus | null | undefined, i
   if (isAgent && (status === 'TIMED_ACTIVE' || status === 'PAID_HELD' || status === 'CREDIT_HELD')) return reservationLabels.ACTIVE
   return status ? reservationLabels[status] ?? '状态待核对' : '状态待获取'
 }
-export type PiBusinessTerms = { warehouseId: number | null; domesticShipment: boolean | null; collectionEntity: string; fulfillmentProfileId?: number | null; paymentDueDate?: string | null; orderSource?: 'EXISTING_ORDER' | 'NEW_BUSINESS' | null }
+export type PiBusinessTerms = { warehouseId: number | null; domesticShipment: boolean | null; collectionEntity: string; fulfillmentProfileId?: number | null; paymentDueDate?: string | null; orderSource?: 'EXISTING_ORDER' | 'NEW_BUSINESS' | null; workflowMode?: 'STANDARD' | 'USER_CONFIRMED' | null }
 export type PiDocument = {
   business?: PiBusinessTerms | null
   sellerName: string; sellerAddress: string; sellerContact: string

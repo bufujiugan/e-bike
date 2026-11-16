@@ -49,6 +49,14 @@ public class PiWorkflowServiceImpl implements PiWorkflowService {
         var profile=profile(pi);
         var current=effective.stream().filter(s->s.code().equals(step.name())).findFirst().orElseThrow(()->new BusinessException("PI_WORKFLOW_STEP_NOT_APPLICABLE","本单配置不适用该步骤"));
         if(step==PiWorkflowStepCode.CREDIT_APPROVED)CurrentOperator.requirePermission("PI_RELEASE");
+        if(business!=null && PiManualWorkflow.enabled(business.document(piId))) {
+            if(step==PiWorkflowStepCode.PI_CREATED) return view(effective,updates(pi));
+            if(!Set.of("CONFIRMED","RELEASED").contains(pi.getStatus())) fail("PI_WORKFLOW_PI_CONFIRM_REQUIRED","请先确认 PI");
+            if(mapper.complete(piId,step.order(),CurrentOperator.id(),request==null?null:normalize(request.note()),serialize(details(request)))!=1)
+                fail("PI_WORKFLOW_CONFLICT","流程已变化，请刷新重试");
+            audit(piId,"人工确认办理："+current.name(),request==null?null:request.note());
+            return view(effectiveSteps(pi,mapper.selectSteps(piId)),updates(pi));
+        }
         if("COMPLETED".equals(current.status()))return view(effective,updates(pi));
         for(var prior:effective) {
             if(profile!=null) {
@@ -113,6 +121,19 @@ public class PiWorkflowServiceImpl implements PiWorkflowService {
         var d=business==null?null:business.document(pi.getId());
         boolean overseas=d!=null&&d.business()!=null&&Boolean.FALSE.equals(d.business().domesticShipment());
         var profile=profile(pi);
+        if(PiManualWorkflow.enabled(d)) {
+            var codes=List.of(PiWorkflowStepCode.PI_CREATED,PiWorkflowStepCode.DOCUMENTS_READY,PiWorkflowStepCode.GOODS_PREPARED,
+                    PiWorkflowStepCode.FORWARDER_SELECTED,PiWorkflowStepCode.STOCK_DISPATCHED,PiWorkflowStepCode.PAYMENT_SETTLED,PiWorkflowStepCode.CASE_CLOSED);
+            var names=List.of("建立 PI","合同与交易资料确认","备货跟进确认","运输或提货安排确认","交付跟进确认","收款跟进确认","办理结案确认");
+            for(int index=0;index<codes.size();index++) {
+                var code=codes.get(index);
+                var row=rows.stream().filter(s->code.name().equals(s.code())).findFirst().orElse(null);
+                boolean completed=code==PiWorkflowStepCode.PI_CREATED || row!=null&&"COMPLETED".equals(row.status());
+                result.add(new PiWorkflowStepView(index+1,code.name(),names.get(index),completed?"COMPLETED":"PENDING",
+                        row==null?null:row.completedBy(),row==null?null:row.completedAt(),row==null?null:row.note(),row==null?null:parse(row.detailJson())));
+            }
+            return result;
+        }
         for(var step:stepsFor(profile)) {
             if(step==PiWorkflowStepCode.PRODUCTION_FOLLOW_UP)continue;
             var row=rows.stream().filter(s->step.name().equals(s.code())).findFirst().orElse(null);
@@ -245,10 +266,6 @@ public class PiWorkflowServiceImpl implements PiWorkflowService {
     private void validateConfiguredStep(PiView pi,PiWorkflowStepCode step,PiWorkflowRequest request,PiFulfillmentProfile profile,List<PiWorkflowStepView> effective) {
         if(step==PiWorkflowStepCode.CASE_CLOSED) {
             if(effective.stream().anyMatch(s->!s.code().equals("CASE_CLOSED")&&!"COMPLETED".equals(s.status())))fail("PI_CLOSE_NOT_READY","交付、应收款或必需单据尚未完成，不能结案");
-        }
-        if(step==PiWorkflowStepCode.CREDIT_APPROVED) {
-            var due=business.document(pi.getId()).business().paymentDueDate();
-            if(due==null||due.isBefore(LocalDate.now()))fail("PI_CREDIT_DUE_INVALID","后付款授权须明确未过期的付款到期日");
         }
         if(Set.of(PiWorkflowStepCode.CREDIT_APPROVED,PiWorkflowStepCode.DISPATCH_SHEET_SENT,PiWorkflowStepCode.GOODS_PREPARED,PiWorkflowStepCode.CI_SENT,PiWorkflowStepCode.RD_SENT,PiWorkflowStepCode.RD_SIGNED,PiWorkflowStepCode.CMR_COLLECTED,PiWorkflowStepCode.CASE_CLOSED).contains(step)) {
             if(request==null||blank(request.note()))fail("PI_WORKFLOW_EVIDENCE_REQUIRED","请填写实际办理情况、接收方或授权依据");

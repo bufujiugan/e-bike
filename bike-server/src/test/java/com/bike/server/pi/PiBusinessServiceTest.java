@@ -94,6 +94,40 @@ class PiBusinessServiceTest {
         verifyNoInteractions(credit);
     }
 
+    private PiFulfillmentProfileMapper configureManual() throws Exception {
+        var credit=configureCredit(false);
+        when(mapper.selectDocument(1L)).thenReturn("""
+            {"bankName":"Bank","bankAccount":"Account","beneficiary":"Guangta",
+             "business":{"warehouseId":2,"domesticShipment":true,"collectionEntity":"GUANGTA","workflowMode":"USER_CONFIRMED"}}
+            """);
+        return credit;
+    }
+    @Test void manualModeReservesStockWithoutInventingPaymentOrCreditApproval() throws Exception {
+        var credit=configureManual();
+        when(mapper.countWarehouseStock(2L,20L)).thenReturn(5);
+        when(inventory.selectFulfillmentSnapshot(20L,0L)).thenReturn(new SkuInventorySnapshot(5,0,0));
+        var model=new OrderInventorySnapshot();model.setPhysicalQty(5);
+        when(reservations.selectFulfillmentSnapshot(30L,0L)).thenReturn(model);
+        var order=new SalesOrderView();order.setId(4L);
+        when(orders.selectByNo(anyString())).thenReturn(order);
+        when(orders.insertOrder(anyString(),any(),any())).thenReturn(1);when(orders.insertItem(anyString(),any())).thenReturn(1);
+        when(credit.insertCreditSource(eq(1L),eq(20L),eq(5),anyString(),any())).thenReturn(1);
+        when(mapper.selectLockId(anyString())).thenReturn(9L);
+        when(credit.insertCreditReservation(eq(4L),eq(9L),eq(1L),any())).thenReturn(1);
+        when(inventory.insertReservationItem(4L,20L,5)).thenReturn(1);
+        when(series.link(eq(1L),eq(4L),anyString())).thenReturn(1);when(orders.updateStatus(4L,"CONFIRMED")).thenReturn(1);
+        assertThat(service.reserveAfterPayment(pi,BigDecimal.ZERO)).isTrue();
+        assertThatCode(()->{service.requireDocuments(1L);service.requirePaymentAuthorization(1L);}).doesNotThrowAnyException();
+        assertThat(pi.getPaidAmount()).isZero();
+        verify(mapper,never()).insertPaidReservation(anyLong(),anyLong(),anyLong(),any());
+        verifyNoInteractions(priority);
+    }
+    @Test void manualModeStillRejectsWarehouseShortage() throws Exception {
+        var credit=configureManual();when(mapper.countWarehouseStock(2L,20L)).thenReturn(4);
+        assertThat(service.reserveAfterPayment(pi,BigDecimal.ZERO)).isFalse();
+        verifyNoInteractions(credit);
+    }
+
     @Test void paymentBelowContractThresholdNeverCreatesOrders() {
         assertThat(service.reserveAfterPayment(pi,new BigDecimal("30"))).isFalse();
         verifyNoInteractions(orders,reservations,inventory);

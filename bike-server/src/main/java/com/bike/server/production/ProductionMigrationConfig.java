@@ -5,6 +5,10 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class ProductionMigrationConfig {
+  @Bean
+  public com.bike.server.production.migration.V58__europe_sales europeSalesMigration() {
+    return new com.bike.server.production.migration.V58__europe_sales();
+  }
   @org.springframework.context.annotation.Bean
   public com.bike.server.production.migration.V57__unified_fulfillment unifiedFulfillmentMigration() {
     return new com.bike.server.production.migration.V57__unified_fulfillment();

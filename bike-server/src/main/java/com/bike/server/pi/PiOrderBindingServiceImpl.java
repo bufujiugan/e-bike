@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class PiOrderBindingServiceImpl implements PiOrderBindingService {
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.europe.EuropeSalesMapper europeSales;
     private final PiMapper pis;
     private final PiSeriesMapper series;
     private final OrderMapper orders;
@@ -67,6 +68,8 @@ public class PiOrderBindingServiceImpl implements PiOrderBindingService {
         requireSourceLink(pi, orderIds);
         if (orderIds.isEmpty()) fail("PI_ORDER_LINK_REQUIRED", "PI尚未关联履约订单，请先完成收款库存占用流程");
         for (long orderId : orderIds) {
+            if(europeSales!=null && europeSales.selectFactoryOrderForSalesOrder(orderId)!=null)
+                fail("PI_FACTORY_ORDER_CONFLICT","销售订单已用于工厂直签业务，不能重复关联 PI");
             var order = orders.selectForUpdate(orderId);
             if (order == null) fail("ORDER_NOT_FOUND", "PI关联的履约订单不存在");
             if (!Objects.equals(order.getCustomerId(), pi.getCustomerId()))

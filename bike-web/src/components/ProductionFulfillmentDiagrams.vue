@@ -27,8 +27,8 @@ const phases: { title: string; timing: string; outcome: string; nodes: FlowNode[
     { step: 10, title: '确认销售订单', owner: '订单员 · 订单与出库', detail: '确认后进入待出库状态', tag: '准备交仓库' },
   ] },
   { title: '发货前后 · 放行、出库与核对', timing: '订单待出库或部分出库且仍有余量', outcome: '完成：出库记录可追溯到订单、总码和车架号', nodes: [
-    { step: 10, title: '确认 PI 与履约配置', owner: '订单员 · 订单办理', detail: '按配置核对收款或后付款授权及备货要求', tag: '销售出库须放行', conditional: true },
-    { step: 11, title: '选客户与订单', owner: '仓管员 · PDA 出库', detail: 'PI 已满足配置要求且放行后办理', tag: '进入出库' },
+    { step: 10, title: '确认 PI 与履约配置', owner: '订单员 · 订单办理', detail: '按配置核对收款或后付款授权及备货要求', tag: '核对本单交付条件', conditional: true },
+    { step: 11, title: '选客户与订单', owner: '仓管员 · PDA 出库', detail: 'PI 单核对放行；工厂直签先确认工厂已收款', tag: '进入出库' },
     { step: 11, title: '扫码并确认批量出库', owner: '仓管员 · PDA 出库', detail: '逐台扫总码，核对本次数量后确认', tag: '选定实际车辆' },
     { step: 11, title: '核对出库结果', owner: '业务员 / 仓管员 · 订单办理', detail: '分批核对交接；送达后继续结算与单据归档', tag: '闭环核对' },
   ] },

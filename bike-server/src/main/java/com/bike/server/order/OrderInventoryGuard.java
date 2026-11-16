@@ -5,12 +5,15 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class OrderInventoryGuard {
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.europe.FactorySalesShipmentGuard factoryShipments;
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.europe.EuropeSalesMapper europeSales;
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.pi.PiBusinessService piBusiness;
     private final OrderReservationMapper mapper;
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.pi.PiShipmentGuard piShipmentGuard;
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.stock.SkuInventoryGuard skuInventoryGuard;
     public OrderInventoryGuard(OrderReservationMapper mapper){this.mapper=mapper;}
     public void requireShipment(SalesOrderView order,int quantity){
+        if(factoryShipments!=null)factoryShipments.requireCollection(order.getId(),order.getCustomerId());
         // 限时占用可供本单出库，但必须保留其他有效锁定；已付款订单沿用付款优先口径。
         var snapshot="TIMED".equals(order.getReservationHoldMode())
                 ? mapper.snapshot(order.getModelId(),order.getId())
@@ -28,10 +31,12 @@ public class OrderInventoryGuard {
             throw new BusinessException("INVENTORY_LOCK_CONFLICT","撤销入库会使有效锁定或订单占用失去库存支撑");
         if(skuInventoryGuard!=null)skuInventoryGuard.requireUnreservedRemoval(vehicleId);
     }
-    public void requireVehicle(SalesOrderView order,long vehicleId){if(skuInventoryGuard!=null)skuInventoryGuard.requireVehicle(order.getId(),vehicleId);}
+    public void requireVehicle(SalesOrderView order,long vehicleId){if(factoryShipments!=null)factoryShipments.requireWarehouse(order.getId(),vehicleId);if(skuInventoryGuard!=null)skuInventoryGuard.requireVehicle(order.getId(),vehicleId);}
     public void recordShipment(long orderId,long vehicleId){if(skuInventoryGuard!=null)skuInventoryGuard.shipped(orderId,vehicleId);}
     public void restoreShipment(long orderId,long vehicleId){if(skuInventoryGuard!=null)skuInventoryGuard.restore(orderId,vehicleId);}
     public void requireEditable(long orderId){
+        if(europeSales!=null && europeSales.selectFactoryOrderForSalesOrder(orderId)!=null)
+            throw new BusinessException("ORDER_LINKED_TO_FACTORY","订单已关联工厂直签业务，请先核对并解除关联后再修改客户或数量");
         if (piShipmentGuard != null) piShipmentGuard.requireOrderEditable(orderId);
         if(mapper.countForOrder(orderId)>0)throw new BusinessException("ORDER_RESERVED","锁定转入订单不可直接修改车型或数量，请取消后重新办理");
     }

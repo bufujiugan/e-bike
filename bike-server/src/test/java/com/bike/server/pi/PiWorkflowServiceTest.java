@@ -37,6 +37,22 @@ class PiWorkflowServiceTest {
         when(mapper.complete(anyLong(),anyInt(),any(),any(),any())).thenReturn(1);
     }
     @AfterEach void cleanup(){SecurityContextHolder.clearContext();}
+    @Test void manualProgressCanAdvanceWithoutAttachmentsAndNeverCreatesPaymentOrInventory() throws Exception {
+        when(business.document(1L)).thenReturn(json.readValue("{\"business\":{\"warehouseId\":2,\"domesticShipment\":false,\"collectionEntity\":\"HONG_KONG\",\"workflowMode\":\"USER_CONFIRMED\"}}",PiDocumentSnapshot.class));
+        service.complete(1L,"STOCK_DISPATCHED",new PiWorkflowRequest((String)null));
+        service.complete(1L,"PAYMENT_SETTLED",new PiWorkflowRequest((String)null));
+        verify(mapper).complete(eq(1L),eq(11),any(),isNull(),any());
+        verify(mapper).complete(eq(1L),eq(20),any(),isNull(),any());
+        verify(business,never()).reserveAfterPayment(any(),any());
+        verify(business,never()).requireDocuments(anyLong());
+        assertThat(pi.getPaidAmount()).isZero();
+        assertThat(service.get(1L).steps()).extracting(PiWorkflowStepView::code).containsExactly("PI_CREATED","DOCUMENTS_READY","GOODS_PREPARED","FORWARDER_SELECTED","STOCK_DISPATCHED","PAYMENT_SETTLED","CASE_CLOSED");
+    }
+    @Test void manualProgressStillRequiresPublishedPi() throws Exception {
+        when(business.document(1L)).thenReturn(json.readValue("{\"business\":{\"workflowMode\":\"USER_CONFIRMED\"}}",PiDocumentSnapshot.class));
+        pi.setStatus("DRAFT");
+        assertThatThrownBy(()->service.complete(1L,"DOCUMENTS_READY",new PiWorkflowRequest((String)null))).isInstanceOf(BusinessException.class).hasMessageContaining("确认 PI");
+    }
     @Test void documentsPrecedePaymentAndProductionIsOptional() {
         var view=service.get(1L);
         assertThat(view.currentStep()).isEqualTo("DOCUMENTS_READY");

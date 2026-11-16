@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class PiServiceImpl implements PiService {
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.europe.EuropeSalesMapper europeSales;
     @org.springframework.beans.factory.annotation.Autowired private PiFulfillmentProfileService fulfillmentProfiles;
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.common.CustomerScopeAccess customerScope;
     private static final BigDecimal ZERO = new BigDecimal("0.00");
@@ -486,6 +487,8 @@ public class PiServiceImpl implements PiService {
     private void checkSourceOrder(PiCreateRequest request, List<PiCalculatedItem> items, boolean editing) {
         if (request.sourceOrderId() == null) return;
         if (mapper.lockOrder(request.sourceOrderId()) == null) fail("ORDER_NOT_FOUND", "来源订单不存在");
+        if(europeSales!=null && europeSales.selectFactoryOrderForSalesOrder(request.sourceOrderId())!=null)
+            fail("PI_FACTORY_ORDER_CONFLICT","来源订单已用于工厂直签业务，请从欧洲销售与交付继续办理");
         reservations.lockReservation(request.sourceOrderId());
         if (!editing && (mapper.countForOrder(request.sourceOrderId()) > 0
                 || series != null && series.currentPiForOrder(request.sourceOrderId()) != null)) fail("ORDER_PI_EXISTS", "来源订单已关联 PI");
@@ -518,7 +521,8 @@ public class PiServiceImpl implements PiService {
                 && Objects.equals(baseline.domesticShipment(), requested.domesticShipment())
                 && Objects.equals(baseline.collectionEntity(), requested.collectionEntity())
                 && Objects.equals(baseline.fulfillmentProfileId(), requested.fulfillmentProfileId())
-                && Objects.equals(baseline.paymentDueDate(), requested.paymentDueDate());
+                && Objects.equals(baseline.paymentDueDate(), requested.paymentDueDate())
+                && Objects.equals(baseline.workflowMode(), requested.workflowMode());
     }
 
     private PiView enrich(PiView pi) {

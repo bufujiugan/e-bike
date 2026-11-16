@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.europe.EuropeSalesMapper">
+  <sql id="orderColumns">o.id,o.order_no,o.customer_id,o.warehouse_id,c.customer_name,w.warehouse_name,o.currency_code,o.details_json,o.steps_json,o.revision,o.created_at,o.updated_at</sql>
+  <sql id="orderJoins">FROM bike_factory_sales_order o JOIN bike_customer c ON c.id=o.customer_id LEFT JOIN bike_warehouse w ON w.id=o.warehouse_id</sql>
+  <sql id="orderWhere"><where>
+    <bind name="scopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/>
+    <if test="scopeUser != null">AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{scopeUser} AND cs.customer_id=o.customer_id)</if>
+    <if test="warehouseId != null">AND o.warehouse_id=#{warehouseId}</if>
+    <if test="businessType != null and businessType != ''">AND o.business_type=#{businessType}</if>
+    <if test="keyword != null and keyword != ''">AND (o.order_no LIKE CONCAT('%',#{keyword},'%') OR c.customer_name LIKE CONCAT('%',#{keyword},'%') OR JSON_UNQUOTE(JSON_EXTRACT(o.details_json,'$.contractNo')) LIKE CONCAT('%',#{keyword},'%'))</if>
+  </where></sql>
+  <select id="selectOrders" resultType="com.bike.server.europe.EuropeSalesMapper$StoredOrder">SELECT <include refid="orderColumns"/> <include refid="orderJoins"/> <include refid="orderWhere"/> ORDER BY o.id DESC LIMIT #{offset},#{limit}</select>
+  <select id="countOrders" resultType="long">SELECT COUNT(*) <include refid="orderJoins"/> <include refid="orderWhere"/></select>
+  <select id="selectOrder" resultType="com.bike.server.europe.EuropeSalesMapper$StoredOrder">SELECT <include refid="orderColumns"/> <include refid="orderJoins"/> WHERE o.id=#{id}</select>
+  <select id="selectOrderForUpdate" resultType="com.bike.server.europe.EuropeSalesMapper$StoredOrder">SELECT <include refid="orderColumns"/> <include refid="orderJoins"/> WHERE o.id=#{id} FOR UPDATE</select>
+  <select id="selectByRequestId" resultType="com.bike.server.europe.EuropeSalesMapper$StoredOrder">SELECT <include refid="orderColumns"/> <include refid="orderJoins"/> WHERE o.request_id=#{requestId}</select>
+  <insert id="insertOrder">INSERT INTO bike_factory_sales_order(order_no,request_id,customer_id,warehouse_id,business_type,currency_code,details_json,steps_json,created_by) VALUES(#{orderNo},#{r.requestId},#{r.customerId},#{r.warehouseId},#{r.businessType},#{r.currencyCode},#{details},JSON_OBJECT(),#{operatorId})</insert>
+  <update id="updateOrder">UPDATE bike_factory_sales_order SET customer_id=#{r.customerId},warehouse_id=#{r.warehouseId},business_type=#{r.businessType},currency_code=#{r.currencyCode},details_json=#{details},revision=revision+1,updated_at=NOW(3) WHERE id=#{id} AND revision=#{r.revision}</update>
+  <update id="updateSteps">UPDATE bike_factory_sales_order SET steps_json=#{steps},revision=revision+1,updated_at=NOW(3) WHERE id=#{id} AND revision=#{revision}</update>
+  <select id="selectLinkedOrders" resultType="com.bike.server.europe.FactorySalesView$LinkedOrder">SELECT o.id,o.order_no,i.ordered_qty order_qty,i.shipped_qty,o.status FROM bike_factory_sales_order_link l JOIN bike_sales_order o ON o.id=l.order_id JOIN bike_sales_order_item i ON i.order_id=o.id WHERE l.factory_order_id=#{id} ORDER BY o.id</select>
+  <select id="selectFactoryOrderForSalesOrder" resultType="long">SELECT factory_order_id FROM bike_factory_sales_order_link WHERE order_id=#{orderId}</select>
+  <insert id="insertOrderLink">INSERT INTO bike_factory_sales_order_link(factory_order_id,order_id) VALUES(#{id},#{orderId})</insert>
+  <delete id="deleteOrderLink">DELETE FROM bike_factory_sales_order_link WHERE factory_order_id=#{id} AND order_id=#{orderId}</delete>
+  <sql id="settlementColumns">id,request_id,amount,currency_code,occurred_at,counterparty,reference_no,remark,status,created_at,reversal_reason</sql>
+  <select id="selectSettlements" resultType="com.bike.server.europe.SalesSettlementView">SELECT <include refid="settlementColumns"/> FROM bike_sales_settlement WHERE subject_type=#{type} AND subject_id=#{subjectId} ORDER BY id DESC</select>
+  <select id="selectSettlementRequest" resultType="com.bike.server.europe.SalesSettlementView">SELECT <include refid="settlementColumns"/> FROM bike_sales_settlement WHERE subject_type=#{type} AND subject_id=#{subjectId} AND request_id=#{requestId}</select>
+  <insert id="insertSettlement">INSERT INTO bike_sales_settlement(subject_type,subject_id,request_id,amount,currency_code,occurred_at,counterparty,reference_no,remark,created_by) VALUES(#{type},#{subjectId},#{r.requestId},#{r.amount},#{r.currencyCode},#{r.occurredAt},#{r.counterparty},#{r.referenceNo},#{r.remark},#{operatorId})</insert>
+  <update id="reverseSettlement">UPDATE bike_sales_settlement SET status='REVERSED',reversed_by=#{operatorId},reversed_at=NOW(3),reversal_reason=#{reason} WHERE subject_type=#{type} AND subject_id=#{subjectId} AND id=#{id} AND status='CONFIRMED'</update>
+  <update id="updateSettlementSupplement">UPDATE bike_sales_settlement SET counterparty=#{r.counterparty},reference_no=#{r.referenceNo},remark=#{r.remark} WHERE subject_type=#{type} AND subject_id=#{subjectId} AND id=#{id} AND status='CONFIRMED'</update>
+</mapper>

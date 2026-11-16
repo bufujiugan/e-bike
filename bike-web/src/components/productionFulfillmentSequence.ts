@@ -83,7 +83,7 @@ export const fulfillmentSequence: SequencePhase[] = [
       ] },
       { title: '确认订单并准备交接', tag: '待出库', messages: [
         { from: 'sales', to: 'system', kind: 'action', title: '核对后确认销售订单', summary: '点击“确认订单，继续出库”', location: 'Web → 订单与出库 → 打开订单办理', input: '核对客户、数量、占用、计划出库日，再确认销售订单。', check: '必须是可确认订单且账号有权限；业务占用异常需先解决。', result: '订单进入待出库；关联 PI 的还需处理 PI 发货条件。', recovery: '不能确认时根据订单状态和提示处理，不让仓管绕过订单发货。', guideStep: 10 },
-        { from: 'sales', to: 'warehouse', kind: 'handoff', title: '交接订单号、客户与待发数量', summary: '提醒仓管：销售出库必须完成 PI 放行', location: 'Web 订单办理 → 出库岗位', input: '交接客户、订单号、固定 SKU、数量和关联 PI 的履约要求。', check: '只有待出库或部分出库且仍有余量的订单可以继续办理。', result: '进入放行与出库阶段，按实际总码选车。', recovery: '客户或 SKU 不明确时先回订单核对，不按同车型随意替代配置。', guideStep: 10 },
+        { from: 'sales', to: 'warehouse', kind: 'handoff', title: '交接订单号、客户与待发数量', summary: '提醒仓管：PI 单核对放行，工厂直签核对工厂收款确认', location: 'Web 订单办理 → 出库岗位', input: '交接客户、订单号、固定 SKU、数量和关联 PI 的履约要求。', check: '只有待出库或部分出库且仍有余量的订单可以继续办理。', result: '进入放行与出库阶段，按实际总码选车。', recovery: '客户或 SKU 不明确时先回订单核对，不按同车型随意替代配置。', guideStep: 10 },
       ] },
     ],
   },
@@ -91,12 +91,12 @@ export const fulfillmentSequence: SequencePhase[] = [
     title: '放行与出库', subtitle: '收款条件、授权放行与逐车出库', roles: ['sales', 'finance', 'system', 'warehouse'],
     before: '订单已确认或部分出库，仍有待发数量且库存占用有效。',
     deliver: '实际出库车辆、出库单、订单已发数量与剩余数量。',
-    decision: '销售出库必须关联 PI；按配置核对预付收款或后付款授权、备货及交付要求。',
+    decision: '正常 PI 销售核对本单放行条件；工厂直签从“欧洲销售与交付”关联普通销售订单，并先确认工厂已收款。',
     groups: [
       { title: '确认 PI 与统一履约配置', tag: '条件分支 · PI', messages: [
-        { from: 'sales', to: 'system', kind: 'condition', title: '核对订单是否关联 PI', summary: '未关联 PI：先建立并确认 PI', location: 'Web → 订单办理 → 本单 PI 与发货放行', input: '查关联 PI，核对客户、商品明细与本订单。', check: '有关联 PI 时不能绕过其收款与放行要求；关联冲突需先处理。', result: '新单必须选择已发布配置与模板，确认后按要求保留库存、备货并放行。', recovery: '多个 PI 关联冲突或客户不一致时，交订单人员核对后再发货。', guideStep: 10 },
+        { from: 'sales', to: 'system', kind: 'condition', title: '核对订单是否关联 PI', summary: '正常 PI 销售建立 PI；工厂直签按独立流程办理', location: 'Web → 订单办理 → 本单 PI 与发货放行', input: '查关联 PI，核对客户、商品明细与本订单。', check: '有关联 PI 时不能绕过其收款与放行要求；关联冲突需先处理。', result: '新单必须选择已发布配置与模板，确认后按要求保留库存、备货并放行。', recovery: '多个 PI 关联冲突或客户不一致时，交订单人员核对后再发货。', guideStep: 10 },
         { from: 'sales', to: 'finance', kind: 'handoff', title: '确认 PI 并交接收款要求', summary: '按 PI 约定的发货收款条件办理', location: 'Web → PI 与履约 / 本单 PI 与发货放行', input: '核对 PI 客户、SKU 明细、数量及发货收款条件，按页面完成确认。', check: '必须使用当前订单关联的 PI，不拿其他客户的收款或放行代替。', result: '财务可按该 PI 核对实际到账。', recovery: '明细或收款要求有误时先修正业务资料，不直接进入出库。', guideStep: 10 },
-        { from: 'finance', to: 'system', kind: 'action', title: '按实际到账登记收款', summary: '预付按到账门槛；后付款须逐单授权', location: 'Web → PI 与履约 → 到账登记', input: '核对真实收款，再由有权限的人员填写页面要求的到账信息。', check: '预付按约定金额校验；后付款由有权限人员批准并明确付款期限；修订确认后重新授权，原到账保留。', result: '记录收款；仅登记到账还不代表已获发货放行。', recovery: '到账不足时等待或核对业务收款条件，不能用虚假到账放行。', guideStep: 10 },
+        { from: 'finance', to: 'system', kind: 'action', title: '按实际到账登记收款', summary: '发出 PI 后付款按到账门槛；收到货后付款须逐单授权', location: 'Web → PI 与履约 → 到账登记', input: '核对真实收款，再由有权限的人员填写页面要求的到账信息。', check: '发出 PI 后付款按约定金额校验；客户收到货后付款由有权限人员核对 PI 付款条款并批准，不强制固定付款日期；修订确认后重新授权，原到账保留。', result: '记录收款；仅登记到账还不代表已获发货放行。', recovery: '到账不足时等待或核对业务收款条件，不能用虚假到账放行。', guideStep: 10 },
         { from: 'finance', to: 'system', kind: 'action', title: '授权人员执行发货放行', summary: '按岗位权限填写放行说明并确认', location: 'Web → PI 与履约 → 发货放行', input: '由具备放行权限的人员核对条件并填写放行说明。', check: '出库校验 PI 与放行状态均已放行，并满足本单配置的收款或授权、库存及备货要求。', result: '满足条件后可交接仓管出库。财务与放行人员可为不同人员。', recovery: '无权限交由授权人员处理；尚未放行时不能让 PDA 强行发货。', guideStep: 10 },
         { from: 'system', to: 'sales', kind: 'result', title: 'PI 已满足发货放行条件', summary: '仍需仓管扫描实际车辆并确认出库', location: 'Web → PI / 订单办理', input: '核对放行结果与本次待发数量。', check: '放行之后实际出库仍会重新校验客户、库存、SKU 和数量。', result: '可以把订单及发货要求交给仓管。', recovery: '后续状态变化导致出库拦截时，以当前校验结果为准重新核对。', guideStep: 10 },
       ] },
@@ -120,7 +120,7 @@ export const fulfillmentSequence: SequencePhase[] = [
     groups: [{ title: '按本单配置办理', tag: '统一规则', messages: [
       { from: 'warehouse', to: 'sales', kind: 'handoff', title: '交接提货或运输信息', summary: '客户提货和我方运输分别登记实际安排', location: 'PI 与履约 → 物流信息', input: '按实际出库批次填写提货联系人、承运商或运单信息。', check: '不得把货代提货当作客户送达。', result: '业务继续跟进运输并确认实际送达。', recovery: '信息未知时如实说明；撤回物流后重新核对凭证。', guideStep: 13 },
       { from: 'sales', to: 'system', kind: 'action', title: '登记发送与回收业务单据', summary: '按要求办理 CI、RD、回签及 CMR', location: 'PI 详情 → 业务单据附件与流程', input: '上传本单文件，选择附件并登记实际日期和接收人。', check: '上传不会自动发给客户；先实际发送，再登记发送完成。', result: '文件与对应节点关联，保留操作人及日期。', recovery: '缺少附件或日期时补齐，不使用其他 PI 的附件代替。', guideStep: 13 },
-      { from: 'finance', to: 'system', kind: 'action', title: '确认真实到账并核对结清', summary: '后付款授权不是到账', location: 'PI 详情 → 收款与放行', input: '按约定期限登记实际到账及凭证。', check: '所需结清金额按当前 PI 总金额核对。', result: '到账足额后结清节点自动完成。', recovery: '错误到账按权限撤回；需要重新核对结案条件。', guideStep: 13 },
+      { from: 'finance', to: 'system', kind: 'action', title: '确认真实到账并核对结清', summary: '收到货后付款授权不是到账', location: 'PI 详情 → 收款与放行', input: '按 PI 付款条款登记实际到账及凭证。', check: '所需结清金额按当前 PI 总金额核对。', result: '到账足额后结清节点自动完成。', recovery: '错误到账按权限撤回；需要重新核对结案条件。', guideStep: 13 },
       { from: 'sales', to: 'system', kind: 'action', title: '核对后结案', summary: '交付、款项和必需单据都已满足', location: 'PI 详情 → 业务流程', input: '核对本单配置及各节点，填写结案说明。', check: '未出库、未送达、未结清或必需文件未完成时不能结案。', result: '本笔履约业务完成。', recovery: '撤销出库、运输或到账会使相关完成条件失效，须重新核对。', guideStep: 13 },
     ] }],
   },

@@ -31,7 +31,7 @@ class PiFulfillmentProfileTest {
     static PiFulfillmentRules creditRules(){return new PiFulfillmentRules("CREDIT","CUSTOMER_PICKUP",false,false,false,true,true,true,List.of("CI","RD","CMR"),List.of(2L));}
     static PiFulfillmentProfile profile(){return new PiFulfillmentProfile(9L,"STANDARD","1","后付款提货","EXPORT","Seller EU","EU","1",creditRules(),true,LocalDateTime.now());}
     private PiDocumentSnapshot document() throws Exception {return json.readValue("""
-        {"templateCode":"EU","templateVersion":"1","business":{"warehouseId":2,"domesticShipment":false,"collectionEntity":"Seller EU","fulfillmentProfileId":9,"paymentDueDate":"2099-01-01"}}
+        {"templateCode":"EU","templateVersion":"1","business":{"warehouseId":2,"domesticShipment":false,"collectionEntity":"Seller EU","fulfillmentProfileId":9}}
         """,PiDocumentSnapshot.class);}
     private void stored(boolean enabled) throws Exception {
         var p=profile();var request=new PiFulfillmentProfileRequest(p.profileCode(),p.version(),p.name(),p.tradeType(),p.collectionEntity(),p.templateCode(),p.templateVersion(),p.rules(),"测试版本");
@@ -46,15 +46,16 @@ class PiFulfillmentProfileTest {
         var changed=json.treeToValue(node,PiDocumentSnapshot.class);
         assertThatThrownBy(()->service.validateSelection(changed,"EXPORT",true)).hasMessageContaining("收款主体");
     }
-    @Test void warehouseAndDueDateAreEnforced() throws Exception {
+    @Test void warehouseIsEnforcedAndCreditDoesNotRequireFixedDueDate() throws Exception {
         stored(true);var node=json.valueToTree(document());((com.fasterxml.jackson.databind.node.ObjectNode)node.get("business")).put("warehouseId",3);
         var changed=json.treeToValue(node,PiDocumentSnapshot.class);
         assertThatThrownBy(()->service.validateSelection(changed,"EXPORT",true)).isInstanceOfSatisfying(BusinessException.class,error->{
             assertThat(error.getCode()).isEqualTo("PI_PROFILE_WAREHOUSE_MISMATCH");
             assertThat(error).hasMessageContaining("发布覆盖该仓库的新版本");
         });
-        ((com.fasterxml.jackson.databind.node.ObjectNode)node.get("business")).put("warehouseId",2).remove("paymentDueDate");
-        var noDate=json.treeToValue(node,PiDocumentSnapshot.class);assertThatThrownBy(()->service.validateSelection(noDate,"EXPORT",true)).hasMessageContaining("到期日");
+        ((com.fasterxml.jackson.databind.node.ObjectNode)node.get("business")).put("warehouseId",2);
+        var noDate=json.treeToValue(node,PiDocumentSnapshot.class);
+        assertThatCode(()->service.validateSelection(noDate,"EXPORT",true)).doesNotThrowAnyException();
     }
     @Test void sameRulesApplyRegardlessOfCountryAndPickupSkipsForwarderWarehouse() {
         var steps=PiWorkflowServiceImpl.stepsFor(profile());
@@ -98,8 +99,8 @@ class PiFulfillmentProfileTest {
         assertThatThrownBy(()->handler.complete(1L,"CREDIT_APPROVED",new PiWorkflowRequest("授权"))).isInstanceOfSatisfying(BusinessException.class,e->assertThat(e.getCode()).isEqualTo("PERMISSION_DENIED"));
         var officer=new UsernamePasswordAuthenticationToken("officer",null,List.of(new SimpleGrantedAuthority("PERM_PI_RELEASE")));
         officer.setDetails(new UserAuthRecord(3L,"officer","unused","INTERNAL",null,null,true));SecurityContextHolder.getContext().setAuthentication(officer);
-        handler.complete(1L,"CREDIT_APPROVED",new PiWorkflowRequest("已核对合同与期限"));
-        verify(workflow).complete(eq(1L),eq(13),eq(3L),eq("已核对合同与期限"),anyString());
+        handler.complete(1L,"CREDIT_APPROVED",new PiWorkflowRequest("已核对合同与付款条款"));
+        verify(workflow).complete(eq(1L),eq(13),eq(3L),eq("已核对合同与付款条款"),anyString());
     }
     @Test void documentsFromAnotherPiCannotCompleteRequiredDocumentStep() throws Exception {
         var pis=mock(PiMapper.class);var workflow=mock(PiWorkflowMapper.class);var business=mock(PiBusinessService.class);var profiles=mock(PiFulfillmentProfileService.class);
