@@ -583,9 +583,9 @@ public class PiServiceImpl implements PiService {
             if(normalize(snapshot.buyerAddress())==null||normalize(snapshot.buyerContact())==null
                     ||normalize(snapshot.shippingAddress())==null||normalize(snapshot.transportMode())==null)
                 fail("PI_DOCUMENT_INCOMPLETE","确认前须填写买方地址、联系方式、收货地址及运输方式");
-            if("EXPORT".equals(pi.getTradeType())&&(normalize(snapshot.tradeTerms())==null
-                    ||normalize(snapshot.buyerCountry())==null||normalize(snapshot.sellerCountry())==null))
-                fail("PI_DOCUMENT_INCOMPLETE","外销PI须填写买卖方国家/地区及贸易术语");
+            if("EXPORT".equals(pi.getTradeType())
+                    &&(normalize(snapshot.buyerCountry())==null||normalize(snapshot.sellerCountry())==null))
+                fail("PI_DOCUMENT_INCOMPLETE","外销PI须填写买卖方国家/地区");
         }
     }
 

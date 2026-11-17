@@ -203,7 +203,7 @@ H5 使用该接口，可搜索、翻页，翻页保留已选订单；切换客�
 
 ## PI完整资料与确认附件（V40/V41）
 
-草稿document新增issueDate、validUntil、shippingAddress、transportMode、tradeTerms、buyerCountry、sellerCountry。保存拒绝倒置日期；确认要求日期、买方地址/联系方式、收货和运输，外销额外要求国家及贸易术语。otherFeeAmount参与精确总额；items新增unit（新请求未填默认台）、imageAttachmentId（未选取SKU首图），保存图片SHA256且检查SKU归属，历史无图片不回填。
+草稿document新增issueDate、validUntil、shippingAddress、transportMode、tradeTerms、buyerCountry、sellerCountry。保存拒绝倒置日期；确认要求日期、买方地址/联系方式、收货和运输，外销额外要求买卖方国家/地区，贸易术语按合同选填。欧盟地区采用卡车运输或客户自提且无贸易术语约定时可留空；非欧盟或涉及报关时可填写DDP、DAP等实际约定。otherFeeAmount参与精确总额；items新增unit（新请求未填默认台）、imageAttachmentId（未选取SKU首图），保存图片SHA256且检查SKU归属，历史无图片不回填。
 
 历史DOMESTIC_V2/EXPORT_V2保留读取和原版式归档；V46后新发布采用V3，增加受控卖方国家/地区、联系人、电话和Email，保存/确认防篡改。V1/V2不能再选用于新建/修改/确认草稿，返回PI_TEMPLATE_LEGACY_READ_ONLY，需管理员发布完整资料的新版本。原已发布PI和归档不变。归档快照固定documentRenderVersion为PI_V1/PI_V2/PI_V3，旧任务无字段时使用PI_V1，重试不能混用版式；草稿预览按对应模板版本输出。
 

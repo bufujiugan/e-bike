@@ -343,6 +343,35 @@ class PiServiceTest {
     }
 
     @Test
+    void exportDocumentAllowsEmptyTradeTermsWhenCountriesAreComplete() throws Exception {
+        PiView pi = pi("DRAFT");
+        pi.setTradeType("EXPORT");
+        pi.setDocumentJson(json.writeValueAsString(exportDocument(null, "Germany", "Hong Kong")));
+        PiTemplateService templates = mock(PiTemplateService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "templates", templates);
+
+        assertThatCode(() -> org.springframework.test.util.ReflectionTestUtils.invokeMethod(
+                service, "requirePublishableDocument", pi)).doesNotThrowAnyException();
+        verify(templates).requirePublished(any(PiDocumentSnapshot.class), eq("EXPORT"));
+    }
+
+    @Test
+    void exportDocumentStillRequiresBuyerAndSellerCountries() throws Exception {
+        PiView pi = pi("DRAFT");
+        pi.setTradeType("EXPORT");
+        PiTemplateService templates = mock(PiTemplateService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "templates", templates);
+
+        pi.setDocumentJson(json.writeValueAsString(exportDocument(null, null, "Hong Kong")));
+        assertCode(() -> org.springframework.test.util.ReflectionTestUtils.invokeMethod(
+                service, "requirePublishableDocument", pi), "PI_DOCUMENT_INCOMPLETE");
+
+        pi.setDocumentJson(json.writeValueAsString(exportDocument(null, "Germany", null)));
+        assertCode(() -> org.springframework.test.util.ReflectionTestUtils.invokeMethod(
+                service, "requirePublishableDocument", pi), "PI_DOCUMENT_INCOMPLETE");
+    }
+
+    @Test
     void cannotClaimShippedLogisticsBeforeReleaseOrWithoutCarrierAndTracking() {
         prepareLocked("CONFIRMED");
         assertCode(() -> service.addLogistics(1, new PiLogisticsRequest("batch", "carrier", "track", "SHIPPED", null)),
@@ -483,6 +512,13 @@ class PiServiceTest {
 
     static PiPaymentRequest payment(String request, String amount) {
         return new PiPaymentRequest(request, money(amount), "CNY", null, null, null);
+    }
+
+    private static PiDocumentSnapshot exportDocument(String tradeTerms, String buyerCountry, String sellerCountry) {
+        return new PiDocumentSnapshot("Seller", "Seller address", "Seller contact", "Buyer address", "Buyer contact",
+                "Bank", "Account", "Beneficiary", "Payment terms", "Delivery terms", "EXPORT", "1",
+                java.time.LocalDate.of(2026, 11, 17), java.time.LocalDate.of(2026, 12, 17), "Ship to",
+                "Truck", tradeTerms, buyerCountry, sellerCountry);
     }
 
     static BigDecimal money(String value) { return value == null ? null : new BigDecimal(value); }
