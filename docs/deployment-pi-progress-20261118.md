@@ -39,7 +39,7 @@
 - `/api/europe/factory-orders`、`/api/pis`、`/api/pis/warehouse-options`、`/api/pi-fulfillment-profiles` 匿名访问均返回 401。
 - 部署前后业务快照一致；V58 状态、失败迁移数和欧洲业务表数量未变化；54 个发布文件、4 份备份散列校验通过。
 - 后端 JAR 保持不变，SHA-256 仍为 `c03f184f1da7278d301daaba85e2d61455bf44dbbd42f2ac70abdd2541cbc84b`。
-- 生产业务系统需要重新登录，发布记录提交时尚未完成登录后的真实 PI 页面交互验收。
+- 登录生产业务系统后打开 `PI0B2C8F8A951C49B9A4A72338545CC6A2 · V1`，页面显示“履约进度 7/7”、完整的 100% 进度条，六个简化办理节点均为完成状态；浏览器控制台错误数为 0。
 
 ## 回退与证据
 
