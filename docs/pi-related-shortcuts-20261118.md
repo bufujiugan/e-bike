@@ -19,7 +19,7 @@
 
 ## 交付状态
 
-仅修改前端，无后端 API 或数据库变更。未提交、未推送、未部署。
+仅修改前端，无后端 API 或数据库变更。已随 `0721212` 提交、推送并部署；详见 `deployment-pi-shortcuts-20261118.md`。
 开始任务前已有的收款凭证相关修改保留。
 
 补充验证：两个入口在未提交、未报错时直接显示；内置浏览器确认物流提示旁入口与空附件下拉入口均跳转原页签。截图：`output/playwright/pi-logistics-maintain-link.png`、`output/playwright/pi-attachment-maintain-link.png`。
