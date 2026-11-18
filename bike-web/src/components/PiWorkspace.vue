@@ -21,6 +21,7 @@ import PiBusinessDashboard from './PiBusinessDashboard.vue'
 import type { PiTemplate } from '../pi-api'
 import { customerProfileApi } from '../customer-profile-api'
 import PiTemplatePicker from './PiTemplatePicker.vue'
+import PiRelatedActions, { type PiRelatedAction } from './PiRelatedActions.vue'
 import PiWorkflowPanel from './PiWorkflowPanel.vue'
 import PiManualWorkflowPanel from './PiManualWorkflowPanel.vue'
 import SalesSettlementPanel from './SalesSettlementPanel.vue'
@@ -630,6 +631,27 @@ async function recordProductionUpdate(body: PiWorkflowComplete) {
   } catch (error) { workflowError.value = message(error, '生产跟进保存失败') }
   finally { workflowActionBusy.value = false }
 }
+const workflowRelatedActions = computed<PiRelatedAction[]>(() => [
+  { key: 'logistics', label: '去维护物流信息', steps: ['TRACKING_RECORDED', 'CUSTOMER_RECEIVED', 'WAREHOUSE_ARRIVED', 'CASE_CLOSED'] },
+  { key: 'confirmations', label: '去维护业务单据附件', steps: ['DOCUMENTS_READY', 'PURCHASE_CONTRACT_READY', 'DISPATCH_SHEET_SENT', 'CI_SENT', 'RD_SENT', 'RD_SIGNED', 'CMR_COLLECTED', 'CASE_CLOSED'], unavailable: canWrite.value ? undefined : '请联系业务经办人维护附件。' },
+  { key: 'payment', label: '去维护收款记录', steps: ['PAYMENT_CONFIRMED', 'PAYMENT_SETTLED', 'STOCK_DISPATCHED', 'RELEASE_PI', 'CASE_CLOSED'], unavailable: showFinance.value ? undefined : '请联系财务人员维护收款记录。' },
+  ...(detail.value?.fulfillment?.length && reservationBlocked.value ? [{ key: 'fulfillment', label: '去维护库存占用', steps: ['INVENTORY_RESERVED', 'STOCK_DISPATCHED', 'RELEASE_PI'] }] : []),
+  { key: 'inventory', label: '去查看 SKU 库存', steps: ['INVENTORY_RESERVED'], href: '/sku-inventory', unavailable: allowed('INVENTORY_READ') ? undefined : '请联系仓库人员核对库存。' },
+  { key: 'stock-out', label: '去查看出库记录', steps: ['STOCK_DISPATCHED'], href: '/stock-out', unavailable: allowed('STOCK_READ') ? undefined : '请联系仓库人员办理出库。' },
+])
+async function openRelatedSection(key: string) {
+  const action = workflowRelatedActions.value.find(item => item.key === key)
+  if (!detail.value || !action || action.unavailable || action.href || actionBusy.value || workflowActionBusy.value) return
+  if (releaseVisible.value) relatedReturn.value = 'release'
+  releaseVisible.value = false
+  detailTab.value = key
+  await nextTick()
+  detailTabsElement.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+const relatedReturn = ref<'release' | ''>('')
+function resumeRelatedForm() { releaseVisible.value = true; relatedReturn.value = ''; void loadReleaseReceipts() }
+watch(detailVisible, visible => { if (!visible) relatedReturn.value = '' })
+const detailTabsElement = ref<HTMLElement>()
 function handleWorkflowAction(action: 'CONFIRM_PI' | 'REGISTER_PAYMENT' | 'RELEASE_PI' | 'REGISTER_LOGISTICS') {
   if (action === 'CONFIRM_PI') void confirmPi()
   else if (action === 'REGISTER_PAYMENT') openPayment()
@@ -814,7 +836,41 @@ async function savePaymentReversal() {
   catch (error) { reversalError.value = message(error, '撤回失败，请核对最新收款记录') }
   finally { actionBusy.value = false }
 }
+type ReleaseReceiptCheck = { count: number | null; error: string }
 const releaseVisible = ref(false), releaseReason = ref(''), releaseError = ref('')
+const releaseReceiptChecks = ref<Record<number, ReleaseReceiptCheck>>({}), releaseReceiptsBusy = ref(false)
+let releaseReceiptLoadVersion = 0
+const confirmedReleasePayments = computed(() => detail.value?.payments.filter(row => row.status === 'CONFIRMED') || [])
+const missingReleaseReceiptCount = computed(() => manualWorkflow.value ? 0 : confirmedReleasePayments.value.filter(row => releaseReceiptChecks.value[row.id]?.count === 0).length)
+const releaseReceiptCheckFailed = computed(() => confirmedReleasePayments.value.some(row => Boolean(releaseReceiptChecks.value[row.id]?.error)))
+async function loadReleaseReceipts() {
+  if (!detail.value || !showFinance.value) return
+  const version = ++releaseReceiptLoadVersion, piId = detail.value.id, payments = confirmedReleasePayments.value
+  releaseReceiptsBusy.value = true
+  releaseReceiptChecks.value = Object.fromEntries(payments.map(row => [row.id, { count: null, error: '' }]))
+  const results = await Promise.all(payments.map(async row => {
+    try { return [row.id, { count: (await piApi.receiptAttachments(row.piId, row.id)).length, error: '' }] as const }
+    catch (error) { return [row.id, { count: null, error: message(error, '凭证状态读取失败') }] as const }
+  }))
+  if (version !== releaseReceiptLoadVersion || !releaseVisible.value || detail.value?.id !== piId) return
+  releaseReceiptChecks.value = Object.fromEntries(results)
+  releaseReceiptsBusy.value = false
+}
+function receiptCheckLabel(payment: PiPayment) {
+  const check = releaseReceiptChecks.value[payment.id]
+  if (!check || check.count == null) return check?.error ? '读取失败' : '检查中'
+  return check.count > 0 ? `已上传 ${check.count} 份` : '缺少凭证'
+}
+function receiptCheckType(payment: PiPayment) {
+  const check = releaseReceiptChecks.value[payment.id]
+  if (check?.error) return 'warning'
+  return check?.count ? 'success' : 'danger'
+}
+function receiptSaved() {
+  if (!receiptPayment.value || !releaseVisible.value) return
+  const current = releaseReceiptChecks.value[receiptPayment.value.id]
+  releaseReceiptChecks.value = { ...releaseReceiptChecks.value, [receiptPayment.value.id]: { count: (current?.count || 0) + 1, error: '' } }
+}
 const reservationBlocked = computed(() => Boolean(detail.value?.fulfillment?.length ? detail.value.fulfillment.some(line => line.remainingQty > 0 && ['EXPIRED_REQUIRES_REACQUIRE', 'RELEASED'].includes(line.reservationStatus)) : detail.value?.sourceOrderId && ['EXPIRED_REQUIRES_REACQUIRE', 'RELEASED'].includes(detail.value.reservationStatus ?? '')))
 const canRenewReservation = computed(() => canManageReservation.value && Boolean(detail.value?.sourceOrderId) && ['TIMED_ACTIVE', 'EXPIRED_REQUIRES_REACQUIRE'].includes(detail.value?.reservationStatus ?? ''))
 const reservationVisible = ref(false), reservationError = ref('')
@@ -839,10 +895,19 @@ async function saveReservation() {
 }
 const gateMet = computed(() => { if (manualWorkflow.value) return true; if (detailProfile.value?.rules.paymentMode === 'CREDIT') return workflow.value?.steps.some(s => s.code === 'CREDIT_APPROVED' && s.status === 'COMPLETED') ?? false; return detail.value != null })
 async function releaseManualPi() { releaseReason.value = '经办人确认欧洲销售交付安排，准备系统出库；实际款项另行登记'; await saveRelease() }
-function openRelease() { releaseReason.value = ''; releaseError.value = ''; releaseVisible.value = true }
+function openRelease() {
+  releaseReason.value = ''; releaseError.value = ''; releaseReceiptChecks.value = {}; releaseVisible.value = true
+  void loadReleaseReceipts()
+}
+watch(releaseVisible, visible => {
+  if (!visible) { releaseReceiptLoadVersion++; releaseReceiptsBusy.value = false }
+})
 async function saveRelease() {
   if (!detail.value || !canRelease.value || actionBusy.value) return
   if (reservationBlocked.value) { releaseError.value = '来源订单占用已失效，请先处理库存占用'; return }
+  if (!manualWorkflow.value && releaseReceiptsBusy.value) { releaseError.value = '正在核对收款凭证，请稍候'; return }
+  if (!manualWorkflow.value && releaseReceiptCheckFailed.value) { releaseError.value = '部分收款凭证状态读取失败，请刷新后重试'; return }
+  if (!manualWorkflow.value && missingReleaseReceiptCount.value > 0) { releaseError.value = `还有 ${missingReleaseReceiptCount.value} 笔已确认到账缺少收款凭证`; return }
   if (!releaseReason.value.trim()) { releaseError.value = '请填写发货放行说明'; return }
   actionBusy.value = true; releaseError.value = ''
   try { detail.value = await piApi.release(detail.value.id, releaseReason.value.trim()); releaseVisible.value = false; await loadWorkflow(detail.value.id); await load(); ElMessage.success('PI 已放行发货') }
@@ -1146,7 +1211,9 @@ onBeforeUnmount(() => {
           <el-descriptions :column="2" border><el-descriptions-item label="所属代理商">{{ detail.agentName || '—' }}</el-descriptions-item><el-descriptions-item label="计划发货">{{ detail.plannedShipDate || '—' }}</el-descriptions-item><el-descriptions-item label="创建时间">{{ detail.createdAt }}</el-descriptions-item><el-descriptions-item label="备注">{{ detail.remark || '—' }}</el-descriptions-item></el-descriptions>
           <p v-if="detailProfile">履约配置：{{ detailProfile.name }} · {{ detailProfile.version }}；收款主体：{{ detailProfile.collectionEntity }}<span v-if="detail.document?.business?.paymentDueDate">；付款到期：{{ detail.document.business.paymentDueDate }}</span></p>
           <PiManualWorkflowPanel v-if="internal && manualWorkflow" :workflow="workflow" :busy="workflowBusy || workflowActionBusy || actionBusy" :error="workflowError || releaseError" :can-write="canWrite" :can-release="canRelease" :pi-status="detail.status" @complete="completeWorkflow" @confirm-pi="handleWorkflowAction('CONFIRM_PI')" @release="releaseManualPi" />
-          <PiWorkflowPanel v-if="internal && !manualWorkflow" :workflow="workflow" :rules="detailProfile?.rules" :busy="workflowBusy" :error="workflowError" :action-busy="workflowActionBusy || actionBusy" :can-write="canWrite" :can-pay="canPay" :can-release="canRelease" :can-logistics="canLogistics" :can-after-sales="canAfterSales" :pi-id="detail.id" :logistics="detail.logistics" :domestic-shipment="detail.document?.business?.domesticShipment" :pi-status="detail.status" :currency-code="detail.currencyCode" :gate-met="gateMet" :reservation-blocked="reservationBlocked" @action="handleWorkflowAction" @complete="completeWorkflow" @production-update="recordProductionUpdate" @after-sales="emit('navigate', 'after-sales')" />
+          <PiWorkflowPanel v-if="internal && !manualWorkflow" :related-actions="workflowRelatedActions" :workflow="workflow" :rules="detailProfile?.rules" :busy="workflowBusy" :error="workflowError" :action-busy="workflowActionBusy || actionBusy" :can-write="canWrite" :can-pay="canPay" :can-release="canRelease" :can-logistics="canLogistics" :can-after-sales="canAfterSales" :pi-id="detail.id" :logistics="detail.logistics" :domestic-shipment="detail.document?.business?.domesticShipment" :pi-status="detail.status" :currency-code="detail.currencyCode" :gate-met="gateMet" :reservation-blocked="reservationBlocked" @action="handleWorkflowAction" @complete="completeWorkflow" @related="openRelatedSection" @production-update="recordProductionUpdate" @after-sales="emit('navigate', 'after-sales')" />
+          <div ref="detailTabsElement"></div>
+          <el-button v-if="relatedReturn" link type="primary" :disabled="actionBusy" @click="resumeRelatedForm">返回放行发货</el-button>
           <el-tabs v-model="detailTab">
             <el-tab-pane v-if="internal && showFinance && (europe || detail.tradeType === 'EXPORT')" label="向 Totem 付款" name="totem"><SalesSettlementPanel type="PI" :subject-id="detail.id" :currency-code="detail.currencyCode" :context="context" /></el-tab-pane><el-tab-pane label="商品与金额" name="items"><el-table :data="detail.items" empty-text="暂无商品">
       <RecordIdColumn /><el-table-column prop="skuCode" label="SKU" min-width="140" /><el-table-column label="图片" width="100"><template #default="scope"><PiItemImage v-if="scope.row.imageAttachmentId" :key="`${detail.id}-${scope.row.id}`" :pi-id="detail.id" :item-id="scope.row.id" /><span v-else>未记录</span></template></el-table-column><el-table-column prop="productName" label="商品" min-width="140" /><el-table-column prop="specification" label="规格" min-width="140" /><el-table-column prop="quantity" label="数量" width="80" /><el-table-column prop="unit" label="单位" width="80" /><el-table-column label="单价" min-width="110"><template #default="scope">{{ money(scope.row.unitPrice) }}</template></el-table-column><el-table-column label="折扣" min-width="100"><template #default="scope">{{ money(scope.row.discountAmount) }}</template></el-table-column><el-table-column label="税费" min-width="100"><template #default="scope">{{ money(scope.row.taxAmount) }}</template></el-table-column><el-table-column label="金额" min-width="120"><template #default="scope">{{ money(scope.row.lineTotal) }}</template></el-table-column></el-table><div class="pi-totals"><span>商品金额 <b>{{ money(detail.subtotal) }}</b></span><span>折扣合计 <b>− {{ money(detail.discountAmount) }}</b></span><span>税费合计 <b>{{ money(detail.taxAmount) }}</b></span><span>运费 <b>{{ money(detail.freightAmount) }}</b></span><span>其他费用 <b>{{ money(detail.otherFeeAmount ?? '0.00') }}</b></span><span>总金额 <b>{{ detail.currencyCode }} {{ money(detail.totalAmount) }}</b></span></div></el-tab-pane>
@@ -1175,7 +1242,7 @@ onBeforeUnmount(() => {
     <el-dialog v-model="logisticsAttachmentVisible" title="物流附件" width="min(850px, 95vw)" :close-on-click-modal="false">
       <PiLogisticsAttachments v-if="detail && logisticsAttachment && logisticsAttachmentVisible" :pi-id="detail.id" :logistics-id="logisticsAttachment.id" :can-upload="canLogistics && ['PLANNED', 'SHIPPED'].includes(logisticsAttachment.status)" />
     </el-dialog>
-    <PiReceiptAttachments v-if="showFinance && detail && receiptPayment" v-model="receiptVisible" :pi-id="receiptPayment.piId" :payment="receiptPayment" :can-upload="canPay && receiptPayment.status === 'CONFIRMED'" />
+    <PiReceiptAttachments v-if="showFinance && detail && receiptPayment" v-model="receiptVisible" :pi-id="receiptPayment.piId" :payment="receiptPayment" :can-upload="canPay && receiptPayment.status === 'CONFIRMED'" @saved="receiptSaved" />
     <el-dialog v-model="reversalVisible" title="撤回错误到账登记" width="520px" :close-on-click-modal="false">
       <p>此操作更正错误登记，不办理退款。原记录和凭证保留，当前 PI 需重新核对并放行。已出库车辆和库存占用保持原状。</p>
       <el-input v-model="reversal.reason" type="textarea" maxlength="500" placeholder="说明哪笔登记有误及核对依据" />
@@ -1193,12 +1260,32 @@ onBeforeUnmount(() => {
       <template #footer><el-button :disabled="actionBusy" @click="reservationVisible = false">取消</el-button><el-button type="primary" :loading="actionBusy" @click="saveReservation">确认重新占用</el-button></template>
     </el-dialog>
     <el-dialog v-model="paymentVisible" title="登记到账" width="520px" :close-on-click-modal="false"><el-form label-position="top"><el-form-item label="到账金额" required><el-input v-model="payment.amount" inputmode="decimal"><template #append>{{ payment.currencyCode }}</template></el-input></el-form-item><el-form-item label="到账时间"><el-date-picker v-model="payment.receivedAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="留空使用当前时间" /></el-form-item><el-form-item label="收款方式" required><el-select v-model="payment.paymentMethod"><el-option v-for="(label, key) in paymentMethods" :key="key" :value="key" :label="label" /></el-select></el-form-item><el-form-item v-if="payment.paymentMethod === 'OTHER'" label="其他方式说明" required><el-input v-model="payment.paymentMethodNote" maxlength="200" /></el-form-item><el-form-item label="到账说明"><el-input v-model="payment.remark" type="textarea" maxlength="500" placeholder="到账来源、银行流水说明等" /></el-form-item></el-form><el-alert v-if="paymentError" :title="paymentError" type="error" :closable="false" /><template #footer><el-button :disabled="actionBusy" @click="paymentVisible = false">取消</el-button><el-button type="primary" :loading="actionBusy" @click="savePayment">确认到账</el-button></template></el-dialog>
-    <el-dialog v-model="releaseVisible" title="放行发货" width="520px" :close-on-click-modal="false"><p>请核对合同、指定仓库库存及收款凭证；已确认的每笔收款须在收款记录中上传凭证，再放行出库。</p><el-form label-position="top"><el-form-item label="放行说明" required><el-input v-model="releaseReason" type="textarea" maxlength="500" /></el-form-item></el-form><el-alert v-if="releaseError" :title="releaseError" type="error" :closable="false" /><template #footer><el-button :disabled="actionBusy" @click="releaseVisible = false">取消</el-button><el-button type="success" :loading="actionBusy" @click="saveRelease">确认放行</el-button></template></el-dialog>
-    <el-dialog v-model="logisticsVisible" title="登记物流批次" width="560px" :close-on-click-modal="false"><el-form label-position="top"><el-form-item label="真实出库批次"><el-select v-model="logistics.stockOutBatchId" clearable placeholder="确认发运时必选"><el-option v-for="batch in detail?.dispatchBatches || []" :key="batch.id" :value="batch.id" :disabled="batch.activeQty === 0" :label="`${batch.batchNo} · 有效 ${batch.activeQty} 台`" /></el-select></el-form-item><el-form-item label="物流批次 / 计划编号" required><el-input v-model="logistics.batchNo" :disabled="Boolean(logistics.stockOutBatchId)" maxlength="64" /></el-form-item><el-form-item label="物流状态" required><el-select v-model="logistics.status"><el-option value="PLANNED" label="计划中" /><el-option value="SHIPPED" label="已发货" :disabled="detail?.status !== 'RELEASED'" /></el-select></el-form-item><el-form-item label="承运商" :required="logistics.status === 'SHIPPED' && !customerArrangedLogistics"><el-input v-model="logistics.carrier" maxlength="128" /></el-form-item><el-form-item label="运单号" :required="logistics.status === 'SHIPPED' && !customerArrangedLogistics"><el-input v-model="logistics.trackingNo" maxlength="128" /></el-form-item><el-form-item label="备注"><el-input v-model="logistics.remark" type="textarea" maxlength="500" /></el-form-item></el-form><el-alert v-if="logisticsError" :title="logisticsError" type="error" :closable="false" /><template #footer><el-button :disabled="actionBusy" @click="logisticsVisible = false">取消</el-button><el-button type="primary" :loading="actionBusy" @click="saveLogistics">保存物流</el-button></template></el-dialog>
+    <el-dialog v-model="releaseVisible" title="放行发货" width="min(760px, 95vw)" :close-on-click-modal="false">
+      <p>请核对合同、指定仓库库存及收款凭证；已确认的每笔收款须上传凭证后再放行出库。</p>
+      <PiRelatedActions v-if="releaseError" :actions="workflowRelatedActions" step="RELEASE_PI" :busy="actionBusy" @select="openRelatedSection" />
+      <section class="release-receipts">
+        <div class="release-receipts-head"><strong>收款凭证</strong><el-button link type="primary" :loading="releaseReceiptsBusy" @click="loadReleaseReceipts">刷新状态</el-button></div>
+        <el-table :data="confirmedReleasePayments" v-loading="releaseReceiptsBusy" empty-text="当前没有已确认到账记录">
+          <el-table-column prop="receivedAt" label="到账时间" min-width="170" />
+          <el-table-column label="金额" min-width="130"><template #default="scope">{{ scope.row.currencyCode }} {{ money(scope.row.amount) }}</template></el-table-column>
+          <el-table-column label="凭证状态" min-width="130"><template #default="scope"><el-tag :type="receiptCheckType(scope.row)">{{ receiptCheckLabel(scope.row) }}</el-tag></template></el-table-column>
+          <el-table-column label="操作" width="130"><template #default="scope"><el-button link type="primary" :disabled="releaseReceiptsBusy" @click="openReceipt(scope.row)">{{ canPay ? (releaseReceiptChecks[scope.row.id]?.count ? '查看 / 补传' : '快速上传') : '查看凭证' }}</el-button></template></el-table-column>
+        </el-table>
+        <el-alert v-if="missingReleaseReceiptCount" :title="`还有 ${missingReleaseReceiptCount} 笔已确认到账缺少收款凭证，请逐笔上传`" type="warning" :closable="false" show-icon />
+        <el-alert v-if="!canPay && missingReleaseReceiptCount" title="当前账号没有收款凭证上传权限，请由具备收款确认权限的人员上传" type="info" :closable="false" show-icon />
+      </section>
+      <el-form label-position="top"><el-form-item label="放行说明" required><el-input v-model="releaseReason" type="textarea" maxlength="500" /></el-form-item></el-form>
+      <el-alert v-if="releaseError" :title="releaseError" type="error" :closable="false" />
+      <template #footer><el-button :disabled="actionBusy" @click="releaseVisible = false">取消</el-button><el-button type="success" :loading="actionBusy" :disabled="releaseReceiptsBusy || releaseReceiptCheckFailed || missingReleaseReceiptCount > 0" @click="saveRelease">确认放行</el-button></template>
+    </el-dialog>
+    <el-dialog v-model="logisticsVisible" title="登记物流批次" width="min(560px, 95vw)" :close-on-click-modal="false">
+      <p v-if="!detail?.dispatchBatches?.some(batch => batch.activeQty > 0)" class="pi-hint">暂无真实出库批次，请由仓库实际出库后生成。<a v-if="allowed('STOCK_READ')" href="/stock-out" target="_blank" rel="noopener noreferrer">去查看出库记录</a></p>
+      <el-form label-position="top"><el-form-item label="真实出库批次"><el-select v-model="logistics.stockOutBatchId" clearable placeholder="确认发运时必选"><el-option v-for="batch in detail?.dispatchBatches || []" :key="batch.id" :value="batch.id" :disabled="batch.activeQty === 0" :label="`${batch.batchNo} · 有效 ${batch.activeQty} 台`" /></el-select></el-form-item><el-form-item label="物流批次 / 计划编号" required><el-input v-model="logistics.batchNo" :disabled="Boolean(logistics.stockOutBatchId)" maxlength="64" /></el-form-item><el-form-item label="物流状态" required><el-select v-model="logistics.status"><el-option value="PLANNED" label="计划中" /><el-option value="SHIPPED" label="已发货" :disabled="detail?.status !== 'RELEASED'" /></el-select></el-form-item><el-form-item label="承运商" :required="logistics.status === 'SHIPPED' && !customerArrangedLogistics"><el-input v-model="logistics.carrier" maxlength="128" /></el-form-item><el-form-item label="运单号" :required="logistics.status === 'SHIPPED' && !customerArrangedLogistics"><el-input v-model="logistics.trackingNo" maxlength="128" /></el-form-item><el-form-item label="备注"><el-input v-model="logistics.remark" type="textarea" maxlength="500" /></el-form-item></el-form><el-alert v-if="logisticsError" :title="logisticsError" type="error" :closable="false" /><template #footer><el-button :disabled="actionBusy" @click="logisticsVisible = false">取消</el-button><el-button type="primary" :loading="actionBusy" @click="saveLogistics">保存物流</el-button></template></el-dialog>
   </section>
 </template>
 
 <style scoped>
 .europe-order-scope{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:16px 18px;margin-bottom:18px;border:1px solid #dbe4ee;border-radius:10px;background:#f6f9fc}.europe-order-scope label{font-weight:600;white-space:nowrap}.europe-order-scope .el-select{width:320px;max-width:100%}.europe-order-scope p{flex-basis:100%;margin:0;color:#65758a;font-size:13px;line-height:1.7}.europe-order-scope .el-alert{width:100%;margin:0}
 .pi-workspace{padding:28px 32px;min-width:0;max-width:1500px;margin:auto}.pi-heading{display:flex;justify-content:space-between;gap:20px;align-items:center;margin-bottom:24px}.pi-heading h2{margin:0 0 7px;font-size:24px}.pi-heading p,.pi-hint{color:#65758a;font-size:13px;line-height:1.7}.pi-heading p{margin:0}.pi-filters{display:flex;gap:12px;align-items:center;margin-bottom:18px}.pi-filters>.el-input{max-width:340px}.pi-filters>.el-select{width:160px}.el-pagination{margin-top:20px;justify-content:flex-end;flex-wrap:wrap}.el-alert{margin:12px 0}.pi-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 18px}.pi-form .el-select,.pi-form .el-date-editor,.el-form-item .el-date-editor{width:100%}.pi-form h3{font-size:16px;margin:22px 0 14px}.pi-items-scroll{overflow-x:auto;margin-bottom:12px}.pi-draft-items{min-width:1020px}.pi-draft-items th,.pi-draft-items td{padding:10px 6px}.pi-draft-items th:first-child{width:340px}.pi-draft-items .el-input-number{width:108px}.pi-draft-items .el-input{min-width:98px}.pi-draft-items .el-select{min-width:320px}.pi-amounts{margin-top:24px}.pi-preview{background:#f1f7fc;border-radius:8px;padding:14px 18px;display:flex;flex-direction:column;gap:7px;align-self:start}.pi-preview span{font-size:12px;color:#52687d}.pi-preview strong{font-size:23px;color:#1677c8}.pi-preview small{font-size:11px;line-height:1.6;color:#748196}.pi-detail{min-height:140px}.pi-detail-heading{display:flex;justify-content:space-between;align-items:center;gap:20px;margin:8px 0 18px}.pi-detail-heading>div{display:flex;gap:12px;flex-wrap:wrap;align-items:center}.pi-detail-heading span{font-size:13px;color:#65758a}.pi-grand-total{font-size:24px;color:#1677c8}.pi-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}.pi-actions .el-button+.el-button{margin-left:0}.pi-tab-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.pi-totals{display:flex;justify-content:flex-end;gap:22px;flex-wrap:wrap;background:#f6f9fc;padding:18px;margin-top:16px}.pi-totals span{display:flex;flex-direction:column;gap:8px;color:#65758a;font-size:12px}.pi-totals b{font-size:15px;color:#23364d}.pi-prewrap{white-space:pre-wrap;overflow-wrap:anywhere}.el-tabs{margin-top:18px}@media(max-width:900px){.pi-workspace{padding:22px 18px}.pi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.pi-filters{flex-wrap:wrap}}@media(max-width:580px){.pi-grid{grid-template-columns:1fr}.pi-heading{align-items:flex-start;flex-direction:column}.pi-detail-heading{align-items:flex-start;flex-direction:column}.pi-filters>.el-input{max-width:none;width:100%}.pi-grand-total{font-size:21px}}
+.release-receipts{margin:16px 0 20px}.release-receipts-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}.release-receipts .el-alert{margin:10px 0 0}
 </style>

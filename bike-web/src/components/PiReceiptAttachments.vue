@@ -6,7 +6,7 @@ import api from '../api'
 import { piApi, type PiPayment, type PiReceiptAttachment } from '../pi-api'
 
 const props = defineProps<{ modelValue: boolean; piId: number; payment: PiPayment; canUpload: boolean }>()
-const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
+const emit = defineEmits<{ 'update:modelValue': [value: boolean]; saved: [attachment: PiReceiptAttachment] }>()
 const visible = computed({ get: () => props.modelValue, set: value => emit('update:modelValue', value) })
 const rows = ref<PiReceiptAttachment[]>([]), loading = ref(false), uploading = ref(false), downloading = ref('')
 const error = ref('')
@@ -22,7 +22,10 @@ async function load() {
   catch (failure) { if (current === version) error.value = message(failure, '凭证列表加载失败，请重试') }
   finally { if (current === version) loading.value = false }
 }
-function saved(row: PiReceiptAttachment) { if (!rows.value.some(item => item.id === row.id)) rows.value.push(row) }
+function saved(row: PiReceiptAttachment) {
+  if (!rows.value.some(item => item.id === row.id)) rows.value.push(row)
+  emit('saved', row)
+}
 async function download(row: PiReceiptAttachment) {
   if (busy.value) return
   const current = version, piId = props.piId, paymentId = props.payment.id

@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
+import PiRelatedActions, { type PiRelatedAction } from './PiRelatedActions.vue'
 import PurchaseContractNumber from './PurchaseContractNumber.vue'
 import type { FulfillmentRules } from '../fulfillment-api'
 import { piApi, type PiWorkflow, type PiWorkflowComplete, type PiWorkflowStep, type PiLogistics } from '../pi-api'
-const props = defineProps<{ workflow: PiWorkflow | null; rules?: FulfillmentRules; busy: boolean; error: string; actionBusy: boolean; canWrite: boolean; canPay: boolean; canRelease: boolean; canLogistics: boolean; canAfterSales: boolean; piStatus: string; currencyCode: string; gateMet: boolean; reservationBlocked: boolean; piId: number; logistics: PiLogistics[]; domesticShipment?: boolean | null }>()
-const emit = defineEmits<{ action: [action: 'CONFIRM_PI' | 'REGISTER_PAYMENT' | 'RELEASE_PI' | 'REGISTER_LOGISTICS']; complete: [stepCode: string, body: PiWorkflowComplete]; productionUpdate: [body: PiWorkflowComplete]; afterSales: [] }>()
+const props = defineProps<{ relatedActions?: PiRelatedAction[]; workflow: PiWorkflow | null; rules?: FulfillmentRules; busy: boolean; error: string; actionBusy: boolean; canWrite: boolean; canPay: boolean; canRelease: boolean; canLogistics: boolean; canAfterSales: boolean; piStatus: string; currencyCode: string; gateMet: boolean; reservationBlocked: boolean; piId: number; logistics: PiLogistics[]; domesticShipment?: boolean | null }>()
+const emit = defineEmits<{ action: [action: 'CONFIRM_PI' | 'REGISTER_PAYMENT' | 'RELEASE_PI' | 'REGISTER_LOGISTICS']; complete: [stepCode: string, body: PiWorkflowComplete]; productionUpdate: [body: PiWorkflowComplete]; afterSales: []; related: [key: string] }>()
 const current = computed(() => props.workflow?.steps.find(s => s.code === props.workflow?.currentStep && s.status !== 'COMPLETED') || null)
 const completed = computed(() => props.workflow?.steps.filter(s => s.status === 'COMPLETED') || [])
 const purchaseContract = computed(() => props.workflow?.steps.find(step => step.code === 'PURCHASE_CONTRACT_READY')?.details)
@@ -12,7 +13,10 @@ const purchaseContractParty = computed(() => purchaseContract.value?.purchaseCon
 const customerForwarder = computed(() => props.rules?.deliveryMode === 'CUSTOMER_PICKUP' || props.workflow?.steps.find(s => s.code === 'FORWARDER_SELECTED')?.details?.forwarderResponsibility === 'CUSTOMER')
 const progress = computed(() => props.workflow?.totalCount ? Math.round(props.workflow.completedCount * 100 / props.workflow.totalCount) : 0)
 const dialogVisible = ref(false), formError = ref(''), activeCode = ref(''), attachmentsBusy = ref(false)
+const suspended = ref(false)
+const proofsError = ref('')
 const proofs = ref<{ id: string; fileName: string }[]>([])
+let proofLoadVersion = 0
 const documentSteps = ['DISPATCH_SHEET_SENT','CI_SENT','RD_SENT','RD_SIGNED','CMR_COLLECTED']
 const configurableSteps = [...documentSteps,'CREDIT_APPROVED','GOODS_PREPARED','CASE_CLOSED']
 const form = reactive({ note: '', contractNo: '', contractReady: false, paymentTableReady: false, purchaseContractNo: '', purchaseContractParty: '', forwarderResponsibility: 'SELLER', forwarderName: '', forwarderAddress: '', forwarderContact: '', domesticCarrier: '', domesticPrice: '', domesticTrackingNo: '', warehouseArrivalDate: '', arrivalProof: '', internationalTrackingNo: '', internationalPrice: '', internationalCurrency: '', receivedDate: '' })
@@ -31,7 +35,7 @@ const actionLabel = computed(() => {
   }
 })
 async function openForm(code: string) {
-  activeCode.value = code; formError.value = ''; proofs.value = []
+  suspended.value = false; activeCode.value = code; formError.value = ''; proofs.value = []
   Object.assign(form, { note: '', contractNo: '', contractReady: false, paymentTableReady: false, purchaseContractNo: '', purchaseContractParty: '', forwarderResponsibility: 'SELLER', forwarderName: '', forwarderAddress: '', forwarderContact: '', domesticCarrier: '', domesticPrice: '', domesticTrackingNo: '', warehouseArrivalDate: '', arrivalProof: '', internationalTrackingNo: '', internationalPrice: '', internationalCurrency: props.currencyCode, receivedDate: '' })
   Object.assign(production, { productionStatus: '', expectedCompletionDate: '', materialStatus: '' })
   if (code === 'PURCHASE_CONTRACT_READY') {
@@ -40,17 +44,34 @@ async function openForm(code: string) {
   }
   form.forwarderResponsibility = props.rules?.deliveryMode === 'CUSTOMER_PICKUP' ? 'CUSTOMER' : 'SELLER'
   dialogVisible.value = true
-  if (documentSteps.includes(code)) {
-    attachmentsBusy.value = true
-    try { proofs.value = await piApi.confirmationAttachments(props.piId) } catch { formError.value = '业务单据读取失败，请重试' } finally { attachmentsBusy.value = false }
-  }
+  if (documentSteps.includes(code)) await loadProofs()
   if (code === 'WAREHOUSE_ARRIVED') {
     form.domesticTrackingNo = props.workflow?.steps.find(step => step.code === 'DOMESTIC_EXPRESS_BOOKED')?.details?.domesticTrackingNo || ''
   }
 }
+async function loadProofs() {
+  const version = ++proofLoadVersion, piId = props.piId
+  attachmentsBusy.value = true; proofsError.value = ''
+  try {
+    const attachments = await piApi.confirmationAttachments(piId)
+    if (version === proofLoadVersion && piId === props.piId) proofs.value = attachments
+  } catch {
+    if (version === proofLoadVersion) proofsError.value = '业务单据读取失败，请重试'
+  } finally { if (version === proofLoadVersion) attachmentsBusy.value = false }
+}
+function openRelated(key: string) {
+  if (props.actionBusy) return
+  if (dialogVisible.value) { suspended.value = true; dialogVisible.value = false }
+  emit('related', key)
+}
+async function resumeForm() {
+  suspended.value = false; dialogVisible.value = true; formError.value = ''
+  if (documentSteps.includes(activeCode.value)) await loadProofs()
+}
 function startAction() {
   const code = current.value?.code
   if (!code || disabled.value) return
+  if (suspended.value && activeCode.value === code) { void resumeForm(); return }
   if (code === 'DOCUMENTS_READY' && props.piStatus === 'DRAFT') { emit('action', 'CONFIRM_PI'); return }
   if (code === 'PAYMENT_CONFIRMED' || code === 'PAYMENT_SETTLED') { emit('action', 'REGISTER_PAYMENT'); return }
   if (code === 'INVENTORY_RESERVED') { emit('complete', code, {}); return }
@@ -99,15 +120,17 @@ function submit() {
   formError.value = ''; emit('complete', code, body)
 }
 function summary(step: PiWorkflowStep) { const d = step.details; return [d?.contractNo, d?.purchaseContractNo, d?.forwarderName, d?.domesticTrackingNo, d?.warehouseArrivalDate, d?.internationalTrackingNo, d?.receivedDate, step.note].filter(Boolean).join(' · ') }
-watch(() => props.workflow, () => { if (props.workflow?.steps.some(s => s.code === activeCode.value && s.status === 'COMPLETED')) dialogVisible.value = false })
+watch(() => props.workflow, () => { if (!suspended.value && props.workflow?.steps.some(s => s.code === activeCode.value && s.status === 'COMPLETED')) dialogVisible.value = false })
 watch(() => props.workflow?.updates.length, (count, before) => { if (activeCode.value === 'PRODUCTION_FOLLOW_UP' && count !== before) dialogVisible.value = false })
-function closeAfterSuccess() { dialogVisible.value = false }
+function closeAfterSuccess() { dialogVisible.value = false; suspended.value = false }
 defineExpose({ closeAfterSuccess })
 </script>
 <template>
   <section class="workflow-band" aria-label="PI流程">
     <div class="workflow-head"><div><span class="workflow-kicker">履约进度</span><strong>{{ workflow?.completedCount || 0 }}/{{ workflow?.totalCount || 11 }}</strong></div><el-progress :percentage="progress" /></div>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
+    <el-button v-if="suspended" link type="primary" :disabled="actionBusy" @click="resumeForm">返回继续填写：{{ workflow?.steps.find(step => step.code === activeCode)?.name || '当前环节' }}</el-button>
+    <PiRelatedActions v-if="current && error" :actions="relatedActions || []" :step="current.code" :busy="actionBusy" @select="openRelated" />
     <p v-if="busy">正在读取流程…</p>
     <div v-else-if="current" class="workflow-current"><div class="workflow-step-number">{{ current.order }}</div><div class="workflow-current-copy"><span>当前任务</span><h3>{{ current.name }}</h3><p v-if="current.code === 'STOCK_DISPATCHED'">放行后由仓库扫码出库；全部货物出库后自动进入下一步。</p><p v-if="current.code === 'INVENTORY_RESERVED'">锁库不足时到账记录保留，补足指定仓库库存后重试。</p></div><el-button type="primary" :loading="actionBusy" :disabled="disabled || current.code === 'PAYMENT_CONFIRMED' && !canPay || current.code === 'INVENTORY_RESERVED' && !canPay && !canRelease || current.code === 'STOCK_DISPATCHED' && (piStatus === 'RELEASED' || !canRelease || !gateMet)" @click="startAction">{{ actionLabel }}</el-button></div>
     <div v-else-if="workflow" class="workflow-complete"><strong>{{ rules ? '交付、结算及所需单据已核对，业务已结案' : '全部货物签收，订单流程完成' }}</strong><el-button v-if="canAfterSales" @click="emit('afterSales')">进入售后</el-button></div>
@@ -118,15 +141,20 @@ defineExpose({ closeAfterSuccess })
     <details v-if="completed.length" class="workflow-history"><summary>查看已完成步骤（{{ completed.length }}）</summary><ol><li v-for="step in completed" :key="step.code"><span>{{ step.order }}</span><div><strong>{{ step.name }}</strong><small>{{ summary(step) || '已完成' }}</small></div></li></ol></details>
   </section>
   <el-dialog v-model="dialogVisible" :title="activeCode === 'PRODUCTION_FOLLOW_UP' ? '记录生产跟进' : workflow?.steps.find(s => s.code === activeCode)?.name || '业务确认'" width="min(600px,94vw)" :close-on-click-modal="false">
+    <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
+    <PiRelatedActions v-if="error && activeCode !== 'TRACKING_RECORDED' && !documentSteps.includes(activeCode)" :actions="relatedActions || []" :step="activeCode" :busy="actionBusy" @select="openRelated" />
     <el-form label-position="top">
-      <template v-if="configurableSteps.includes(activeCode)"><p v-if="activeCode === 'CREDIT_APPROVED'">批准后按本单约定保留库存，实际到账仍需单独登记。请核对客户、金额、PI 付款条款并填写授权依据。</p><template v-if="documentSteps.includes(activeCode)"><p>先在 PI 详情“业务单据附件”上传对应文件。发送节点记录经办人实际发送情况，不会自动向客户或工厂发送。</p><el-form-item label="本PI业务单据附件" required><el-select v-model="form.arrivalProof" :loading="attachmentsBusy"><el-option v-for="proof in proofs" :key="proof.id" :value="proof.id" :label="proof.fileName" /></el-select></el-form-item><el-form-item label="实际发送 / 回收日期" required><el-date-picker v-model="form.receivedDate" value-format="YYYY-MM-DD" /></el-form-item></template></template>
+      <template v-if="configurableSteps.includes(activeCode)"><p v-if="activeCode === 'CREDIT_APPROVED'">批准后按本单约定保留库存，实际到账仍需单独登记。请核对客户、金额、PI 付款条款并填写授权依据。</p><template v-if="documentSteps.includes(activeCode)"><p>先在 PI 详情“业务单据附件”上传对应文件。发送节点记录经办人实际发送情况，不会自动向客户或工厂发送。</p><el-form-item label="本PI业务单据附件" required>
+          <el-select v-model="form.arrivalProof" :loading="attachmentsBusy" placeholder="选择已上传附件" style="width:100%"><el-option v-for="proof in proofs" :key="proof.id" :value="proof.id" :label="proof.fileName" /><template #empty><div class="workflow-proof-empty"><span>{{ attachmentsBusy ? '正在读取附件…' : proofsError ? '附件读取失败，请重试' : '暂无附件' }}</span><el-button v-if="canWrite && !attachmentsBusy" link type="primary" :disabled="actionBusy" @click="openRelated('confirmations')">去维护业务单据附件</el-button></div></template></el-select>
+          <div class="workflow-field-shortcut"><el-button v-if="canWrite" link type="primary" :disabled="actionBusy" @click="openRelated('confirmations')">没有需要的附件？去维护业务单据附件</el-button><span v-else-if="!attachmentsBusy && !proofs.length">请联系业务经办人维护附件。</span><span v-if="proofsError">{{ proofsError }}</span></div>
+        </el-form-item><el-form-item label="实际发送 / 回收日期" required><el-date-picker v-model="form.receivedDate" value-format="YYYY-MM-DD" /></el-form-item></template></template>
       <template v-if="activeCode === 'PRODUCTION_FOLLOW_UP'"><el-form-item label="生产进度" required><el-input v-model="production.productionStatus" type="textarea" maxlength="500" /></el-form-item><el-form-item label="预计完成日期"><el-date-picker v-model="production.expectedCompletionDate" value-format="YYYY-MM-DD" /></el-form-item><el-form-item label="材料情况"><el-input v-model="production.materialStatus" maxlength="500" /></el-form-item></template>
       <template v-else-if="activeCode === 'DOCUMENTS_READY'"><el-form-item label="销售合同号" :required="rules?.salesContractRequired ?? true"><el-input v-model="form.contractNo" maxlength="128" /></el-form-item><el-checkbox v-model="form.contractReady">PI、销售合同及付款信息已确认</el-checkbox><el-checkbox v-model="form.paymentTableReady">收付款表已建立（应收金额、币种、收款主体已核对）</el-checkbox></template>
       <template v-else-if="activeCode === 'PURCHASE_CONTRACT_READY'"><el-form-item label="购销合同方" required><el-select v-if="!rules" v-model="form.purchaseContractParty"><el-option value="SAVA" label="SAVA" /><el-option value="YINSANHUAN" label="银三环" /></el-select><el-input v-else v-model="form.purchaseContractParty" maxlength="200" placeholder="实际合同方" /></el-form-item><el-form-item label="购销合同号" required><el-input v-model="form.purchaseContractNo" maxlength="128" /></el-form-item></template>
       <template v-else-if="activeCode === 'FORWARDER_SELECTED'"><el-form-item label="由谁联系货代" required><el-radio-group v-model="form.forwarderResponsibility" :disabled="Boolean(rules)"><el-radio value="CUSTOMER">客户联系</el-radio><el-radio value="SELLER">我方联系</el-radio></el-radio-group></el-form-item><el-form-item label="货代名称" required><el-input v-model="form.forwarderName" maxlength="128" /></el-form-item><el-form-item :label="customerForwarder && rules ? '实际提货仓库地址' : '货代仓库地址'" required><el-input v-model="form.forwarderAddress" type="textarea" maxlength="1000" /></el-form-item><el-form-item :label="customerForwarder && rules ? '提货联系人及联系方式' : '收货人及联系方式'" required><el-input v-model="form.forwarderContact" maxlength="300" /></el-form-item></template>
       <template v-else-if="activeCode === 'DOMESTIC_EXPRESS_BOOKED'"><p v-if="customerForwarder">客户安排的运输按可获取信息登记，在补充说明中确认送仓安排。</p><el-form-item label="送仓承运商" :required="!customerForwarder"><el-input v-model="form.domesticCarrier" placeholder="货拉拉 / 跨越 / 顺丰 / 其他" maxlength="128" /></el-form-item><el-form-item label="送仓运单号" :required="!customerForwarder"><el-input v-model="form.domesticTrackingNo" maxlength="128" /></el-form-item><el-form-item :label="'运费 / ' + currencyCode" :required="!customerForwarder"><el-input v-model="form.domesticPrice" inputmode="decimal" /></el-form-item></template>
       <template v-else-if="activeCode === 'WAREHOUSE_ARRIVED'"><el-form-item label="实际到仓日期" required><el-date-picker v-model="form.warehouseArrivalDate" value-format="YYYY-MM-DD" /></el-form-item><el-form-item label="物流单号" required><el-input v-model="form.domesticTrackingNo" maxlength="128" placeholder="请输入送达货代仓库的物流单号" /></el-form-item></template>
-      <template v-else-if="activeCode === 'TRACKING_RECORDED'"><p>请先为每个实际出库批次登记发运信息。客户安排的按可获取信息填写。</p><el-form-item label="货代发货号" :required="!customerForwarder"><el-input v-model="form.internationalTrackingNo" maxlength="128" /></el-form-item><el-form-item label="实际运输费用" :required="!customerForwarder"><el-input v-model="form.internationalPrice" inputmode="decimal" /></el-form-item><el-form-item label="费用币种" :required="!customerForwarder"><el-input v-model="form.internationalCurrency" maxlength="3" /></el-form-item></template>
+      <template v-else-if="activeCode === 'TRACKING_RECORDED'"><p class="workflow-logistics-hint">请先为每个实际出库批次登记发运信息。客户安排的按可获取信息填写。<el-button link type="primary" :disabled="actionBusy" @click="openRelated('logistics')">去维护物流信息</el-button></p><el-form-item label="货代发货号" :required="!customerForwarder"><el-input v-model="form.internationalTrackingNo" maxlength="128" /></el-form-item><el-form-item label="实际运输费用" :required="!customerForwarder"><el-input v-model="form.internationalPrice" inputmode="decimal" /></el-form-item><el-form-item label="费用币种" :required="!customerForwarder"><el-input v-model="form.internationalCurrency" maxlength="3" /></el-form-item></template>
       <template v-else-if="activeCode === 'CUSTOMER_RECEIVED'"><el-form-item label="全部货物签收日期" required><el-date-picker v-model="form.receivedDate" value-format="YYYY-MM-DD" /></el-form-item></template>
       <el-form-item :label="configurableSteps.includes(activeCode) ? '办理情况 / 接收人 / 授权依据' : '补充说明'" :required="configurableSteps.includes(activeCode)"><el-input v-model="form.note" type="textarea" maxlength="500" /></el-form-item>
     </el-form><el-alert v-if="formError" :title="formError" type="error" :closable="false" />
@@ -134,6 +162,9 @@ defineExpose({ closeAfterSuccess })
   </el-dialog>
 </template>
 <style scoped>
+.workflow-field-shortcut{display:flex;flex-wrap:wrap;gap:8px;width:100%;margin-top:6px;color:#65758a;font-size:13px}.workflow-logistics-hint .el-button{margin-left:6px;vertical-align:baseline}
+.workflow-proof-empty{display:flex;align-items:center;justify-content:flex-start;gap:8px;flex-wrap:wrap;margin:8px 0;padding:4px 12px;color:#65758a;font-size:13px}
+
 :deep(.el-checkbox){height:auto;min-height:32px;align-items:flex-start;margin-right:0;max-width:100%}
 :deep(.el-checkbox__input){margin-top:4px}
 :deep(.el-checkbox__label){white-space:normal;line-height:1.5}
