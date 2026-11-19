@@ -742,6 +742,8 @@ async function openEdit() {
   await nextTick(); initializingDraft = false; await loadOptions()
 }
 function payload(): PiCreate {
+  if (props.europe && !editingRevision.value && draft.document.business && !draft.document.business.salesChannel)
+    draft.document.business.salesChannel = 'CZECH_PI'
   if (!draft.customerId) throw new Error('请选择客户')
   if (draft.document.issueDate && draft.document.validUntil && draft.document.validUntil < draft.document.issueDate) throw new Error('有效期不能早于开单日期')
   if (!draft.document.sellerName.trim() || !draft.document.paymentTerms.trim() || !draft.document.deliveryTerms.trim() || !draft.document.templateCode.trim() || !draft.document.templateVersion.trim()) throw new Error('请填写卖方名称、付款条款、交付条款、模板名称及版本')
@@ -1158,7 +1160,7 @@ onBeforeUnmount(() => {
             </section>
             <section v-show="draftStep === 1" class="pi-draft-step">
               <div class="pi-step-heading"><span class="pi-eyebrow">STEP 02</span><h2>把交易约定说清楚。</h2><p>模板负责固定资料，你只需填写这笔订单的实际约定。</p></div>
-              <section class="pi-form-card" data-draft-field="template"><PiTemplatePicker :trade-type="draft.tradeType" :document="draft.document" :can-manage="canManageTemplates" :disabled="actionBusy || Boolean(draftProfile)" :profile-bound="Boolean(draftProfile)" :manage-disabled="actionBusy" :refresh-key="templateRefreshKey" @select="chooseTemplate" @manage="openTemplates()" @adjust="openTemplates" /></section>
+              <section class="pi-form-card" data-draft-field="template"><p v-if="europe" class="field-hint">欧洲内销、外销 PI 保存后统一采用 France_1104 版式；以下选择用于带入本单的卖方与银行资料。</p><PiTemplatePicker :trade-type="draft.tradeType" :document="draft.document" :can-manage="canManageTemplates" :disabled="actionBusy || Boolean(draftProfile)" :profile-bound="Boolean(draftProfile)" :manage-disabled="actionBusy" :refresh-key="templateRefreshKey" @select="chooseTemplate" @manage="openTemplates()" @adjust="openTemplates" /></section>
               <section class="pi-form-card" data-draft-field="bank"><div class="pi-section-heading"><h3>收款信息 · {{ draft.document.business?.collectionEntity || '待选择' }}</h3></div><p class="pi-field-help">模板带入账户后可按本单更新；保存为本单快照，已确认单据须通过修订调整。</p><div class="pi-draft-grid"><el-form-item label="收款银行" required><el-input v-model="draft.document.bankName" maxlength="200" /></el-form-item><el-form-item label="收款账户" required><el-input v-model="draft.document.bankAccount" maxlength="200" /></el-form-item><el-form-item label="收款人 / 公司全称" required><el-input v-model="draft.document.beneficiary" maxlength="200" /></el-form-item></div></section>
               <section class="pi-form-card"><div class="pi-section-heading"><div><h3>付款约定</h3><p>收款门槛不会自动填写比例；请按实际约定确认。</p></div></div>
                 <el-form-item label="付款条款" required data-draft-field="paymentTerms" :error="fieldError('paymentTerms')"><el-input v-model="draft.document.paymentTerms" aria-label="付款条款" type="textarea" :rows="3" maxlength="2000" placeholder="填写双方约定的付款方式、时间及条件" /></el-form-item>

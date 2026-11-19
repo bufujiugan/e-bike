@@ -57,7 +57,12 @@ public class PiTemplateService {
     }
     public void selectRenderer(PiView pi) {
         var d=pi.getDocument();
-        pi.setDocumentRenderVersion(renderVersion(d==null?null:mapper.find(d.templateCode(),d.templateVersion())));
+        pi.setDocumentRenderVersion(renderVersion(d==null?null:mapper.find(d.templateCode(),d.templateVersion()), d));
+    }
+    static String renderVersion(PiTemplate template, PiDocumentSnapshot document) {
+        if (document != null && document.business() != null
+                && "CZECH_PI".equals(document.business().salesChannel())) return "PI_EUROPE_V1";
+        return renderVersion(template);
     }
     static String renderVersion(PiTemplate template) {
         if(template==null)return "PI_V1";
