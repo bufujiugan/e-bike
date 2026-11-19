@@ -7,7 +7,7 @@ import type { PiSalesScenario } from '../pi-sales-scenario'
 
 const props = defineProps<{ context: (PermissionContext & { userType?: string; username?: string }) | null }>()
 const emit = defineEmits<{ navigate: [view: string] }>()
-// 历史 PI 延续原菜单归属，全部入口同时支持跨业务查询。
+// 历史 PI 保留原销售标识，欧洲页面的所有入口继续按实际出货仓查询。
 const mode = ref<PiSalesScenario | 'HISTORY'>('CZECH_EXPORT')
 const agent = computed(() => hasRole(props.context, 'WEB_AGENT') || props.context?.userType === 'AGENT')
 </script>
@@ -22,7 +22,7 @@ const agent = computed(() => hasRole(props.context, 'WEB_AGENT') || props.contex
         <el-radio-button value="HISTORY">全部／历史 PI</el-radio-button>
       </el-radio-group>
     </template>
-    <PiWorkspace :key="agent ? 'agent' : mode" :context="context"
+    <PiWorkspace :key="agent ? 'agent' : mode" :context="context" europe
       :sales-scenario="agent || mode === 'HISTORY' ? undefined : mode"
       :allow-create="mode !== 'HISTORY'" @navigate="emit('navigate', $event)" />
   </section>

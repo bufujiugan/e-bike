@@ -8,8 +8,8 @@
 | --- | --- | --- |
 | 销售订单 | 内销 | 在订单办理中填写合同信息，按指定模板生成并下载购销合同 `.xlsx`，不生成 PI |
 | 销售订单 | 外销 | 新增“外销 · PI”，复用 PI 开单、修订、收款、放行、物流及单据导出 |
-| PI 与履约 | 捷克内销 | 新增“捷克内销 · PI”，复用内销商品、价格、税费和付款字段，单据仍走 PI 流程 |
-| PI 与履约 | 捷克外销 | “捷克外销 · PI”，沿用已有外销 PI 能力 |
+| 欧洲销售与交付 → 正常 PI 销售 | 捷克内销 | 新增“捷克内销 · PI”，复用内销商品、价格、税费和付款字段，单据仍走 PI 流程 |
+| 欧洲销售与交付 → 正常 PI 销售 | 捷克外销 | “捷克外销 · PI”，沿用已有外销 PI 能力 |
 
 国内外销默认 USD，捷克内外销默认 EUR，币种均可修改。国内外销默认国内出货，捷克默认非国内出货；实际出货地点与仓库仍由经办人核对选择。销售入口与实际出货地点是独立属性。
 
@@ -18,13 +18,13 @@
 ## 实现与兼容
 
 - `bike-web/src/views/BusinessModulePage.vue`：国内内销与外销切换，保留原订单列表及办理操作。
-- `bike-web/src/components/CzechPiWorkspace.vue`：捷克内销、外销及全部／历史 PI 入口；代理商仍使用原只读 PI 工作台。
+- `bike-web/src/components/CzechPiWorkspace.vue`：在 `EuropeSalesWorkspace.vue` 的正常 PI 销售中提供捷克内销、外销及全部／历史 PI 入口，全部按欧洲出货仓筛选；`App.vue` 的 PI 与履约菜单恢复通用 PI 工作台，代理商仍使用原只读能力。
 - `bike-web/src/pi-sales-scenario.ts`、`PiWorkspace.vue`、`pi-api.ts`：统一表单默认值、分页／导出筛选、本机草稿归属判断。场景入口固定贸易类型，保留可编辑币种及实际出货地点。
-- `PiBusinessTerms.salesChannel`：新增可选 JSON 字段，`CHINA_SALES` 表示销售订单菜单，`CZECH_PI` 表示 PI 与履约菜单。旧 Java 构造器保留，缺失字段仍可反序列化，不写入 null 字段。
+- `PiBusinessTerms.salesChannel`：新增可选 JSON 字段，`CHINA_SALES` 表示销售订单菜单，`CZECH_PI` 表示欧洲销售与交付中的捷克 PI（保留原标识兼容已保存数据）。旧 Java 构造器保留，缺失字段仍可反序列化，不写入 null 字段。
 - `PiBusinessServiceImpl.validateTerms`：国内销售入口只允许外销 PI；内销沿原购销合同业务办理。捷克支持两种贸易类型。
 - `PiServiceImpl.listBySalesScenario`：保留账号权限、客户范围、代理商范围与财务脱敏；新增条件在 `PiMapper.xml` 中实施，分页及总数采用相同条件。
 - `GET /api/pis`、`GET /api/pis/export.xlsx`：新增可选查询参数 `tradeType`、`salesChannel`，省略参数保持原查询能力。导出每一页保持相同筛选。
-- 历史没有 `salesChannel` 的 PI 延续原 PI 菜单归属，可在捷克对应贸易类型及“全部／历史 PI”查询。未批量更新历史快照。缺失入口标识的本机草稿采用相同兼容规则。
+- 历史没有 `salesChannel` 的 PI 保持兼容，可在通用 PI 工作台查询，也可在欧洲销售所选出货仓下按捷克对应贸易类型及“全部／历史 PI”查询。未批量更新历史快照。缺失入口标识的本机草稿采用相同兼容规则。
 - 修订继承原入口标识，并纳入既有履约条款一致性校验。列表筛选不作为授权边界。
 
 没有新增数据库列、迁移脚本、缓存、MQ、定时任务或异步处理。写入仍沿用 PI 保存事务及审计；库存、收款和放行复用原流程。
@@ -60,3 +60,7 @@
 - 隔离的前端组件测试使用模拟接口与 Java 生成样例，内置浏览器验证空字段拦截、1234.56 小数单价、金额合计和下载提示；390px 宽度下内容宽度也是 390px，无横向溢出。未连接真实订单后端进行业务写入，不代表生产验收。
 - 合同表单增加 `step=0.01` 和受控表单校验，修复浏览器原生整数步长阻止小数金额提交的问题。
 - 日志：`output/contract-tests-20261119.log`、`output/contract-web-build-20261119.log`；版式验证：`output/contract-preview.pdf`、`output/contract-preview-1.png`；界面截图：`output/playwright/order-contract-desktop-20261119.png`、`output/playwright/order-contract-mobile-20261119.png`。
+
+## 菜单归属更正
+
+用户于 2026-11-19 更正：捷克内销、外销入口属于“欧洲销售与交付”，不属于“PI 与履约”。本次仅调整前端组件挂载，保留欧洲正常 PI 的仓库约束、简化办理及向 Totem 付款能力，工厂直签内外销入口保持原功能；销售订单内销购销合同和国内外销 PI 不变。后端接口、JSON 标识及历史数据无需迁移。

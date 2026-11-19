@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { PermissionContext } from '../permissions'
-import PiWorkspace from './PiWorkspace.vue'
+import CzechPiWorkspace from './CzechPiWorkspace.vue'
 import FactorySalesWorkspace from './FactorySalesWorkspace.vue'
 import EuropeSalesGuide from './EuropeSalesGuide.vue'
 defineProps<{ context: (PermissionContext & { userType?: string; username?: string }) | null }>()
@@ -12,7 +12,7 @@ const mode=ref('pi'),guideVisible=ref(false)
   <section class="europe-sales">
     <div class="europe-title"><div><h2>欧洲销售与交付</h2><p>先选择交易方式：正常 PI 销售，或工厂直接签约收款。</p></div><el-button @click="guideVisible=true">查看外销操作说明</el-button></div>
     <div class="europe-modes" role="group" aria-label="欧洲销售业务类型"><button type="button" :class="{active:mode==='pi'}" @click="mode='pi'"><strong>正常 PI 销售</strong><span>先收款／货到付款 · 跟进付 Totem</span></button><button type="button" :class="{active:mode==='domestic'}" @click="mode='domestic'"><strong>捷克代理当地内销</strong><span>工厂直签 · 含 VAT · 先付款后提货</span></button><button type="button" :class="{active:mode==='export'}" @click="mode='export'"><strong>工厂直签外销</strong><span>不做 PI · 按合同不含 VAT · 先付款后提货</span></button></div>
-    <KeepAlive><PiWorkspace v-if="mode==='pi'" :context="context" europe @navigate="emit('navigate',$event)" /><FactorySalesWorkspace v-else :key="mode" :context="context" :business-type="mode==='domestic'?'FACTORY_DOMESTIC':'FACTORY_EXPORT'" /></KeepAlive>
+    <KeepAlive><CzechPiWorkspace v-if="mode==='pi'" :context="context" @navigate="emit('navigate',$event)" /><FactorySalesWorkspace v-else :key="mode" :context="context" :business-type="mode==='domestic'?'FACTORY_DOMESTIC':'FACTORY_EXPORT'" /></KeepAlive>
     <el-dialog v-model="guideVisible" title="外销／欧洲销售操作说明" width="min(1050px,96vw)" append-to-body><EuropeSalesGuide /></el-dialog>
   </section>
 </template>
