@@ -2,6 +2,8 @@
 
 用户指定 `France_1104_PI.xlsx` 为欧洲销售与交付的内销、外销 PI 版式，并明确供应商、银行、客户和商品资料沿用每张 PI 的已确认数据。
 
+已于 2026-11-19 16:15:50（Asia/Shanghai）部署应用提交 `dbcf3a7`，服务器及公网检查通过。发布证据和验收边界见 `docs/deployment-europe-pi-france-20261119.md`。
+
 ## 范围与兼容
 
 - 新增 `PI_EUROPE_V1` 渲染版本。具有 `CZECH_PI` 销售入口标识的 PI 草稿及新归档使用同一版式，Excel 和 PDF 共用工作表布局。
