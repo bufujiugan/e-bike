@@ -34,7 +34,10 @@ final class PiEuropeSheetPdfRenderer {
                 PDFont selected=value.codePoints().allMatch(cp->cp<128)?latin:font;
                 float required=wrap(selected,value,size,width-5).size()*(size+2)+4;
                 float current=height(sheet,range.getFirstRow(),range.getLastRow());
-                if(required>current)row.setHeightInPoints(row.getHeightInPoints()+required-current);
+                if(required>current)for(int index=range.getFirstRow();index<=range.getLastRow();index++) {
+                    var target=sheet.getRow(index);if(target==null)target=sheet.createRow(index);
+                    target.setHeightInPoints(target.getHeightInPoints()+(required-current)/(range.getLastRow()-range.getFirstRow()+1));
+                }
             }
         }
     }

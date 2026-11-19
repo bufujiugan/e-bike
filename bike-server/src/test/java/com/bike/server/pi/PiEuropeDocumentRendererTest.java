@@ -93,6 +93,20 @@ class PiEuropeDocumentRendererTest {
         }
     }
 
+    @Test void longAddressesAndDescriptionsRemainReadableWithoutExceedingExcelRowHeight() throws Exception {
+        var pi=sample(1);ObjectNode doc=json.valueToTree(pi.getDocument());
+        doc.put("sellerAddress","示例地址".repeat(200)+"ADDRESS-END");
+        pi.setDocument(json.treeToValue(doc,PiDocumentSnapshot.class));
+        pi.getItems().getFirst().setSpecification("Long specification ".repeat(50)+"SPEC-END");
+        try(var book=new XSSFWorkbook(new ByteArrayInputStream(documents.excel(pi)))) {
+            for(var row:book.getSheetAt(0))assertThat(row.getHeightInPoints()).isLessThanOrEqualTo(409);
+            assertThat(content(book)).contains("ADDRESS-END","SPEC-END");
+        }
+        try(var pdf=Loader.loadPDF(documents.pdf(pi))) {
+            assertThat(new PDFTextStripper().getText(pdf)).contains("ADDRESS-END","SPEC-END");
+        }
+    }
+
     private PiView sample(int count) throws Exception {
         var pi=PiDocumentServiceTest.sample(count);pi.setDocumentRenderVersion("PI_EUROPE_V1");pi.setPiNo("PI-EU-SAMPLE-001");pi.setCurrencyCode("EUR");
         var quantity=BigDecimal.valueOf(count);
