@@ -1,6 +1,6 @@
 # 国内与捷克销售入口调整
 
-日期：2026-11-19。应用提交 `53c39bf` 已推送 GitHub，并于 13:55:59（Asia/Shanghai）部署生产；发布及线上核验记录见 `docs/deployment-sales-contract-20261119.md`。
+日期：2026-11-19。销售场景与购销合同提交 `53c39bf` 于 13:55:59（Asia/Shanghai）部署生产；捷克菜单归属更正提交 `c043fc5` 于 15:29:00 部署生产。发布及线上核验记录分别见 `docs/deployment-sales-contract-20261119.md` 和 `docs/deployment-czech-menu-20261119.md`。
 
 ## 业务入口
 
