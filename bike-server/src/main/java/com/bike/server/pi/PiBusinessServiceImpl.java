@@ -41,6 +41,8 @@ public class PiBusinessServiceImpl implements PiBusinessService {
     public void validateTerms(PiDocumentSnapshot d,String tradeType) {
         if(d==null||d.business()==null||d.business().warehouseId()==null||d.business().domesticShipment()==null)
             fail("PI_BUSINESS_REQUIRED","请补齐出库仓库及是否国内出货；不同仓库须分别建立PI");
+        if ("CHINA_SALES".equals(d.business().salesChannel()) && !"EXPORT".equals(tradeType))
+            fail("PI_SALES_SCENARIO_INVALID", "国内销售订单的内销请办理购销合同，外销才使用PI");
         if(mapper.countEnabledWarehouse(d.business().warehouseId())!=1)fail("WAREHOUSE_NOT_FOUND","出库仓库不存在或已停用");
         if(profiles!=null)profiles.validateSelection(d,tradeType,false);
         String expected="EXPORT".equals(tradeType)?"HONG_KONG":"GUANGTA";

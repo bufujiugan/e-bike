@@ -105,6 +105,30 @@ public class PiServiceImpl implements PiService {
     }
 
     @Override
+    public PageResponse<PiView> listBySalesScenario(String keyword, String status, Long warehouseId,
+            String tradeType, String salesChannel, long page, long pageSize) {
+        requireRead();
+        String trade = upper(tradeType), channel = upper(salesChannel);
+        if (channel != null && !Set.of("CHINA_SALES", "CZECH_PI").contains(channel))
+            fail("INVALID_PARAMETER", "销售入口类型无效");
+        if (trade != null && !Set.of("DOMESTIC", "EXPORT").contains(trade))
+            fail("INVALID_PARAMETER", "贸易类型须为内销或外销");
+        if (trade == null && channel == null)
+            return listByWarehouse(keyword, status, warehouseId, page, pageSize);
+        if (warehouseId != null && warehouseId <= 0) fail("INVALID_PARAMETER", "请选择有效的出库仓库");
+        customerScope.lockForBusiness();
+        long currentPage = Math.min(10_000_000, Math.max(1, page));
+        long size = Math.min(100, Math.max(1, pageSize));
+        Long agent = CurrentOperator.hasRole("WEB_AGENT") ? agentId() : null;
+        String query = normalize(keyword), state = upper(status);
+        var records = mapper.selectPageBySalesScenario(query, state, agent, warehouseId, trade,
+                channel, "CZECH_PI".equals(channel), (currentPage - 1) * size, size);
+        records.forEach(pi -> { enrichFulfillment(pi); redactFinance(pi); });
+        return new PageResponse<>(records, currentPage, size,
+                mapper.countBySalesScenario(query, state, agent, warehouseId, trade, channel, "CZECH_PI".equals(channel)));
+    }
+
+    @Override
     public Map<String, Object> getDispatchBatch(long piId, long batchId) {
         var pi = get(piId);
         var batch = dispatch.get(batchId);
@@ -522,7 +546,8 @@ public class PiServiceImpl implements PiService {
                 && Objects.equals(baseline.collectionEntity(), requested.collectionEntity())
                 && Objects.equals(baseline.fulfillmentProfileId(), requested.fulfillmentProfileId())
                 && Objects.equals(baseline.paymentDueDate(), requested.paymentDueDate())
-                && Objects.equals(baseline.workflowMode(), requested.workflowMode());
+                && Objects.equals(baseline.workflowMode(), requested.workflowMode())
+                && Objects.equals(baseline.salesChannel(), requested.salesChannel());
     }
 
     private PiView enrich(PiView pi) {

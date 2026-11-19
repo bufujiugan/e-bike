@@ -7,6 +7,8 @@ public interface PiService {
     PiOptionsView options(String keyword);
     PageResponse<PiView> list(String keyword,String status,long page,long pageSize);
     PageResponse<PiView> listByWarehouse(String keyword, String status, Long warehouseId, long page, long pageSize);
+    PageResponse<PiView> listBySalesScenario(String keyword, String status, Long warehouseId,
+            String tradeType, String salesChannel, long page, long pageSize);
     List<java.util.Map<String, Object>> listWarehouseOptions();
     PiView get(long id);
     java.util.Map<String, Object> getDispatchBatch(long piId, long batchId);

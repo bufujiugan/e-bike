@@ -31,7 +31,7 @@ function continueProduction(stage: string, sku: { id: number; skuCode: string; m
   history.replaceState(null, '', url)
 }
 function refreshOrderJourney() { workflowRefreshKey.value++; void loadModule(activeView.value) }
-const PiWorkspace = defineAsyncComponent(() => import('./components/PiWorkspace.vue'))
+const CzechPiWorkspace = defineAsyncComponent(() => import('./components/CzechPiWorkspace.vue'))
 const EuropeSalesWorkspace = defineAsyncComponent(() => import('./components/EuropeSalesWorkspace.vue'))
 const AfterSalesWorkspace = defineAsyncComponent(() => import('./components/AfterSalesWorkspace.vue'))
 const CustomerScopeEditor = defineAsyncComponent(() => import('./components/CustomerScopeEditor.vue'))
@@ -1186,7 +1186,7 @@ async function submitPrimaryAction() {
       <TraceQuery v-else-if="activeView === 'trace' && !passwordChangeVisible" />
       <SkuInventoryPanel v-else-if="activeView === 'sku-inventory' && !passwordChangeVisible" :context="authContext" @navigate="navigate" @convert="changeInventoryLock([$event], 'convert')" />
       <EuropeSalesWorkspace v-else-if="activeView === 'europe-orders' && !passwordChangeVisible" :context="authContext" @navigate="navigate" />
-      <PiWorkspace v-else-if="activeView === 'pis' && !passwordChangeVisible" :context="authContext" @navigate="navigate" />
+      <CzechPiWorkspace v-else-if="activeView === 'pis' && !passwordChangeVisible" :context="authContext" @navigate="navigate" />
       <CustomerScopeManager v-else-if="activeView === 'customer-scopes' && !passwordChangeVisible && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'CUSTOMER_SCOPE_MANAGE')" />
       <FileReviewManager v-else-if="activeView === 'file-reviews' && !passwordChangeVisible && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'FILE_REVIEW_MANAGE')" />
       <AfterSalesWorkspace v-else-if="activeView === 'after-sales' && !passwordChangeVisible" :auth-context="authContext" />

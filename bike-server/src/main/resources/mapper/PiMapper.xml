@@ -66,6 +66,14 @@
                       AND (lg.tracking_no LIKE CONCAT('%',#{keyword},'%') OR lg.batch_no LIKE CONCAT('%',#{keyword},'%'))))
             </if>
             <if test="status != null and status != ''">AND p.status=#{status}</if>
+            <if test="_parameter.containsKey('tradeType') and tradeType != null">AND p.trade_type=#{tradeType}</if>
+            <if test="_parameter.containsKey('salesChannel') and salesChannel != null">
+                AND (JSON_UNQUOTE(JSON_EXTRACT(p.document_snapshot,'$.business.salesChannel'))=#{salesChannel}
+                <if test="includeLegacy">
+                    OR JSON_EXTRACT(p.document_snapshot,'$.business.salesChannel') IS NULL
+                    OR JSON_UNQUOTE(JSON_EXTRACT(p.document_snapshot,'$.business.salesChannel'))='null'
+                </if>)
+            </if>
             <if test="_parameter.containsKey('warehouseId') and warehouseId != null">
                 AND JSON_UNQUOTE(JSON_EXTRACT(p.document_snapshot,'$.business.warehouseId'))=CAST(#{warehouseId} AS CHAR)
             </if>
@@ -76,6 +84,11 @@
         <include refid="base"/><include refid="where"/>
         ORDER BY p.created_at DESC,p.id DESC LIMIT #{offset},#{limit}
     </select>
+    <select id="selectPageBySalesScenario" resultType="com.bike.server.pi.PiView">
+        <include refid="base"/><include refid="where"/>
+        ORDER BY p.created_at DESC,p.id DESC LIMIT #{offset},#{limit}
+    </select>
+    <select id="countBySalesScenario" resultType="long">SELECT COUNT(*) FROM bike_pi p <include refid="where"/></select>
     <select id="count" resultType="long">SELECT COUNT(*) FROM bike_pi p <include refid="where"/></select>
     <select id="selectPageByWarehouse" resultType="com.bike.server.pi.PiView">
         <include refid="base"/><include refid="where"/>

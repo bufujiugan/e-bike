@@ -113,6 +113,40 @@ class PiWarehouseQueryTest {
         params.remove("warehouseId");
         assertThat(config.getMappedStatement("com.bike.server.pi.PiMapper.selectPage").getBoundSql(params).getSql())
                 .doesNotContain("$.business.warehouseId");
+        params.put("warehouseId", 23L);
+        params.put("tradeType", "DOMESTIC");
+        for (boolean includeLegacy : List.of(true, false)) {
+            params.put("salesChannel", includeLegacy ? "CZECH_PI" : "CHINA_SALES");
+            params.put("includeLegacy", includeLegacy);
+            for (String statement : List.of("selectPageBySalesScenario", "countBySalesScenario")) {
+                var bound = config.getMappedStatement("com.bike.server.pi.PiMapper." + statement).getBoundSql(params);
+                assertThat(bound.getSql()).contains("p.trade_type=", "$.business.salesChannel",
+                        "$.business.warehouseId", "bike_user_customer_scope", "p.agent_id=");
+                assertThat(bound.getParameterMappings()).anyMatch(parameter -> parameter.getProperty().equals("tradeType"));
+                assertThat(bound.getSql().contains("$.business.salesChannel') IS NULL")).isEqualTo(includeLegacy);
+            }
+        }
+    }
+
+    @Test void exportKeepsSalesScenarioAcrossAllPages() throws Exception {
+        var pis = mock(PiService.class); var audit = mock(OperationLogMapper.class);
+        when(audit.insert(any(), any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(1);
+        var reports = new PiReportService(mock(PiReportMapper.class), pis, audit, mock(CustomerScopeAccess.class));
+        var records = IntStream.rangeClosed(1, 101).mapToObj(index -> {
+            var pi = new PiView(); pi.setPiNo("CZ-DOMESTIC-" + index); pi.setRevision(1);
+            pi.setTradeType("DOMESTIC"); pi.setCurrencyCode("EUR"); return pi;
+        }).toList();
+        when(pis.listBySalesScenario(null, null, null, "DOMESTIC", "CZECH_PI", 1, 100))
+                .thenReturn(new PageResponse<>(records.subList(0, 100), 1, 100, 101));
+        when(pis.listBySalesScenario(null, null, null, "DOMESTIC", "CZECH_PI", 2, 100))
+                .thenReturn(new PageResponse<>(records.subList(100, 101), 2, 100, 101));
+        try (var workbook = new XSSFWorkbook(new ByteArrayInputStream(reports.export(null, null, null, "DOMESTIC", "CZECH_PI")))) {
+            assertThat(workbook.getSheetAt(0).getLastRowNum()).isEqualTo(101);
+            assertThat(workbook.getSheetAt(0).getRow(101).getCell(0).getStringCellValue()).isEqualTo("CZ-DOMESTIC-101");
+            assertThat(workbook.getSheetAt(0).getRow(101).getCell(4).getStringCellValue()).isEqualTo("内销");
+        }
+        verify(pis, never()).list(any(), any(), anyLong(), anyLong());
+        verify(pis, never()).listByWarehouse(any(), any(), any(), anyLong(), anyLong());
     }
 
     private static void authenticate(String... authorities) {

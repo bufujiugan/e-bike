@@ -10,7 +10,7 @@ export function reservationLabel(status: ReservationStatus | null | undefined, i
   if (isAgent && (status === 'TIMED_ACTIVE' || status === 'PAID_HELD' || status === 'CREDIT_HELD')) return reservationLabels.ACTIVE
   return status ? reservationLabels[status] ?? '状态待核对' : '状态待获取'
 }
-export type PiBusinessTerms = { warehouseId: number | null; domesticShipment: boolean | null; collectionEntity: string; fulfillmentProfileId?: number | null; paymentDueDate?: string | null; orderSource?: 'EXISTING_ORDER' | 'NEW_BUSINESS' | null; workflowMode?: 'STANDARD' | 'USER_CONFIRMED' | null }
+export type PiBusinessTerms = { warehouseId: number | null; domesticShipment: boolean | null; collectionEntity: string; fulfillmentProfileId?: number | null; paymentDueDate?: string | null; orderSource?: 'EXISTING_ORDER' | 'NEW_BUSINESS' | null; workflowMode?: 'STANDARD' | 'USER_CONFIRMED' | null; salesChannel?: 'CHINA_SALES' | 'CZECH_PI' | null }
 export type PiDocument = {
   business?: PiBusinessTerms | null
   sellerName: string; sellerAddress: string; sellerContact: string
@@ -88,7 +88,7 @@ export type PiLogisticsCreate = { batchNo: string; carrier?: string; trackingNo?
 export const piApi = {
   async dashboard() { return (await api.get<{ data: Record<string, number | null> }>('/api/pis/dashboard')).data.data },
   async queue(queue: string, params: { keyword?: string; page: number; pageSize: number }) { return (await api.get<{ data: { total: number; records: PiQueueRow[] } }>(`/api/pis/dashboard/${queue}`, { params })).data.data },
-  async exportList(params: { keyword?: string; status?: string; warehouseId?: number }) { return (await api.get<Blob>('/api/pis/export.xlsx', { params, responseType: 'blob' })).data },
+  async exportList(params: { keyword?: string; status?: string; warehouseId?: number; tradeType?: string; salesChannel?: 'CHINA_SALES' | 'CZECH_PI' }) { return (await api.get<Blob>('/api/pis/export.xlsx', { params, responseType: 'blob' })).data },
   async warehouseOptions() { return (await api.get<{ data: (PiMasterOption & { status: string })[] }>('/api/pis/warehouse-options')).data.data },
   async revisions(id: number) { return (await api.get<{ data: PiView[] }>(`/api/pis/${id}/revisions`)).data.data },
   async createRevision(id: number, body: { requestId: string; expectedRevision: number; reason: string }) { return (await api.post<{ data: PiView }>(`/api/pis/${id}/revisions`, body)).data.data },
@@ -106,7 +106,7 @@ export const piApi = {
   async retryExport(id: number, revision: number, reason: string) { return (await api.post<{ data: PiExportJob }>(`/api/pis/${id}/export-task/retry`, { revision, reason })).data.data },
   async templates(tradeType: string | undefined, page: number) { return (await api.get<{ data: { records: PiTemplate[]; total: number } }>('/api/pi-templates', { params: { tradeType, page, pageSize: 20 } })).data.data },
   async publishTemplate(body: PiTemplatePublish) { return (await api.post<{ data: PiTemplate }>('/api/pi-templates', body)).data.data },
-  async list(params: { keyword?: string; status?: string; warehouseId?: number; page: number; pageSize: number }) {
+  async list(params: { keyword?: string; status?: string; warehouseId?: number; tradeType?: string; salesChannel?: 'CHINA_SALES' | 'CZECH_PI'; page: number; pageSize: number }) {
     return (await api.get<{ data: { records: PiView[]; total: number } }>('/api/pis', { params })).data.data
   },
   async get(id: number) { return (await api.get<{ data: PiView }>(`/api/pis/${id}`)).data.data },

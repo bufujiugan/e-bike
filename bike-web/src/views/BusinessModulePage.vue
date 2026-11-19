@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, toRef } from 'vue'
+import { computed, defineAsyncComponent, ref, toRef } from 'vue'
 import type { ModuleData } from '../config/page-presentation'
 import type { PermissionContext } from '../permissions'
+import { hasPermission, hasRole } from '../permissions'
 import { useOperationalOverview } from '../composables/useOperationalOverview'
 import AssemblyProgressPage from './AssemblyProgressPage.vue'
 import VehicleArchivePage from './VehicleArchivePage.vue'
@@ -14,6 +15,11 @@ import AlertCard from '../components/common/AlertCard.vue'
 import MetricGrid from '../components/dashboard/MetricGrid.vue'
 import ModuleList from '../components/business/ModuleList.vue'
 const props = defineProps<{ moduleKey: string; module: ModuleData; title: string; search: string; page: number; pageSize: number; loading: boolean; error: string; context: PermissionContext | null; columnWidth: (column: string) => number }>()
+const PiWorkspace = defineAsyncComponent(() => import('../components/PiWorkspace.vue'))
+const salesMode = ref('DOMESTIC')
+const canUseExportPi = computed(() => props.moduleKey === 'orders' && hasPermission(props.context, 'PI_READ')
+  && !hasRole(props.context, 'WEB_AGENT') && !hasRole(props.context, 'PDA_OPERATOR'))
+const showExportPi = computed(() => canUseExportPi.value && salesMode.value === 'EXPORT')
 const emit = defineEmits<{ 'update:search': [value: string]; 'update:page': [value: number]; 'update:pageSize': [value: number]; refresh: []; reset: []; pageChange: []; sizeChange: [] }>()
 const overview = useOperationalOverview(toRef(props, 'context'), toRef(props, 'moduleKey'))
 const { points, metrics, permitted, error: overviewError, loading: overviewLoading } = overview
@@ -21,6 +27,12 @@ const listTitle = computed(() => ({ assembly: '组装任务列表', vehicles: '�
 function refresh() { emit('refresh'); void overview.refresh() }
 </script>
 <template><div class="sm-page">
+  <el-radio-group v-if="canUseExportPi" v-model="salesMode" aria-label="国内销售类型" class="sales-scenario-tabs">
+    <el-radio-button value="DOMESTIC">内销 · 购销合同</el-radio-button>
+    <el-radio-button value="EXPORT">外销 · PI</el-radio-button>
+  </el-radio-group>
+  <PiWorkspace v-if="showExportPi" :context="context" sales-scenario="CHINA_EXPORT" />
+  <div v-show="!showExportPi" class="sm-page">
   <AlertCard v-if="error" tone="error" title="业务数据加载失败" :description="error"><template #action><el-button size="small" @click="refresh">重试</el-button></template></AlertCard>
   <AlertCard v-if="overviewError" tone="error" title="统计数据加载失败" :description="overviewError"><template #action><el-button size="small" @click="overview.refresh">重试统计</el-button></template></AlertCard>
   <AssemblyProgressPage v-if="moduleKey === 'assembly'" :module="module" :loading="loading" :error="error" :today-assembled="overview.value('今日组装')" />
@@ -33,4 +45,5 @@ function refresh() { emit('refresh'); void overview.refresh() }
   <MetricGrid v-else :items="module.stats.map(stat => ({ label: stat.label, value: stat.value }))" :loading="loading" />
   <slot name="before-list" />
   <ModuleList :module="module" :title="listTitle" :search="search" :page="page" :page-size="pageSize" :loading="loading" :error="error" :column-width="columnWidth" @update:search="emit('update:search', $event)" @update:page="emit('update:page', $event)" @update:page-size="emit('update:pageSize', $event)" @refresh="refresh" @reset="emit('reset')" @page-change="emit('pageChange')" @size-change="emit('sizeChange')"><template #actions><slot name="actions" /></template><template #row-actions="{ row }"><slot name="row-actions" :row="row" /></template></ModuleList>
-</div></template>
+</div></div></template>
+<style scoped>.sales-scenario-tabs{display:flex;flex-wrap:wrap;gap:8px}</style>

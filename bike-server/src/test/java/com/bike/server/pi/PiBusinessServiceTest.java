@@ -52,6 +52,30 @@ class PiBusinessServiceTest {
     }
     @AfterEach void cleanup() { SecurityContextHolder.clearContext(); }
 
+    @Test void salesChannelRoundTripsWithoutChangingShipmentAndRejectsChinaDomesticPi() throws Exception {
+        for (String channel : List.of("CHINA_SALES", "CZECH_PI")) {
+            for (String trade : List.of("DOMESTIC", "EXPORT")) {
+                var snapshot = json.readTree(mapper.selectDocument(1L));
+                var terms = (com.fasterxml.jackson.databind.node.ObjectNode) snapshot.get("business");
+                terms.put("salesChannel", channel);
+                terms.put("collectionEntity", "EXPORT".equals(trade) ? "HONG_KONG" : "GUANGTA");
+                var document = json.treeToValue(snapshot, PiDocumentSnapshot.class);
+                var restored = json.readValue(json.writeValueAsString(document), PiDocumentSnapshot.class);
+                assertThat(restored.business().salesChannel()).isEqualTo(channel);
+                assertThat(restored.business().domesticShipment()).isTrue();
+                if ("CHINA_SALES".equals(channel) && "DOMESTIC".equals(trade)) {
+                    assertThatThrownBy(() -> service.validateTerms(restored, trade))
+                            .isInstanceOfSatisfying(BusinessException.class,
+                                    error -> assertThat(error.getCode()).isEqualTo("PI_SALES_SCENARIO_INVALID"));
+                } else {
+                    assertThatCode(() -> service.validateTerms(restored, trade)).doesNotThrowAnyException();
+                }
+            }
+        }
+        assertThat(service.document(1L).business().salesChannel()).isNull();
+        assertThat(json.writeValueAsString(service.document(1L))).doesNotContain("salesChannel");
+    }
+
     private PiFulfillmentProfileMapper configureCredit(boolean approved) throws Exception {
         var profiles=mock(PiFulfillmentProfileService.class);
         var credit=mock(PiFulfillmentProfileMapper.class);

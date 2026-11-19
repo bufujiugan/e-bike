@@ -28,8 +28,10 @@ import SalesSettlementPanel from './SalesSettlementPanel.vue'
 import PiFeeInput from './PiFeeInput.vue'
 import PurchaseContractNumber from './PurchaseContractNumber.vue'
 import '../styles/pi-draft.css'
+import { salesScenarioDefaults, salesScenarioFilters, matchesSalesScenario, type PiSalesScenario } from '../pi-sales-scenario'
 
-const props = defineProps<{ context: (PermissionContext & { userType?: string; username?: string }) | null; initialKeyword?: string; europe?: boolean }>()
+const props = withDefaults(defineProps<{ context: (PermissionContext & { userType?: string; username?: string }) | null; initialKeyword?: string; europe?: boolean; salesScenario?: PiSalesScenario; allowCreate?: boolean }>(), { allowCreate: true })
+const scenario = computed(() => props.salesScenario ? salesScenarioDefaults(props.salesScenario) : undefined)
 const emit = defineEmits<{ navigate: [view: string] }>()
 const isAgent = computed(() => hasRole(props.context, 'WEB_AGENT') || props.context?.userType === 'AGENT')
 const isPda = computed(() => hasRole(props.context, 'PDA_OPERATOR') || props.context?.userType === 'PDA_OPERATOR')
@@ -108,7 +110,7 @@ const europeWarehouses = ref<Awaited<ReturnType<typeof piApi.warehouseOptions>>>
 const europeWarehousesBusy = ref(false), europeWarehouseError = ref(''), europePreferenceError = ref('')
 const europeWarehouse = computed(() => europeWarehouses.value.find(item => item.id === europeWarehouseId.value))
 const europeScopeReady = computed(() => !props.europe || Boolean(europeWarehouse.value))
-const canCreateInScope = computed(() => !props.europe || europeWarehouse.value?.status === 'ENABLED')
+const canCreateInScope = computed(() => props.allowCreate !== false && (!props.europe || europeWarehouse.value?.status === 'ENABLED'))
 function europePreferenceKey() { return `bike:europe-warehouse:${encodeURIComponent(props.context?.username || '')}` }
 let europeWarehouseLoadVersion = 0
 async function loadEuropeWarehouses() {
@@ -245,7 +247,12 @@ const localSaveStatus = computed(() => localSaveError.value ? '本机草稿保�
 function localStore(username = props.context?.username || '') { return createPiLocalDraftStore(window.localStorage, username) }
 function refreshLocalDrafts() {
   if (!canWrite.value || !props.context?.username) { localDrafts.value = []; return }
-  try { const result = localStore().list(); localDrafts.value = props.europe ? result.records.filter(saved => europeWarehouseId.value != null && saved.content.form.document.business?.warehouseId === europeWarehouseId.value) : result.records; localDraftError.value = result.errors.join('；') }
+  try {
+    const result = localStore().list()
+    localDrafts.value = result.records.filter(saved => matchesSalesScenario(saved.content.form, props.salesScenario)
+      && (!props.europe || europeWarehouseId.value != null && saved.content.form.document.business?.warehouseId === europeWarehouseId.value))
+    localDraftError.value = result.errors.join('；')
+  }
   catch { localDraftError.value = '无法读取本机草稿，请检查浏览器存储设置' }
 }
 function beginLocalDraft() {
@@ -315,6 +322,8 @@ async function restoreLocalDraft(record: PiLocalDraft) {
     const saved = localStore().read(record.id)
     if (!saved) throw new Error('这份本机草稿已删除，请刷新列表')
     const content = saved.content
+    if (!matchesSalesScenario(content.form, props.salesScenario))
+      throw new Error('这份草稿的销售类型已变更，请在对应销售入口或全部／历史 PI 中继续填写')
     if (props.europe && content.form.document.business?.warehouseId !== europeWarehouseId.value)
       throw new Error('这份草稿的出货仓已变更，请在对应仓库或 PI 与履约入口继续填写')
     if (content.fromLocks && !canManageReservation.value) throw new Error('当前账号没有来源锁定操作权限')
@@ -401,6 +410,7 @@ watch(draft, () => {
 function stepIssue(step: number): { step: number; field: string; message: string } | null {
   const issue = (field: string, message: string) => ({ step, field, message })
   if (step === 0) {
+    if (!matchesSalesScenario(draft, props.salesScenario)) return issue('warehouse', '单据的贸易类型或销售入口与当前页面不一致，请从对应入口办理')
     if (optionsError.value) return issue('options', '基础资料尚未加载成功，请重试')
     if (!draft.document.business?.warehouseId) return issue('warehouse', '请先选择出库仓库，不同仓库分别建立 PI')
     if (requiresProfile.value && !draft.document.business?.fulfillmentProfileId) return issue('fulfillmentProfile', selectableProfiles.value.length ? '请选择适用于当前仓库和贸易类型的履约配置' : '当前仓库没有可用履约配置，请先发布适用版本')
@@ -587,7 +597,7 @@ async function load() {
   if (!canRead.value) return
   if (!europeScopeReady.value) { ++listVersion; rows.value = []; total.value = 0; busy.value = false; return }
   const version = ++listVersion; busy.value = true; loadError.value = ''
-  try { const result = await piApi.list({ keyword: keyword.value.trim() || undefined, status: status.value || undefined, warehouseId: props.europe ? europeWarehouseId.value : undefined, page: page.value, pageSize: pageSize.value }); if (version === listVersion) { rows.value = result.records; total.value = result.total; reportRefresh.value++ } }
+  try { const result = await piApi.list({ ...salesScenarioFilters(props.salesScenario), keyword: keyword.value.trim() || undefined, status: status.value || undefined, warehouseId: props.europe ? europeWarehouseId.value : undefined, page: page.value, pageSize: pageSize.value }); if (version === listVersion) { rows.value = result.records; total.value = result.total; reportRefresh.value++ } }
   catch (error) { if (version === listVersion) { rows.value = []; total.value = 0; loadError.value = message(error, 'PI 列表加载失败') } }
   finally { if (version === listVersion) busy.value = false }
 }
@@ -596,7 +606,7 @@ async function exportList() {
   if (exportBusy.value || !europeScopeReady.value) return
   exportBusy.value = true; loadError.value = ''
   try {
-    const blob = await piApi.exportList({ keyword: keyword.value.trim() || undefined, status: status.value || undefined, warehouseId: props.europe ? europeWarehouseId.value : undefined })
+    const blob = await piApi.exportList({ ...salesScenarioFilters(props.salesScenario), keyword: keyword.value.trim() || undefined, status: status.value || undefined, warehouseId: props.europe ? europeWarehouseId.value : undefined })
     const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = props.europe ? '欧洲订单.xlsx' : 'PI列表.xlsx'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
   } catch (e) {
     if (api.isAxiosError(e) && e.response?.data instanceof Blob) { try { loadError.value = JSON.parse(await e.response.data.text()).message || 'PI列表导出失败' } catch { loadError.value = 'PI列表导出失败' } }
@@ -688,6 +698,14 @@ async function openCreate(mode: 'new' | 'locks' = 'new') {
     draft.tradeType = 'EXPORT'; draft.currencyCode = 'EUR'; draft.depositRequiredAmount = '0.00'
     draft.document.business.warehouseId = europeWarehouseId.value!; draft.document.business.domesticShipment = false
     draft.document.business.workflowMode = 'USER_CONFIRMED'; draft.document.business.collectionEntity = 'HONG_KONG'
+  }
+  if (scenario.value && draft.document.business) {
+    draft.tradeType = scenario.value.tradeType
+    draft.currencyCode = scenario.value.currencyCode
+    draft.document.business.domesticShipment = scenario.value.domesticShipment
+    draft.document.business.salesChannel = scenario.value.salesChannel
+    draft.document.business.collectionEntity = draft.tradeType === 'EXPORT' ? 'HONG_KONG' : 'GUANGTA'
+    draft.document.business.orderSource = 'NEW_BUSINESS'
   }
   if (fromLocks.value) draft.items = []
   resetDraftWizard(); beginLocalDraft(); createError.value = ''; optionKeyword.value = ''; createVisible.value = true
@@ -1009,7 +1027,8 @@ onBeforeUnmount(() => {
   <section class="pi-workspace">
     <el-empty v-if="!canRead" description="当前账号没有 PI 查看权限" />
     <template v-else>
-      <div class="pi-heading"><div><h2>{{ europe ? '正常 PI 销售' : isAgent ? '我的 PI 单据' : 'PI 与销售履约' }}</h2><p>{{ europe ? '按实际出货仓办理 PI；新单默认简化办理，客户收款与付 Totem 分别登记。' : isAgent ? '查看已发布的单据、商品和物流进度。' : '维护商品与交易条款，跟进收款、放行和物流。' }}</p></div></div>
+      <div class="pi-heading"><div><h2>{{ scenario?.title || (europe ? '正常 PI 销售' : isAgent ? '我的 PI 单据' : 'PI 与销售履约') }}</h2><p>{{ europe ? '按实际出货仓办理 PI；新单默认简化办理，客户收款与付 Totem 分别登记。' : isAgent ? '查看已发布的单据、商品和物流进度。' : '维护商品与交易条款，跟进收款、放行和物流。' }}</p></div></div>
+      <el-alert v-if="scenario" :title="scenario.domesticShipment ? '国内外销使用 PI 流程，请按实际业务选择出货仓和出货地点，并核对外销模板、收款和交付约定。' : '捷克内销、外销均使用 PI 流程，出货仓、税费和银行资料按本单约定填写。'" type="info" :closable="false" />
       <section v-if="europe" class="europe-order-scope" aria-label="欧洲订单出货仓">
         <label for="europe-warehouse">捷克出货仓</label>
         <el-select id="europe-warehouse" v-model="europeWarehouseId" aria-label="捷克出货仓" filterable :loading="europeWarehousesBusy" placeholder="请选择实际的捷克出货仓" @change="selectEuropeWarehouse">
@@ -1020,8 +1039,8 @@ onBeforeUnmount(() => {
         <el-alert v-if="europePreferenceError" :title="europePreferenceError" type="warning" :closable="false" />
         <el-alert v-if="europeWarehouse && !canCreateInScope" title="该仓库已停用，仅可查看历史订单；新建 PI 请选用启用仓库。" type="warning" :closable="false" />
       </section>
-      <PiBusinessDashboard v-if="internal && !europe" :refresh="reportRefresh" @open-pi="id => openDetail({ id })" />
-      <form class="pi-filters list-toolbar" @submit.prevent="search"><el-input v-model="keyword" aria-label="搜索PI、客户、SKU、订单、出库单或物流单号" placeholder="PI / 客户 / SKU / 订单 / 出库单 / 物流单号" clearable /><el-select v-model="status" aria-label="PI 状态" clearable placeholder="全部状态"><el-option v-for="s in states" :key="s" :value="s" :label="stateNames[s]" /></el-select><el-button native-type="submit" type="primary" :loading="busy" :disabled="!europeScopeReady">查询</el-button><el-button @click="keyword = ''; status = ''; search()">重置</el-button><el-button v-if="canExport" :loading="exportBusy" :disabled="!europeScopeReady" @click="exportList">导出当前查询全部 PI</el-button><el-button v-if="internal" @click="openProfiles">履约配置</el-button><el-button v-if="canManageTemplates" @click="openTemplates()">模板与银行资料</el-button><el-button v-if="canWrite && canManageReservation" :disabled="!canCreateInScope" @click="openConversion">从 SKU 锁定生成 PI</el-button><el-button v-if="canWrite" type="primary" :disabled="!canCreateInScope" @click="openCreate()">新建 PI</el-button></form>
+      <PiBusinessDashboard v-if="internal && !europe && !salesScenario" :refresh="reportRefresh" @open-pi="id => openDetail({ id })" />
+      <form class="pi-filters list-toolbar" @submit.prevent="search"><el-input v-model="keyword" aria-label="搜索PI、客户、SKU、订单、出库单或物流单号" placeholder="PI / 客户 / SKU / 订单 / 出库单 / 物流单号" clearable /><el-select v-model="status" aria-label="PI 状态" clearable placeholder="全部状态"><el-option v-for="s in states" :key="s" :value="s" :label="stateNames[s]" /></el-select><el-button native-type="submit" type="primary" :loading="busy" :disabled="!europeScopeReady">查询</el-button><el-button @click="keyword = ''; status = ''; search()">重置</el-button><el-button v-if="canExport" :loading="exportBusy" :disabled="!europeScopeReady" @click="exportList">导出当前查询全部 PI</el-button><el-button v-if="internal" @click="openProfiles">履约配置</el-button><el-button v-if="canManageTemplates" @click="openTemplates()">模板与银行资料</el-button><el-button v-if="canWrite && canManageReservation && allowCreate !== false" :disabled="!canCreateInScope" @click="openConversion">从 SKU 锁定生成 PI</el-button><el-button v-if="canWrite && allowCreate !== false" type="primary" :disabled="!canCreateInScope" @click="openCreate()">新建 PI</el-button></form>
 <el-alert v-if="internal && profilesError" :title="profilesError" type="error" :closable="false"><el-button text @click="loadProfiles">重试加载履约配置</el-button></el-alert>
       <el-alert v-if="canWrite && localDraftError" :title="localDraftError" type="error" :closable="false"><el-button text @click="refreshLocalDrafts">重新读取</el-button></el-alert>
       <section v-if="canWrite && localDrafts.length" class="pi-local-drafts" aria-label="本机草稿">
@@ -1082,8 +1101,8 @@ onBeforeUnmount(() => {
                   </el-alert>
                   <p v-if="draftProfile" class="pi-field-help">{{ draftProfile.rules.paymentMode === 'CREDIT' ? '客户收到货后付款：须逐单授权后发货，实际到账另行登记；不固定付款日期，具体约定以 PI 付款条款为准。' : '发出 PI 后付款：按约定收款金额保留库存与放行，具体付款时间以 PI 付款条款为准。' }}交付：{{ draftProfile.rules.deliveryMode === 'CUSTOMER_PICKUP' ? '客户货代提货' : '我方安排运输' }}。所需单据：{{ draftProfile.rules.requiredDocuments.join('、') || '按配置办理' }}。</p>
                   <el-alert v-if="draft.document.business.workflowMode === 'USER_CONFIRMED'" class="pi-span-two" title="本单采用简化办理：正常填写后确认推进，合同、附件和款项资料可后补；实际到账及系统出库另行登记。" type="info" :closable="false" />
-                  <el-form-item label="是否从国内出货" required><el-select v-model="draft.document.business.domesticShipment" :disabled="europe || editingRevision && Boolean(detail?.document?.business)"><el-option :value="true" :label="draftProfile ? '是（合同要求以履约配置为准）' : '是，须办理 SAVA／银三环购销合同'" /><el-option :value="false" :label="draftProfile ? '否（合同要求以履约配置为准）' : '否，不适用国内购销合同'" /></el-select></el-form-item>
-                </div><div class="pi-draft-grid pi-trade-fields"><el-form-item label="贸易类型" required><el-select v-model="draft.tradeType" aria-label="贸易类型" :disabled="editingRevision" @change="changeTradeType"><el-option value="DOMESTIC" label="内销" /><el-option value="EXPORT" label="外销" /></el-select></el-form-item><el-form-item label="币种" required data-draft-field="currency" :error="fieldError('currency')"><el-input v-model="draft.currencyCode" aria-label="币种" :disabled="editingRevision" maxlength="3" placeholder="CNY / USD / EUR" /></el-form-item></div>
+                  <el-form-item label="是否从国内出货" required><el-select v-model="draft.document.business.domesticShipment" :disabled="europe || editingRevision && Boolean(detail?.document?.business)"><el-option :value="true" :label="salesScenario ? '是，从国内仓库出货' : draftProfile ? '是（合同要求以履约配置为准）' : '是，须办理 SAVA／银三环购销合同'" /><el-option :value="false" :label="draftProfile ? '否（合同要求以履约配置为准）' : '否，不适用国内购销合同'" /></el-select></el-form-item>
+                </div><div class="pi-draft-grid pi-trade-fields"><el-form-item label="贸易类型" required><el-select v-model="draft.tradeType" aria-label="贸易类型" :disabled="Boolean(salesScenario) || editingRevision" @change="changeTradeType"><el-option value="DOMESTIC" label="内销" /><el-option value="EXPORT" label="外销" /></el-select></el-form-item><el-form-item label="币种" required data-draft-field="currency" :error="fieldError('currency')"><el-input v-model="draft.currencyCode" aria-label="币种" :disabled="editingRevision" maxlength="3" placeholder="CNY / USD / EUR" /></el-form-item></div>
                 </div>
                 <div v-if="customerBusy" class="pi-field-help" role="status">正在带入客户商务资料…</div>
                 <el-alert v-if="customerLoadFailed" title="客户资料带入失败，当前内容暂不能提交" type="error" :closable="false"><el-button text :disabled="actionBusy" @click="draft.customerId && chooseCustomer(draft.customerId)">重试加载客户资料</el-button></el-alert>

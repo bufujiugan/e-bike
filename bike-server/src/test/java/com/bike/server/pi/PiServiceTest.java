@@ -51,6 +51,29 @@ class PiServiceTest {
     void logout() { SecurityContextHolder.clearContext(); }
 
     @Test
+    void salesScenarioAppliesSameFiltersToPageAndCountAndRedactsFinance() {
+        login("ROLE_WEB_OPERATOR", "PERM_PI_READ");
+        var pi = pi("DRAFT");
+        pi.setPaidAmount(money("80.00"));
+        when(mapper.selectPageBySalesScenario("客户", null, null, 7L, "DOMESTIC", "CZECH_PI", true, 20, 20))
+                .thenReturn(List.of(pi));
+        when(mapper.countBySalesScenario("客户", null, null, 7L, "DOMESTIC", "CZECH_PI", true)).thenReturn(23L);
+        var result = service.listBySalesScenario(" 客户 ", null, 7L, "domestic", "CZECH_PI", 2, 20);
+        assertThat(result.total()).isEqualTo(23);
+        assertThat(result.records()).hasSize(1);
+        assertThat(result.records().getFirst().getPaidAmount()).isNull();
+        verify(mapper).countBySalesScenario("客户", null, null, 7L, "DOMESTIC", "CZECH_PI", true);
+    }
+
+    @Test
+    void salesScenarioRejectsInvalidTradeAndStillRequiresReadPermission() {
+        assertCode(() -> service.listBySalesScenario(null, null, null, "FACTORY", "CHINA_SALES", 1, 20), "INVALID_PARAMETER");
+        login("ROLE_WEB_OPERATOR");
+        assertCode(() -> service.listBySalesScenario(null, null, null, "EXPORT", "CHINA_SALES", 1, 20), "PERMISSION_DENIED");
+        verifyNoInteractions(mapper);
+    }
+
+    @Test
     void ordinaryReaderCannotReadPaymentsOrTotalReceived() {
         login("ROLE_WEB_OPERATOR", "PERM_PI_READ");
         PiView pi = pi("CONFIRMED");
