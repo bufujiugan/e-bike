@@ -10,6 +10,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.*;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -37,8 +39,9 @@ class PiWorkflowServiceTest {
         when(mapper.complete(anyLong(),anyInt(),any(),any(),any())).thenReturn(1);
     }
     @AfterEach void cleanup(){SecurityContextHolder.clearContext();}
-    @Test void manualProgressCanAdvanceWithoutAttachmentsAndNeverCreatesPaymentOrInventory() throws Exception {
+    @Test void manualProgressRequiresRealDispatchButNeverCreatesPaymentOrInventory() throws Exception {
         when(business.document(1L)).thenReturn(json.readValue("{\"business\":{\"warehouseId\":2,\"domesticShipment\":false,\"collectionEntity\":\"HONG_KONG\",\"workflowMode\":\"USER_CONFIRMED\"}}",PiDocumentSnapshot.class));
+        when(business.allDispatched(1L)).thenReturn(true);
         service.complete(1L,"STOCK_DISPATCHED",new PiWorkflowRequest((String)null));
         service.complete(1L,"PAYMENT_SETTLED",new PiWorkflowRequest((String)null));
         verify(mapper).complete(eq(1L),eq(11),any(),isNull(),any());
@@ -80,7 +83,8 @@ class PiWorkflowServiceTest {
     }
     @Test void stockCannotBeMarkedDispatchedByClickingComplete() {
         paid();when(mapper.selectStepsForUpdate(1L)).thenReturn(rows("DOCUMENTS_READY","PURCHASE_CONTRACT_READY"));
-        assertThatThrownBy(()->service.complete(1L,"STOCK_DISPATCHED",new PiWorkflowRequest("确认"))).isInstanceOf(BusinessException.class).hasMessageContaining("真实业务记录");
+        assertThatThrownBy(()->service.complete(1L,"STOCK_DISPATCHED",new PiWorkflowRequest("确认"))).isInstanceOf(BusinessException.class).hasMessageContaining("尚未全部实际出库");
+        verify(mapper,never()).complete(anyLong(),anyInt(),any(),any(),any());
     }
     @Test void customerForwarderCanRecordUnknownDomesticCarrierWithExplanation() throws Exception {
         paid();when(business.allDispatched(1L)).thenReturn(true);
@@ -131,6 +135,7 @@ class PiWorkflowServiceTest {
         verify(mapper,never()).complete(anyLong(),anyInt(),any(),any(),any());
     }
     @Test void historicalWarehouseArrivalWithAttachmentRemainsCompleted() {
+        when(business.allDispatched(1L)).thenReturn(true);
         when(mapper.selectSteps(1L)).thenReturn(List.of(row("WAREHOUSE_ARRIVED","""
             {"warehouseArrivalDate":"2026-01-01","arrivalProof":"old-attachment"}
             """)));
@@ -161,7 +166,7 @@ class PiWorkflowServiceTest {
         when(pis.selectById(2L)).thenReturn(previous);
         when(mapper.selectSteps(1L)).thenReturn(List.of(new PiWorkflowStepRecord(10,"PURCHASE_CONTRACT_READY","合同","PENDING",null,null,null,null)));
         when(mapper.selectSteps(2L)).thenReturn(rows("DOCUMENTS_READY","PURCHASE_CONTRACT_READY","CUSTOMER_RECEIVED"));
-        when(business.allTracked(1L)).thenReturn(true);
+        when(business.allDispatched(1L)).thenReturn(true);when(business.allTracked(1L)).thenReturn(true);
         var view = service.get(1L);
         assertThat(view.steps().stream().filter(s->s.code().equals("PURCHASE_CONTRACT_READY")).findFirst().orElseThrow().status()).isEqualTo("COMPLETED");
         assertThat(view.steps().stream().filter(s->s.code().equals("CUSTOMER_RECEIVED")).findFirst().orElseThrow().status()).isEqualTo("PENDING");
@@ -194,6 +199,70 @@ class PiWorkflowServiceTest {
         when(mapper.selectStepsForUpdate(1L)).thenReturn(List.of(row("DOCUMENTS_READY","{}")));
         service.complete(1L,"DOCUMENTS_READY",new PiWorkflowRequest("补录","SALE-NEW",true,true,false,null,null,null,null,null,null,null,null,null,null,null));
         verify(mapper).complete(eq(1L),eq(3),any(),eq("补录"),contains("SALE-NEW"));
+    }
+    @ParameterizedTest
+    @CsvSource({"MANUAL,DOMESTIC,true","MANUAL,EXPORT,false","MANUAL,EXPORT,true",
+            "CONFIGURED,DOMESTIC,true","CONFIGURED,EXPORT,false","CONFIGURED,EXPORT,true",
+            "LEGACY,DOMESTIC,true","LEGACY,EXPORT,false","LEGACY,EXPORT,true"})
+    void unshippedPiCannotCompleteDispatchOrSkipToLaterStepsEvenWithStoredCompletion(
+            String mode,String tradeType,boolean domesticShipment) throws Exception {
+        configureDispatchScenario(mode,tradeType,domesticShipment);
+        var stored=rows(Arrays.stream(PiWorkflowStepCode.values()).map(Enum::name).toArray(String[]::new));
+        when(mapper.selectSteps(1L)).thenReturn(stored);
+        when(mapper.selectStepsForUpdate(1L)).thenReturn(stored);
+        pi.setTotalAmount(new BigDecimal("100"));paid();
+        var guardedCodes=Set.of("STOCK_DISPATCHED","DOMESTIC_EXPRESS_BOOKED","WAREHOUSE_ARRIVED",
+                "TRACKING_RECORDED","CUSTOMER_RECEIVED","CI_SENT","RD_SENT","RD_SIGNED",
+                "PAYMENT_SETTLED","CMR_COLLECTED","CASE_CLOSED");
+        var view=service.get(1L);
+        if("CONFIGURED".equals(mode)) {
+            assertThat(view.totalCount()).isEqualTo(19);
+            assertThat(view.steps().get(8).code()).isEqualTo("STOCK_DISPATCHED");
+        }
+        for(var step:view.steps()) {
+            if(!guardedCodes.contains(step.code()))continue;
+            assertThat(step.status()).as("%s must reflect actual stock",step.code()).isEqualTo("PENDING");
+            assertThatThrownBy(()->service.complete(1L,step.code(),new PiWorkflowRequest("尝试跳步")))
+                    .as("%s must reject direct completion",step.code())
+                    .isInstanceOfSatisfying(BusinessException.class,error->assertThat(error.getCode()).isEqualTo("PI_WORKFLOW_DISPATCH_REQUIRED"));
+        }
+        verify(mapper,never()).complete(anyLong(),anyInt(),any(),any(),any());
+    }
+    @ParameterizedTest
+    @CsvSource({"MANUAL,DOMESTIC,true","MANUAL,EXPORT,false","CONFIGURED,DOMESTIC,true",
+            "CONFIGURED,EXPORT,false","LEGACY,DOMESTIC,true","LEGACY,EXPORT,true"})
+    void dispatchStepFollowsActualStockAndReturnsToPendingAfterReversal(
+            String mode,String tradeType,boolean domesticShipment) throws Exception {
+        configureDispatchScenario(mode,tradeType,domesticShipment);
+        when(business.allDispatched(1L)).thenReturn(true);
+        var view=service.get(1L);
+        assertThat(view.steps().stream().filter(s->s.code().equals("STOCK_DISPATCHED")).findFirst().orElseThrow().status()).isEqualTo("COMPLETED");
+        when(mapper.selectSteps(1L)).thenReturn(rows("STOCK_DISPATCHED","CASE_CLOSED"));
+        when(business.allDispatched(1L)).thenReturn(false);
+        assertThat(service.get(1L).steps().stream().filter(s->Set.of("STOCK_DISPATCHED","CASE_CLOSED").contains(s.code())))
+                .allSatisfy(step->assertThat(step.status()).isEqualTo("PENDING"));
+    }
+    @Test void manualPreparationsRemainAvailableBeforeDispatch() throws Exception {
+        configureDispatchScenario("MANUAL","EXPORT",false);
+        for(var code:List.of("DOCUMENTS_READY","GOODS_PREPARED","FORWARDER_SELECTED")) {
+            service.complete(1L,code,new PiWorkflowRequest("出库前准备"));
+            verify(mapper).complete(eq(1L),eq(PiWorkflowStepCode.parse(code).order()),any(),any(),any());
+        }
+    }
+    private void configureDispatchScenario(String mode,String tradeType,boolean domesticShipment) throws Exception {
+        pi.setTradeType(tradeType);pi.setStatus("RELEASED");
+        var node=json.createObjectNode();
+        var terms=node.putObject("business").put("warehouseId",2).put("domesticShipment",domesticShipment);
+        if("MANUAL".equals(mode))terms.put("workflowMode","USER_CONFIRMED");
+        when(business.document(1L)).thenReturn(json.treeToValue(node,PiDocumentSnapshot.class));
+        if("CONFIGURED".equals(mode)) {
+            var profiles=mock(PiFulfillmentProfileService.class);
+            ReflectionTestUtils.setField(service,"profiles",profiles);
+            var rules=new PiFulfillmentRules("PREPAY","SELLER_TRANSPORT",true,true,true,true,true,true,
+                    List.of("CI","RD","CMR"),List.of(2L));
+            when(profiles.resolveProfile(any())).thenReturn(new PiFulfillmentProfile(9L,"STANDARD","1","完整履约",
+                    tradeType,"Seller","EU","1",rules,true,null));
+        }
     }
     private PiWorkflowStepRecord row(String code,String detail){var step=PiWorkflowStepCode.parse(code);return new PiWorkflowStepRecord(step.order(),code,step.stepName(),"COMPLETED",1L,null,null,detail);}
 }

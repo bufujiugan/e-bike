@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import AppIcon from '../AppIcon.vue'
+import MascotCompanion from '../common/MascotCompanion.vue'
 import type { NavGroup, NavItem } from '../../config/page-presentation'
 
 const props = defineProps<{ groups: NavGroup[]; active: string; username: string; role: string; collapsed: boolean }>()
@@ -93,6 +94,7 @@ watch([() => props.active, displayGroups], async ([key]) => {
       </section>
     </nav>
     <footer class="workspace-sidebar-footer">
+      <div class="sidebar-companion" aria-hidden="true"><span>今天也一起，<br /><strong>稳稳向前。</strong></span><MascotCompanion compact /></div>
       <button type="button" class="workspace-logout" title="退出登录" aria-label="退出登录" @click="emit('logout')"><AppIcon name="logout" /><span class="sm-nav-label">退出登录</span></button>
     </footer>
   </aside>

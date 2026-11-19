@@ -1,0 +1,650 @@
+/* 奶油蜜桃主题：只覆盖视觉属性，沿用原有布局、响应式规则与业务状态。
+ * 壳层选择器高于业务组件的 scoped 样式，避免异步加载后回退到原配色。
+ * 弹窗使用自身类名覆盖，兼容挂载到 body 的情况。
+ */
+:root {
+  --bike-ink: #4b352d;
+  --bike-text-muted: #7b6153;
+  --bike-primary: #b44e36;
+  --bike-primary-hover: #963e2b;
+  --bike-canvas: #fff9ee;
+  --bike-paper: #fffef9;
+  --bike-lilac: #ffe0db;
+  --bike-cream: #fcecb7;
+  --bike-mint: #e4eed7;
+  --bike-peach: #ffe5d2;
+  --bike-focus: #963e2b;
+  --bike-control-border: #a68b73;
+  --bike-radius-control: 10px;
+  --bike-radius-card: 20px;
+  --bike-motion-fast: 160ms;
+  --bike-font: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  color: #4b352d;
+  background: #fff9ee;
+  --sm-primary: var(--bike-primary);
+  --sm-navy: #4f3c30;
+  --sm-navy-light: #695142;
+  --sm-bg: #fff9ee;
+  --sm-surface: #fffef9;
+  --sm-border: #dcc5ad;
+  --sm-text: #4b352d;
+  --sm-secondary: var(--bike-text-muted);
+  --sm-success: #39764e;
+  --sm-warning: #94601c;
+  --sm-danger: #b33e56;
+  --sm-purple: #ce8b62;
+  --sm-radius: 18px;
+  --sm-shadow: 0 4px 0 rgb(94 66 43 / 3%), 0 10px 28px rgb(94 66 43 / 4%);
+  --surface-shadow: var(--sm-shadow);
+  --el-color-primary: var(--bike-primary);
+  --el-color-primary-light-3: #b69784;
+  --el-color-primary-light-5: #cdb8a7;
+  --el-color-primary-light-7: #e1d3c8;
+  --el-color-primary-light-8: #ede4dc;
+  --el-color-primary-light-9: #f9f2ed;
+  --el-color-primary-dark-2: #5f4637;
+  --el-color-success: #39764e;
+  --el-color-success-light-3: #83aa92;
+  --el-color-success-light-5: #aecab8;
+  --el-color-success-light-7: #cddfd3;
+  --el-color-success-light-8: #dceade;
+  --el-color-success-light-9: #eef6ef;
+  --el-color-success-dark-2: #38684b;
+  --el-color-warning: #94601c;
+  --el-color-warning-light-3: #d3a46c;
+  --el-color-warning-light-5: #e6c79b;
+  --el-color-warning-light-7: #f2dcba;
+  --el-color-warning-light-8: #f8e9cf;
+  --el-color-warning-light-9: #fff5e2;
+  --el-color-warning-dark-2: #956024;
+  --el-color-danger: #b33e56;
+  --el-color-danger-light-3: #d88a98;
+  --el-color-danger-light-5: #e7b0b9;
+  --el-color-danger-light-7: #f0d0d6;
+  --el-color-danger-light-8: #f7dfe5;
+  --el-color-danger-light-9: #fff0f2;
+  --el-color-danger-dark-2: #a63f52;
+  --el-color-info: var(--bike-text-muted);
+  --el-color-info-light-3: #b6a49a;
+  --el-color-info-light-5: #cdc3ba;
+  --el-color-info-light-7: #e4ded9;
+  --el-color-info-light-8: #ede9e5;
+  --el-color-info-light-9: #f7f4f1;
+  --el-text-color-primary: #4b352d;
+  --el-text-color-regular: #6f5c51;
+  --el-text-color-secondary: var(--bike-text-muted);
+  --el-text-color-placeholder: var(--bike-text-muted);
+  --el-text-color-disabled: #c1b4aa;
+  --el-border-color: #e2dbd5;
+  --el-border-color-light: #ebe6e2;
+  --el-border-color-lighter: #f0edea;
+  --el-border-color-extra-light: #f6f3f1;
+  --el-fill-color: #f4f0ed;
+  --el-fill-color-light: #f8f5f3;
+  --el-fill-color-lighter: #fcfaf9;
+  --el-fill-color-extra-light: #fdfcfb;
+  --el-fill-color-blank: #fffef9;
+  --el-bg-color: #fffef9;
+  --el-bg-color-page: #fff9ee;
+  --el-bg-color-overlay: #fffef9;
+  --el-border-radius-base: 10px;
+  --el-border-radius-small: 8px;
+  --el-box-shadow-light: 0 8px 28px rgb(83 57 37 / 9%);
+  --el-box-shadow: 0 12px 40px rgb(83 57 37 / 12%);
+}
+
+body { color: var(--sm-text); background: var(--sm-bg); }
+::selection { background: #f8e6d8; color: #533827; }
+:focus-visible { outline: 2px solid var(--bike-focus); outline-offset: 3px; }
+.admin-app.sm-app, html .admin-app.sm-app.sm-unified .admin-shell, html .admin-app.sm-app.sm-unified .sm-workspace { background: var(--sm-bg); color: var(--sm-text); }
+
+/* 侧栏保留原有树形导航与折叠行为，仅改变颜色和材质。 */
+.admin-app.sm-app .sm-sidebar.sm-sidebar {
+  --nav-text: #6f5c51;
+  --nav-icon: #9a8273;
+  --nav-hover: #f4ede7;
+  --nav-selected: #5f4636;
+  color: var(--sm-text);
+  background: #fffdf7;
+  border-right-color: #e9e3df;
+  box-shadow: 3px 0 18px rgb(92 61 40 / 2%);
+}
+html .admin-app.sm-app.sm-unified .sm-sidebar-top, html .admin-app.sm-app.sm-unified .workspace-sidebar-footer { border-color: #e9e3df; }
+html .admin-app.sm-app.sm-unified .workspace-brand-mark, .login-brand .brand-mark {
+  color: #805524; background: linear-gradient(140deg, #fff0c8, #ffe3a2);
+  border-radius: 13px; box-shadow: 0 3px 9px #d6b5771a; font-style: normal;
+}
+html .admin-app.sm-app.sm-unified .workspace-brand-copy strong { color: #423329; }
+html .admin-app.sm-app.sm-unified .workspace-brand-copy small { color: var(--bike-text-muted); }
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-sidebar-collapse,
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-submenu-toggle { color: #9a8273; background: #f5efea; border-radius: 8px; }
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-sidebar-collapse:hover,
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-submenu-toggle:hover { color: #5f4636; background: #eee2d8; }
+html .admin-app.sm-app.sm-unified .sm-sidebar nav { scrollbar-color: #dfd3c9 transparent; }
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-nav-heading { color: #6f5c51; border-radius: 12px; }
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-nav-heading.is-expanded { background: #f7f3ef; }
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-nav-heading.has-active-child { color: #5f4636; background: #f3eae3; }
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-nav-heading:hover { color: #5f4636; background: #f3eae3; }
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-nav-count { color: var(--bike-text-muted); background: #f0e6dd; border-radius: 6px; }
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-chevron-surface { color: #a69082; }
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-nav-parent-row,
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-nav-link { border-radius: 12px; }
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-nav-link:hover { color: #5f4636; }
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-nav-parent-row.has-active-child { background: #f6f0eb; }
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-nav-parent-row.is-active,
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-nav-child.is-active { background: var(--bike-primary); color: #fff; box-shadow: 0 4px 0 #eaddd2; }
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-nav-parent-row.is-active > .sm-nav-link { background: transparent; color: #fff; }
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-nav-child.is-active:hover { color: #fff; }
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-nav-items::before,
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-nav-parent-row::after { background: #e0d3c8; }
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-nav-parent-row::before,
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-nav-child::before { background: #c4ab9b; }
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-nav-parent-row.is-active::before,
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-nav-parent-row.has-active-child::before { background: #c49a80; box-shadow: 0 0 0 2px #f3eae3; }
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-nav-children { border-left-color: #e0d3c8; }
+html .admin-app.sm-app.sm-unified .workspace-logout { color: #856f61; border-radius: 12px; }
+html .admin-app.sm-app.sm-unified .workspace-logout:hover { color: #5f4636; background: #f4ede7; }
+html .admin-app.sm-app.sm-unified .workspace-logout .app-icon { color: #bc8090; }
+html .admin-app.sm-app.sm-unified .sm-sidebar button:focus-visible { outline: 2px solid var(--bike-focus); outline-offset: 3px; }
+
+/* 顶栏、原有场景横幅与账户控件。 */
+html .admin-app.sm-app.sm-unified .sm-top-header { background: #fcf9f6; border-color: #dcc5ad; }
+html .admin-app.sm-app.sm-unified .cc-header-breadcrumb, html .admin-app.sm-app.sm-unified .cc-header-breadcrumb strong { color: #524137; }
+html .admin-app.sm-app.sm-unified .cc-header-breadcrumb > span, html .admin-app.sm-app.sm-unified .cc-header-breadcrumb > i { color: var(--bike-text-muted); }
+html .admin-app.sm-app.sm-unified .sm-hero { background: linear-gradient(110deg, #fcf8f1, #fbf2ea 60%, #fceadf); }
+html .admin-app.sm-app.sm-unified .sm-hero::after { background: linear-gradient(transparent, var(--sm-bg)); }
+html .admin-app.sm-app.sm-unified .sm-hero-scene img { filter: none; }
+html .admin-app.sm-app.sm-unified .sm-page-title h1, html .admin-app.sm-app.sm-unified .sm-section-heading h2 { color: #4b352d; }
+html .admin-app.sm-app.sm-unified .sm-page-title p, html .admin-app.sm-app.sm-unified .sm-hero-brandline { color: var(--bike-text-muted); }
+html .admin-app.sm-app.sm-unified .sm-hero-motto, html .admin-app.sm-app.sm-unified .pc-hero-motto,
+html .admin-app.sm-app.sm-unified .cc-date-panel { color: #805f4b; background: #fffbf4d9; border-color: #e9e1db; border-radius: 16px; box-shadow: var(--sm-shadow); }
+html .admin-app.sm-app.sm-unified .sm-hero-motto > span, html .admin-app.sm-app.sm-unified .sm-hero-motto small,
+html .admin-app.sm-app.sm-unified .pc-hero-motto small, html .admin-app.sm-app.sm-unified .cc-date-panel > span { color: var(--bike-text-muted); }
+html .admin-app.sm-app.sm-unified .cc-date-panel > strong { color: #5f4636; }
+html .admin-app.sm-app.sm-unified .cc-date-panel > span.is-error { color: var(--sm-danger); }
+html .admin-app.sm-app.sm-unified .sm-header-divider { background: #e8e1dc; }
+html .admin-app.sm-app.sm-unified .workspace-page-title { color: #524137; }
+html .admin-app.sm-app.sm-unified .workspace-breadcrumb { color: var(--bike-text-muted); }
+html .admin-app.sm-app.sm-unified .workspace-breadcrumb i { color: #cabeb5; }
+html .admin-app.sm-app.sm-unified .workspace-global-search .el-select__wrapper { background: #fffcfa; box-shadow: 0 0 0 1px #e7e1dc inset; border-radius: 11px; }
+html .admin-app.sm-app.sm-unified .workspace-global-search .app-icon, html .admin-app.sm-app.sm-unified .workspace-tool-button { color: #9a8273; }
+html .admin-app.sm-app.sm-unified .workspace-tool-button:hover { color: #7f5d48; background: #f6eee7; }
+html .admin-app.sm-app.sm-unified .workspace-tools-divider { background: #ebe4de; }
+html .admin-app.sm-app.sm-unified .account-avatar-trigger { color: #614e42; }
+html .admin-app.sm-app.sm-unified .account-avatar-trigger:hover, html .admin-app.sm-app.sm-unified .account-avatar-trigger.is-open { background: #f7efe8; }
+.account-avatar.account-avatar { color: #8b6750; background: #f6eae0; }
+
+/* 公共卡片与原有状态语义：蜜桃色操作、绿色完成、琥珀待办、玫红异常。 */
+html .admin-app.sm-app.sm-unified .sm-tone-blue { --tone: #ba825f; --tone-bg: #faede3; }
+html .admin-app.sm-app.sm-unified .sm-tone-green { --tone: #4e8763; --tone-bg: #e4f0e6; }
+html .admin-app.sm-app.sm-unified .sm-tone-orange { --tone: #b67b2e; --tone-bg: #fff0ce; }
+html .admin-app.sm-app.sm-unified .sm-tone-red { --tone: #c25b70; --tone-bg: #fce4e9; }
+html .admin-app.sm-app.sm-unified .sm-tone-purple { --tone: #c98961; --tone-bg: #faede2; }
+html .admin-app.sm-app.sm-unified .sm-tone-muted { --tone: #9c8576; --tone-bg: #f3eeea; }
+html .admin-app.sm-app.sm-unified .sm-card, html .admin-app.sm-app.sm-unified .panel,
+html .admin-app.sm-app.sm-unified .production-data-card, html .admin-app.sm-app.sm-unified .sm-workspace > :is(.pi-workspace, .after-sales, .trace-query),
+html .admin-app.sm-app.sm-unified .workflow-header, html .admin-app.sm-app.sm-unified .order-summary, html .admin-app.sm-app.sm-unified .order-vehicles, html .admin-app.sm-app.sm-unified .order-action-panel {
+  border-color: var(--sm-border); border-radius: 18px; background: #fffef9; box-shadow: var(--sm-shadow);
+}
+html .admin-app.sm-app.sm-unified .sm-metric { border-color: color-mix(in srgb, var(--tone), transparent 90%); border-radius: 18px; background: linear-gradient(120deg, color-mix(in srgb, var(--tone-bg), white 26%), var(--tone-bg)); box-shadow: 0 3px 10px rgb(96 65 43 / 2%); }
+html .admin-app.sm-app.sm-unified .sm-metric-icon { color: var(--tone); background: #ffffff80; border-radius: 16px; box-shadow: inset 0 1px 1px #fff9; }
+html .admin-app.sm-app.sm-unified .sm-metric-value strong { color: #4b352d; }
+html .admin-app.sm-app.sm-unified .sm-metric-label { color: #6f5c50; }
+html .admin-app.sm-app.sm-unified .sm-metric-hint, html .admin-app.sm-app.sm-unified .sm-metric-value small { color: var(--bike-text-muted); }
+html .admin-app.sm-app.sm-unified .sm-metric-sparkline i { background: var(--tone); }
+html .admin-app.sm-app.sm-unified .sm-status { border-radius: 10px; }
+html .admin-app.sm-app.sm-unified .sm-section-heading > span, html .admin-app.sm-app.sm-unified .sm-caption,
+html .admin-app.sm-app.sm-unified .sm-pagination, html .admin-app.sm-app.sm-unified .sm-table-source { color: var(--bike-text-muted); }
+html .admin-app.sm-app.sm-unified .sm-progress-track { background: #f0ebe6; border-radius: 10px; }
+html .admin-app.sm-app.sm-unified .sm-progress-label { color: var(--bike-text-muted); }
+html .admin-app.sm-app.sm-unified .sm-process-circle { background: #faeee4; color: #b08062; outline-color: #efdfd2; }
+html .admin-app.sm-app.sm-unified .sm-process-node strong { color: #675143; }
+html .admin-app.sm-app.sm-unified .sm-process-node small { color: var(--bike-text-muted); }
+html .admin-app.sm-app.sm-unified .sm-process-node:not(:last-child)::after { background: #ecd9ca; color: #bf957b; }
+html .admin-app.sm-app.sm-unified .sm-empty { color: var(--bike-text-muted); }
+html .admin-app.sm-app.sm-unified .sm-empty-art { color: #c59f88; background: linear-gradient(140deg, #fff1cc, #f9ece2); border-color: #f2e6dc; border-radius: 18px; }
+html .admin-app.sm-app.sm-unified .sm-empty-art .app-icon { color: #bf957b; }
+html .admin-app.sm-app.sm-unified .sm-empty h3 { color: #7c6556; }
+html .admin-app.sm-app.sm-unified .sm-empty p { color: var(--bike-text-muted); }
+html .admin-app.sm-app.sm-unified .sm-empty strong { color: #7d6657; }
+html .admin-app.sm-app.sm-unified .sm-empty-art i { background: #f0dbc9; }
+html .admin-app.sm-app.sm-unified .cc-flow .sm-process-circle sup { background: #faeee5; color: #b28b72; }
+html .admin-app.sm-app.sm-unified .cc-flow .sm-process-node > b { color: #8e6a54; }
+html .admin-app.sm-app.sm-unified .cc-station-card header > span { color: #b18a72; background: #f7ebe2; }
+html .admin-app.sm-app.sm-unified .cc-station-card dt, html .admin-app.sm-app.sm-unified .cc-station-card dd.cc-missing { color: var(--bike-text-muted); }
+html .admin-app.sm-app.sm-unified .cc-station-card dd, html .admin-app.sm-app.sm-unified .cc-station-card .sm-progress-label { color: #856c5c; }
+html .admin-app.sm-app.sm-unified .cc-segmented { background: #f8f0ea; }
+html .admin-app.sm-app.sm-unified .cc-segmented button, html .admin-app.sm-app.sm-unified .cc-task-tabs button { background: #f9f2ed; color: var(--bike-text-muted); }
+html .admin-app.sm-app.sm-unified .cc-segmented button.active, html .admin-app.sm-app.sm-unified .cc-task-tabs button.active { background: #ac8064; color: #fff; }
+
+/* 我的工作台：保留三分区、快捷入口和恢复办理卡片。 */
+html .admin-app.sm-app.sm-unified .workbench-home, html .admin-app.sm-app.sm-unified .business-workspace { color: #4b352d; background: transparent; }
+html .admin-app.sm-app.sm-unified .workbench-welcome { border-color: #f1e3bd; border-radius: 26px; background: #fff4cf; box-shadow: 0 5px 0 #f1e8d5; }
+html .admin-app.sm-app.sm-unified .workbench-welcome::before { background: radial-gradient(ellipse, #f9eade 0 48%, transparent 49%); mask-image: none; opacity: .65; filter: none; }
+html .admin-app.sm-app.sm-unified .welcome-copy h1, html .admin-app.sm-app.sm-unified .workbench-section-title h2,
+html .admin-app.sm-app.sm-unified .area-heading h3, html .admin-app.sm-app.sm-unified .shortcut-grid strong { color: #4b352d; }
+html .admin-app.sm-app.sm-unified .workflow-eyebrow, html .admin-app.sm-app.sm-unified .welcome-copy > p,
+html .admin-app.sm-app.sm-unified .workbench-section-title p, html .admin-app.sm-app.sm-unified .workbench-section-title > span { color: var(--bike-text-muted); }
+html .admin-app.sm-app.sm-unified .business-workspace .welcome-guide, html .admin-app.sm-app.sm-unified .resume-button { color: #fff; background: linear-gradient(110deg, #826350, #5f4636); border-radius: 12px; box-shadow: 0 5px 12px #87655015; }
+html .admin-app.sm-app.sm-unified .business-workspace .welcome-guide:hover, html .admin-app.sm-app.sm-unified .resume-button:hover { background: #775946; }
+html .admin-app.sm-app.sm-unified .resume-card { border-color: #fff; border-radius: 20px; background: #fffef9; box-shadow: 0 5px 0 #e8dba746; }
+html .admin-app.sm-app.sm-unified .resume-label, html .admin-app.sm-app.sm-unified .resume-card p, html .admin-app.sm-app.sm-unified .resume-empty { color: var(--bike-text-muted); border-color: #ece5e0; }
+html .admin-app.sm-app.sm-unified .resume-decoration { color: #b18b3c; background: #fff0c6; }
+html .admin-app.sm-app.sm-unified .workbench-section-title h2::before { background: #d0a58b; border-radius: 4px; }
+html .admin-app.sm-app.sm-unified .workbench-area { --area-color: #9f7053; --area-bg: #f8e8db; border-color: #f1e2d5; border-radius: 24px; background: #fbf2ea; box-shadow: 0 5px 0 #f0e7df; }
+html .admin-app.sm-app.sm-unified .workbench-area.area-production { --area-color: #477658; --area-bg: #d9ebd4; border-color: #d7e4cf; background: #eaf3e3; box-shadow: 0 5px 0 #dfe8d8; }
+html .admin-app.sm-app.sm-unified .workbench-area.area-warehouse { --area-color: #99611f; --area-bg: #ffe7b1; border-color: #efdfb7; background: #fff2d5; box-shadow: 0 5px 0 #efe4cb; }
+html .admin-app.sm-app.sm-unified .area-icon { border-radius: 19px; background: #fffef9; border: 2px solid #ffffff; box-shadow: 0 4px 0 color-mix(in srgb, var(--area-color), transparent 90%); transform: rotate(-4deg); }
+html .admin-app.sm-app.sm-unified .area-heading > .area-watermark { color: var(--area-color); opacity: .15; }
+html .admin-app.sm-app.sm-unified .area-description, html .admin-app.sm-app.sm-unified .area-hint { color: var(--bike-text-muted); border-color: #eee9e5; }
+html .admin-app.sm-app.sm-unified .area-steps { border-top: 1px solid color-mix(in srgb, var(--area-color), white 75%); }
+html .admin-app.sm-app.sm-unified .area-steps button { color: #604a3d; background: #fffef9; border-color: #ffffff; border-radius: 14px; box-shadow: 0 2px 0 #4b352d06; }
+html .admin-app.sm-app.sm-unified .area-steps button:hover { background: var(--area-bg); border-color: color-mix(in srgb, var(--area-color), white 65%); }
+html .admin-app.sm-app.sm-unified .step-icon { color: var(--area-color); background: var(--area-bg); border-radius: 10px; }
+html .admin-app.sm-app.sm-unified .area-steps small { color: var(--bike-text-muted); }
+html .admin-app.sm-app.sm-unified .area-steps .step-chevron { color: #ae988b; }
+html .admin-app.sm-app.sm-unified .shortcut-grid button { border-color: #dcc5ad; border-radius: 16px; background: #fffef9; color: #998071; box-shadow: var(--sm-shadow); }
+html .admin-app.sm-app.sm-unified .shortcut-grid button:hover { border-color: #e6d3c3; background: #fefbf8; }
+html .admin-app.sm-app.sm-unified .shortcut-icon { color: #ba8f75; background: #faf1e9; border-radius: 13px; }
+html .admin-app.sm-app.sm-unified .shortcut-grid small { color: var(--bike-text-muted); }
+html .admin-app.sm-app.sm-unified .workflow-areas { border-color: #efe8e3; }
+html .admin-app.sm-app.sm-unified .workflow-areas button.active { color: #966c52; border-color: #c09276; }
+html .admin-app.sm-app.sm-unified .workflow-stages button.active, html .admin-app.sm-app.sm-unified .workflow-context { background: #f9f1eb; color: #966c52; border-radius: 10px; }
+html .admin-app.sm-app.sm-unified .business-workspace button:focus-visible { outline: 2px solid var(--bike-focus); outline-offset: 3px; }
+
+/* 表格、筛选框和浮层共享主题，浮层挂载到 body 时同样生效。 */
+.el-button { border-radius: 10px; }
+.el-button--primary:not(.is-plain):not(.is-text):not(.is-link):not(:disabled) { background: linear-gradient(110deg, #8d6a55, #674c3c); border-color: #80614d; box-shadow: 0 3px 8px #82635014; }
+.el-button--primary:not(.is-plain):not(.is-text):not(.is-link):not(:disabled):hover { background: #8f6a53; border-color: #8f6a53; }
+html .admin-app.sm-app.sm-unified .primary-action, html .admin-app.sm-app.sm-unified .filter-button { background: #80614d; border-color: #80614d; color: #fff; border-radius: 10px; box-shadow: 0 3px 8px #82635014; }
+html .admin-app.sm-app.sm-unified .secondary-action, html .admin-app.sm-app.sm-unified .reset-button, html .admin-app.sm-app.sm-unified .page-button { color: #8c7262; border-color: #e8ded5; border-radius: 10px; }
+html .admin-app.sm-app.sm-unified .sm-filter-bar .el-input__wrapper, html .admin-app.sm-app.sm-unified .sm-filter-bar .el-select__wrapper,
+.el-input__wrapper, .el-select__wrapper, .el-textarea__inner { border-radius: 10px; }
+html .admin-app.sm-app.sm-unified .sm-navigation-search .el-select__wrapper { background: #fffef9; box-shadow: 0 0 0 1px #e9e2dc inset; border-radius: 11px; }
+.el-table, html .admin-app.sm-app.sm-unified .el-table, html .admin-app.sm-app.sm-unified .sm-data-table .el-table {
+  --el-table-header-bg-color: #f8f5f2;
+  --el-table-tr-bg-color: #fffef9;
+  --el-table-row-hover-bg-color: #fcf5f0;
+  --el-table-current-row-bg-color: #faf0e8;
+  --el-table-border-color: #efeae5;
+  --el-table-header-text-color: #725e51;
+  --el-table-text-color: #665347;
+  --el-table-bg-color: #fffef9;
+  border-color: #e9e4e0; border-radius: 12px; color: #665347;
+}
+html .admin-app.sm-app.sm-unified .el-table th.el-table__cell,
+html .admin-app.sm-app.sm-unified .sm-data-table .el-table th.el-table__cell { color: #725e51; background: #f8f5f2; }
+html .admin-app.sm-app.sm-unified .module-table th, html .admin-app.sm-app.sm-unified .module-table th.module-row-actions { color: #725e51; background: #f8f5f2; }
+html .admin-app.sm-app.sm-unified .module-table td { border-color: #efeae5; color: #665347; }
+html .admin-app.sm-app.sm-unified .module-table .module-row-actions { background: #fffef9; }
+html .admin-app.sm-app.sm-unified .module-table tbody tr:hover td { background: #fcf5f0; }
+.el-tag { border-radius: 8px; }
+.el-dialog.el-dialog, .el-message-box.el-message-box { border: 1px solid #eae4df; border-radius: 20px; background: #fffef9; box-shadow: 0 20px 65px #523d3024; }
+.el-dialog .el-dialog__header { background: linear-gradient(110deg, #fdf8f4, #fff7ed); border-color: #ede6e1; border-radius: 19px 19px 0 0; }
+.el-dialog .el-dialog__title, .el-message-box .el-message-box__title { color: #594234; }
+.el-drawer .el-drawer__header { color: #594234; background: #fcf7f3; border-color: #ede6e1; }
+.el-alert { border-radius: 12px; }
+.el-popper.is-light, .sm-account-popover.el-popper { border-color: #eae2dc; border-radius: 12px; box-shadow: var(--el-box-shadow-light); }
+.el-descriptions { --el-descriptions-item-bordered-label-background: #f8f5f2; }
+.el-pagination.is-background .el-pager li { border-radius: 9px; }
+.el-pagination.is-background .el-pager li.is-active { background: #966c52; }
+.el-empty { --el-empty-fill-color-1: #fdfaf7; --el-empty-fill-color-2: #f9f2ed; --el-empty-fill-color-3: #f5eae1; --el-empty-fill-color-4: #f8f0ea; --el-empty-fill-color-5: #efe0d4; --el-empty-fill-color-6: #f0e4db; --el-empty-fill-color-7: #f9f2ed; --el-empty-fill-color-8: #e9d9cc; --el-empty-fill-color-9: #e5d1c1; }
+
+/* 生产与销售专用容器的固定色，保持内部字段和尺寸不变。 */
+html .admin-app.sm-app.sm-unified .sm-production-tabs { background: #fffafc; border-color: #ebe4df; border-radius: 14px; }
+html .admin-app.sm-app.sm-unified .sm-production-tabs .el-tabs__item { border-color: #eee5de; border-radius: 11px; color: #7d6353; }
+html .admin-app.sm-app.sm-unified .sm-production-tabs .el-tabs__item.is-active { color: #fff; background: linear-gradient(120deg, #a47f68, #775947); border-color: #9f7a63; box-shadow: 0 3px 8px #82635018; }
+html .admin-app.sm-app.sm-unified .pc-segmented, html .admin-app.sm-app.sm-unified .cc-task-tabs { background-color: #f9f3ef; border-color: #efe6df; border-radius: 10px; }
+html .admin-app.sm-app.sm-unified .pc-segmented button[aria-pressed='true'], html .admin-app.sm-app.sm-unified .cc-task-tabs button.is-active { color: #fff; background: #8e6b55; box-shadow: none; }
+html .admin-app.sm-app.sm-unified .pc-station-grid article, html .admin-app.sm-app.sm-unified .cc-station-card,
+html .admin-app.sm-app.sm-unified .sm-task-card, html .admin-app.sm-app.sm-unified .sm-current-day { background: #fdfaf7; border-color: #efe6de; border-radius: 13px; }
+html .admin-app.sm-app.sm-unified .pc-station-grid header strong, html .admin-app.sm-app.sm-unified .cc-station-card strong,
+html .admin-app.sm-app.sm-unified .sm-task-head strong, html .admin-app.sm-app.sm-unified .sm-current-day h3 { color: #71594a; }
+html .admin-app.sm-app.sm-unified .pc-station-grid header > span { background: #f7ebe2; color: #ab7d61; border-radius: 6px; }
+html .admin-app.sm-app.sm-unified .pc-exception-columns { color: #947b6b; background: #faf2eb; border-radius: 10px; }
+html .admin-app.sm-app.sm-unified .page-intro, html .admin-app.sm-app.sm-unified .module-heading,
+html .admin-app.sm-app.sm-unified :is(.pi-heading, .section-heading) { background: linear-gradient(110deg, #fffef9, #f9f2ed); border-color: #efe8e2; }
+html .admin-app.sm-app.sm-unified :is(.pi-heading, .section-heading) h2, html .admin-app.sm-app.sm-unified .module-heading h2 { color: #4b352d; }
+html .admin-app.sm-app.sm-unified .order-operations button { background: #fffef9; border-color: #e9e1db; border-radius: 13px; color: var(--bike-text-muted); }
+html .admin-app.sm-app.sm-unified .order-operations button.active, html .admin-app.sm-app.sm-unified .vehicle-choices button.selected { background: #fff1e2; border-color: #cbad9a; color: #966c52; }
+html .admin-app.sm-app.sm-unified .next-operation, html .admin-app.sm-app.sm-unified .journey-heading, html .admin-app.sm-app.sm-unified .journey-counts > div,
+html .admin-app.sm-app.sm-unified .vehicle-stock-details, html .admin-app.sm-app.sm-unified .vehicle-code-grid > div:not(.bound) { background: #faf5f1; border-color: #ede5de; border-radius: 13px; }
+html .admin-app.sm-app.sm-unified .journey-counts strong { color: #987159; }
+
+html .admin-app.sm-app.sm-unified .business-workspace > .pi-workspace { background: #fffef9; border: 1px solid var(--sm-border); border-radius: 18px; box-shadow: var(--sm-shadow); }
+html .admin-app.sm-app.sm-unified .pi-queue-cards button,
+html .admin-app.sm-app.sm-unified .dashboard-card,
+html .admin-app.sm-app.sm-unified .module-stat { background: linear-gradient(125deg, #fbf3ed, #ffe0db); border-color: #f1e5dc; border-radius: 17px; color: #755f52; box-shadow: var(--sm-shadow); }
+html .admin-app.sm-app.sm-unified .pi-queue-cards button:nth-child(3n + 1) { background: linear-gradient(125deg, #fff7e5, #fff0d1); border-color: #f1e3c7; }
+html .admin-app.sm-app.sm-unified .pi-queue-cards button:nth-child(3n) { background: linear-gradient(125deg, #ffefe7, #fce2db); border-color: #f3dbd5; }
+html .admin-app.sm-app.sm-unified .pi-queue-cards strong,
+html .admin-app.sm-app.sm-unified .dashboard-card strong,
+html .admin-app.sm-app.sm-unified .module-stat strong { color: #7b5842; }
+html .admin-app.sm-app.sm-unified .dashboard-card.selected { border-color: #caa690; background: #f8ece3; }
+html .admin-app.sm-app.sm-unified .module-stat.green strong { color: var(--sm-success); }
+html .admin-app.sm-app.sm-unified .module-stat.orange strong { color: var(--sm-warning); }
+html .admin-app.sm-app.sm-unified .module-stat.red strong { color: var(--sm-danger); }
+html .el-dialog.pi-draft-dialog { color: #4b352d; background: #fcf8f5; }
+html .pi-draft-dialog > .el-dialog__header { background: linear-gradient(110deg, #faf1ea, #fff6e8); border-color: #efe6de; }
+html .pi-draft-dialog > .el-dialog__footer,
+html .pi-draft-dialog .pi-draft-steps,
+html .pi-draft-dialog .pi-draft-summary { background: #fffef9; border-color: #efe6de; }
+html .pi-draft-dialog .pi-draft-heading h2,
+html .pi-draft-dialog .pi-section-heading h3 { color: #5d4637; }
+html .pi-draft-dialog .pi-draft-heading p,
+html .pi-draft-dialog .pi-step-heading p { color: var(--bike-text-muted); }
+html .pi-draft-dialog .pi-draft-badge { color: var(--bike-text-muted); background: #fff2cd; border-color: #f2e4bf; }
+html .pi-draft-dialog .pi-document-mark { color: #a87d63; background: #faf0e7; border-color: #eeddcf; }
+html .pi-draft-dialog .pi-draft-steps .active { color: #966f56; }
+html .pi-draft-dialog .pi-step-number { color: var(--bike-text-muted); background: #fff0df; }
+html .pi-draft-dialog .active .pi-step-number { color: #fff; background: #b0876e; box-shadow: 0 4px 9px #b0876e20; }
+html .pi-draft-dialog .passed .pi-step-number { color: #4e8763; background: #e7f2e8; }
+html .pi-draft-dialog .pi-form-card { background: #fffef9; border-color: #ece4dd; border-radius: 16px; }
+html .pi-draft-dialog .pi-item-card { background: #fffdfc; border-color: #ece4dd; border-radius: 12px; }
+html .pi-draft-dialog .el-form-item__label { color: var(--bike-text-muted); }
+html .pi-draft-dialog .el-input__wrapper,
+html .pi-draft-dialog .el-select__wrapper { border-radius: 10px; box-shadow: 0 0 0 1px #e9dfd7 inset; }
+/* 保留字段错误和键盘焦点的可辨识状态。 */
+html .pi-draft-dialog .el-input__wrapper.is-focus,
+html .pi-draft-dialog .el-select__wrapper.is-focused { box-shadow: 0 0 0 1px var(--el-color-primary) inset; }
+html .pi-draft-dialog .is-error .el-input__wrapper,
+html .pi-draft-dialog .is-error .el-select__wrapper { box-shadow: 0 0 0 1px var(--el-color-danger) inset; }
+html .pi-draft-dialog .pi-summary-total strong { color: #a3775b; }
+html .pi-draft-dialog .pi-count-badge { color: #ae8369; background: #f8ece2; border-radius: 8px; }
+html .pi-draft-dialog .pi-save-notice,
+html .pi-draft-dialog .pi-template-option.selected { background: #fbf3ec; border-color: #e7d1bf; color: #8e6d58; }
+html .pi-draft-dialog .pi-template-option:hover { border-color: #cca891; }
+html .pi-draft-dialog :is(button, summary):focus-visible { outline: 2px solid var(--bike-focus); outline-offset: 3px; }
+html .admin-app.sm-app.sm-unified .production-toolbar .production-refresh { color: #a67d64; }
+html .admin-app.sm-app.sm-unified .production-manager .task-list-hint { color: var(--bike-text-muted); background: #f9f2ed; border-color: #efe6df; border-radius: 12px; }
+html .admin-app.sm-app.sm-unified .task-list-hint .app-icon,
+html .admin-app.sm-app.sm-unified .production-toolbar .el-select__prefix { color: #b49480; }
+html .admin-app.sm-app.sm-unified .production-task-table .el-button.is-link { color: #9e7860; background: #f9f0e8; border-radius: 8px; }
+html .admin-app.sm-app.sm-unified .production-toolbar .el-input__wrapper,
+html .admin-app.sm-app.sm-unified .production-toolbar .el-select__wrapper { box-shadow: 0 0 0 1px #ece2da inset; }
+html .admin-app.sm-app.sm-unified .production-toolbar .el-input__wrapper.is-focus,
+html .admin-app.sm-app.sm-unified .production-toolbar .el-select__wrapper.is-focused { box-shadow: 0 0 0 1px var(--el-color-primary) inset; }
+
+@media (max-width: 600px) {
+  html .admin-app.sm-app.sm-unified .workbench-welcome::before { opacity: .14; }
+}
+
+/* 登录页沿用原表单和场景，柔化配色。 */
+.login-shell { background: radial-gradient(ellipse at 80% 15%, #f8eade, transparent 60%), #fcf6ed; }
+.login-art { background: url('/images/yellow-companion.png') 40% 77% / 140px 140px no-repeat, radial-gradient(ellipse at 40% 72%, #fff0b9 0 20%, transparent 40%); filter: none; }
+.login-art::after { background: linear-gradient(90deg, transparent 65%, #fcf6ed); }
+.login-panel { border-color: #fff; background: #fffdf8ed; box-shadow: 0 24px 80px #85695818; border-radius: 26px; }
+.login-brand strong, .login-panel h2 { color: #4b352d; }
+.login-panel .eyebrow, .login-kicker { color: #b28569; }
+.login-panel .el-form-item__label { color: #826c5e; }
+.login-panel .el-input__wrapper { background: #fdfaf8; border-radius: 12px; }
+.login-panel .submit { background: linear-gradient(110deg, #a78067, #674c3c); box-shadow: 0 8px 20px #a47d6524; }
+.login-brand small, .login-footnote, .login-panel .description { color: var(--bike-text-muted); }
+
+/* 字体与状态统一在主题层维护，业务组件仍负责结构和响应式分栏。 */
+html .admin-app.sm-app.sm-unified,
+.el-dialog, .el-message-box, .el-popper, .login-shell {
+  font-family: var(--bike-font);
+  -webkit-font-smoothing: antialiased;
+}
+html .admin-app.sm-app.sm-unified .workbench-home { font-family: var(--bike-font); }
+html .admin-app.sm-app.sm-unified :is(.sm-page-title h1, .welcome-copy h1) { letter-spacing: -.5px; text-wrap: balance; }
+html .admin-app.sm-app.sm-unified .sm-page-title h1::before { border-radius: 4px; background: var(--bike-primary); }
+html .admin-app.sm-app.sm-unified .sm-hero { background: linear-gradient(100deg, #fff9ee 5%, #fff2cd 75%, #f6efe9); }
+html .admin-app.sm-app.sm-unified .sm-hero-copy { position: relative; z-index: 1; }
+html .admin-app.sm-app.sm-unified .sm-hero-brandline { font-size: 11px; letter-spacing: 1.5px; }
+html .admin-app.sm-app.sm-unified .sm-page-title p { font-size: 14px; line-height: 1.7; }
+html .admin-app.sm-app.sm-unified .workspace-brand-copy small { font-size: 11px; }
+html .admin-app.sm-app.sm-unified .sm-nav-heading { font-size: 14px; }
+html .admin-app.sm-app.sm-unified .sm-nav-link { font-size: 13px; }
+html .admin-app.sm-app.sm-unified .sm-nav-count { font-size: 11px; }
+html .admin-app.sm-app.sm-unified :is(.sm-section-heading h2, .workbench-section-title h2) { font-weight: 700; }
+html .admin-app.sm-app.sm-unified .sm-metric-label { font-size: 14px; }
+html .admin-app.sm-app.sm-unified .sm-metric-value strong { font-size: 30px; letter-spacing: -.7px; font-variant-numeric: tabular-nums; }
+html .admin-app.sm-app.sm-unified :is(.sm-metric-hint, .sm-section-heading > span, .sm-process-node small, .sm-empty p, .sm-table-source, .sm-pagination, .cc-station-card dt, .cc-station-card dd.cc-missing, .cc-task-tabs > span, .cc-failure-heading > small) { font-size: 12px; line-height: 1.6; }
+html .admin-app.sm-app.sm-unified :is(.area-description, .area-hint, .area-steps small, .shortcut-grid small) { font-size: 13px; }
+html .admin-app.sm-app.sm-unified .cc-flow .sm-process-node small { white-space: normal; }
+html .admin-app.sm-app.sm-unified .cc-flow .sm-process-node { grid-template-rows: 23px 27px minmax(40px, auto); }
+html .admin-app.sm-app.sm-unified :is(.sm-process-node strong, .cc-station-card header strong) { font-size: 13px; }
+html .admin-app.sm-app.sm-unified .cc-flow .sm-process-count b { color: var(--bike-ink); }
+html .admin-app.sm-app.sm-unified .cc-station-card { background: var(--bike-paper); }
+html .admin-app.sm-app.sm-unified .cc-station-card:nth-child(2) { background: #f1f6ef; }
+html .admin-app.sm-app.sm-unified .cc-station-card:nth-child(3) { background: #fff8e9; }
+html .admin-app.sm-app.sm-unified .cc-station-card:nth-child(4) { background: #fdf0ea; }
+html .admin-app.sm-app.sm-unified .cc-station-card header > span { color: var(--bike-primary); background: var(--bike-lilac); }
+html .admin-app.sm-app.sm-unified .cc-station-card dt { white-space: normal; }
+html .admin-app.sm-app.sm-unified :is(.cc-segmented button, .cc-task-tabs button, .sm-section-actions .el-button, .sm-text-link) { font-size: 12px; min-height: 28px; }
+html .admin-app.sm-app.sm-unified .cc-failure-strip { background: #fff5ed; border-color: #efded3; border-radius: var(--bike-radius-card); }
+html .admin-app.sm-app.sm-unified .cc-failure-heading > strong { color: var(--bike-ink); }
+html .admin-app.sm-app.sm-unified .cc-supplement .el-collapse-item__header { background: var(--bike-paper); border-color: var(--sm-border); color: var(--bike-text-muted); border-radius: 12px; font-size: 13px; }
+html .admin-app.sm-app.sm-unified .cc-quick-actions button { background: var(--bike-lilac); color: var(--bike-primary); border-color: var(--sm-border); border-radius: 12px; }
+html .admin-app.sm-app.sm-unified .cc-quick-actions small { color: var(--bike-text-muted); font-size: 12px; }
+html .admin-app.sm-app.sm-unified :is(.el-table, .sm-data-table .el-table) { font-size: 13px; font-variant-numeric: tabular-nums; }
+html .admin-app.sm-app.sm-unified .el-table .cell { line-height: 1.65; }
+html .admin-app.sm-app.sm-unified .el-table th.el-table__cell { font-weight: 600; }
+html .admin-app.sm-app.sm-unified .sm-data-table .el-scrollbar__thumb { background: #c2b4a8; }
+html .admin-app.sm-app.sm-unified :is(.row-action, .el-button.is-link) { font-size: 13px; }
+html .el-dialog.pi-draft-dialog :is(.pi-step-heading h2, .pi-form-card h3, .pi-draft-summary h3, .pi-item-total strong) { color: var(--bike-ink); }
+html .el-dialog.pi-draft-dialog :is(.pi-eyebrow, .pi-muted, .pi-field-help, .pi-section-heading p, .pi-summary-caption, .pi-summary-meta, .pi-summary-total > span, .pi-summary-note, .pi-detail-grid dt, .pi-local-save-status, .pi-draft-steps button:not(.active), .pi-draft-summary p, .pi-draft-summary dt, .pi-item-heading, .pi-line-adjustment small) { color: var(--bike-text-muted); }
+html .el-dialog.pi-draft-dialog :is(.pi-muted, .pi-field-help, .pi-local-save-status, .pi-draft-summary p, .pi-draft-summary dt, .pi-draft-steps small) { font-size: 12px; line-height: 1.65; }
+
+/* 普通控件、错误、禁用和键盘焦点分开定义，避免柔和配色抹平状态。 */
+html body .el-input__wrapper,
+html body .el-select__wrapper,
+html body .el-textarea__inner,
+html .pi-draft-dialog .el-input__wrapper,
+html .pi-draft-dialog .el-select__wrapper,
+html .admin-app.sm-app.sm-unified .production-toolbar .el-input__wrapper,
+html .admin-app.sm-app.sm-unified .production-toolbar .el-select__wrapper { box-shadow: 0 0 0 1px var(--bike-control-border) inset; }
+html body .el-input__wrapper.is-focus,
+html body .el-select__wrapper.is-focused,
+html body .el-textarea__inner:focus,
+html .pi-draft-dialog .el-input__wrapper.is-focus,
+html .pi-draft-dialog .el-select__wrapper.is-focused,
+html .admin-app.sm-app.sm-unified .production-toolbar .el-input__wrapper.is-focus,
+html .admin-app.sm-app.sm-unified .production-toolbar .el-select__wrapper.is-focused { box-shadow: 0 0 0 2px var(--bike-focus) inset; }
+html body .is-error .el-input__wrapper,
+html body .is-error .el-select__wrapper,
+html body .is-error .el-textarea__inner,
+html .pi-draft-dialog .is-error .el-input__wrapper,
+html .pi-draft-dialog .is-error .el-select__wrapper { box-shadow: 0 0 0 2px var(--el-color-danger) inset; }
+html body .el-input.is-disabled .el-input__wrapper,
+html body .el-select__wrapper.is-disabled { background: #f1eeeb; box-shadow: 0 0 0 1px #dcd5cf inset; }
+.el-button.is-disabled, .el-button:disabled { box-shadow: none; }
+.el-button--primary.is-disabled, .el-button--primary:disabled { color: #856f61; background: #ede6e1; border-color: #dfd6ce; }
+.el-tag { font-weight: 500; }
+.el-overlay { background: rgb(47 31 58 / 32%); }
+html .admin-app.sm-app.sm-unified :is(button, a):focus-visible,
+html .el-dialog :is(button, a, summary):focus-visible { outline: 2px solid var(--bike-focus); outline-offset: 2px; }
+html .admin-app.sm-app.sm-unified :is(button, .el-input__wrapper, .el-select__wrapper),
+.el-dialog button { transition: background-color var(--bike-motion-fast) ease, border-color var(--bike-motion-fast) ease, box-shadow var(--bike-motion-fast) ease; }
+html .admin-app.sm-app.sm-unified :is(.area-steps button, .shortcut-grid button):active { background: var(--bike-lilac); box-shadow: inset 0 0 0 1px #d7c1af; }
+.login-art h1 { color: var(--bike-ink); }
+.login-art h1 strong { color: var(--bike-primary); }
+.login-art p { color: var(--bike-text-muted); }
+.login-art-tags span { color: var(--bike-primary); border-color: #e9e0d8; border-radius: 14px; }
+
+/* 用户提供的小宠物与奶油色视觉。装饰不参与业务布局，也不遮挡点击。 */
+html .admin-app.sm-app.sm-unified .workbench-companion { position: absolute; z-index: 0; top: 50%; right: 365px; transform: translateY(-50%) rotate(3deg); pointer-events: none; }
+html .admin-app.sm-app.sm-unified .workbench-welcome::before { inset: -30px 285px -30px auto; width: 380px; opacity: .55; }
+html .admin-app.sm-app.sm-unified .welcome-copy { position: relative; z-index: 1; }
+html .admin-app.sm-app.sm-unified .welcome-copy .workflow-eyebrow { display: inline-block; padding: 5px 10px; border: 1px solid #e4d3a8; border-radius: 8px; background: #fff9e6; color: #765725; font-size: 12px; letter-spacing: 1px; }
+html .admin-app.sm-app.sm-unified .welcome-copy h1 { font-size: clamp(26px, 2.3vw, 34px); font-weight: 750; }
+html .admin-app.sm-app.sm-unified .workbench-section-title { margin-bottom: 14px; }
+html .admin-app.sm-app.sm-unified .workbench-section-title h2::before { top: 5px; width: 5px; height: 20px; background: #bb8d70; }
+html .admin-app.sm-app.sm-unified .workbench-section-title > span { padding: 5px 10px; border: 1px solid #e8e0d6; border-radius: 8px; background: #fffef9; font-size: 12px; }
+html .admin-app.sm-app.sm-unified .shortcut-grid button { border-radius: 18px; border-color: #e8dfd4; box-shadow: 0 4px 0 #ece5dc; }
+html .admin-app.sm-app.sm-unified .shortcut-grid button:nth-child(2) .shortcut-icon { background: #e8f0e0; color: #527446; }
+html .admin-app.sm-app.sm-unified .shortcut-grid button:nth-child(3) .shortcut-icon { background: #ffe9df; color: #a66046; }
+html .admin-app.sm-app.sm-unified .sidebar-companion { display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 8px 10px 3px; margin: 0 0 12px; border: 1px solid #f0e2bd; border-radius: 18px; background: #fff6d9; color: #7c6439; font-size: 12px; line-height: 1.8; }
+html .admin-app.sm-app.sm-unified .sidebar-companion strong { color: #5c4324; font-weight: 600; }
+html .admin-app.sm-app.sm-unified .sm-sidebar.is-sidebar-collapsed .sidebar-companion { display: none; }
+html .admin-app.sm-app.sm-unified .sm-top-header { background: #fffdf7; }
+html .admin-app.sm-app.sm-unified .workspace-tool-button { border-radius: 10px; }
+html .admin-app.sm-app.sm-unified .workspace-global-search .el-select__wrapper { background: #faf7f1; border-radius: 12px; }
+html .admin-app.sm-app.sm-unified .account-avatar { border: 2px solid #fff; background: #f9ebdf; box-shadow: 0 2px 0 #ebddd1; }
+html .admin-app.sm-app.sm-unified .workspace-brand-mark { background: #ffe6a0; border: 2px solid #fff0c7; box-shadow: 0 3px 0 #f0d899; }
+html .admin-app.sm-app.sm-unified .sm-metric { border-radius: 22px; box-shadow: inset 0 1px 0 #fff9, 0 4px 0 color-mix(in srgb, var(--tone), transparent 90%); }
+html .admin-app.sm-app.sm-unified .sm-tone-blue { --tone: #a87556; --tone-bg: #f9eade; }
+html .admin-app.sm-app.sm-unified .sm-tone-green { --tone: #477658; --tone-bg: #e3efd9; }
+html .admin-app.sm-app.sm-unified .sm-tone-orange { --tone: #95611e; --tone-bg: #fcecb7; }
+html .admin-app.sm-app.sm-unified .sm-tone-red { --tone: #ae455c; --tone-bg: #ffe3d9; }
+html .admin-app.sm-app.sm-unified .sm-metric-icon { border: 2px solid #ffffffa6; background: #fffef9; border-radius: 17px; }
+html .admin-app.sm-app.sm-unified :is(.sm-card, .production-data-card, .business-workspace > .pi-workspace) { border-radius: 22px; border-color: #e9e1d8; }
+html .admin-app.sm-app.sm-unified :is(.page-intro, .module-heading, .pi-heading, .section-heading) { background: linear-gradient(100deg, #fffef9, #fff6de); }
+html .admin-app.sm-app.sm-unified .el-table { --el-table-header-bg-color: #f7f1ec; --el-table-header-text-color: #644735; --el-table-row-hover-bg-color: #fff4d8; --el-table-current-row-bg-color: #fff0c8; }
+html .admin-app.sm-app.sm-unified .el-table th.el-table__cell,
+html .admin-app.sm-app.sm-unified .sm-data-table .el-table th.el-table__cell { background: #f7f1ec; color: #644735; }
+html .admin-app.sm-app.sm-unified .el-table__body tr.hover-row > td.el-table__cell { background: #fff4d8; }
+html .admin-app.sm-app.sm-unified .el-table { border-radius: 14px; }
+.el-button--primary:not(.is-plain):not(.is-text):not(.is-link):not(:disabled) { background: var(--bike-primary); border-color: var(--bike-primary); box-shadow: 0 3px 0 #ecded3; }
+.el-button--primary:not(.is-plain):not(.is-text):not(.is-link):not(:disabled):hover { background: var(--bike-primary-hover); border-color: var(--bike-primary-hover); }
+html .admin-app.sm-app.sm-unified .business-workspace .welcome-guide,
+html .admin-app.sm-app.sm-unified .resume-button { background: var(--bike-primary); box-shadow: 0 3px 0 #e6d8cd; }
+.el-dialog.el-dialog, .el-message-box.el-message-box { border-radius: 24px; }
+.el-dialog .el-dialog__header,
+html .pi-draft-dialog > .el-dialog__header { background: linear-gradient(100deg, #faede3, #fff2d1); border-radius: 23px 23px 0 0; }
+.el-tag { border-radius: 7px; }
+html .admin-app.sm-app.sm-unified .sm-empty-art { border: 2px solid #fff; box-shadow: 0 4px 0 #f0e5dc; }
+
+@media (min-width: 851px) and (max-width: 1250px) {
+  html .admin-app.sm-app.sm-unified .workbench-companion { display: none; }
+}
+@media (max-width: 850px) {
+  html .admin-app.sm-app.sm-unified .workbench-companion { top: 24px; right: 18px; transform: scale(.52); transform-origin: top right; }
+  html .admin-app.sm-app.sm-unified .welcome-copy { padding-top: 5px; }
+  html .admin-app.sm-app.sm-unified .welcome-copy h1 { padding-right: 65px; }
+  html .admin-app.sm-app.sm-unified .workbench-welcome::before { inset: 0 0 auto auto; width: 200px; height: 180px; }
+  html .admin-app.sm-app.sm-unified .sm-hero-scene { justify-content: flex-end; padding-right: 18px; }
+  html .admin-app.sm-app.sm-unified .sm-hero-scene .mascot-companion { transform: scale(.7); transform-origin: right center; }
+}
+
+@media (max-width: 760px) {
+  html .admin-app.sm-app.sm-unified .sidebar-companion { display: none; }
+  /* 窄屏保留全部表格字段，让右侧操作列随表格滚动，避免盖住商品内容。 */
+  html .admin-app.sm-app.sm-unified .el-table .el-table__cell.el-table-fixed-column--right { position: static !important; }
+  html .admin-app.sm-app.sm-unified .el-table .el-table__cell.el-table-fixed-column--right::before { display: none; }
+  html .admin-app.sm-app.sm-unified :is(.sm-metric-hint, .area-description, .area-hint, .area-steps small, .shortcut-grid small) { font-size: 12px; }
+  html .admin-app.sm-app.sm-unified .sm-metric-value strong { font-size: 26px; }
+  html .admin-app.sm-app.sm-unified .sm-section-heading { flex-wrap: wrap; }
+  html .admin-app.sm-app.sm-unified .sm-hero-scene { opacity: .12; }
+  html .admin-app.sm-app.sm-unified .workbench-welcome::before { opacity: .12; }
+  html .admin-app.sm-app.sm-unified .welcome-copy > p { font-size: 14px; }
+  html .admin-app.sm-app.sm-unified .sm-sidebar :is(.sm-nav-heading, .sm-nav-link) { min-height: 44px; }
+  .el-dialog :is(.el-input__inner, .el-textarea__inner), .login-panel .el-input__inner { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html .admin-app.sm-app.sm-unified *, .el-dialog *, .login-shell * { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
+/* 已选方案 B：奶油格纹、贴纸描边与偏移阴影；只在装饰和容器上使用纹理。 */
+:root {
+  --bike-primary: #b44e36;
+  --bike-primary-hover: #963e2b;
+  --bike-side: #fffdf5;
+  --bike-border: #dcc5ad;
+  --bike-tint: #ffe5d2;
+  --bike-hero: #ffe4c5;
+  --bike-sticker-border: #9e876c;
+  --bike-sticker-shadow: 4px 5px 0 #d4bfa0;
+  --sm-border: var(--bike-border);
+  --sm-shadow: 3px 4px 0 #dcc7ac80;
+  --el-color-primary: var(--bike-primary);
+  --el-color-primary-light-3: #cb836e;
+  --el-color-primary-light-5: #dea797;
+  --el-color-primary-light-7: #ebc9bd;
+  --el-color-primary-light-8: #f2d9ce;
+  --el-color-primary-light-9: #fcf0e9;
+  --el-color-primary-dark-2: var(--bike-primary-hover);
+  --el-border-color: #c9b49d;
+  --el-border-color-light: #e6d6c4;
+  --el-border-color-lighter: #f0e4d6;
+  --el-fill-color-light: #fff5e8;
+  --el-bg-color-page: var(--bike-canvas);
+}
+::selection { background: #f7cbb2; color: var(--bike-ink); }
+html .admin-app.sm-app.sm-unified .sm-workspace {
+  background-color: var(--bike-canvas);
+  background-image: linear-gradient(#dcc5ad26 1px, transparent 1px), linear-gradient(90deg, #dcc5ad26 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+html .admin-app.sm-app.sm-unified .sm-sidebar {
+  --nav-text: var(--bike-text-muted); --nav-icon: #9b7763;
+  --nav-hover: var(--bike-tint); --nav-selected: var(--bike-primary);
+  background: var(--bike-side); border-right-color: var(--bike-border); box-shadow: none;
+}
+html .admin-app.sm-app.sm-unified :is(.sm-sidebar-top, .workspace-sidebar-footer, .sm-top-header) { border-color: var(--bike-border); }
+html .admin-app.sm-app.sm-unified .sm-top-header { background: var(--bike-side); }
+html .admin-app.sm-app.sm-unified .sm-sidebar :is(.sm-nav-heading, .sm-nav-link, .workspace-logout) { color: var(--bike-text-muted); }
+html .admin-app.sm-app.sm-unified .sm-sidebar :is(.sm-nav-heading.has-active-child, .sm-nav-heading.is-expanded, .sm-nav-parent-row.has-active-child) { background: var(--bike-tint); color: var(--bike-primary); }
+html .admin-app.sm-app.sm-unified .sm-sidebar :is(.sm-nav-count, .sm-sidebar-collapse, .sm-submenu-toggle),
+html .admin-app.sm-app.sm-unified .account-avatar { background: var(--bike-tint); color: var(--bike-primary); }
+html .admin-app.sm-app.sm-unified :is(.sm-nav-child.is-active, .sm-nav-parent-row.is-active) { background: var(--bike-primary); color: #fff; border: 1px solid #763e2c; box-shadow: 2px 3px 0 #e3c3aa; }
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-nav-child.is-active .sm-nav-link,
+html .admin-app.sm-app.sm-unified .sm-sidebar .sm-nav-parent-row.is-active > .sm-nav-link { color: #fff; }
+html .admin-app.sm-app.sm-unified :is(.workspace-tool-button, .workspace-global-search .app-icon, .workspace-logout .app-icon) { color: var(--bike-primary); }
+html .admin-app.sm-app.sm-unified .workspace-global-search .el-select__wrapper { background: var(--bike-canvas); box-shadow: 0 0 0 1px var(--bike-border) inset; }
+html .admin-app.sm-app.sm-unified .workspace-brand-mark { background: var(--bike-hero); color: var(--bike-primary); box-shadow: none; }
+html .admin-app.sm-app.sm-unified .workbench-welcome { background: var(--bike-hero); border: 1.5px solid #775b43; border-radius: 25px; box-shadow: 4px 5px 0 #e8cba5; }
+html .admin-app.sm-app.sm-unified .workbench-welcome::before { background: none; }
+html .admin-app.sm-app.sm-unified .workbench-welcome::after { content: ''; position: absolute; right: 359px; top: 28px; width: 176px; height: 176px; background: #fff7dd; border: 2px dashed #be9c70; border-radius: 44% 55% 43% 56%; z-index: -1; transform: rotate(12deg); pointer-events: none; }
+html .admin-app.sm-app.sm-unified .workflow-eyebrow { color: var(--bike-text-muted); background: var(--bike-paper); transform: rotate(-2deg); border: 1px solid #b59a7b; box-shadow: 2px 2px 0 #ddc4a4; }
+html .admin-app.sm-app.sm-unified .welcome-copy h1 { color: var(--bike-ink); letter-spacing: .3px; }
+html .admin-app.sm-app.sm-unified :is(.welcome-guide, .resume-button),
+.el-button--primary:not(.is-plain):not(.is-text):not(.is-link):not(:disabled) {
+  color: #fff; background: var(--bike-primary); border: 1.5px solid #763e2c; border-radius: 11px; box-shadow: 3px 3px 0 #803f2426;
+}
+html .admin-app.sm-app.sm-unified :is(.welcome-guide, .resume-button):hover,
+.el-button--primary:not(.is-plain):not(.is-text):not(.is-link):not(:disabled):hover { background: var(--bike-primary-hover); border-color: #763e2c; }
+html .admin-app.sm-app.sm-unified .resume-card { background: var(--bike-paper); border: 1.5px solid #aa8865; border-radius: 16px; box-shadow: 3px 4px 0 #dab58b; }
+html .admin-app.sm-app.sm-unified .resume-card > strong { color: var(--bike-ink); }
+html .admin-app.sm-app.sm-unified .resume-decoration { background: var(--bike-tint); color: var(--bike-primary); }
+html .admin-app.sm-app.sm-unified .workbench-section-title h2::before { background: var(--bike-primary); }
+html .admin-app.sm-app.sm-unified .workbench-area.area-production { --area-color: #587251; --area-bg: #e4eed7; }
+html .admin-app.sm-app.sm-unified .workbench-area.area-sales { --area-color: #a65253; --area-bg: #ffe0db; }
+html .admin-app.sm-app.sm-unified .workbench-area.area-warehouse { --area-color: #947028; --area-bg: #fcecb7; }
+html .admin-app.sm-app.sm-unified .workbench-area:is(.area-production, .area-sales, .area-warehouse) { background: var(--area-bg); border: 1.5px solid var(--bike-sticker-border); border-radius: 22px; box-shadow: var(--bike-sticker-shadow); }
+html .admin-app.sm-app.sm-unified .area-icon { background: #fffef8; transform: rotate(-7deg); border: 1.5px solid #aa967d; border-radius: 16px; box-shadow: 3px 3px 0 #77624725; }
+html .admin-app.sm-app.sm-unified .area-steps { border-top: 1.5px dashed #b7a18a; }
+html .admin-app.sm-app.sm-unified .area-steps button { color: var(--bike-ink); background: #fffef8; border: 1px solid #c9b49d; border-radius: 12px; box-shadow: 2px 2px 0 #8d78541a; }
+html .admin-app.sm-app.sm-unified .area-steps button:hover { background: #fff8ec; border-color: var(--area-color); }
+html .admin-app.sm-app.sm-unified .area-hint { border-color: #c9b49d; }
+html .admin-app.sm-app.sm-unified .step-icon { border-radius: 9px; }
+html .admin-app.sm-app.sm-unified .step-chevron { color: var(--area-color); }
+html .admin-app.sm-app.sm-unified .shortcut-grid button { background: var(--bike-paper); border: 1.5px solid #b7a18a; border-radius: 15px; box-shadow: 3px 3px 0 #d4bfa0; }
+html .admin-app.sm-app.sm-unified .shortcut-grid button:hover { background: #fff4e4; border-color: #99775b; }
+html .admin-app.sm-app.sm-unified .shortcut-icon { background: var(--bike-tint); color: var(--bike-primary); transform: rotate(-4deg); border-radius: 12px; }
+html .admin-app.sm-app.sm-unified .mascot-halo { background: none; box-shadow: none; }
+html .admin-app.sm-app.sm-unified .mascot-companion img { filter: drop-shadow(3px 0 0 white) drop-shadow(-3px 0 0 white) drop-shadow(0 3px 0 white) drop-shadow(0 -3px 0 white); }
+html .admin-app.sm-app.sm-unified .mascot-platform { background: #c6a678; box-shadow: none; opacity: .3; }
+html .admin-app.sm-app.sm-unified .mascot-spark { background: #bd7047; width: 16px; height: 16px; }
+html .admin-app.sm-app.sm-unified .sidebar-companion { color: var(--bike-ink); background: var(--bike-hero); border: 1px dashed #b69976; border-radius: 15px; }
+html .admin-app.sm-app.sm-unified :is(.sm-card, .production-data-card, .workflow-header, .order-summary, .order-action-panel) { border-color: var(--bike-border); box-shadow: 3px 4px 0 #dcc7ac80; }
+html .admin-app.sm-app.sm-unified .sm-hero { background: linear-gradient(110deg, #fff9ee, #ffe4c5); }
+html .admin-app.sm-app.sm-unified :is(.primary-action, .filter-button) { color: #fff; background: var(--bike-primary); border-color: #763e2c; box-shadow: 2px 3px 0 #e3c3aa; }
+html .admin-app.sm-app.sm-unified .sm-production-tabs .el-tabs__item.is-active,
+html .admin-app.sm-app.sm-unified .pc-segmented button[aria-pressed='true'],
+html .admin-app.sm-app.sm-unified .cc-task-tabs button.is-active { color: #fff; background: var(--bike-primary); border-color: #763e2c; }
+html .admin-app.sm-app.sm-unified .el-table { --el-table-header-bg-color: #fff0dc; --el-table-tr-bg-color: var(--bike-paper); --el-table-row-hover-bg-color: #fff3e6; --el-table-current-row-bg-color: #ffe9d8; --el-table-border-color: #e6d6c4; --el-table-header-text-color: #765541; --el-table-text-color: var(--bike-ink); }
+html .admin-app.sm-app.sm-unified .el-table th.el-table__cell,
+html .admin-app.sm-app.sm-unified .sm-data-table .el-table th.el-table__cell,
+html .admin-app.sm-app.sm-unified .module-table th { color: #765541; background: #fff0dc; }
+.el-dialog.el-dialog, .el-message-box.el-message-box { border: 1.5px solid #b7a18a; background: var(--bike-paper); box-shadow: 5px 6px 0 #9e806640, 0 20px 65px #49302424; }
+.el-dialog .el-dialog__header, html .pi-draft-dialog > .el-dialog__header { background: #ffe9d3; border-bottom: 1px solid #dcc5ad; }
+html .el-dialog.pi-draft-dialog { color: var(--bike-ink); background: #fff9ee; }
+html .pi-draft-dialog .pi-form-card { border-color: #d9c2a9; }
+html .pi-draft-dialog .active .pi-step-number { color: #fff; background: var(--bike-primary); box-shadow: 2px 2px 0 #e3c3aa; }
+html .pi-draft-dialog .pi-draft-steps .active { color: var(--bike-primary); }
+.el-pagination.is-background .el-pager li.is-active { background: var(--bike-primary); }
+.el-overlay { background: rgb(62 43 32 / 32%); }
+.login-shell { background: radial-gradient(ellipse at 75% 20%, #ffe1c6, transparent 60%), #fff9ee; }
+.login-panel { border: 1.5px solid #b7a18a; background: var(--bike-paper); box-shadow: 6px 7px 0 #dcc7ac; }
+.login-panel .submit { background: var(--bike-primary); box-shadow: 3px 4px 0 #e3c3aa; }
+.login-panel .submit:hover { background: var(--bike-primary-hover); }
+@media (min-width: 851px) and (max-width: 1250px) {
+  html .admin-app.sm-app.sm-unified .workbench-welcome::after { display: none; }
+}
+@media (max-width: 850px) {
+  html .admin-app.sm-app.sm-unified .workbench-welcome::after { width: 84px; height: 84px; right: 14px; top: 22px; }
+  html .admin-app.sm-app.sm-unified .workbench-welcome { box-shadow: 2px 3px 0 #e8cba5; }
+}

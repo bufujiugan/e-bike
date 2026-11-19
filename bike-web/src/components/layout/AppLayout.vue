@@ -4,7 +4,9 @@ import Sidebar from './Sidebar.vue'
 import TopHeader from './TopHeader.vue'
 import PageHero from '../common/PageHero.vue'
 import { pagePresentation, type NavGroup } from '../../config/page-presentation'
+import { provideAccountDecoration } from '../../account-decoration'
 const props = defineProps<{ groups: NavGroup[]; active: string; title: string; group: string; username: string; role: string; lastLoaded: string }>()
+provideAccountDecoration(() => props.username)
 const emit = defineEmits<{ navigate: [key: string]; guide: []; settings: []; logout: [] }>()
 const presentation = computed(() => pagePresentation[props.active])
 const isProductionView = computed(() => props.active === 'production' || props.active.startsWith('production-'))

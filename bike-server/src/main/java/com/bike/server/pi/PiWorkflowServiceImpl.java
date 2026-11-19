@@ -48,6 +48,9 @@ public class PiWorkflowServiceImpl implements PiWorkflowService {
         var rows=mapper.selectStepsForUpdate(piId);var effective=effectiveSteps(pi,rows);
         var profile=profile(pi);
         var current=effective.stream().filter(s->s.code().equals(step.name())).findFirst().orElseThrow(()->new BusinessException("PI_WORKFLOW_STEP_NOT_APPLICABLE","本单配置不适用该步骤"));
+        // 内外销及简化办理统一以真实出库为准，必须在人工确认和已完成的提前返回之前校验。
+        if(requiresStockDispatch(step) && (business==null || !business.allDispatched(piId)))
+            fail("PI_WORKFLOW_DISPATCH_REQUIRED","本 PI 尚未全部实际出库，请完成仓库出库后再确认出库或后续流程");
         if(step==PiWorkflowStepCode.CREDIT_APPROVED)CurrentOperator.requirePermission("PI_RELEASE");
         if(business!=null && PiManualWorkflow.enabled(business.document(piId))) {
             if(step==PiWorkflowStepCode.PI_CREATED) return view(effective,updates(pi));
@@ -121,6 +124,7 @@ public class PiWorkflowServiceImpl implements PiWorkflowService {
         var d=business==null?null:business.document(pi.getId());
         boolean overseas=d!=null&&d.business()!=null&&Boolean.FALSE.equals(d.business().domesticShipment());
         var profile=profile(pi);
+        boolean dispatched=business!=null&&business.allDispatched(pi.getId());
         if(PiManualWorkflow.enabled(d)) {
             var codes=List.of(PiWorkflowStepCode.PI_CREATED,PiWorkflowStepCode.DOCUMENTS_READY,PiWorkflowStepCode.GOODS_PREPARED,
                     PiWorkflowStepCode.FORWARDER_SELECTED,PiWorkflowStepCode.STOCK_DISPATCHED,PiWorkflowStepCode.PAYMENT_SETTLED,PiWorkflowStepCode.CASE_CLOSED);
@@ -129,6 +133,8 @@ public class PiWorkflowServiceImpl implements PiWorkflowService {
                 var code=codes.get(index);
                 var row=rows.stream().filter(s->code.name().equals(s.code())).findFirst().orElse(null);
                 boolean completed=code==PiWorkflowStepCode.PI_CREATED || row!=null&&"COMPLETED".equals(row.status());
+                if(code==PiWorkflowStepCode.STOCK_DISPATCHED)completed=dispatched;
+                else if(requiresStockDispatch(code))completed=completed&&dispatched;
                 result.add(new PiWorkflowStepView(index+1,code.name(),names.get(index),completed?"COMPLETED":"PENDING",
                         row==null?null:row.completedBy(),row==null?null:row.completedAt(),row==null?null:row.note(),row==null?null:parse(row.detailJson())));
             }
@@ -146,18 +152,28 @@ public class PiWorkflowServiceImpl implements PiWorkflowService {
                 case PURCHASE_CONTRACT_READY -> profile==null?overseas||stored&&validPurchase(parse(row.detailJson())):stored&&parse(row.detailJson())!=null&&!blank(parse(row.detailJson()).purchaseContractNo())&&!blank(parse(row.detailJson()).purchaseContractParty());
                 case PAYMENT_SETTLED -> pi.getPaidAmount()!=null&&pi.getTotalAmount()!=null&&pi.getPaidAmount().compareTo(pi.getTotalAmount())>=0;
                 case CASE_CLOSED -> stored&&result.stream().allMatch(s->"COMPLETED".equals(s.status()));
-                case STOCK_DISPATCHED -> business!=null&&business.allDispatched(pi.getId());
+                case STOCK_DISPATCHED -> dispatched;
                 case FORWARDER_SELECTED -> stored && validForwarder(parse(row.detailJson()));
                 case TRACKING_RECORDED -> stored&&business!=null&&business.allTracked(pi.getId());
                 case CUSTOMER_RECEIVED -> stored && parse(row.detailJson()) != null
                     && parse(row.detailJson()).receivedDate() != null && business != null && business.allTracked(pi.getId());
                 default -> stored;
             };
+            // 历史人工勾选或撤销出库后，后续节点不能继续以已完成状态推进。
+            if(requiresStockDispatch(step))completed=completed&&dispatched;
             String note=profile==null&&step==PiWorkflowStepCode.PURCHASE_CONTRACT_READY&&overseas?"非国内出货，不适用国内购销合同":row==null?null:row.note();
             result.add(new PiWorkflowStepView(result.size()+1,step.name(),profile!=null&&step==PiWorkflowStepCode.CUSTOMER_RECEIVED?"确认全部货物送达":profile!=null&&step==PiWorkflowStepCode.FORWARDER_SELECTED?(profile.rules().customerPickup()?"确认客户货代提货安排":"确认我方运输安排"):step.stepName(),completed?"COMPLETED":"PENDING",
                 row==null?null:row.completedBy(),row==null?null:row.completedAt(),note,row==null?null:parse(row.detailJson())));
         }
         return result;
+    }
+    private boolean requiresStockDispatch(PiWorkflowStepCode step) {
+        // 使用业务节点而非序号：不同履约配置的展示顺序不同，收款登记仍由独立业务入口办理。
+        return switch(step) {
+            case STOCK_DISPATCHED,DOMESTIC_EXPRESS_BOOKED,WAREHOUSE_ARRIVED,TRACKING_RECORDED,
+                    CUSTOMER_RECEIVED,CI_SENT,RD_SENT,RD_SIGNED,PAYMENT_SETTLED,CMR_COLLECTED,CASE_CLOSED -> true;
+            default -> false;
+        };
     }
     private void validateBusinessGate(PiView pi,PiWorkflowStepCode step,PiWorkflowRequest r,List<PiWorkflowStepRecord> rows) {
         var profile=profile(pi);

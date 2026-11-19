@@ -10,5 +10,6 @@ import './styles/smart-manufacturing.css'
 import './styles/command-center.css'
 import './styles/manufacturing-shell.css'
 import './styles/production-center.css'
+import './styles/pastel-theme.css'
 
 createApp(App).use(createPinia()).use(ElementPlus, { locale: zhCn }).mount('#app')

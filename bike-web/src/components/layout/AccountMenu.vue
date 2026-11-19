@@ -5,11 +5,13 @@ import type { DropdownInstance } from 'element-plus'
 import AppIcon from '../AppIcon.vue'
 import api from '../../api'
 import { accountAvatarApi } from '../../account-avatar-api'
+import DecorationImageDialog from '../common/DecorationImageDialog.vue'
 
 const props = defineProps<{ username: string; role: string; collapsed?: boolean }>()
 const emit = defineEmits<{ settings: []; logout: [] }>()
 const isOpen = ref(false)
 const profileVisible = ref(false)
+const decorationVisible = ref(false)
 const dropdown = ref<DropdownInstance>()
 const avatarButton = ref<HTMLButtonElement>()
 const fileInput = ref<HTMLInputElement>()
@@ -108,6 +110,7 @@ async function closeAccountMenu() {
 
 function selectAccountAction(command: string) {
   if (command === 'profile' || command === 'avatar') profileVisible.value = true
+  else if (command === 'decoration') decorationVisible.value = true
   else if (command === 'settings') emit('settings')
   else if (command === 'logout') emit('logout')
 }
@@ -129,6 +132,7 @@ function selectAccountAction(command: string) {
         <el-dropdown-menu class="account-menu-actions">
           <el-dropdown-item command="profile"><AppIcon name="users" /><span>个人资料</span></el-dropdown-item>
           <el-dropdown-item command="avatar"><AppIcon name="upload" /><span>修改头像</span></el-dropdown-item>
+          <el-dropdown-item command="decoration"><AppIcon name="layers" /><span>更换装饰图片</span></el-dropdown-item>
           <el-dropdown-item command="settings"><AppIcon name="production" /><span>账号设置</span></el-dropdown-item>
           <el-dropdown-item command="logout"><AppIcon name="logout" /><span>退出登录</span></el-dropdown-item>
         </el-dropdown-menu>
@@ -149,6 +153,7 @@ function selectAccountAction(command: string) {
     <dl class="account-profile-fields"><div><dt>账号名称</dt><dd>{{ username }}</dd></div><div><dt>角色</dt><dd>{{ role }}</dd></div></dl>
     <template #footer><div class="account-profile-footer"><el-button :disabled="avatarSaving" @click="profileVisible = false">关闭</el-button><el-button :disabled="avatarSaving" @click="profileVisible = false; emit('settings')">账号设置</el-button><el-button type="primary" :disabled="!hasAvatarChange || avatarLoading" :loading="avatarSaving" @click="saveAvatar">保存头像</el-button></div></template>
   </el-dialog>
+  <DecorationImageDialog v-model="decorationVisible" :username="username" />
 </template>
 
 <style scoped>

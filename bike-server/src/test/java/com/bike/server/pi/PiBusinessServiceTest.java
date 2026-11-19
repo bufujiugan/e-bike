@@ -272,6 +272,16 @@ class PiBusinessServiceTest {
         when(mapper.countUntrackedBatches(1L)).thenReturn(0);
         assertThat(service.allTracked(1L)).isTrue();
     }
+    @Test void dispatchRequiresActiveStockRecordsAndNoRemainingQuantity() {
+        assertThat(service.allDispatched(1L)).isFalse();
+        when(mapper.countActiveShipments(1L)).thenReturn(1);
+        when(mapper.countUnshipped(1L)).thenReturn(4);
+        assertThat(service.allDispatched(1L)).isFalse();
+        when(mapper.countUnshipped(1L)).thenReturn(0);
+        assertThat(service.allDispatched(1L)).isTrue();
+        when(mapper.countActiveShipments(1L)).thenReturn(0);
+        assertThat(service.allDispatched(1L)).isFalse();
+    }
     @Test void arrivalAttachmentMustBelongToPi() {
         assertThatThrownBy(()->service.requireArrivalProof(1L,"other-attachment")).hasMessageContaining("本PI物流附件");
     }

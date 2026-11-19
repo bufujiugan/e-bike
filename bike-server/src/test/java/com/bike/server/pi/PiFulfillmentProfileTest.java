@@ -74,7 +74,7 @@ class PiFulfillmentProfileTest {
         ReflectionTestUtils.setField(handler,"business",business);ReflectionTestUtils.setField(handler,"profiles",profiles);ReflectionTestUtils.setField(handler,"profileMapper",mapper);
         var pi=new PiView();pi.setId(1L);pi.setCustomerId(1L);pi.setStatus("CONFIRMED");pi.setTotalAmount(java.math.BigDecimal.TEN);pi.setPaidAmount(java.math.BigDecimal.ZERO);
         when(pis.selectForUpdate(1L)).thenReturn(pi);when(business.document(1L)).thenReturn(document());when(profiles.resolveProfile(any())).thenReturn(profile());
-        when(business.allTracked(1L)).thenReturn(true);
+        when(business.allDispatched(1L)).thenReturn(true);when(business.allTracked(1L)).thenReturn(true);
         assertThatThrownBy(()->handler.complete(1L,"CASE_CLOSED",new PiWorkflowRequest("核对结案"))).hasMessageContaining("不能结案");
         verify(workflow,never()).complete(anyLong(),anyInt(),any(),any(),any());
     }
@@ -107,7 +107,7 @@ class PiFulfillmentProfileTest {
         var handler=CustomerScopeTestSupport.isolated(new PiWorkflowServiceImpl(pis,workflow,logs,json));
         ReflectionTestUtils.setField(handler,"business",business);ReflectionTestUtils.setField(handler,"profiles",profiles);ReflectionTestUtils.setField(handler,"profileMapper",mapper);
         var pi=new PiView();pi.setId(1L);pi.setCustomerId(1L);pi.setStatus("RELEASED");when(pis.selectForUpdate(1L)).thenReturn(pi);
-        when(business.document(1L)).thenReturn(document());when(profiles.resolveProfile(any())).thenReturn(profile());when(business.allTracked(1L)).thenReturn(true);
+        when(business.document(1L)).thenReturn(document());when(profiles.resolveProfile(any())).thenReturn(profile());when(business.allDispatched(1L)).thenReturn(true);when(business.allTracked(1L)).thenReturn(true);
         when(workflow.selectStepsForUpdate(1L)).thenReturn(List.of(new PiWorkflowStepRecord(8,"CUSTOMER_RECEIVED","送达","COMPLETED",1L,LocalDateTime.now(),null,"{\"receivedDate\":\"2026-01-01\"}")));
         var request=json.readValue("{\"note\":\"已发送\",\"arrivalProof\":\"other-pi-file\",\"receivedDate\":\"2026-01-01\"}",PiWorkflowRequest.class);
         assertThatThrownBy(()->handler.complete(1L,"CI_SENT",request)).hasMessageContaining("本PI");

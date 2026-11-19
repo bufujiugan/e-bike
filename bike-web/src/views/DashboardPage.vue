@@ -45,7 +45,7 @@ const codeFields = [
   { key: 'frameSn', label: '车架码', icon: 'vehicles' }, { key: 'motorSn', label: '电机码', icon: 'production' },
   { key: 'batterySn', label: '电池码', icon: 'battery' }, { key: 'displaySn', label: '仪表码', icon: 'display' },
 ] as const
-const states = [{ key: 'OPEN', label: '作业中', color: '#1677ff' }, { key: 'COMPLETED', label: '已完成', color: '#16bfa3' }, { key: 'CANCELLED', label: '已取消', color: '#98abc2' }]
+const states = [{ key: 'OPEN', label: '作业中', color: '#b44e36' }, { key: 'COMPLETED', label: '已完成', color: '#6a9d7e' }, { key: 'CANCELLED', label: '已取消', color: '#b7a899' }]
 const stateRows = computed(() => states.map(state => ({ ...state, count: tasks.value.filter(task => task.status === state.key).length })))
 const filteredTasks = computed(() => tasks.value.filter(task => taskFilter.value === 'ALL' || task.status === taskFilter.value).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)))
 const operationalTasks = computed(() => tasks.value.filter(task => task.status !== 'CANCELLED'))
@@ -70,13 +70,13 @@ const flow = computed<ProcessStep[]>(() => [
 ])
 const taskChart = computed(() => hasTaskData.value && tasks.value.length ? {
   tooltip: { trigger: 'item', renderMode: 'richText' },
-  series: [{ type: 'pie', radius: ['63%', '86%'], center: ['50%', '50%'], label: { show: true, position: 'center', formatter: `${tasks.value.length}\n今日样本任务`, color: '#102c58', fontSize: 17, lineHeight: 26 }, emphasis: { scale: false }, data: stateRows.value.map(row => ({ name: row.label, value: row.count, itemStyle: { color: row.color } })) }],
+  series: [{ type: 'pie', radius: ['63%', '86%'], center: ['50%', '50%'], label: { show: true, position: 'center', formatter: `${tasks.value.length}\n今日样本任务`, color: '#4b352d', fontSize: 17, lineHeight: 26 }, emphasis: { scale: false }, data: stateRows.value.map(row => ({ name: row.label, value: row.count, itemStyle: { color: row.color } })) }],
 } : null)
 const trendOption = computed(() => props.error || !props.points.length ? null : {
   tooltip: { trigger: 'axis' }, grid: { top: 16, right: 14, bottom: 26, left: 32 },
-  xAxis: { type: 'category', boundaryGap: false, data: props.points.map(point => point.date.slice(5).replace('-', '/')), axisTick: { show: false }, axisLine: { lineStyle: { color: '#dce9fa' } }, axisLabel: { color: '#7394be', fontSize: 10 } },
-  yAxis: { type: 'value', minInterval: 1, axisLabel: { color: '#7394be' }, splitLine: { lineStyle: { color: '#e9f1fc' } } },
-  series: [{ name: { assembled: '组装', stockIn: '入库', stockOut: '出库' }[trendMode.value], type: 'line', smooth: true, symbol: 'circle', symbolSize: 7, itemStyle: { color: '#1681ff', borderColor: '#fff', borderWidth: 1.5 }, lineStyle: { width: 2 }, data: props.points.map(point => point[trendMode.value]), areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#8cc5ff77' }, { offset: 1, color: '#e4f2ff22' }] } } }],
+  xAxis: { type: 'category', boundaryGap: false, data: props.points.map(point => point.date.slice(5).replace('-', '/')), axisTick: { show: false }, axisLine: { lineStyle: { color: '#e6d6c4' } }, axisLabel: { color: '#7b6153', fontSize: 12 } },
+  yAxis: { type: 'value', minInterval: 1, axisLabel: { color: '#7b6153' }, splitLine: { lineStyle: { color: '#f4e8db' } } },
+  series: [{ name: { assembled: '组装', stockIn: '入库', stockOut: '出库' }[trendMode.value], type: 'line', smooth: true, symbol: 'circle', symbolSize: 7, itemStyle: { color: '#b44e36', borderColor: '#fff', borderWidth: 1.5 }, lineStyle: { width: 2 }, data: props.points.map(point => point[trendMode.value]), areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#edba9d77' }, { offset: 1, color: '#fff1e222' }] } } }],
 })
 const supplementaryMetrics = computed<Metric[]>(() => props.metrics.map(item => ({ ...item, tone: item.tone as Tone, hint: '运营汇总 · 原统计口径' })))
 const vehicleChart = computed(() => props.error ? null : donutOption(props.statusRows.map(row => ({ name: row.label, value: row.count })), '整车总量'))

@@ -6,6 +6,7 @@ import SkuInventoryPanel from './SkuInventoryPanel.vue'
 import FulfillmentQueue from './FulfillmentQueue.vue'
 import PiWorkspace from './PiWorkspace.vue'
 import AppIcon from './AppIcon.vue'
+import MascotCompanion from './common/MascotCompanion.vue'
 
 const props = defineProps<{ context: PermissionContext | null; username: string; refreshKey: number }>()
 const emit = defineEmits<{ navigate: [key: string]; guide: []; convert: [lockNo: string]; order: [orderNo: string] }>()
@@ -101,6 +102,7 @@ onUnmounted(() => window.removeEventListener('popstate',syncStage))
   <div class="business-workspace" :class="{ 'workbench-home': stage === 'home' }">
     <template v-if="stage === 'home'">
       <section class="workbench-welcome">
+        <div class="workbench-companion"><MascotCompanion /></div>
         <div class="welcome-copy"><span class="workflow-eyebrow">BIKE / 工作空间</span><h1>把手上的事，接着办好。</h1><p>{{ username }}，欢迎回来。从当前业务出发，找到下一步。</p><button class="welcome-guide" @click="emit('guide')"><AppIcon name="layers" />查看操作说明<AppIcon name="arrow" /></button></div>
         <div class="resume-card"><span class="resume-label"><AppIcon name="clock" />{{ recentStep ? '最近办理 · 当前会话' : '开始今天的工作' }}</span><strong>{{ recentStep?.title || '选择一个业务开始' }}</strong><p>{{ recentStep?.detail || '下方按业务整理了常用入口，办理后可从这里快速返回。' }}</p><button v-if="recentStep" class="resume-button" @click="choose(recentStep.key)">继续办理<AppIcon name="arrow" /></button><span v-else class="resume-empty">你的最近办理入口将保留在这里</span><span v-if="!recentStep" class="resume-decoration" aria-hidden="true"><AppIcon name="arrow" /></span></div>
       </section>

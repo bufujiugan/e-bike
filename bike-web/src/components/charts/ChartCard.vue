@@ -15,7 +15,7 @@ async function render() {
   await nextTick()
   if (!target.value || !props.option) { chart?.dispose(); chart = undefined; return }
   chart ??= echarts.init(target.value)
-  chart.setOption({ animation: false, color: ['#1677ff', '#16bfa3', '#7b61ff', '#ffb94f', '#37b9df'], textStyle: { fontFamily: 'Microsoft YaHei, sans-serif', fontSize: 11 }, ...props.option }, { notMerge: true })
+  chart.setOption({ animation: false, color: ['#b44e36', '#4f8764', '#c88c49', '#ad792d', '#bb705f'], textStyle: { fontFamily: 'Microsoft YaHei, sans-serif', fontSize: 12 }, ...props.option }, { notMerge: true })
   chart.resize()
 }
 watch(() => props.option, render, { deep: true })
