@@ -12,6 +12,21 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class OrderServiceTest {
 
+    @Test
+    void readOnlyStaffCanSeeWhetherAnOrderHasPiWithoutContractWritePermission() {
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                "reader", "N/A", java.util.List.of(new SimpleGrantedAuthority("PERM_ORDER_READ"))));
+        var mapper = Mockito.mock(OrderMapper.class);
+        var links = Mockito.mock(OrderContractMapper.class);
+        Mockito.when(mapper.selectById(7L)).thenReturn(order(7L, "SO-7", "CONFIRMED", 0, 2));
+        var service = com.bike.server.common.CustomerScopeTestSupport.isolated(new OrderServiceImpl(mapper));
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "contractLinks", links);
+        Mockito.when(links.existsPiForOrder(7L)).thenReturn(true);
+        assertThat(service.get(7L).getHasLinkedPi()).isTrue();
+        Mockito.when(links.existsPiForOrder(7L)).thenReturn(false);
+        assertThat(service.get(7L).getHasLinkedPi()).isFalse();
+    }
+
     @org.junit.jupiter.api.BeforeEach
     void setAuthenticatedAdmin() {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(

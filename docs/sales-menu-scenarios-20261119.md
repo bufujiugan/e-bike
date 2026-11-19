@@ -2,6 +2,8 @@
 
 日期：2026-11-19。销售场景与购销合同提交 `53c39bf` 于 13:55:59（Asia/Shanghai）部署生产；捷克菜单归属更正提交 `c043fc5` 于 15:29:00 部署生产。发布及线上核验记录分别见 `docs/deployment-sales-contract-20261119.md` 和 `docs/deployment-czech-menu-20261119.md`。
 
+后续本地调整见 `docs/sales-document-routing-20261119.md`：国内外销固定英国 built PI 参考版式；明确属于国内内销的历史 PI 关联订单可生成购销合同。下文“已关联任何 PI 不可导出”为原发布版本行为，不再代表本地新逻辑。
+
 ## 业务入口
 
 | 菜单 | 销售类型 | 办理方式 |

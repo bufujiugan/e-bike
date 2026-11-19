@@ -28,7 +28,7 @@ import SalesSettlementPanel from './SalesSettlementPanel.vue'
 import PiFeeInput from './PiFeeInput.vue'
 import PurchaseContractNumber from './PurchaseContractNumber.vue'
 import '../styles/pi-draft.css'
-import { salesScenarioDefaults, salesScenarioFilters, matchesSalesScenario, type PiSalesScenario } from '../pi-sales-scenario'
+import { salesScenarioDefaults, salesScenarioFilters, matchesSalesScenario, salesChannelLayoutName, type PiSalesScenario } from '../pi-sales-scenario'
 
 const props = withDefaults(defineProps<{ context: (PermissionContext & { userType?: string; username?: string }) | null; initialKeyword?: string; europe?: boolean; salesScenario?: PiSalesScenario; allowCreate?: boolean }>(), { allowCreate: true })
 const scenario = computed(() => props.salesScenario ? salesScenarioDefaults(props.salesScenario) : undefined)
@@ -230,6 +230,7 @@ function emptyDocument(): PiDocument {
 }
 function newItem(): DraftItem { return { key: createUuid(), skuId: undefined, quantity: 1, unitPrice: '', discountAmount: '0.00', taxAmount: '0.00', unit: '台' } }
 const draft = reactive<PiDraftForm>({ customerId: undefined, agentId: undefined, sourceOrderId: undefined, tradeType: 'DOMESTIC', currencyCode: 'CNY', plannedShipDate: '', discountAmount: '0.00', taxAmount: '0.00', freightAmount: '0.00', otherFeeAmount: '0.00', depositRequiredAmount: '', shipmentRequiredAmount: '', remark: '', document: emptyDocument(), items: [newItem()] })
+const fixedLayoutName = computed(() => salesChannelLayoutName(draft.document.business?.salesChannel || (!editingRevision.value ? scenario.value?.salesChannel || (props.europe ? 'CZECH_PI' : undefined) : undefined)))
 const draftSteps = [
   { title: '客户与商品', description: '选客户，添加商品' },
   { title: '交易与交付', description: '选模板，填写约定' },
@@ -1030,7 +1031,7 @@ onBeforeUnmount(() => {
     <el-empty v-if="!canRead" description="当前账号没有 PI 查看权限" />
     <template v-else>
       <div class="pi-heading"><div><h2>{{ scenario?.title || (europe ? '正常 PI 销售' : isAgent ? '我的 PI 单据' : 'PI 与销售履约') }}</h2><p>{{ europe ? '按实际出货仓办理 PI；新单默认简化办理，客户收款与付 Totem 分别登记。' : isAgent ? '查看已发布的单据、商品和物流进度。' : '维护商品与交易条款，跟进收款、放行和物流。' }}</p></div></div>
-      <el-alert v-if="scenario" :title="scenario.domesticShipment ? '国内外销使用 PI 流程，请按实际业务选择出货仓和出货地点，并核对外销模板、收款和交付约定。' : '捷克内销、外销均使用 PI 流程，出货仓、税费和银行资料按本单约定填写。'" type="info" :closable="false" />
+      <el-alert v-if="scenario" :title="salesScenario === 'CHINA_EXPORT' ? '国内外销使用 PI 流程，固定采用 260728英国builtPI 模板；请核对本单收款与交付约定。' : '欧洲内销、外销均使用 PI 流程，固定采用 France_1104_PI 模板；出货仓、税费和银行资料按本单约定填写。'" type="info" :closable="false" />
       <section v-if="europe" class="europe-order-scope" aria-label="欧洲订单出货仓">
         <label for="europe-warehouse">捷克出货仓</label>
         <el-select id="europe-warehouse" v-model="europeWarehouseId" aria-label="捷克出货仓" filterable :loading="europeWarehousesBusy" placeholder="请选择实际的捷克出货仓" @change="selectEuropeWarehouse">
@@ -1160,7 +1161,7 @@ onBeforeUnmount(() => {
             </section>
             <section v-show="draftStep === 1" class="pi-draft-step">
               <div class="pi-step-heading"><span class="pi-eyebrow">STEP 02</span><h2>把交易约定说清楚。</h2><p>模板负责固定资料，你只需填写这笔订单的实际约定。</p></div>
-              <section class="pi-form-card" data-draft-field="template"><p v-if="europe" class="field-hint">欧洲内销、外销 PI 保存后统一采用 France_1104 版式；以下选择用于带入本单的卖方与银行资料。</p><PiTemplatePicker :trade-type="draft.tradeType" :document="draft.document" :can-manage="canManageTemplates" :disabled="actionBusy || Boolean(draftProfile)" :profile-bound="Boolean(draftProfile)" :manage-disabled="actionBusy" :refresh-key="templateRefreshKey" @select="chooseTemplate" @manage="openTemplates()" @adjust="openTemplates" /></section>
+              <section class="pi-form-card" data-draft-field="template"><PiTemplatePicker :fixed-layout-name="fixedLayoutName" :trade-type="draft.tradeType" :document="draft.document" :can-manage="canManageTemplates" :disabled="actionBusy || Boolean(draftProfile)" :profile-bound="Boolean(draftProfile)" :manage-disabled="actionBusy" :refresh-key="templateRefreshKey" @select="chooseTemplate" @manage="openTemplates()" @adjust="openTemplates" /></section>
               <section class="pi-form-card" data-draft-field="bank"><div class="pi-section-heading"><h3>收款信息 · {{ draft.document.business?.collectionEntity || '待选择' }}</h3></div><p class="pi-field-help">模板带入账户后可按本单更新；保存为本单快照，已确认单据须通过修订调整。</p><div class="pi-draft-grid"><el-form-item label="收款银行" required><el-input v-model="draft.document.bankName" maxlength="200" /></el-form-item><el-form-item label="收款账户" required><el-input v-model="draft.document.bankAccount" maxlength="200" /></el-form-item><el-form-item label="收款人 / 公司全称" required><el-input v-model="draft.document.beneficiary" maxlength="200" /></el-form-item></div></section>
               <section class="pi-form-card"><div class="pi-section-heading"><div><h3>付款约定</h3><p>收款门槛不会自动填写比例；请按实际约定确认。</p></div></div>
                 <el-form-item label="付款条款" required data-draft-field="paymentTerms" :error="fieldError('paymentTerms')"><el-input v-model="draft.document.paymentTerms" aria-label="付款条款" type="textarea" :rows="3" maxlength="2000" placeholder="填写双方约定的付款方式、时间及条件" /></el-form-item>

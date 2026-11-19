@@ -17,7 +17,11 @@ const order = ref<any>(), sourceLock = ref<any>(), busy = ref(false), saving = r
 const showPi = ref(false)
 const showContract = ref(false)
 const contractOpened = ref(false)
-const canGenerateContract = computed(() => internal.value && hasPermission(props.context, 'ORDER_READ') && hasPermission(props.context, 'ORDER_WRITE') && !['CANCELLED', 'CLOSED'].includes(order.value?.status))
+const contractPreparation = ref<{ available: boolean; reason?: string; hasLinkedPi: boolean }>()
+const contractError = ref('')
+const canPrepareContract = computed(() => internal.value && hasPermission(props.context, 'ORDER_READ') && hasPermission(props.context, 'ORDER_WRITE'))
+const canGenerateContract = computed(() => canPrepareContract.value && hasPermission(props.context, 'ORDER_WRITE') && contractPreparation.value?.available === true)
+const hasLinkedPi = computed(() => (contractPreparation.value?.hasLinkedPi ?? order.value?.hasLinkedPi) === true)
 let version = 0
 const internal = computed(() => !hasRole(props.context, 'WEB_AGENT') && !hasRole(props.context, 'PDA_OPERATOR'))
 const canConfirm = computed(() => internal.value && hasPermission(props.context, 'ORDER_WRITE') && ['DRAFT', 'PENDING'].includes(order.value?.status))
@@ -33,17 +37,28 @@ const nextStep = computed(() => {
   const current = order.value
   if (!current) return ''
   if (['DRAFT', 'PENDING'].includes(current.status)) return '下一步：核对客户、数量与库存占用，确认销售订单。'
-  if (['CONFIRMED', 'PARTIAL_SHIPPED'].includes(current.status)) return '下一步：核对库存占用与 PI 发货放行，然后由 PDA 按本订单扫码出库。'
+  if (['CONFIRMED', 'PARTIAL_SHIPPED'].includes(current.status)) return hasLinkedPi.value
+    ? '下一步：核对库存占用和已关联 PI 的发货放行，再由 PDA 按本订单扫码出库。'
+    : '下一步：核对购销合同、库存占用与出库条件，再由 PDA 按本订单扫码出库。'
   if (current.status === 'SHIPPED') return '本订单已完成出库，可以在下方核对每台车及出库单。'
   return '该订单已停止履约，请核对订单状态及历史记录。'
 })
 async function load() {
   const current = ++version
   busy.value = true; error.value = ''; lockError.value = ''; order.value = undefined; sourceLock.value = undefined
+  contractPreparation.value = undefined; contractError.value = ''; showPi.value = false
   try {
     const result = (await api.get(`/api/orders/by-no/${encodeURIComponent(props.orderNo)}`)).data.data
     if (current !== version) return
     order.value = result
+    if (canPrepareContract.value) {
+      try {
+        const preparation = (await api.get(`/api/orders/${result.id}/purchase-contract`)).data.data
+        if (current === version) contractPreparation.value = preparation
+      } catch (cause) {
+        if (current === version) contractError.value = api.isAxiosError(cause) ? cause.response?.data?.message || '合同入口加载失败，请刷新重试' : '合同入口加载失败，请刷新重试'
+      }
+    }
     if (result.sourceLockNo && hasAnyPermission(props.context, ['AGENT_LOCK_WRITE','AGENT_INVENTORY_READ']) && internal.value) {
       try {
         const lock = (await api.get(`/api/inventory-locks/by-no/${encodeURIComponent(result.sourceLockNo)}`)).data.data
@@ -77,11 +92,16 @@ watch(() => props.orderNo, () => { showPi.value = false; showContract.value = fa
         <div class="journey-counts"><div>订购数量<strong>{{ order.orderQty }} 台</strong></div><div>已出库<strong>{{ order.shippedQty }} 台</strong></div><div>未出库<strong>{{ Math.max(0, order.orderQty - order.shippedQty) }} 台</strong></div><div>库存占用<strong>{{ reservationLabel(order.reservationStatus) }}</strong></div></div>
         <el-alert :title="nextStep" type="info" :closable="false" show-icon />
         <el-alert v-if="order.status === 'CANCELLED' && order.remark?.startsWith('自动取消：')" title="订单已自动取消" :description="order.remark" type="warning" :closable="false" show-icon />
-        <div class="journey-actions"><el-button v-if="canConfirm" type="primary" :loading="saving" @click="confirm">确认订单，继续出库</el-button><el-button v-if="hasPermission(context, 'PI_READ')" @click="showPi = !showPi">{{ showPi ? '收起 PI 与放行' : '本单 PI 与发货放行' }}</el-button></div>
-        <p v-if="['CONFIRMED','PARTIAL_SHIPPED'].includes(order.status)">PDA：进入「出库」，选择客户「{{ order.customerName }}」，搜索订单「{{ order.orderNo }}」，核对后扫描整车总码。关联 PI 的订单还需完成 PI 确认、到账登记与发货放行。</p>
-        <el-button v-if="canGenerateContract" @click="showContract = !showContract; contractOpened = true">{{ showContract ? '收起购销合同' : '生成购销合同' }}</el-button>
+        <el-alert v-if="contractError" :title="contractError" type="error" :closable="false"><el-button text @click="load">重试</el-button></el-alert>
+        <el-alert v-else-if="contractPreparation && !contractPreparation.available" :title="contractPreparation.reason || '当前订单不适用购销合同'" type="info" :closable="false" />
+        <div class="journey-actions">
+          <el-button v-if="canGenerateContract" type="primary" @click="showContract = !showContract; contractOpened = true">{{ showContract ? '收起购销合同' : '生成购销合同' }}</el-button>
+          <el-button v-if="canConfirm" :loading="saving" @click="confirm">确认订单，继续出库</el-button>
+          <el-button v-if="hasLinkedPi && hasPermission(context, 'PI_READ')" @click="showPi = !showPi">{{ showPi ? '收起已关联 PI' : '查看已关联 PI 与履约' }}</el-button>
+        </div>
+        <p v-if="['CONFIRMED','PARTIAL_SHIPPED'].includes(order.status)">PDA：进入「出库」，选择客户「{{ order.customerName }}」，搜索订单「{{ order.orderNo }}」，核对后扫描整车总码。<template v-if="hasLinkedPi">已关联 PI 的订单仍需完成原 PI 的确认、到账登记与发货放行。</template></p>
         <OrderPurchaseContract v-if="contractOpened && canGenerateContract" v-show="showContract" :order="order" />
-        <PiWorkspace v-if="showPi" :context="context" :initial-keyword="order.orderNo" />
+        <PiWorkspace v-if="showPi && hasLinkedPi" :context="context" :initial-keyword="order.orderNo" :allow-create="false" />
         <el-descriptions title="订单与来源" :column="1" border>
           <el-descriptions-item v-if="internal" label="购销合同方">{{ order.purchaseContractParty === 'YINSANHUAN' ? '银三环' : order.purchaseContractParty || '未登记' }}</el-descriptions-item>
           <el-descriptions-item v-if="internal" label="购销合同号"><PurchaseContractNumber :value="order.purchaseContractNo" /></el-descriptions-item>

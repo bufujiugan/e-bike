@@ -5,6 +5,9 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public class SalesOrderView {
+    private Boolean hasLinkedPi;
+    public Boolean getHasLinkedPi() { return hasLinkedPi; }
+    public void setHasLinkedPi(Boolean value) { hasLinkedPi = value; }
     private String purchaseContractParty;
     private String purchaseContractNo;
     public String getPurchaseContractParty() { return purchaseContractParty; }

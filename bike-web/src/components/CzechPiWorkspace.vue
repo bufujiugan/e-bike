@@ -15,10 +15,10 @@ const agent = computed(() => hasRole(props.context, 'WEB_AGENT') || props.contex
 <template>
   <section>
     <template v-if="!agent">
-      <p>捷克销售：内销和外销均办理 PI，按实际交易填写税费、收款资料及交付安排。</p>
-      <el-radio-group v-model="mode" aria-label="捷克销售类型" class="sales-scenario-tabs">
-        <el-radio-button value="CZECH_DOMESTIC">捷克内销 · PI</el-radio-button>
-        <el-radio-button value="CZECH_EXPORT">捷克外销 · PI</el-radio-button>
+      <p>欧洲内销和外销均办理 PI，统一使用 France_1104_PI 模板，按实际交易填写税费、收款资料及交付安排。</p>
+      <el-radio-group v-model="mode" aria-label="欧洲销售类型" class="sales-scenario-tabs">
+        <el-radio-button value="CZECH_DOMESTIC">内销</el-radio-button>
+        <el-radio-button value="CZECH_EXPORT">外销</el-radio-button>
         <el-radio-button value="HISTORY">全部／历史 PI</el-radio-button>
       </el-radio-group>
     </template>

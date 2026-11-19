@@ -125,6 +125,37 @@ class OrderContractServiceTest {
         assertThatThrownBy(() -> generate(payload)).isInstanceOf(BusinessException.class).hasMessageContaining("PI");
     }
 
+    @Test void allowsExplicitDomesticLegacyPiWithoutChangingItsFulfillment() throws Exception {
+        var payload = validPayload();
+        when(mapper.existsPiForOrder(81L)).thenReturn(true);
+        when(mapper.selectLinkedPiScenarios(81L)).thenReturn(List.of(
+                new OrderContractMapper.LinkedPiScenario("DOMESTIC", null, "true")));
+        assertThat(service.prepareContract(81).hasLinkedPi()).isTrue();
+        assertThat(service.prepareContract(81).available()).isTrue();
+        try (var excel = new XSSFWorkbook(new ByteArrayInputStream(generate(payload)))) {
+            assertThat(excel.getSheetAt(0).getSheetName()).isEqualTo("购销合同");
+            assertThat(excel.getSheetAt(0).getRow(21).getCell(10).getNumericCellValue()).isEqualTo(3703.68);
+        }
+        verify(orders, atLeastOnce()).get(81L);
+        verifyNoMoreInteractions(orders);
+    }
+
+    @Test void rejectsExportEuropeUnknownAndConflictingLinkedPiScenarios() {
+        var payload = validPayload();
+        when(mapper.existsPiForOrder(81L)).thenReturn(true);
+        var domestic = new OrderContractMapper.LinkedPiScenario("DOMESTIC", null, "true");
+        for (var scenario : List.of(
+                new OrderContractMapper.LinkedPiScenario("EXPORT", "CHINA_SALES", "true"),
+                new OrderContractMapper.LinkedPiScenario("DOMESTIC", "CZECH_PI", "true"),
+                new OrderContractMapper.LinkedPiScenario("DOMESTIC", "CZECH_PI", "false"),
+                new OrderContractMapper.LinkedPiScenario("DOMESTIC", null, null),
+                new OrderContractMapper.LinkedPiScenario("DOMESTIC", null, "false"))) {
+            when(mapper.selectLinkedPiScenarios(81L)).thenReturn(List.of(domestic, scenario));
+            assertThat(service.prepareContract(81).available()).isFalse();
+            assertThatThrownBy(() -> generate(payload)).isInstanceOf(BusinessException.class).hasMessageContaining("归属");
+        }
+    }
+
     @Test void rejectsCancelledAndClosedOrders() {
         var payload = validPayload();
         for (String status : List.of("CANCELLED", "CLOSED")) {
@@ -169,6 +200,10 @@ class OrderContractServiceTest {
         String sql = configuration.getMappedStatement(OrderContractMapper.class.getName() + ".existsPiForOrder")
                 .getBoundSql(java.util.Map.of("orderId", 81L)).getSql();
         assertThat(sql).contains("bike_pi WHERE source_order_id=?", "bike_pi_order_link WHERE order_id=?");
+        String scenarios = configuration.getMappedStatement(OrderContractMapper.class.getName() + ".selectLinkedPiScenarios")
+                .getBoundSql(java.util.Map.of("orderId", 81L)).getSql();
+        assertThat(scenarios).contains("p.source_order_id=?", "l.order_id=?", "l.series_id=p.series_id",
+                "$.business.salesChannel", "$.business.domesticShipment");
     }
 
     @Test void requiresInternalReadAndWritePermissions() {

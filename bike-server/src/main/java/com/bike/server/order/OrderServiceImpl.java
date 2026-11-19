@@ -16,6 +16,7 @@ public class OrderServiceImpl implements OrderService {
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.common.CustomerScopeAccess customerScope;
     private final OrderMapper orderMapper;
     @Autowired private com.bike.server.pi.PiPurchaseContractService purchaseContracts;
+    @Autowired private OrderContractMapper contractLinks;
     @Autowired private ProductionGuard guard;
     @Autowired private OrderInventoryGuard inventoryGuard;
     @Autowired private OrderReservationCoordinator reservations;
@@ -169,6 +170,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private SalesOrderView enrichDetails(SalesOrderView order) {
+        if (contractLinks != null) order.setHasLinkedPi(contractLinks.existsPiForOrder(order.getId()));
         order.setShippedVehicles(orderMapper.selectShippedVehicles(order.getId()));
         if (!CurrentOperator.hasRole("WEB_AGENT") && purchaseContracts != null) {
             var contract = purchaseContracts.findForOrder(order.getId());

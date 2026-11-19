@@ -60,8 +60,12 @@ public class PiTemplateService {
         pi.setDocumentRenderVersion(renderVersion(d==null?null:mapper.find(d.templateCode(),d.templateVersion()), d));
     }
     static String renderVersion(PiTemplate template, PiDocumentSnapshot document) {
-        if (document != null && document.business() != null
-                && "CZECH_PI".equals(document.business().salesChannel())) return "PI_EUROPE_V1";
+        if (document != null && document.business() != null) {
+            // 销售入口决定单据版式；已发布模板继续提供卖方和银行资料。
+            // PI_V5 为 260728英国builtPI 的五列参考版式，欧洲独立使用 France_1104。
+            if ("CHINA_SALES".equals(document.business().salesChannel())) return "PI_V5";
+            if ("CZECH_PI".equals(document.business().salesChannel())) return "PI_EUROPE_V1";
+        }
         return renderVersion(template);
     }
     static String renderVersion(PiTemplate template) {

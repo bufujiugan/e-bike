@@ -4,7 +4,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import api from '../api'
 import { piApi, type PiDocument, type PiTemplate } from '../pi-api'
 
-const props = defineProps<{ tradeType: string; document: PiDocument; canManage: boolean; disabled: boolean; manageDisabled?: boolean; profileBound?: boolean; refreshKey: number }>()
+const props = defineProps<{ tradeType: string; document: PiDocument; canManage: boolean; disabled: boolean; manageDisabled?: boolean; profileBound?: boolean; refreshKey: number; fixedLayoutName?: string }>()
 const emit = defineEmits<{ select: [template: PiTemplate]; manage: []; adjust: [template: PiTemplate] }>()
 const templates = ref<PiTemplate[]>([]), page = ref(1), total = ref(0), busy = ref(false), error = ref('')
 const hasSelection = computed(() => Boolean(props.document.templateCode && props.document.templateVersion))
@@ -33,7 +33,7 @@ function isSelected(template: PiTemplate) {
 <template>
   <section class="pi-template-picker" aria-label="选择单据模板">
     <div class="pi-section-heading">
-      <div><h3>单据模板 <span class="pi-required">*</span></h3><p>选一次模板，自动带入卖方与收款银行，无需重复填写。</p></div>
+      <div><h3>{{ fixedLayoutName ? '卖方与银行资料' : '单据模板' }} <span class="pi-required">*</span></h3><p v-if="fixedLayoutName">单据版式固定为 {{ fixedLayoutName }}。以下选择带入卖方与收款银行。</p><p v-else>选一次模板，自动带入卖方与收款银行，无需重复填写。</p></div>
       <div class="pi-inline-actions"><el-button text :loading="busy" :disabled="manageDisabled" @click="load">刷新</el-button><el-button v-if="canManage" text :disabled="manageDisabled" @click="emit('manage')">管理模板</el-button></div>
     </div>
     <p v-if="profileBound" class="pi-field-help">当前模板由履约配置指定。可直接调整模板；保存新版本后，需在履约配置中选用新模板，再应用到本单。</p>
@@ -68,7 +68,7 @@ function isSelected(template: PiTemplate) {
         <div><dt>收款银行</dt><dd>{{ document.bankName || '未记录' }}</dd></div>
         <div><dt>收款账号</dt><dd>{{ document.bankAccount || '未记录' }}</dd></div>
       </dl>
-      <p class="pi-field-help">如需调整卖方资料、默认银行信息或 PI 版式，可点击模板卡片上的“调整模板”，保存为新版本。</p>
+      <p class="pi-field-help">{{ fixedLayoutName ? '可调整卖方与银行资料并保存新版本；本销售入口的单据版式保持固定。' : '如需调整卖方资料、默认银行信息或 PI 版式，可点击模板卡片上的“调整模板”，保存为新版本。' }}</p>
     </details>
   </section>
 </template>

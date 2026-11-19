@@ -7,7 +7,13 @@ import ts from '../../bike-web/node_modules/typescript/lib/typescript.js';
 const context = vm.createContext({ exports: {} });
 vm.runInContext(ts.transpile(readFileSync(new URL('../../bike-web/src/pi-sales-scenario.ts', import.meta.url), 'utf8'),
   { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }), context);
-const { salesScenarioDefaults, salesScenarioFilters, matchesSalesScenario } = context.exports;
+const { salesScenarioDefaults, salesScenarioFilters, matchesSalesScenario, salesChannelLayoutName } = context.exports;
+
+test('国内外销与欧洲内外销展示固定模板，历史归属不明确时不猜测版式', () => {
+  assert.equal(salesChannelLayoutName('CHINA_SALES'), '260728英国builtPI');
+  assert.equal(salesChannelLayoutName('CZECH_PI'), 'France_1104_PI');
+  assert.equal(salesChannelLayoutName(undefined), undefined);
+});
 
 test('国内外销和捷克内外销分别使用正确的贸易类型、出货属性和币种默认值', () => {
   for (const [scenario, tradeType, domesticShipment, currencyCode] of [

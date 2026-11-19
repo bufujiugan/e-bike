@@ -28,11 +28,12 @@ function refresh() { emit('refresh'); void overview.refresh() }
 </script>
 <template><div class="sm-page">
   <el-radio-group v-if="canUseExportPi" v-model="salesMode" aria-label="国内销售类型" class="sales-scenario-tabs">
-    <el-radio-button value="DOMESTIC">内销 · 购销合同</el-radio-button>
-    <el-radio-button value="EXPORT">外销 · PI</el-radio-button>
+    <el-radio-button value="DOMESTIC">内销</el-radio-button>
+    <el-radio-button value="EXPORT">外销</el-radio-button>
   </el-radio-group>
   <PiWorkspace v-if="showExportPi" :context="context" sales-scenario="CHINA_EXPORT" />
   <div v-show="!showExportPi" class="sm-page">
+  <el-alert v-if="moduleKey === 'orders'" title="国内内销办理购销合同" description="使用「10.23金轮信德-广州塔威 购销合同」模板。进入订单办理，点击“生成购销合同”并下载 Excel。" type="info" :closable="false" />
   <AlertCard v-if="error" tone="error" title="业务数据加载失败" :description="error"><template #action><el-button size="small" @click="refresh">重试</el-button></template></AlertCard>
   <AlertCard v-if="overviewError" tone="error" title="统计数据加载失败" :description="overviewError"><template #action><el-button size="small" @click="overview.refresh">重试统计</el-button></template></AlertCard>
   <AssemblyProgressPage v-if="moduleKey === 'assembly'" :module="module" :loading="loading" :error="error" :today-assembled="overview.value('今日组装')" />

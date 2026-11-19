@@ -74,7 +74,7 @@ watch(() => [props.order.id, props.order.updatedAt], () => { void load() }, { im
 <template>
   <section v-loading="loading" class="order-contract" aria-label="生成内销购销合同">
     <h3>内销购销合同</h3>
-    <p>按指定购销合同模板生成 Excel。客户、车型和数量取自订单；请补充并核对合同信息。本次填写仅保留在当前窗口，下载后请保存文件。</p>
+    <p>使用「10.23金轮信德-广州塔威 购销合同」模板生成 Excel。客户、车型和数量取自订单；请补充并核对合同信息。本次填写仅保留在当前窗口，下载后请保存文件。</p>
     <div v-if="error" ref="errorSummary" role="alert" tabindex="-1" class="contract-error">{{ error }}</div>
     <el-alert v-if="unavailable" :title="unavailable" type="info" :closable="false" />
     <el-button v-if="error && !contract" @click="load">重新加载合同资料</el-button>
