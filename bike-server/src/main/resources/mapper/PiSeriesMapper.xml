@@ -3,15 +3,16 @@
 <mapper namespace="com.bike.server.pi.PiSeriesMapper">
   <select id="seriesId" resultType="long">SELECT series_id FROM bike_pi WHERE id=#{piId}</select>
   <sql id="lockOptionsWhere">
-    l.scope_type='SKU' AND l.customer_id=#{customerId} AND l.agent_id &lt;=&gt; #{agentId}
+    l.scope_type='SKU' AND l.customer_id=#{customerId}
+    <if test="!anyAgent">AND l.agent_id &lt;=&gt; #{agentId}</if>
     AND l.status IN ('LOCKED','PARTIAL_CONVERTED') AND l.expire_time&gt;NOW(3)
     AND l.lock_qty&gt;l.released_qty+l.converted_qty
     <if test="keyword != null">AND (l.lock_no LIKE CONCAT('%',#{keyword},'%') OR s.sku_code LIKE CONCAT('%',#{keyword},'%'))</if>
   </sql>
   <select id="lockOptions" resultType="map">
     SELECT l.id,l.lock_no lockNo,l.sku_id skuId,s.sku_code skuCode,s.product_name productName,s.model_id modelId,
-      l.lock_qty-l.released_qty-l.converted_qty remainingQty,l.expire_time expireTime
-    FROM bike_inventory_lock l JOIN bike_production_sku s ON s.id=l.sku_id
+      l.lock_qty-l.released_qty-l.converted_qty remainingQty,l.expire_time expireTime,l.agent_id agentId,a.agent_name agentName
+    FROM bike_inventory_lock l JOIN bike_production_sku s ON s.id=l.sku_id LEFT JOIN bike_agent a ON a.id=l.agent_id
     WHERE <include refid="lockOptionsWhere"/> ORDER BY l.id LIMIT #{offset},20
   </select>
   <select id="countLockOptions" resultType="long">SELECT COUNT(*) FROM bike_inventory_lock l

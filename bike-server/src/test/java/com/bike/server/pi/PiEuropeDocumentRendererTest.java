@@ -108,6 +108,70 @@ class PiEuropeDocumentRendererTest {
         }
     }
 
+    /** 按 312605030_Italy_DSB_Commercial Invoice：Nett/Gross/Total 为公式，折扣与运费在商品下方分行。 */
+    @Test void v2UsesReferenceFormulasAndListsDiscountLikeFreight() throws Exception {
+        var pi=sample(1);pi.setDocumentRenderVersion(PiEuropeDocumentRendererV2.VERSION);pi.setCustomerName("=1+1");
+        var item=pi.getItems().getFirst();item.setQuantity(1);item.setUnitPrice(new BigDecimal("4200.00"));
+        item.setDiscountAmount(new BigDecimal("200.00"));item.setTaxAmount(BigDecimal.ZERO);item.setLineTotal(new BigDecimal("4000.00"));
+        pi.setSubtotal(new BigDecimal("4200.00"));pi.setDiscountAmount(new BigDecimal("200.00"));pi.setTaxAmount(BigDecimal.ZERO);
+        pi.setFreightAmount(new BigDecimal("200.00"));pi.setOtherFeeAmount(BigDecimal.ZERO);pi.setTotalAmount(new BigDecimal("4200.00"));
+        byte[] bytes=documents.excel(pi);
+        try(var book=new XSSFWorkbook(new ByteArrayInputStream(bytes))) {
+            var sheet=book.getSheetAt(0);var line=sheet.getRow(32);
+            assertThat(line.getCell(0).getStringCellValue()).doesNotContain("Discount");
+            assertThat(line.getCell(8).getCellFormula()).isEqualTo("E33*F33");
+            assertThat(line.getCell(10).getCellFormula()).isEqualTo("I33*(1+H33)");
+            assertThat(line.getCell(7).getNumericCellValue()).isZero();
+            assertThat(sheet.getRow(33).getCell(0).getStringCellValue()).isEqualTo("Discount");
+            assertThat(sheet.getRow(33).getCell(10).getNumericCellValue()).isEqualTo(-200);
+            assertThat(sheet.getRow(34).getCell(0).getStringCellValue()).isEqualTo("Freight Cost");
+            assertThat(sheet.getRow(34).getCell(10).getNumericCellValue()).isEqualTo(200);
+            assertThat(sheet.getMergedRegions()).contains(CellRangeAddress.valueOf("A34:J34"),CellRangeAddress.valueOf("K34:L34"),CellRangeAddress.valueOf("A35:J35"));
+            assertThat(sheet.getRow(35).getCell(8).getStringCellValue()).isEqualTo("Total Price");
+            assertThat(sheet.getRow(35).getCell(10).getCellFormula()).isEqualTo("SUM(K33:L35)");
+            var evaluator=book.getCreationHelper().createFormulaEvaluator();
+            assertThat(evaluator.evaluate(line.getCell(8)).getNumberValue()).isEqualTo(4200);
+            assertThat(evaluator.evaluate(line.getCell(10)).getNumberValue()).isEqualTo(4200);
+            assertThat(evaluator.evaluate(sheet.getRow(35).getCell(10)).getNumberValue()).isEqualTo(4200);
+            // 已写入缓存值：未重算的查看器也能直接显示金额。
+            assertThat(sheet.getRow(35).getCell(10).getNumericCellValue()).isEqualTo(4200);
+            assertThat(sheet.getRow(8).getCell(7).getCellType()).isEqualTo(CellType.STRING);
+        }
+        try(var pdf=Loader.loadPDF(documents.pdf(pi))) {
+            String text=new PDFTextStripper().getText(pdf);
+            assertThat(text).contains("Discount","-200.00","Freight Cost","4,200.00").doesNotContain("Discount: 200","4,000.00");
+        }
+        writePreview("europe-pi-v2-discount",bytes,pi);
+    }
+
+    @Test void v2DerivesVatRateAndKeepsSystemTotal() throws Exception {
+        // 3 × 100，行折扣 30，行税 56.7（= 21% × 270），全单追加折扣 5、税 3，运费 10，其他 2，应付 336.7。
+        var pi=sample(1);pi.setDocumentRenderVersion(PiEuropeDocumentRendererV2.VERSION);
+        byte[] bytes=documents.excel(pi);
+        try(var book=new XSSFWorkbook(new ByteArrayInputStream(bytes))) {
+            var sheet=book.getSheetAt(0);var evaluator=book.getCreationHelper().createFormulaEvaluator();
+            assertThat(sheet.getRow(32).getCell(7).getNumericCellValue()).isEqualTo(.21);
+            assertThat(evaluator.evaluate(sheet.getRow(32).getCell(8)).getNumberValue()).isEqualTo(300);
+            assertThat(evaluator.evaluate(sheet.getRow(32).getCell(10)).getNumberValue()).isCloseTo(363,within(1e-9));
+            assertThat(sheet.getRow(33).getCell(0).getStringCellValue()).isEqualTo("Discount (incl. VAT)");
+            assertThat(sheet.getRow(33).getCell(10).getNumericCellValue()).isCloseTo(-41.3,within(1e-9));
+            assertThat(sheet.getRow(34).getCell(0).getStringCellValue()).isEqualTo("VAT");
+            assertThat(sheet.getRow(35).getCell(0).getStringCellValue()).isEqualTo("Freight Cost");
+            assertThat(sheet.getRow(36).getCell(0).getStringCellValue()).isEqualTo("Other Fees");
+            assertThat(sheet.getRow(37).getCell(10).getCellFormula()).isEqualTo("SUM(K33:L37)");
+            assertThat(evaluator.evaluate(sheet.getRow(37).getCell(10)).getNumberValue()).isCloseTo(336.7,within(1e-9));
+        }
+        writePreview("europe-pi-v2-vat",bytes,pi);
+    }
+
+    private void writePreview(String name, byte[] xlsx, PiView pi) throws Exception {
+        String folder=System.getProperty("bike.pi.europe.preview.dir");
+        if(folder==null) return;
+        var path=Path.of(folder);Files.createDirectories(path);Files.write(path.resolve(name+".xlsx"),xlsx);
+        byte[] pdfBytes=documents.pdf(pi);Files.write(path.resolve(name+".pdf"),pdfBytes);
+        try(var pdf=Loader.loadPDF(pdfBytes)) {var renderer=new PDFRenderer(pdf);for(int page=0;page<pdf.getNumberOfPages();page++)ImageIO.write(renderer.renderImageWithDPI(page,100),"PNG",path.resolve(name+"-"+(page+1)+".png").toFile());}
+    }
+
     private PiView sample(int count) throws Exception {
         var pi=PiDocumentServiceTest.sample(count);pi.setDocumentRenderVersion("PI_EUROPE_V1");pi.setPiNo("PI-EU-SAMPLE-001");pi.setCurrencyCode("EUR");
         var quantity=BigDecimal.valueOf(count);

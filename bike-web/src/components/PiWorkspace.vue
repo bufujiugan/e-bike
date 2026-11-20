@@ -531,7 +531,10 @@ async function chooseCustomer(id: number) {
   finally { if (version === customerLoadVersion) customerBusy.value = false }
 }
 watch(() => draft.customerId, () => { if (!restoringDraft.value && !initializingDraft && editingId.value == null && !filteredOrders.value.some(order => order.id === draft.sourceOrderId)) draft.sourceOrderId = undefined })
+// 加入锁定时自动带入其代理商，此时不应清空已选锁定。
+let agentFromLock = false
 watch([() => draft.customerId, () => draft.agentId], () => {
+  if (agentFromLock) { agentFromLock = false; return }
   if (restoringDraft.value || initializingDraft) return
   lockVersion++; lockRows.value = []; lockTotal.value = 0; lockPage.value = 1; selectedLocks.value = []
   if (fromLocks.value) { draft.items = []; void loadLocks() }
@@ -540,7 +543,9 @@ async function loadLocks() {
   if ((!fromLocks.value && !revisionFulfillment.value) || !draft.customerId) return
   const version = ++lockVersion; lockBusy.value = true; lockError.value = ''
   try {
-    const found = await piApi.lockOptions({ customerId: draft.customerId, agentId: draft.agentId, keyword: lockKeyword.value.trim() || undefined, page: lockPage.value })
+    // 新建时未选代理商：查该客户全部代理商下的锁定（含无代理商），加入后自动带入代理商。
+    const anyAgent = fromLocks.value && !revisionFulfillment.value && !draft.agentId && !selectedLocks.value.length
+    const found = await piApi.lockOptions({ customerId: draft.customerId, agentId: draft.agentId, keyword: lockKeyword.value.trim() || undefined, page: lockPage.value, anyAgent: anyAgent || undefined })
     if (version === lockVersion) { lockRows.value = found.records; lockTotal.value = found.total }
   } catch (error) { if (version === lockVersion) lockError.value = message(error, '来源锁定加载失败') }
   finally { if (version === lockVersion) lockBusy.value = false }
@@ -553,6 +558,16 @@ function syncLockItems() {
 }
 function addLock(lock: PiLockOption) {
   if (selectedLocks.value.some(item => item.id === lock.id)) return
+  if (fromLocks.value && !revisionFulfillment.value) {
+    const lockAgent = lock.agentId ?? undefined
+    const first = selectedLocks.value[0]
+    if (first && (first.agentId ?? undefined) !== lockAgent) { ElMessage.warning('同一份 PI 只能合并同一代理商的锁定，请分开生成'); return }
+    if ((draft.agentId ?? undefined) !== lockAgent) {
+      if (draft.agentId) { ElMessage.warning('该锁定属于其他代理商，请先清空「所属代理商」再加入'); return }
+      if (lockAgent && !options.value.agents.some(agent => agent.id === lockAgent)) options.value.agents.push({ id: lockAgent, code: '', name: lock.agentName || '锁定代理商' })
+      agentFromLock = true; draft.agentId = lockAgent
+    }
+  }
   selectedLocks.value.push({ ...lock, quantity: lock.remainingQty })
   if (!options.value.skus.some(item => item.id === lock.skuId)) options.value.skus.push({ id: lock.skuId, skuCode: lock.skuCode, productName: lock.productName, modelId: lock.modelId })
   if (revisionFulfillment.value && !draft.items.some(item => item.skuId === lock.skuId)) draft.items.push({ ...newItem(), skuId: lock.skuId, quantity: lock.remainingQty })
@@ -1096,7 +1111,7 @@ onBeforeUnmount(() => {
         </article>
       </section>
       <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false" />
-      <el-table v-loading="busy" :data="rows" :empty-text="europe && !europeScopeReady ? '请先选择捷克出货仓' : '没有符合条件的 PI'" row-key="id">
+      <el-table v-loading="busy" :data="rows" :empty-text="europe && !europeScopeReady ? '请先选择捷克出货仓' : '没有符合条件的 PI'" row-key="id" max-height="calc(100vh - 220px)" scrollbar-always-on>
       <RecordIdColumn />
         <el-table-column prop="piNo" label="PI 编号" min-width="200"><template #default="scope"><el-button link type="primary" @click="openDetail(scope.row)">{{ scope.row.piNo }}</el-button></template></el-table-column>
         <el-table-column prop="revision" label="版本" width="70" /><el-table-column prop="customerName" label="客户" min-width="150" />
@@ -1172,13 +1187,13 @@ onBeforeUnmount(() => {
                 <div class="pi-section-heading"><div><h3>商品明细 <span class="pi-count-badge">{{ draft.items.length }}</span></h3><p>{{ fromLocks ? '从下方锁定中选择商品，再填写单价。' : '选择 SKU 后填写数量与单价，图片在保存时带入。' }}</p></div><el-button :disabled="fixedItems || draft.items.length >= 100" @click="draft.items.push(newItem())">＋ 添加商品</el-button></div>
                 <el-alert v-if="editingRevision && fixedItems" title="数量和移除商品在确认修订时生效，不能少于已发数量；新增 SKU 须选择来源锁定。" type="info" :closable="false" />
       <section data-draft-field="locks" class="pi-lock-selection" v-if="fromLocks || revisionFulfillment && canManageReservation">
-        <p v-if="fromLocks" class="pi-hint">先选择客户及代理商，再选择来源锁定。本次会同时生成各SKU的履约订单和一份PI草稿；确认PI时一起确认履约订单，保留每笔锁定原截止。</p>
+        <p v-if="fromLocks" class="pi-hint">先选择客户，再选择来源锁定；代理商可不选，加入锁定时自动带入（同一份 PI 只能合并同一代理商的锁定）。只显示未到期、仍有剩余可转数量的 SKU 锁定。本次会同时生成各SKU的履约订单和一份PI草稿；确认PI时一起确认履约订单，保留每笔锁定原截止。</p>
         <p v-if="revisionFulfillment" class="pi-hint">新增SKU或新增独立履约子单时选择同客户来源锁定，数量计入下方商品总数量；草稿不转换，确认修订才生效并沿用原截止时间。删除来源选择不会自动删除商品行。</p>
         <div class="pi-filters"><el-input v-model="lockKeyword" placeholder="按锁定单号或 SKU 搜索" /><el-button :disabled="!draft.customerId" :loading="lockBusy" @click="lockPage = 1; loadLocks()">查找来源锁定</el-button></div>
         <el-alert v-if="lockError" :title="lockError" type="error" :closable="false" />
-        <el-table :data="lockRows" v-loading="lockBusy" empty-text="选择客户后查询可转换的SKU锁定">
+        <el-table :data="lockRows" v-loading="lockBusy" :empty-text="draft.customerId ? '该客户没有可转换的SKU锁定（已到期、已转完或属于其他代理商的不显示）' : '选择客户后查询可转换的SKU锁定'">
       <RecordIdColumn />
-          <el-table-column prop="lockNo" label="来源锁定" min-width="180" /><el-table-column prop="skuCode" label="SKU" /><el-table-column prop="remainingQty" label="剩余可转" width="100" /><el-table-column prop="expireTime" label="原截止" min-width="170" />
+          <el-table-column prop="lockNo" label="来源锁定" min-width="180" /><el-table-column prop="skuCode" label="SKU" /><el-table-column label="代理商" min-width="120"><template #default="{ row }">{{ row.agentName || '无代理商' }}</template></el-table-column><el-table-column prop="remainingQty" label="剩余可转" width="100" /><el-table-column prop="expireTime" label="原截止" min-width="170" />
           <el-table-column label="选择" width="90"><template #default="{ row }"><el-button link :disabled="selectedLocks.some(item => item.id === row.id)" @click="addLock(row)">加入</el-button></template></el-table-column>
         </el-table>
         <el-pagination v-model:current-page="lockPage" :total="lockTotal" :page-size="20" layout="total, prev, pager, next" @current-change="loadLocks" />

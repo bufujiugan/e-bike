@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 /**
  * PI_EUROPE_V2：France_1104_PI 原件版式。相对 V1 修正开单日期被版本状态覆盖、恢复原件的
  * KVK-No./VAT/IBAN/SWIFT 栏目与 “No.” 编号写法，并补入卖方登记号、VAT、SWIFT、买方 VAT 和发货地址。
+ * 商品金额与底部调整行按 312605030_Italy_DSB_Commercial Invoice：Nett/Gross/Total 为 Excel 公式，折扣与运费分行列示。
  * 已归档或已入队的 PI_EUROPE_V1 仍由 {@link PiEuropeDocumentRenderer} 按原版本生成。
  */
 final class PiEuropeDocumentRendererV2 {
@@ -68,11 +69,14 @@ final class PiEuropeDocumentRendererV2 {
         // 原件金额格式固定为欧元符号；其他币种使用同样的两位小数并显示币种代码。
         String moneyFormat = "EUR".equals(currency) ? itemStyles[5].getDataFormatString() : "\"" + currency + "\" #,##0.00;[Red]\"" + currency + "\" -#,##0.00";
         short money = book.createDataFormat().getFormat(moneyFormat);
-        CellStyle description = derived(book, itemStyles[0], style -> { style.setAlignment(HorizontalAlignment.LEFT); style.setVerticalAlignment(VerticalAlignment.CENTER); style.setWrapText(true); });
+        // 原件商品说明与其他列一样水平居中。
+        CellStyle description = derived(book, itemStyles[0], style -> { style.setAlignment(HorizontalAlignment.CENTER); style.setVerticalAlignment(VerticalAlignment.CENTER); style.setWrapText(true); });
         CellStyle count = derived(book, itemStyles[4], style -> style.setVerticalAlignment(VerticalAlignment.CENTER));
         CellStyle price = derived(book, itemStyles[5], style -> { style.setDataFormat(money); style.setVerticalAlignment(VerticalAlignment.CENTER); });
-        CellStyle percent = derived(book, itemStyles[7], style -> style.setDataFormat(book.createDataFormat().getFormat("0%")));
-        CellStyle adjustmentLabel = derived(book, totalLabel, style -> style.setFont(book.getFontAt(itemStyles[0].getFontIndex())));
+        CellStyle percent = derived(book, itemStyles[7], style -> { style.setDataFormat(book.createDataFormat().getFormat("0%")); style.setVerticalAlignment(VerticalAlignment.CENTER); });
+        CellStyle percentDetail = derived(book, percent, style -> style.setDataFormat(book.createDataFormat().getFormat("0.00%")));
+        // 原件 Credit / Freight Cost 行与商品行同字体，说明在 A:J 合并居中，金额在 K:L。
+        CellStyle adjustmentLabel = derived(book, itemStyles[0], style -> { style.setAlignment(HorizontalAlignment.CENTER); style.setVerticalAlignment(VerticalAlignment.CENTER); });
         CellStyle adjustmentAmount = derived(book, price, style -> {});
         CellStyle grandTotal = derived(book, totalAmount, style -> style.setDataFormat(money));
         removeRowsFrom(sheet, ITEM_ROW);
@@ -118,7 +122,11 @@ final class PiEuropeDocumentRendererV2 {
         text(sheet, "I32", "Price Nett\n(" + currency + ")");
         text(sheet, "K32", "Price Gross\n(" + currency + ")");
 
+        // 按 312605030_Italy_DSB_Commercial Invoice 原件：Price Nett = 数量 × 单价，Price Gross = Nett × (1 + VAT %)，
+        // 折扣（原件 Credit）与运费（Freight Cost）各占一行写在商品下方，Total Price = SUM(Gross 列)。
         int row = ITEM_ROW;
+        boolean formulas = true, discountIncludesVat = false;
+        BigDecimal grossDiscount = BigDecimal.ZERO, unratedTax = BigDecimal.ZERO, expected = BigDecimal.ZERO;
         for (var item : pi.getItems()) {
             Row target = sheet.createRow(row);
             target.setHeightInPoints(itemHeight);
@@ -126,34 +134,56 @@ final class PiEuropeDocumentRendererV2 {
             target.getCell(0).setCellStyle(description);
             for (int col : new int[]{5, 8, 10}) target.getCell(col).setCellStyle(price);
             target.getCell(4).setCellStyle(count);
-            target.getCell(7).setCellStyle(percent);
             merge(sheet, row, 0, 3); merge(sheet, row, 5, 6); merge(sheet, row, 8, 9); merge(sheet, row, 10, 11);
-            String name = join("\n", item.getProductName(), same(item.getProductName(), item.getSpecification()) ? null : item.getSpecification());
-            if (amount(item.getDiscountAmount()).signum() != 0) name += "\nDiscount: " + item.getDiscountAmount().setScale(2, RoundingMode.HALF_UP).toPlainString();
-            text(target.getCell(0), name);
+            text(target.getCell(0), join("\n", item.getProductName(), same(item.getProductName(), item.getSpecification()) ? null : item.getSpecification()));
             target.getCell(4).setCellValue(item.getQuantity());
             number(target.getCell(5), item.getUnitPrice());
-            BigDecimal net = amount(item.getLineTotal()).subtract(amount(item.getTaxAmount()));
-            number(target.getCell(8), net);
-            number(target.getCell(10), item.getLineTotal());
-            // 系统保存行税额而非税率：显示税额 / 折后净额的有效比例，金额以快照为准。
-            if (net.signum() != 0) number(target.getCell(7), amount(item.getTaxAmount()).divide(net, 4, RoundingMode.HALF_UP));
-            else if (amount(item.getTaxAmount()).signum() == 0) target.getCell(7).setCellValue(0);
-            else text(target.getCell(7), "Tax " + item.getTaxAmount().toPlainString());
+            BigDecimal raw = amount(item.getUnitPrice()).multiply(BigDecimal.valueOf(item.getQuantity()));
+            BigDecimal discount = amount(item.getDiscountAmount()), tax = amount(item.getTaxAmount()), base = raw.subtract(discount);
+            // 系统按行保存税额：VAT % = 行税额 ÷ 折后净额；折后净额为零时税额无法折成税率，改列入下方 VAT 行。
+            BigDecimal rate = BigDecimal.ZERO;
+            if (tax.signum() != 0 && base.signum() > 0) rate = tax.divide(base, 12, RoundingMode.HALF_UP).stripTrailingZeros();
+            else unratedTax = unratedTax.add(tax);
+            target.getCell(7).setCellStyle(rate.movePointRight(2).stripTrailingZeros().scale() <= 0 ? percent : percentDetail);
+            target.getCell(7).setCellValue(rate.doubleValue());
+            BigDecimal gross = raw.multiply(BigDecimal.ONE.add(rate));
+            if (exact(item.getUnitPrice()) && exact(raw)) {
+                int excelRow = row + 1;
+                target.getCell(8).setCellFormula("E" + excelRow + "*F" + excelRow);
+                target.getCell(10).setCellFormula("I" + excelRow + "*(1+H" + excelRow + ")");
+            } else {
+                formulas = false;
+                number(target.getCell(8), raw);
+                number(target.getCell(10), excel(gross));
+            }
+            BigDecimal lineDiscount = discount.multiply(BigDecimal.ONE.add(rate));
+            if (discount.signum() != 0 && rate.signum() != 0) discountIncludesVat = true;
+            grossDiscount = grossDiscount.add(lineDiscount);
+            expected = expected.add(gross).subtract(lineDiscount);
             row++;
         }
         BigDecimal lineDiscount = pi.getItems().stream().map(item -> amount(item.getDiscountAmount())).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal lineTax = pi.getItems().stream().map(item -> amount(item.getTaxAmount())).reduce(BigDecimal.ZERO, BigDecimal::add);
-        row = adjustment(sheet, row, "Order discount", amount(pi.getDiscountAmount()).subtract(lineDiscount).negate(), adjustmentLabel, adjustmentAmount);
-        row = adjustment(sheet, row, "Order tax", amount(pi.getTaxAmount()).subtract(lineTax), adjustmentLabel, adjustmentAmount);
-        row = adjustment(sheet, row, "Freight", amount(pi.getFreightAmount()), adjustmentLabel, adjustmentAmount);
-        row = adjustment(sheet, row, "Other fees", amount(pi.getOtherFeeAmount()), adjustmentLabel, adjustmentAmount);
+        BigDecimal discountRow = grossDiscount.add(amount(pi.getDiscountAmount()).subtract(lineDiscount)).negate();
+        BigDecimal vatRow = amount(pi.getTaxAmount()).subtract(lineTax).add(unratedTax);
+        BigDecimal freight = amount(pi.getFreightAmount()), otherFees = amount(pi.getOtherFeeAmount());
+        expected = expected.add(amount(pi.getDiscountAmount()).subtract(lineDiscount).negate()).add(vatRow).add(freight).add(otherFees);
+        row = adjustment(sheet, row, discountIncludesVat ? "Discount (incl. VAT)" : "Discount", discountRow, adjustmentLabel, adjustmentAmount);
+        row = adjustment(sheet, row, "VAT", vatRow, adjustmentLabel, adjustmentAmount);
+        row = adjustment(sheet, row, "Freight Cost", freight, adjustmentLabel, adjustmentAmount);
+        row = adjustment(sheet, row, "Other Fees", otherFees, adjustmentLabel, adjustmentAmount);
         Row totalRow = sheet.createRow(row);
         totalRow.setHeightInPoints(21.6f);
         for (int col = 8; col <= LAST_COL; col++) totalRow.createCell(col).setCellStyle(col < 10 ? totalLabel : grandTotal);
         merge(sheet, row, 8, 9); merge(sheet, row, 10, 11);
         text(totalRow.getCell(8), "Total Price");
-        number(totalRow.getCell(10), pi.getTotalAmount());
+        // 公式合计与系统应付总额核对一致才写公式；任何不一致都以系统金额为准，避免单据金额与系统不符。
+        boolean reconciled = expected.subtract(amount(pi.getTotalAmount())).abs().compareTo(new BigDecimal("0.005")) < 0;
+        if (formulas && reconciled && !pi.getItems().isEmpty()) totalRow.getCell(10).setCellFormula("SUM(K" + (ITEM_ROW + 1) + ":L" + row + ")");
+        else {
+            if (!reconciled) LoggerFactory.getLogger(getClass()).warn("Europe PI amounts do not reconcile, piId={}, rows={}, total={}", pi.getId(), expected, pi.getTotalAmount());
+            number(totalRow.getCell(10), pi.getTotalAmount());
+        }
         row += 3;
         Row downpaymentRow = sheet.createRow(row);
         downpaymentRow.createCell(0).setCellStyle(downpayment);
@@ -184,6 +214,9 @@ final class PiEuropeDocumentRendererV2 {
         sheet.getPrintSetup().setLandscape(false);
         sheet.getPrintSetup().setFitWidth((short) 1); sheet.getPrintSetup().setFitHeight((short) 0);
         book.setPrintArea(0, 0, LAST_COL, 0, row - 1);
+        // 写入公式缓存值：Excel 打开即显示金额，PDF 与预览按同一结果绘制。
+        book.getCreationHelper().createFormulaEvaluator().evaluateAll();
+        book.setForceFormulaRecalculation(true);
         PiSheetPdfRenderer.fitRows(book, sheet, 0, LAST_COL);
         if (PiSheetPdfRenderer.nearlySinglePage(sheet, 0, LAST_COL, printLastRow(book))) sheet.getPrintSetup().setFitHeight((short) 1);
     }
@@ -191,13 +224,19 @@ final class PiEuropeDocumentRendererV2 {
     private static int adjustment(Sheet sheet, int row, String label, BigDecimal value, CellStyle labelStyle, CellStyle amountStyle) {
         if (value.signum() == 0) return row;
         Row target = sheet.createRow(row);
-        target.setHeightInPoints(18);
-        for (int col = 8; col <= LAST_COL; col++) target.createCell(col).setCellStyle(col < 10 ? labelStyle : amountStyle);
-        merge(sheet, row, 8, 9); merge(sheet, row, 10, 11);
-        text(target.getCell(8), label);
-        number(target.getCell(10), value);
+        target.setHeightInPoints(21.6f);
+        for (int col = 0; col <= LAST_COL; col++) target.createCell(col).setCellStyle(col < 10 ? labelStyle : amountStyle);
+        merge(sheet, row, 0, 9); merge(sheet, row, 10, 11);
+        text(target.getCell(0), label);
+        number(target.getCell(10), excel(value));
         return row + 1;
     }
+
+    /** 公式引用的数值须能被 Excel 双精度准确表示；超过时该行改写计算结果。 */
+    private static boolean exact(BigDecimal value) { return value != null && value.stripTrailingZeros().precision() <= 15; }
+
+    /** 含税折扣等派生金额只保留 Excel 可准确表示的 15 位有效数字，避免被写成文本。 */
+    private static BigDecimal excel(BigDecimal value) { return value.round(new java.math.MathContext(15, RoundingMode.HALF_UP)); }
 
     private static void logo(XSSFWorkbook book, Sheet sheet) throws IOException {
         try (var logo = PiEuropeDocumentRendererV2.class.getResourceAsStream("/pi/teewing-logo.png")) {

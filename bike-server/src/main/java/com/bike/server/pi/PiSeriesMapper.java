@@ -21,8 +21,8 @@ public interface PiSeriesMapper {
     List<PiFulfillmentLine> fulfillment(@Param("piId") long piId);
     Long currentPiForOrder(@Param("orderId") long orderId);
     List<java.util.Map<String,Object>> lockOptions(@Param("customerId") long customerId,
-            @Param("agentId") Long agentId,@Param("keyword") String keyword,@Param("offset") long offset);
-    long countLockOptions(@Param("customerId") long customerId,@Param("agentId") Long agentId,@Param("keyword") String keyword);
+            @Param("agentId") Long agentId,@Param("anyAgent") boolean anyAgent,@Param("keyword") String keyword,@Param("offset") long offset);
+    long countLockOptions(@Param("customerId") long customerId,@Param("agentId") Long agentId,@Param("anyAgent") boolean anyAgent,@Param("keyword") String keyword);
     List<PiShipmentGate> gates(@Param("orderId") long orderId);
     Integer remainingForVehicle(@Param("piId") long piId, @Param("vehicleId") long vehicleId);
     int holdAfterPayment(@Param("orderId") long orderId, @Param("piId") long piId,

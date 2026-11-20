@@ -27,12 +27,18 @@ public class PiConversionService {
     }
     @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public PageResponse<Map<String,Object>> options(long customerId,Long agentId,String keyword,long page) {
+        return options(customerId,agentId,false,keyword,page);
+    }
+    /** anyAgent=true 时不按代理商过滤（新建时尚未选代理商），结果带出各锁定的代理商供前端自动带入。 */
+    @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
+    public PageResponse<Map<String,Object>> options(long customerId,Long agentId,boolean anyAgent,String keyword,long page) {
         CurrentOperator.requireInternalWebAccess();
         for(String permission:List.of("PI_READ","PI_WRITE","AGENT_LOCK_WRITE"))CurrentOperator.requirePermission(permission);
         customerScope.requireCustomer(customerId);
         long p=Math.min(10000000,Math.max(1,page));
         String query=keyword==null||keyword.isBlank()?null:keyword.trim();
-        return new PageResponse<>(series.lockOptions(customerId,agentId,query,(p-1)*20),p,20,series.countLockOptions(customerId,agentId,query));
+        boolean all=anyAgent&&agentId==null;
+        return new PageResponse<>(series.lockOptions(customerId,agentId,all,query,(p-1)*20),p,20,series.countLockOptions(customerId,agentId,all,query));
     }
     /** 页面“从 SKU 锁定生成 PI”：与新建 PI 相同，须来自外销或欧洲销售入口。 */
     @Transactional

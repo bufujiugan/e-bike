@@ -80,19 +80,21 @@
             <if test="agentId != null">AND p.agent_id=#{agentId} AND p.status IN ('CONFIRMED','RELEASED')</if>
         </where>
     </sql>
+    <!-- 列表排序：已作废放最后，其余按最近操作（修改）时间倒序 -->
+    <sql id="listOrder">ORDER BY CASE WHEN p.status='CANCELLED' THEN 1 ELSE 0 END,p.updated_at DESC,p.id DESC</sql>
     <select id="selectPage" resultType="com.bike.server.pi.PiView">
         <include refid="base"/><include refid="where"/>
-        ORDER BY p.created_at DESC,p.id DESC LIMIT #{offset},#{limit}
+        <include refid="listOrder"/> LIMIT #{offset},#{limit}
     </select>
     <select id="selectPageBySalesScenario" resultType="com.bike.server.pi.PiView">
         <include refid="base"/><include refid="where"/>
-        ORDER BY p.created_at DESC,p.id DESC LIMIT #{offset},#{limit}
+        <include refid="listOrder"/> LIMIT #{offset},#{limit}
     </select>
     <select id="countBySalesScenario" resultType="long">SELECT COUNT(*) FROM bike_pi p <include refid="where"/></select>
     <select id="count" resultType="long">SELECT COUNT(*) FROM bike_pi p <include refid="where"/></select>
     <select id="selectPageByWarehouse" resultType="com.bike.server.pi.PiView">
         <include refid="base"/><include refid="where"/>
-        ORDER BY p.created_at DESC,p.id DESC LIMIT #{offset},#{limit}
+        <include refid="listOrder"/> LIMIT #{offset},#{limit}
     </select>
     <select id="countByWarehouse" resultType="long">SELECT COUNT(*) FROM bike_pi p <include refid="where"/></select>
     <select id="selectById" resultType="com.bike.server.pi.PiView"><include refid="base"/> WHERE p.id=#{id}</select>
