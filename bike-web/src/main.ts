@@ -11,5 +11,6 @@ import './styles/command-center.css'
 import './styles/manufacturing-shell.css'
 import './styles/production-center.css'
 import './styles/pastel-theme.css'
+import './styles/sales-routing.css'
 
 createApp(App).use(createPinia()).use(ElementPlus, { locale: zhCn }).mount('#app')

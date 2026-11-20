@@ -124,4 +124,54 @@ class OrderServiceTest {
         order.setCustomerId(1L);
         return order;
     }
+
+    @Test
+    void confirmRequiresExplicitSalesTypeBeforeAnyStatusChange() {
+        OrderMapper mapper = Mockito.mock(OrderMapper.class);
+        SalesOrderView order = order(7L, "SO-7", "PENDING", 0, 2);
+        Mockito.when(mapper.selectById(7L)).thenReturn(order);
+        var service = com.bike.server.common.CustomerScopeTestSupport.isolated(new OrderServiceImpl(mapper));
+        assertThatThrownBy(() -> service.confirm(7L)).isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).getCode()).isEqualTo("ORDER_SALES_TYPE_REQUIRED");
+        Mockito.verify(mapper, Mockito.never()).updateStatus(Mockito.anyLong(), Mockito.anyString());
+        order.setSalesType(SalesType.DOMESTIC);
+        Mockito.when(mapper.updateStatus(7L, "CONFIRMED")).thenReturn(1);
+        service.confirm(7L);
+        Mockito.verify(mapper).updateStatus(7L, "CONFIRMED");
+    }
+
+    @Test
+    void salesTypeCanBeChosenOnlyOnceAndNeverOverwritesAnExistingType() {
+        OrderMapper mapper = Mockito.mock(OrderMapper.class);
+        SalesOrderView order = order(7L, "SO-7", "CONFIRMED", 0, 2);
+        Mockito.when(mapper.selectById(7L)).thenReturn(order);
+        Mockito.when(mapper.assignSalesType(7L, SalesType.EXPORT)).thenAnswer(call -> { order.setSalesType(SalesType.EXPORT); order.setSelectedSalesType(SalesType.EXPORT); return 1; });
+        var service = com.bike.server.common.CustomerScopeTestSupport.isolated(new OrderServiceImpl(mapper));
+        assertThatThrownBy(() -> service.assignSalesType(7L, "OTHER")).isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).getCode()).isEqualTo("ORDER_SALES_TYPE_INVALID");
+        assertThat(service.assignSalesType(7L, SalesType.EXPORT).getSalesType()).isEqualTo(SalesType.EXPORT);
+        Mockito.verify(mapper).insertOperationLog("ORDER_UPDATE", "SO-7", "确定销售类型", null, "test-admin", "CONFIRMED", "CONFIRMED", null, "外销 · PI");
+        // 同一类型重复提交幂等；改为其他类型被拒绝。
+        assertThat(service.assignSalesType(7L, SalesType.EXPORT).getSalesType()).isEqualTo(SalesType.EXPORT);
+        assertThatThrownBy(() -> service.assignSalesType(7L, SalesType.DOMESTIC)).isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).getCode()).isEqualTo("ORDER_SALES_TYPE_LOCKED");
+        Mockito.verify(mapper, Mockito.times(1)).assignSalesType(Mockito.anyLong(), Mockito.anyString());
+        SalesOrderView cancelled = order(8L, "SO-8", "CANCELLED", 0, 2);
+        Mockito.when(mapper.selectById(8L)).thenReturn(cancelled);
+        assertThatThrownBy(() -> service.assignSalesType(8L, SalesType.DOMESTIC)).isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void listFilterAcceptsOnlyKnownSalesTypes() {
+        OrderMapper mapper = Mockito.mock(OrderMapper.class);
+        var service = com.bike.server.common.CustomerScopeTestSupport.isolated(new OrderServiceImpl(mapper));
+        Mockito.when(mapper.selectPage(Mockito.isNull(), Mockito.isNull(), Mockito.isNull(), Mockito.eq(java.util.List.of("DOMESTIC", "PENDING")), Mockito.eq(0L), Mockito.eq(20L))).thenReturn(java.util.List.of());
+        assertThat(service.list(null, null, " DOMESTIC,PENDING,DOMESTIC ", 1, 20).records()).isEmpty();
+        assertThatThrownBy(() -> service.list(null, null, "DOMESTIC,UNKNOWN", 1, 20)).isInstanceOf(BusinessException.class);
+        assertThat(SalesType.ofPi("EXPORT", null, true)).isEqualTo(SalesType.EXPORT);
+        assertThat(SalesType.ofPi("DOMESTIC", null, true)).isEqualTo(SalesType.DOMESTIC);
+        assertThat(SalesType.ofPi("DOMESTIC", null, false)).isEqualTo(SalesType.EUROPE);
+        assertThat(SalesType.ofPi("EXPORT", "CHINA_SALES", false)).isEqualTo(SalesType.EXPORT);
+        assertThat(SalesType.ofPi("DOMESTIC", "CZECH_PI", true)).isEqualTo(SalesType.EUROPE);
+    }
 }

@@ -38,6 +38,11 @@ public class ModuleServiceImpl implements ModuleService {
 
     @Override
     public ModulePageResponse list(String module, String keyword, long page, long pageSize) {
+        return list(module, keyword, null, page, pageSize);
+    }
+
+    @Override
+    public ModulePageResponse list(String module, String keyword, String salesTypes, long page, long pageSize) {
         if (!SUPPORTED_MODULES.contains(module)) {
             throw new BusinessException("MODULE_NOT_SUPPORTED", "不支持的业务模块");
         }
@@ -58,9 +63,15 @@ public class ModuleServiceImpl implements ModuleService {
         String sortColumn = List.of("创建时间", "操作时间", "时间", "组装时间", "开始时间", "入库日期", "查询时间")
                 .stream().filter(definition.columns()::contains).findFirst().orElse(definition.columns().getFirst());
         boolean financialAudit = com.bike.server.common.FinancialAuditAccess.allowed();
-        long total = moduleMapper.countRows(normalize(module), agentId, definition.columns(), normalizedKeyword, financialAudit);
-        var records = moduleMapper.selectRowsPage(normalize(module), agentId, definition.columns(), normalizedKeyword,
-                sortColumn, (normalizedPage - 1) * normalizedSize, normalizedSize, financialAudit);
+        var salesTypeFilter = "orders".equals(module) ? com.bike.server.order.SalesType.filter(salesTypes) : null;
+        long offset = (normalizedPage - 1) * normalizedSize;
+        // 未按销售类型筛选时沿用原查询签名。
+        long total = salesTypeFilter == null
+                ? moduleMapper.countRows(normalize(module), agentId, definition.columns(), normalizedKeyword, financialAudit)
+                : moduleMapper.countRows(normalize(module), agentId, definition.columns(), normalizedKeyword, financialAudit, salesTypeFilter);
+        var records = salesTypeFilter == null
+                ? moduleMapper.selectRowsPage(normalize(module), agentId, definition.columns(), normalizedKeyword, sortColumn, offset, normalizedSize, financialAudit)
+                : moduleMapper.selectRowsPage(normalize(module), agentId, definition.columns(), normalizedKeyword, sortColumn, offset, normalizedSize, financialAudit, salesTypeFilter);
         var columns = new java.util.ArrayList<>(definition.columns());
         if ("stock-out".equals(module)) {
             columns.addAll(List.of("购销合同方", "购销合同号"));
@@ -149,7 +160,7 @@ public class ModuleServiceImpl implements ModuleService {
         definitions.put("stock", definition("整车入库、出库及撤销记录", List.of("业务单号", "类型", "整车数量", "客户 / 仓库", "操作人", "操作时间", "状态", "聚合码", "创建时间", "修改时间"), "新建出入库单"));
         definitions.put("stock-in", definition("整车入库记录及撤销状态", List.of("业务单号", "类型", "整车数量", "客户 / 仓库", "操作人", "操作时间", "状态", "聚合码", "创建时间", "修改时间"), "办理入库"));
         definitions.put("stock-out", definition("整车出库记录及撤销状态", List.of("业务单号", "类型", "整车数量", "客户 / 仓库", "操作人", "操作时间", "状态", "聚合码", "创建时间", "修改时间", "出库备注"), "办理出库"));
-        definitions.put("orders", definition("客户订单、出库进度与车辆明细", List.of("订单号", "客户", "车型", "订单数量", "已出库", "计划发货", "状态", "来源锁定", "占用截止", "占用状态", "备注", "创建时间", "修改时间"), "新建销售订单"));
+        definitions.put("orders", definition("客户订单、出库进度与车辆明细", List.of("订单号", "客户", "车型", "订单数量", "已出库", "计划发货", "状态", "来源锁定", "占用截止", "占用状态", "备注", "创建时间", "修改时间", "销售类型"), "新建销售订单"));
         definitions.put("agents", definition("代理商基础资料与联系信息", List.of("代理商编号", "代理商名称", "联系人", "联系电话", "状态", "创建时间", "修改时间"), "新增代理商"));
         definitions.put("trace", definition("通过聚合码查看完整链路，车架与部件编码支持辅助查询", List.of("查询对象", "聚合码", "当前状态", "最近操作", "订单号", "客户", "查询时间", "创建时间", "修改时间"), "开始追溯查询"));
         definitions.put("parts", definition("零部件来料、质检和绑定状态", List.of("零部件 SN", "类型", "供应商", "批次", "绑定状态", "当前车架", "状态", "聚合码", "创建时间", "修改时间"), "新增零部件"));

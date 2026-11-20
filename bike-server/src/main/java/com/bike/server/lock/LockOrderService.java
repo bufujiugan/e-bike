@@ -31,8 +31,22 @@ public class LockOrderService {
         records.forEach(OrderServiceImpl::redactReservationForAgent);
         return new PageResponse<>(records,p,size,reservations.countForLock(id));
     }
+    /** 锁定页直接转单：只允许内销购销合同。 */
     @Transactional
     public SalesOrderView convert(long id,LockOrderRequest request){
+        // 转单前必须明确去向；系统不能凭客户或币种猜测内外销。
+        if(request.salesType()==null)
+            throw new BusinessException("ORDER_SALES_TYPE_REQUIRED","请选择转单去向：内销购销合同、外销 PI 或欧洲 PI");
+        if(!SalesType.DOMESTIC.equals(request.salesType()))
+            throw new BusinessException("LOCK_CONVERT_USE_PI","外销及欧洲业务请在对应菜单中从 SKU 锁定生成 PI，不在此直接生成订单");
+        return createOrder(id,request,SalesType.DOMESTIC);
+    }
+    /** 锁定转 PI 时由 PI 转换在同一事务内生成履约订单，销售类型取自 PI 的销售入口。 */
+    @Transactional
+    public SalesOrderView convertForPi(long id,LockOrderRequest request,String salesType){
+        return createOrder(id,request,SalesType.require(salesType));
+    }
+    private SalesOrderView createOrder(long id,LockOrderRequest request,String salesType){
         CurrentOperator.requireInternalWebAccess();CurrentOperator.requirePermission("AGENT_LOCK_WRITE");CurrentOperator.requirePermission("ORDER_WRITE");
         customerScope.requireCustomer(request.customerId());
         guard.lock();
@@ -58,7 +72,7 @@ public class LockOrderService {
             throw new BusinessException("INVENTORY_LOCK_CONFLICT","合格库存不足以支撑现有占用，请处理隔离或补足库存");
         if(locks.convert(id,request.quantity())!=1)throw new BusinessException("INVENTORY_LOCK_CONFLICT","转换数量超过剩余量或锁定已关闭");
         String no="SO"+UUID.randomUUID().toString().replace("-","").substring(0,18).toUpperCase();
-        var orderRequest=new SalesOrderCreateRequest(request.customerId(),lock.getAgentId(),lock.getProductModelId(),request.quantity(),request.plannedShipDate(),"来源锁定："+lock.getLockNo());
+        var orderRequest=new SalesOrderCreateRequest(request.customerId(),lock.getAgentId(),lock.getProductModelId(),request.quantity(),request.plannedShipDate(),"来源锁定："+lock.getLockNo(),salesType);
         if(orders.insertOrder(no,orderRequest,CurrentOperator.id())!=1||orders.insertItem(no,orderRequest)!=1)throw new BusinessException("ORDER_CREATE_FAILED","转单失败");
         SalesOrderView order=orders.selectByNo(no);
         if(reservations.insert(order.getId(),id,request.requestId(),lock.getProductModelId(),request.quantity(),lock.getExpireTime())!=1)throw new BusinessException("ORDER_CREATE_FAILED","订单占用保存失败");

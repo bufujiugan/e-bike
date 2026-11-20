@@ -9,6 +9,7 @@ import AppIcon from './components/AppIcon.vue'
 import AppLayout from './components/layout/AppLayout.vue'
 import AccountSettingsDialog from './components/layout/AccountSettingsDialog.vue'
 import BusinessModulePage from './views/BusinessModulePage.vue'
+import { salesTypeOptions, salesTypeNavKey, setSalesIntent, type SalesIntent, type SalesType } from './sales-routing'
 import DashboardPage from './views/DashboardPage.vue'
 import RecordDetails from './components/RecordDetails.vue'
 import ProductionManager from './components/ProductionManager.vue'
@@ -372,7 +373,7 @@ function locateLinkedOrder(orderNo: string) {
   linkedOrdersVisible.value = false
   journeyOrderNo.value = orderNo
 }
-const lockOrderForm = reactive({ lockId: 0, lockNo: '', quantity: 1, remaining: 1, fixedCustomer: false, skuCode: '', customerId: null as number | null, plannedShipDate: '', requestId: '' })
+const lockOrderForm = reactive({ lockId: 0, lockNo: '', quantity: 1, remaining: 1, fixedCustomer: false, skuCode: '', customerId: null as number | null, plannedShipDate: '', requestId: '', salesType: '' as '' | SalesType, europeTradeType: 'EXPORT' as 'DOMESTIC' | 'EXPORT' })
 const canConvertLock = computed(() => Boolean(authContext.value && !authContext.value.roles.includes('WEB_AGENT') &&
   (isSuperAdmin(authContext.value) || (hasPermission(authContext.value,'ORDER_WRITE') && hasPermission(authContext.value,'AGENT_LOCK_WRITE')))))
 function canRenewOrderReservation(row: string[]) {
@@ -382,16 +383,31 @@ function canRenewOrderReservation(row: string[]) {
       (['FULFILLED', '已履约'].includes(row[9]) && Boolean(row[8] && row[8] !== '-')))
 }
 
+// 锁定转单先明确去向：内销在此生成订单；外销、欧洲进入对应菜单从锁定生成 PI，不在此建单。
+function continueLockToPi() {
+  const salesType = lockOrderForm.salesType
+  if (salesType !== 'EXPORT' && salesType !== 'EUROPE') return
+  const customer = masterOptions.customers.find((item: { id: number }) => item.id === lockOrderForm.customerId) as { name?: string } | undefined
+  setSalesIntent({ kind: 'lock', salesType, europeTradeType: salesType === 'EUROPE' ? lockOrderForm.europeTradeType : undefined, lockId: lockOrderForm.lockId, lockNo: lockOrderForm.lockNo, customerId: lockOrderForm.customerId, customerName: customer?.name })
+  lockOrderVisible.value = false
+  navigate(salesTypeNavKey(salesType))
+}
+function continueOrderToPi(intent: SalesIntent) {
+  setSalesIntent(intent)
+  journeyOrderNo.value = ''
+  navigate(salesTypeNavKey(intent.salesType))
+}
 async function submitLockOrder() {
+  if (lockOrderForm.salesType !== 'DOMESTIC') { ElMessage.error('请先选择转单去向'); return }
   if (!lockOrderForm.customerId) { ElMessage.error('请选择订单客户'); return }
   lockOrderSubmitting.value = true
   try {
     const response = await axios.post(`/api/inventory-locks/${lockOrderForm.lockId}/orders`, {
       customerId: lockOrderForm.customerId, quantity: lockOrderForm.quantity, requestId: lockOrderForm.requestId,
-      plannedShipDate: lockOrderForm.plannedShipDate || null
+      plannedShipDate: lockOrderForm.plannedShipDate || null, salesType: 'DOMESTIC'
     }, authConfig())
     lockOrderVisible.value = false
-    ElMessage.success(`已创建订单 ${response.data.data.orderNo}，库存占用已保留`)
+    ElMessage.success(`已创建内销订单 ${response.data.data.orderNo}，库存占用已保留；请在订单办理中生成购销合同后确认订单`)
     workflowRefreshKey.value++
     if (hasPermission(authContext.value, 'ORDER_READ')) journeyOrderNo.value = response.data.data.orderNo
     await loadModule(activeView.value)
@@ -565,7 +581,7 @@ async function loadModule(module: string) {
   dataLoading.value = true
   dataError.value = ''
   try {
-    const response = await axios.get(`/api/modules/${module}`, { params: { keyword: moduleSearch.value.trim() || undefined, page: modulePage.value, pageSize: modulePageSize.value }, headers: { Authorization: `Bearer ${localStorage.getItem('bike_access_token')}` } })
+    const response = await axios.get(`/api/modules/${module}`, { params: { keyword: moduleSearch.value.trim() || undefined, salesType: module === 'orders' && !isAgentAccount.value ? 'DOMESTIC,PENDING' : undefined, page: modulePage.value, pageSize: modulePageSize.value }, headers: { Authorization: `Bearer ${localStorage.getItem('bike_access_token')}` } })
     if (requestVersion !== moduleRequestVersion || activeView.value !== module || !loggedIn.value) return
     modulePageData.value[module] = response.data.data
     lastLoadedAt.value = new Date().toLocaleString('zh-CN', {hour12:false})
@@ -895,7 +911,7 @@ async function changeInventoryLock(row: string[], action: 'release' | 'convert')
       }
       const customers = await axios.get('/api/master/customers', authConfig())
       masterOptions.customers = customers.data.data.filter((customer: {status: string}) => customer.status === 'ENABLED')
-      Object.assign(lockOrderForm, { lockId: lock.id, lockNo: lock.lockNo, quantity: remaining, remaining, fixedCustomer: Boolean(lock.customerId), skuCode: lock.skuCode ?? '', customerId: lock.customerId ?? null, plannedShipDate: '', requestId: createUuid() })
+      Object.assign(lockOrderForm, { lockId: lock.id, lockNo: lock.lockNo, quantity: remaining, remaining, fixedCustomer: Boolean(lock.customerId), skuCode: lock.skuCode ?? '', customerId: lock.customerId ?? null, plannedShipDate: '', requestId: createUuid(), salesType: '', europeTradeType: 'EXPORT' })
       lockOrderVisible.value = true
       return
     }
@@ -1097,7 +1113,7 @@ async function submitPrimaryAction() {
     } else if (actionKind.value === 'order') {
       endpoint = editingId.value === null ? '/api/orders' : `/api/orders/${editingId.value}`
       actionMethod = editingId.value === null ? 'post' : 'put'
-      payload = { customerId: Number(actionForm.customerId), agentId: actionForm.agentId ? Number(actionForm.agentId) : null, modelId: Number(actionForm.modelId), orderQty: Number(actionForm.orderQty), plannedShipDate: actionForm.plannedShipDate || null, remark: actionForm.remark || null }
+      payload = { customerId: Number(actionForm.customerId), agentId: actionForm.agentId ? Number(actionForm.agentId) : null, modelId: Number(actionForm.modelId), orderQty: Number(actionForm.orderQty), plannedShipDate: actionForm.plannedShipDate || null, remark: actionForm.remark || null, ...(editingId.value === null ? { salesType: 'DOMESTIC' } : {}) }
     } else if (actionKind.value === 'user') {
       endpoint = editingId.value === null ? '/api/users' : `/api/users/${editingId.value}`
       actionMethod = editingId.value === null ? 'post' : 'put'
@@ -1186,17 +1202,17 @@ async function submitPrimaryAction() {
       <TraceQuery v-else-if="activeView === 'trace' && !passwordChangeVisible" />
       <SkuInventoryPanel v-else-if="activeView === 'sku-inventory' && !passwordChangeVisible" :context="authContext" @navigate="navigate" @convert="changeInventoryLock([$event], 'convert')" />
       <EuropeSalesWorkspace v-else-if="activeView === 'europe-orders' && !passwordChangeVisible" :context="authContext" @navigate="navigate" />
-      <PiWorkspace v-else-if="activeView === 'pis' && !passwordChangeVisible" :context="authContext" @navigate="navigate" />
+      <PiWorkspace v-else-if="activeView === 'pis' && !passwordChangeVisible" :context="authContext" :allow-create="false" generic-entry @navigate="navigate" />
       <CustomerScopeManager v-else-if="activeView === 'customer-scopes' && !passwordChangeVisible && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'CUSTOMER_SCOPE_MANAGE')" />
       <FileReviewManager v-else-if="activeView === 'file-reviews' && !passwordChangeVisible && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'FILE_REVIEW_MANAGE')" />
       <AfterSalesWorkspace v-else-if="activeView === 'after-sales' && !passwordChangeVisible" :auth-context="authContext" />
       <BusinessModulePage v-else :module-key="activeView" :module="activeModule" :title="activeNav?.label ?? '业务记录'" v-model:search="moduleSearch" v-model:page="modulePage" v-model:page-size="modulePageSize" :loading="dataLoading" :error="dataError" :context="authContext" :column-width="moduleColumnWidth" @refresh="loadModule(activeView)" @reset="moduleSearch = ''" @page-change="loadModule(activeView)" @size-change="modulePage = 1; loadModule(activeView)">
         <template #before-list><CustomerProfiles v-if="activeView === 'customers' && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR')" :can-write="hasPermission(authContext, 'CUSTOMER_PROFILE_WRITE')" /></template>
         <template #actions><CustomerAccountCreate v-if="activeView === 'users' && isSuperAdmin(authContext)" @created="loadModule('users')" /><div class="module-actions"><button v-if="hasPermission(authContext, 'DATA_EXPORT') && ['parts','inventory','stock-in','stock-out','stock','orders','rework'].includes(activeView)" class="secondary-action" @click="downloadModule(activeView === 'operation-logs' ? 'logs' : activeView)">导出当前查询</button><button v-if="activeView === 'parts' && canImportActiveModule" class="secondary-action" @click="downloadPartsTemplate">下载部件导入模板</button></div><PermissionGate :allowed="canShowPrimaryAction"><div class="module-actions"><button v-if="canImportActiveModule" class="secondary-action" @click="chooseImport(activeView)">导入 Excel</button><button class="primary-action" @click="openPrimaryAction">＋ {{ activeModule?.action }}</button><input ref="importInput" class="hidden-file-input" type="file" accept=".xlsx,.xls" @change="importModule" /></div></PermissionGate></template>
-        <template #row-actions="{ row }"><button v-if="activeView === 'orders'" class="row-action" @click="journeyOrderNo = row[0]">订单办理</button><button v-if="['inventory-locks', 'agent-locks', 'agent-dashboard'].includes(activeView) && hasPermission(authContext, 'ORDER_READ')" class="row-action" @click="openLinkedOrders(row)">关联订单</button><button v-if="activeView === 'orders' && canRenewOrderReservation(row)" class="row-action" @click="manageOrderReservation(row, 'renew')">{{ ['FULFILLED', '已履约'].includes(row[9]) ? '续占用以撤销出库' : '重新占用' }}</button><button v-if="activeView === 'orders' && canWriteActiveModule && ['PARTIAL_SHIPPED', '部分出库'].includes(row[6])" class="row-action" @click="manageOrderReservation(row, 'close')">关闭剩余</button><button v-if="activeView === 'agents' && isSuperAdmin(authContext)" class="row-action" @click="editAgentAccess(row)">车型授权</button><CustomerScopeEditor v-if="activeView === 'users' && hasPermission(authContext, 'CUSTOMER_SCOPE_MANAGE') && ['WEB_ADMIN', 'WEB_OPERATOR'].includes(row[2])" :username="row[0]" /><button v-if="!(activeView === 'users' && row[2] === 'CUSTOMER')" class="row-action" @click="openRowAction(row)">{{ activeView === 'orders' && ((row[7] && row[7] !== '-') || !['DRAFT','PENDING','草稿','待确认'].includes(row[6])) ? '查看详情' : rowActionLabel }}</button><button v-if="canWriteActiveModule && ['users', 'roles', 'workstations', 'locations'].includes(activeView)" class="row-action" @click="toggleSystemStatus(row)">{{ row[activeView === 'locations' ? 4 : 3] === '启用' ? '停用' : '启用' }}</button><button v-if="canWriteActiveModule && activeView === 'orders' && ['DRAFT', 'PENDING', '草稿', '待确认'].includes(row[6])" class="row-action" @click="changeOrderStatus(row, 'confirm')">确认</button><button v-if="canWriteActiveModule && activeView === 'orders' && !['SHIPPED', 'PARTIAL_SHIPPED', 'CANCELLED', 'CLOSED', '已完成', '部分出库', '已作废', '已关闭'].includes(row[6])" class="row-action danger-action" @click="changeOrderStatus(row, 'cancel')">作废</button><button v-if="canWriteActiveModule && ['inventory-locks', 'agent-locks'].includes(activeView) && ['锁定中', '部分转订单', 'LOCKED', 'PARTIAL_CONVERTED'].includes(row[7])" class="row-action" @click="changeInventoryLock(row, 'release')">释放</button><button v-if="canWriteActiveModule && ['inventory-locks', 'agent-locks'].includes(activeView) && ['锁定中', '部分转订单', 'LOCKED', 'PARTIAL_CONVERTED'].includes(row[7]) && canConvertLock && Number(row[3]) - Number(row[4]) - Number(row[5]) > 0" class="row-action" @click="changeInventoryLock(row, 'convert')">转订单</button><button v-if="canWriteActiveModule && ['stock-in', 'stock-out'].includes(activeView) && ['已完成', 'COMPLETED'].includes(row[6])" class="row-action danger-action" @click="cancelStockRecord(row)">撤销</button></template>
+        <template #row-actions="{ row }"><button v-if="activeView === 'orders'" class="row-action" @click="journeyOrderNo = row[0]">订单办理</button><button v-if="['inventory-locks', 'agent-locks', 'agent-dashboard'].includes(activeView) && hasPermission(authContext, 'ORDER_READ')" class="row-action" @click="openLinkedOrders(row)">关联订单</button><button v-if="activeView === 'orders' && canRenewOrderReservation(row)" class="row-action" @click="manageOrderReservation(row, 'renew')">{{ ['FULFILLED', '已履约'].includes(row[9]) ? '续占用以撤销出库' : '重新占用' }}</button><button v-if="activeView === 'orders' && canWriteActiveModule && ['PARTIAL_SHIPPED', '部分出库'].includes(row[6])" class="row-action" @click="manageOrderReservation(row, 'close')">关闭剩余</button><button v-if="activeView === 'agents' && isSuperAdmin(authContext)" class="row-action" @click="editAgentAccess(row)">车型授权</button><CustomerScopeEditor v-if="activeView === 'users' && hasPermission(authContext, 'CUSTOMER_SCOPE_MANAGE') && ['WEB_ADMIN', 'WEB_OPERATOR'].includes(row[2])" :username="row[0]" /><button v-if="!(activeView === 'users' && row[2] === 'CUSTOMER')" class="row-action" @click="openRowAction(row)">{{ activeView === 'orders' && ((row[7] && row[7] !== '-') || !['DRAFT','PENDING','草稿','待确认'].includes(row[6])) ? '查看详情' : rowActionLabel }}</button><button v-if="canWriteActiveModule && ['users', 'roles', 'workstations', 'locations'].includes(activeView)" class="row-action" @click="toggleSystemStatus(row)">{{ row[activeView === 'locations' ? 4 : 3] === '启用' ? '停用' : '启用' }}</button><button v-if="canWriteActiveModule && activeView === 'orders' && !['SHIPPED', 'PARTIAL_SHIPPED', 'CANCELLED', 'CLOSED', '已完成', '部分出库', '已作废', '已关闭'].includes(row[6])" class="row-action danger-action" @click="changeOrderStatus(row, 'cancel')">作废</button><button v-if="canWriteActiveModule && ['inventory-locks', 'agent-locks'].includes(activeView) && ['锁定中', '部分转订单', 'LOCKED', 'PARTIAL_CONVERTED'].includes(row[7])" class="row-action" @click="changeInventoryLock(row, 'release')">释放</button><button v-if="canWriteActiveModule && ['inventory-locks', 'agent-locks'].includes(activeView) && ['锁定中', '部分转订单', 'LOCKED', 'PARTIAL_CONVERTED'].includes(row[7]) && canConvertLock && Number(row[3]) - Number(row[4]) - Number(row[5]) > 0" class="row-action" @click="changeInventoryLock(row, 'convert')">转订单 / PI</button><button v-if="canWriteActiveModule && ['stock-in', 'stock-out'].includes(activeView) && ['已完成', 'COMPLETED'].includes(row[6])" class="row-action danger-action" @click="cancelStockRecord(row)">撤销</button></template>
       </BusinessModulePage>
     <template #dialogs>
-    <OrderJourney v-if="journeyOrderNo && !passwordChangeVisible && !isCustomerAccount" :order-no="journeyOrderNo" :context="authContext" @close="journeyOrderNo = ''" @changed="refreshOrderJourney" />
+    <OrderJourney v-if="journeyOrderNo && !passwordChangeVisible && !isCustomerAccount" :order-no="journeyOrderNo" :context="authContext" @close="journeyOrderNo = ''" @changed="refreshOrderJourney" @continue-pi="continueOrderToPi" />
     <ProductionFulfillmentGuide v-if="authContext && !isCustomerAccount" v-model="operationGuideVisible" :context="authContext" initial-view="flow" @navigate="navigate" @stage="openOperationGuideStage" />
     <el-dialog v-model="importDetailsVisible" title="导入结果" width="min(720px, 95vw)">
       <template v-if="importDetails"><p>成功 {{ importDetails.successRows }} 条，失败 {{ importDetails.failureRows }} 条。请按错误行修正后重新导入。</p>
@@ -1276,15 +1292,25 @@ async function submitPrimaryAction() {
       </el-form>
       <template #footer><el-button @click="actionDialogVisible = false">取消</el-button><el-button type="primary" :loading="actionSubmitting" @click="submitPrimaryAction">保存</el-button></template>
     </el-dialog>
-    <el-dialog v-model="lockOrderVisible" title="锁定转销售订单" width="560px" :close-on-click-modal="false">
-      <p>来源：{{ lockOrderForm.lockNo }}。转单保留库存占用和原到期时间，订单创建后需确认才能出库。</p>
-      <el-form label-width="100px">
-        <el-form-item v-if="lockOrderForm.skuCode" label="固定 SKU"><span>{{ lockOrderForm.skuCode }}</span></el-form-item>
+    <el-dialog v-model="lockOrderVisible" title="锁定转单 · 选择销售去向" width="min(720px, 96vw)" :close-on-click-modal="false">
+      <p>来源：{{ lockOrderForm.lockNo }}<template v-if="lockOrderForm.skuCode"> · 固定 SKU {{ lockOrderForm.skuCode }}</template>。系统不会根据客户或币种判断内外销，请先选择本次转单去向，选定后对应单据不可更改。</p>
+      <div class="lock-sales-types" role="radiogroup" aria-label="转单去向">
+        <button v-for="option in salesTypeOptions" :key="option.value" type="button" role="radio" :aria-checked="lockOrderForm.salesType === option.value" :class="{ active: lockOrderForm.salesType === option.value }" @click="lockOrderForm.salesType = option.value">
+          <strong>{{ option.title }}</strong><small>{{ option.menu }} · 模板：{{ option.template }}</small><span>{{ option.description }}</span>
+        </button>
+      </div>
+      <el-form v-if="lockOrderForm.salesType === 'DOMESTIC'" label-width="100px">
+        <el-alert title="转单保留库存占用和原到期时间。订单办理第一步先生成并核对购销合同，再确认订单，确认后才能出库。" type="info" :closable="false" />
         <el-form-item label="客户"><el-select v-model="lockOrderForm.customerId" :disabled="lockOrderForm.fixedCustomer" filterable><el-option v-for="customer in masterOptions.customers" :key="customer.id" :value="customer.id" :label="`${customer.code} · ${customer.name}`" /></el-select></el-form-item>
         <el-form-item label="转换数量"><el-input-number v-model="lockOrderForm.quantity" :min="1" :max="lockOrderForm.remaining" :precision="0" /></el-form-item>
         <el-form-item label="计划出库日"><el-date-picker v-model="lockOrderForm.plannedShipDate" value-format="YYYY-MM-DD" /></el-form-item>
       </el-form>
-      <template #footer><el-button @click="lockOrderVisible = false">取消</el-button><el-button type="primary" :loading="lockOrderSubmitting" @click="submitLockOrder">创建订单</el-button></template>
+      <template v-else-if="lockOrderForm.salesType === 'EUROPE'">
+        <el-radio-group v-model="lockOrderForm.europeTradeType" aria-label="欧洲贸易类型"><el-radio-button value="DOMESTIC">欧洲内销</el-radio-button><el-radio-button value="EXPORT">欧洲外销</el-radio-button></el-radio-group>
+        <el-alert title="将进入「欧洲销售与交付 → 正常 PI 销售」，按所选出货仓从这条锁定生成 PI，单据使用 France_1104_PI 模板。" type="info" :closable="false" />
+      </template>
+      <el-alert v-else-if="lockOrderForm.salesType === 'EXPORT'" title="将进入「销售订单 → 外销」，从这条锁定生成 PI，单据使用 260728英国builtPI 模板；收款达标后由 PI 流程生成履约订单。" type="info" :closable="false" />
+      <template #footer><el-button @click="lockOrderVisible = false">取消</el-button><el-button v-if="lockOrderForm.salesType === 'DOMESTIC'" type="primary" :loading="lockOrderSubmitting" @click="submitLockOrder">创建内销订单</el-button><el-button v-else type="primary" :disabled="!lockOrderForm.salesType" @click="continueLockToPi">{{ lockOrderForm.salesType ? '前往生成 PI' : '请先选择去向' }}</el-button></template>
     </el-dialog>
     <el-dialog v-model="agentAccessVisible" :title="`${agentAccessName} · 车型授权`" width="620px">
       <p>选择允许该代理商查看库存、锁定库存和提交采购意向的车型。清空后撤销全部车型授权；历史锁定仍可查看和释放。</p>

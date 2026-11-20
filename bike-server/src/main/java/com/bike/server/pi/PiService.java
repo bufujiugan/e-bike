@@ -13,6 +13,8 @@ public interface PiService {
     PiView get(long id);
     java.util.Map<String, Object> getDispatchBatch(long piId, long batchId);
     PiView create(PiCreateRequest request);
+    /** 页面新建：要求明确的销售入口（外销或欧洲），再按 create 保存草稿。 */
+    default PiView createFromSalesEntry(PiCreateRequest request) { return create(request); }
     PiView update(long id, PiCreateRequest request);
     PiView cancel(long id, PiCancelRequest request);
     PiView confirm(long id);

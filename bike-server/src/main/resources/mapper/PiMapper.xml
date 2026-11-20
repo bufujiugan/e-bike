@@ -22,7 +22,7 @@
         ORDER BY s.sku_code,s.id LIMIT 200
     </select>
     <select id="selectOrderOptions" resultType="map">
-        SELECT o.id,o.order_no orderNo,o.customer_id customerId,o.agent_id agentId,o.status,
+        SELECT o.id,o.order_no orderNo,o.customer_id customerId,o.agent_id agentId,o.status,o.sales_type salesType,
                i.product_model_id modelId,i.ordered_qty quantity,o.planned_ship_date plannedShipDate,
                a.agent_name agentName,ri.sku_id skuId,sku.sku_code skuCode,sku.product_name productName,
                sku.specification,sku.enabled,ri.ordered_qty-ri.closed_qty skuQuantity

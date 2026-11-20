@@ -61,6 +61,19 @@ public class PiOrderBindingServiceImpl implements PiOrderBindingService {
         }
     }
 
+    /** 经办人已为订单确定销售类型时，PI 的销售入口须与之一致；历史待选订单沿用原关联。 */
+    private void requireMatchingSalesType(PiView pi, com.bike.server.order.SalesOrderView order) {
+        if (order.getSelectedSalesType() == null) return;
+        PiDocumentSnapshot document = document(pi);
+        var business = document == null ? null : document.business();
+        // 尚未填写出货仓与出货属性的早期草稿无法判断销售类型，确认前另有业务条款校验。
+        if (business == null) return;
+        String expected = com.bike.server.order.SalesType.ofPi(pi.getTradeType(), business.salesChannel(), business.domesticShipment());
+        if (!expected.equals(order.getSelectedSalesType()))
+            fail("PI_ORDER_SALES_TYPE_MISMATCH", "来源订单 " + order.getOrderNo() + " 已确定为「"
+                    + com.bike.server.order.SalesType.label(order.getSelectedSalesType()) + "」，请在对应菜单办理");
+    }
+
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void requireConsistentFulfillment(PiView pi) {
@@ -76,6 +89,7 @@ public class PiOrderBindingServiceImpl implements PiOrderBindingService {
                 fail("PI_ORDER_CUSTOMER_MISMATCH", "PI与来源订单 " + order.getOrderNo() + " 的客户不一致");
             if (!Objects.equals(order.getAgentId(), pi.getAgentId()))
                 fail("PI_ORDER_AGENT_MISMATCH", "PI与来源订单 " + order.getOrderNo() + " 的代理商不一致，请以原订单为准");
+            requireMatchingSalesType(pi, order);
         }
         Map<Long, Long> expected = new TreeMap<>(), actual = new TreeMap<>();
         for (var item : pis.selectItems(pi.getId())) expected.merge(item.getSkuId(), (long) item.getQuantity(), Long::sum);

@@ -32,6 +32,9 @@ public class PiDocumentService {
     private static final Color PALE = new Color(235, 241, 245);
 
     public byte[] excel(PiView pi) {
+        if(PiUkInvoiceRenderer.VERSION.equals(pi.getDocumentRenderVersion())) return new PiUkInvoiceRenderer().excel(pi);
+        if(PiEuropeDocumentRendererV2.VERSION.equals(pi.getDocumentRenderVersion())) return new PiEuropeDocumentRendererV2().excel(pi);
+        if(PiDomesticContractRenderer.VERSION.equals(pi.getDocumentRenderVersion())) return new PiDomesticContractRenderer().excel(pi);
         if("PI_EUROPE_V1".equals(pi.getDocumentRenderVersion())) return new PiEuropeDocumentRenderer().excel(pi);
         if(java.util.Set.of("PI_V4","PI_V5","PI_INVOICE_V1").contains(Objects.toString(pi.getDocumentRenderVersion(),"")))return new PiReferenceExcelRenderer().render(pi, this::thumbnail);
         if("PI_V1".equals(pi.getDocumentRenderVersion()))return legacy.excel(pi);
@@ -108,6 +111,9 @@ public class PiDocumentService {
     }
 
     public byte[] pdf(PiView pi) {
+        if(PiUkInvoiceRenderer.VERSION.equals(pi.getDocumentRenderVersion())) return new PiUkInvoiceRenderer().pdf(pi);
+        if(PiEuropeDocumentRendererV2.VERSION.equals(pi.getDocumentRenderVersion())) return new PiEuropeDocumentRendererV2().pdf(pi);
+        if(PiDomesticContractRenderer.VERSION.equals(pi.getDocumentRenderVersion())) return new PiDomesticContractRenderer().pdf(pi);
         if("PI_EUROPE_V1".equals(pi.getDocumentRenderVersion())) return new PiEuropeDocumentRenderer().pdf(pi);
         if("PI_V5".equals(pi.getDocumentRenderVersion())) return new PiReferencePdfRenderer().render(pi, this::thumbnail);
         if("PI_V1".equals(pi.getDocumentRenderVersion()))return legacy.pdf(pi);

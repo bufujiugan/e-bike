@@ -140,7 +140,7 @@ onUnmounted(() => window.removeEventListener('popstate',syncStage))
     <ProductionManager v-if="['skus','tasks','prints'].includes(stage) && productionRead" :key="stage + ':' + (selectedSku?.id ?? '')" :view="stage" :username="username" :context="context" :initial-sku-id="selectedSku?.id" :initial-keyword="stage === 'skus' ? selectedSku?.skuCode : undefined" :can-manage="internal && hasPermission(context,'PRODUCTION_MANAGE')" :can-operate="hasPermission(context,'ASSEMBLY_OPERATE')" :can-report-issue="hasAnyPermission(context,['ASSEMBLY_OPERATE','REWORK_OPERATE'])" @navigate="navigate" @order="emit('order',$event)" @continue="nextStage" />
     <SkuInventoryPanel v-else-if="stage === 'inventory'" :key="selectedSku?.id ?? 'all'" :context="context" :initial-sku-id="selectedSku?.id" :initial-model-id="selectedSku?.modelId" @navigate="navigate" @convert="emit('convert',$event)" />
     <FulfillmentQueue v-else-if="stage === 'locks' || stage === 'orders'" :key="stage" :kind="stage" :context="context" :refresh-key="refreshKey" @convert="emit('convert',$event)" @order="emit('order',$event)" />
-    <PiWorkspace v-else-if="stage === 'pis'" :context="context" @navigate="navigate" />
+    <PiWorkspace v-else-if="stage === 'pis'" :context="context" :allow-create="false" generic-entry @navigate="navigate" />
     </template>
   </div>
 </template>

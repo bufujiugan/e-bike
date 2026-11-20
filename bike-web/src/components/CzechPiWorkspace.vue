@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { peekSalesIntent } from '../sales-routing'
 import type { PermissionContext } from '../permissions'
 import { hasRole } from '../permissions'
 import PiWorkspace from './PiWorkspace.vue'
@@ -10,6 +11,8 @@ const emit = defineEmits<{ navigate: [view: string] }>()
 // 历史 PI 保留原销售标识，欧洲页面的所有入口继续按实际出货仓查询。
 const mode = ref<PiSalesScenario | 'HISTORY'>('CZECH_EXPORT')
 const agent = computed(() => hasRole(props.context, 'WEB_AGENT') || props.context?.userType === 'AGENT')
+const intent = computed(() => agent.value ? null : peekSalesIntent('EUROPE'))
+watch(intent, value => { if (value) mode.value = value.europeTradeType === 'DOMESTIC' ? 'CZECH_DOMESTIC' : 'CZECH_EXPORT' }, { immediate: true })
 </script>
 
 <template>
@@ -24,7 +27,7 @@ const agent = computed(() => hasRole(props.context, 'WEB_AGENT') || props.contex
     </template>
     <PiWorkspace :key="agent ? 'agent' : mode" :context="context" europe
       :sales-scenario="agent || mode === 'HISTORY' ? undefined : mode"
-      :allow-create="mode !== 'HISTORY'" @navigate="emit('navigate', $event)" />
+      :allow-create="mode !== 'HISTORY'" :intent="mode === 'HISTORY' ? null : intent" @navigate="emit('navigate', $event)" />
   </section>
 </template>
 

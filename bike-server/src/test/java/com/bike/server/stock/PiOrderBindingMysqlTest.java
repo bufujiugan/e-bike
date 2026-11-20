@@ -145,7 +145,8 @@ class PiOrderBindingMysqlTest {
     private long order(SkuCommitmentMysqlTest.Fixture f, int quantity) {
         var lock = f.tx(() -> f.locks.create(new SkuLockRequest("source-lock", 1L, null, null, null,
                 List.of(new SkuLockRequest.Item(10, quantity))))).getFirst();
-        return f.tx(() -> f.conversion.convert(lock.getId(), new LockOrderRequest(1L, quantity, "source-order", null))).getId();
+        // 夹具 PI 为非国内出货且无入口标识（按欧洲 PI 归类），来源订单须为同一销售类型。
+        return f.tx(() -> f.conversion.convertForPi(lock.getId(), new LockOrderRequest(1L, quantity, "source-order", null, "EUROPE"), "EUROPE")).getId();
     }
     private PiCreateRequest request(Long orderId, int quantity) {
         var document = new PiDocumentSnapshot("卖方", null, null, null, null, null, null, null, "收款后发货", "自提", "DOMESTIC", "1");

@@ -11,6 +11,9 @@ const rows = ref<PiTemplate[]>([]), total = ref(0), page = ref(1), busy = ref(fa
 const sourceTemplate = ref<PiTemplate | null>(null), saving = ref(false), formError = ref('')
 const fields = [['templateCode', '模板编码'], ['templateVersion', '版本号'], ['sellerName', '卖方名称'], ['sellerAddress', '卖方地址'], ['sellerCountry', '卖方国家/地区'], ['sellerContactName', '卖方联系人'], ['sellerPhone', '卖方电话'], ['sellerEmail', '卖方Email'], ['bankName', '收款银行'], ['bankAccount', '收款账号'], ['beneficiary', '收款单位'], ['reason', '发布原因']] as const
 type TemplateField = typeof fields[number][0]
+// 选填：外销 / 欧洲单据按原件显示的银行附加资料和卖方登记号、VAT，未填写的栏目在单据中留空。
+const optionalFields = [['bankAddress', '银行地址 Bank Address', 500], ['swiftCode', 'SWIFT Code', 64], ['bankCode', 'Bank Code', 64], ['branchCode', 'Branch Code', 64], ['sellerRegistrationNo', '卖方登记号（如 KVK-No.）', 100], ['sellerVatNo', '卖方 VAT 号', 100]] as const
+type OptionalField = typeof optionalFields[number][0]
 const templateForm = ref<{ $el: HTMLElement }>()
 const fieldErrors = reactive<Partial<Record<TemplateField, string>>>({})
 const invalidFields = computed(() => fields.filter(([key]) => fieldErrors[key]))
@@ -40,7 +43,7 @@ async function focusField(key: TemplateField) {
   field?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   field?.querySelector<HTMLInputElement | HTMLTextAreaElement>('input:not(:disabled), textarea:not(:disabled)')?.focus({ preventScroll: true })
 }
-const emptyDraft = (): PiTemplatePublish => ({ templateCode: '', templateVersion: '', tradeType: props.tradeType || 'DOMESTIC', layoutCode: 'STANDARD_V3', sellerName: '', sellerAddress: '', sellerContact: '', sellerCountry: '', sellerContactName: '', sellerPhone: '', sellerEmail: '', bankName: '', bankAccount: '', beneficiary: '', reason: '' })
+const emptyDraft = (): PiTemplatePublish => ({ templateCode: '', templateVersion: '', tradeType: props.tradeType || 'DOMESTIC', layoutCode: 'STANDARD_V3', sellerName: '', sellerAddress: '', sellerContact: '', sellerCountry: '', sellerContactName: '', sellerPhone: '', sellerEmail: '', bankName: '', bankAccount: '', beneficiary: '', reason: '', bankAddress: '', swiftCode: '', bankCode: '', branchCode: '', sellerRegistrationNo: '', sellerVatNo: '' })
 const draft = reactive<PiTemplatePublish>(emptyDraft())
 const layoutOptions = computed(() => sourceTemplate.value && isSelectablePiLayout(sourceTemplate.value.layoutCode)
   && !piTemplateLayouts.some(layout => layout.value === sourceTemplate.value?.layoutCode)
@@ -53,6 +56,7 @@ function beginAdjustment(source?: PiTemplate) {
     // 只复制发布字段，旧版本和已生成单据继续保留原始资料。
     for (const [key] of fields) if (key !== 'reason') draft[key] = source[key] || ''
     draft.sellerContact = source.sellerContact || ''
+    for (const [key] of optionalFields) draft[key] = source[key] || ''
     draft.tradeType = source.tradeType
     draft.layoutCode = isSelectablePiLayout(source.layoutCode) ? source.layoutCode : 'STANDARD_V3'
     draft.templateVersion = `R${Date.now()}`
@@ -110,7 +114,7 @@ async function publish() {
       <el-table-column prop="sellerName" label="卖方" /><el-table-column prop="bankName" label="银行" /><el-table-column prop="bankAccount" label="账号" />
       <el-table-column label="创建时间" min-width="175"><template #default="s">{{ formatDateTime(s.row.publishedAt) }}</template></el-table-column>
       <el-table-column label="修改时间" min-width="175"><template #default="s">{{ formatDateTime(s.row.publishedAt) }}</template></el-table-column>
-      <el-table-column type="expand"><template #default="s"><el-descriptions :column="2" border><el-descriptions-item v-for="key in ['sellerAddress', 'sellerCountry', 'sellerContactName', 'sellerPhone', 'sellerEmail']" :key="key" :label="fields.find(f => f[0] === key)?.[1]">{{ s.row[key] || '历史未记录' }}</el-descriptions-item></el-descriptions></template></el-table-column>
+      <el-table-column type="expand"><template #default="s"><el-descriptions :column="2" border><el-descriptions-item v-for="key in ['sellerAddress', 'sellerCountry', 'sellerContactName', 'sellerPhone', 'sellerEmail']" :key="key" :label="fields.find(f => f[0] === key)?.[1]">{{ s.row[key] || '历史未记录' }}</el-descriptions-item><el-descriptions-item v-for="[key, label] in optionalFields" :key="key" :label="label">{{ s.row[key] || '未填写' }}</el-descriptions-item></el-descriptions></template></el-table-column>
       <el-table-column v-if="canManage || selectable" label="操作" :width="canManage && selectable ? 160 : 110" fixed="right"><template #default="s"><el-button v-if="canManage" link type="primary" @click="beginAdjustment(s.row)">调整模板</el-button><el-button v-if="selectable" link type="primary" :disabled="!isSelectablePiLayout(s.row.layoutCode)" @click="emit('select', s.row)">选用</el-button></template></el-table-column>
     </el-table>
     <el-pagination v-model:current-page="page" :page-size="20" :total="total" layout="prev, pager, next, total" @current-change="load" />
@@ -125,6 +129,7 @@ async function publish() {
         <el-form-item label="PI 版式" required><el-select v-model="draft.layoutCode" aria-label="PI 版式"><el-option v-for="layout in layoutOptions" :key="layout.value" :value="layout.value" :label="layout.label" /></el-select></el-form-item>
         <el-form-item v-for="[key, label] in fields" :key="key" :label="label" required :error="fieldErrors[key]" :data-template-field="key"><el-input v-model="draft[key]" :aria-label="label" :aria-invalid="Boolean(fieldErrors[key])" :disabled="key === 'templateCode' && Boolean(sourceTemplate)" :placeholder="key === 'templateCode' ? '例如 EXPORT_01（大写字母、数字、_、-）' : key === 'templateVersion' ? '例如 V1.0' : undefined" :type="['sellerAddress', 'reason'].includes(key) ? 'textarea' : key === 'sellerEmail' ? 'email' : 'text'" :maxlength="key === 'sellerAddress' ? 1000 : key === 'reason' ? 500 : key === 'sellerEmail' ? 254 : ['sellerCountry', 'sellerContactName'].includes(key) ? 100 : key === 'sellerPhone' || key === 'templateCode' ? 64 : key === 'templateVersion' ? 32 : 200" @blur="validateField(key)" @input="fieldErrors[key] && validateField(key)" /></el-form-item>
         <el-form-item label="补充联系方式（可选）"><el-input v-model="draft.sellerContact" aria-label="补充联系方式" maxlength="300" /></el-form-item>
+        <el-form-item v-for="[key, label, max] in optionalFields" :key="key" :label="`${label}（选填）`" :data-template-field="key"><el-input v-model="draft[key as OptionalField]" :aria-label="label" :maxlength="max" :type="key === 'bankAddress' ? 'textarea' : 'text'" /></el-form-item>
       </el-form>
       <template #footer><div v-if="invalidFields.length" class="template-error-summary" role="alert">请修改：{{ invalidFields.map(([, label]) => label).join('、') }}。<el-button link type="danger" @click="focusField(invalidFields[0]![0])">定位第一处错误</el-button></div><div v-else-if="formError" class="template-error-summary" role="alert">{{ formError }}</div><el-button :disabled="saving" @click="editing = false">取消</el-button><el-button v-if="canManage" type="primary" :loading="saving" @click="publish">保存为新版本</el-button></template>
     </el-dialog>

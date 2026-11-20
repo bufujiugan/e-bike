@@ -129,7 +129,10 @@ public class PiBusinessServiceImpl implements PiBusinessService {
     }
     private void createReservedOrder(PiView pi,PiItemView item,boolean credit) {
         String no="SO"+UUID.randomUUID().toString().replace("-","").substring(0,18).toUpperCase();
-        var request=new SalesOrderCreateRequest(pi.getCustomerId(),pi.getAgentId(),item.getProductModelId(),item.getQuantity(),pi.getPlannedShipDate(),(credit?"PI后付款授权履约：":"PI收款后履约：")+pi.getPiNo());
+        var snapshot=pi.getDocument()!=null?pi.getDocument():document(pi.getId());
+        var business=snapshot==null?null:snapshot.business();
+        var request=new SalesOrderCreateRequest(pi.getCustomerId(),pi.getAgentId(),item.getProductModelId(),item.getQuantity(),pi.getPlannedShipDate(),(credit?"PI后付款授权履约：":"PI收款后履约：")+pi.getPiNo(),
+                com.bike.server.order.SalesType.ofPi(pi.getTradeType(),business==null?null:business.salesChannel(),business==null?null:business.domesticShipment()));
         if(orders.insertOrder(no,request,CurrentOperator.id())!=1||orders.insertItem(no,request)!=1)fail("PI_RESERVATION_FAILED","履约订单创建失败");
         long orderId=orders.selectByNo(no).getId();String lockNo="LK"+UUID.randomUUID().toString().replace("-","").substring(0,16).toUpperCase();
         if((credit?profileMapper.insertCreditSource(pi.getId(),item.getSkuId(),item.getQuantity(),lockNo,CurrentOperator.id()):mapper.insertPaidSource(pi.getId(),item.getSkuId(),item.getQuantity(),lockNo,CurrentOperator.id()))!=1)fail("PI_RESERVATION_FAILED","收款占用来源保存失败");

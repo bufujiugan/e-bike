@@ -27,7 +27,7 @@ class AuditPrivacyMysqlTest {
                 System.getenv("BIKE_MYSQL_TEST_USER"), System.getenv("BIKE_MYSQL_TEST_PASSWORD"));
         var configuration = new Configuration(new Environment("audit-privacy", new JdbcTransactionFactory(), source));
         String prefix = "accept_audit_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12) + "_";
-        for (String name : List.of("AuditPolicyMapper", "InventoryPolicyMapper", "ModuleMapper", "DashboardMapper")) {
+        for (String name : List.of("AuditPolicyMapper", "InventoryPolicyMapper", "OrderMapper", "ModuleMapper", "DashboardMapper")) {
             try (var stream = Resources.getResourceAsStream("mapper/" + name + ".xml")) {
                 String xml = new String(stream.readAllBytes(), StandardCharsets.UTF_8).replace("bike_", prefix);
                 new XMLMapperBuilder(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)), configuration,

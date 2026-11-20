@@ -74,6 +74,11 @@ public class OrderContractServiceImpl implements OrderContractService {
     }
 
     private String unavailableReason(SalesOrderView order, boolean hasLinkedPi) {
+        // 是否内销由经办人在转单、建单或订单办理时明确选择，不能根据有无 PI 推断。
+        if (order.getSalesType() == null) return "请先选择本订单的销售类型；选择“内销 · 购销合同”后才能生成购销合同";
+        if (!SalesType.DOMESTIC.equals(order.getSalesType())) {
+            return "本订单为「" + SalesType.label(order.getSalesType()) + "」，请在对应 PI 流程办理单据，不生成国内购销合同";
+        }
         if (hasLinkedPi) {
             var scenarios = mapper.selectLinkedPiScenarios(order.getId());
             // 仅对明确的国内内销历史记录补开合同，不解除既有 PI 的收款和出库约束。

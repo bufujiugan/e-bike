@@ -34,6 +34,12 @@ public class PiConversionService {
         String query=keyword==null||keyword.isBlank()?null:keyword.trim();
         return new PageResponse<>(series.lockOptions(customerId,agentId,query,(p-1)*20),p,20,series.countLockOptions(customerId,agentId,query));
     }
+    /** 页面“从 SKU 锁定生成 PI”：与新建 PI 相同，须来自外销或欧洲销售入口。 */
+    @Transactional
+    public PiView convertFromSalesEntry(PiConversionRequest input) {
+        if(input!=null) PiServiceImpl.requireSalesEntry(input.pi());
+        return convert(input);
+    }
     @Transactional
     public PiView convert(PiConversionRequest input) {
         CurrentOperator.requireInternalWebAccess();
@@ -64,8 +70,10 @@ public class PiConversionService {
         for(var item:request.pi().items()) actual.merge(item.skuId(),(long)item.quantity(),Long::sum);
         if(!expected.equals(actual)) fail("ORDER_SKU_MISMATCH","PI各SKU数量必须等于本次来源锁定转换量");
         var orders=new ArrayList<Long>();
-        for(var source:sources) orders.add(converter.convert(source.lockId(),new LockOrderRequest(request.pi().customerId(),source.quantity(),
-                "PI_"+UUID.randomUUID(),request.pi().plannedShipDate())).getId());
+        var business=request.pi().document()==null?null:request.pi().document().business();
+        String salesType=com.bike.server.order.SalesType.ofPi(request.pi().tradeType(),business==null?null:business.salesChannel(),business==null?null:business.domesticShipment());
+        for(var source:sources) orders.add(converter.convertForPi(source.lockId(),new LockOrderRequest(request.pi().customerId(),source.quantity(),
+                "PI_"+UUID.randomUUID(),request.pi().plannedShipDate(),salesType),salesType).getId());
         // Service proxy calls join this transaction: a PI validation/audit failure rolls every order back.
         PiView pi=pis.create(request.pi());
         for(long orderId:orders) if(series.link(pi.getId(),orderId,"SKU_CONVERSION")!=1) fail("PI_CONVERSION_FAILED","履约订单关联失败");

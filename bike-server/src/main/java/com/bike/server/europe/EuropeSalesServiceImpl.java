@@ -127,6 +127,8 @@ public class EuropeSalesServiceImpl implements EuropeSalesService {
                 fail("FACTORY_ORDER_CUSTOMER_MISMATCH","关联销售订单须属于同一客户");
             scope.requireCustomer(order.getCustomerId());
             if(series.currentPiForOrder(orderId)!=null) fail("FACTORY_ORDER_HAS_PI","该销售订单已关联 PI，请使用正常 PI 销售流程");
+            if(order.getSelectedSalesType()!=null && !com.bike.server.order.SalesType.EUROPE.equals(order.getSelectedSalesType()))
+                fail("FACTORY_ORDER_SALES_TYPE_MISMATCH","该销售订单已确定为「"+com.bike.server.order.SalesType.label(order.getSelectedSalesType())+"」，不能关联欧洲工厂直签");
             Long owner=mapper.selectFactoryOrderForSalesOrder(orderId);
             if(owner!=null && owner!=id) fail("FACTORY_ORDER_LINK_CONFLICT","该销售订单已关联其他工厂直签订单");
             if(owner==null && mapper.insertOrderLink(id,orderId)!=1) conflict();

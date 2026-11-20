@@ -38,7 +38,7 @@ public class PiController {
 
     @PostMapping("/from-locks")
     public ApiResponse<PiView> convert(@Valid @RequestBody PiConversionRequest request) {
-        return ApiResponse.success("锁定已原子生成履约订单和PI草稿", conversions.convert(request));
+        return ApiResponse.success("锁定已原子生成履约订单和PI草稿", conversions.convertFromSalesEntry(request));
     }
     @GetMapping("/lock-options")
     public ApiResponse<PageResponse<java.util.Map<String,Object>>> lockOptions(@RequestParam long customerId,
@@ -99,7 +99,7 @@ public class PiController {
 
     @PostMapping
     public ApiResponse<PiView> create(@Valid @RequestBody PiCreateRequest request) {
-        return ApiResponse.success("PI 草稿已创建", service.create(request));
+        return ApiResponse.success("PI 草稿已创建", service.createFromSalesEntry(request));
     }
 
     @PostMapping("/{id}/confirm")

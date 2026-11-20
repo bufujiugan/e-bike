@@ -52,19 +52,33 @@ public class PiTemplateService {
                 ||!Objects.equals(Objects.requireNonNullElse(t.sellerContact(),""),Objects.requireNonNullElse(d.sellerContact(),""))||(d.business()==null&&!Objects.equals(t.bankName(),d.bankName()))
                 ||(d.business()==null&&(!Objects.equals(t.bankAccount(),d.bankAccount())||!Objects.equals(t.beneficiary(),d.beneficiary())))
                 ||!Objects.equals(t.sellerCountry(),d.sellerCountry())||!Objects.equals(t.sellerContactName(),d.sellerContactName())
-                ||!Objects.equals(t.sellerPhone(),d.sellerPhone())||!Objects.equals(t.sellerEmail(),d.sellerEmail()))
+                ||!Objects.equals(t.sellerPhone(),d.sellerPhone())||!Objects.equals(t.sellerEmail(),d.sellerEmail())
+                // 卖方登记号与 VAT 随模板固定；银行附加资料与银行账户一样在有业务条款时可按本单调整。
+                ||!sameOptional(t.sellerRegistrationNo(),d.sellerRegistrationNo())||!sameOptional(t.sellerVatNo(),d.sellerVatNo())
+                ||(d.business()==null&&(!sameOptional(t.bankAddress(),d.bankAddress())||!sameOptional(t.swiftCode(),d.swiftCode())
+                    ||!sameOptional(t.bankCode(),d.bankCode())||!sameOptional(t.branchCode(),d.branchCode()))))
             throw new BusinessException("PI_TEMPLATE_SNAPSHOT_MISMATCH","卖方和银行资料须使用已发布模板；变更请发布新版本后重新选择");
     }
     public void selectRenderer(PiView pi) {
         var d=pi.getDocument();
-        pi.setDocumentRenderVersion(renderVersion(d==null?null:mapper.find(d.templateCode(),d.templateVersion()), d));
+        pi.setDocumentRenderVersion(renderVersion(d==null?null:mapper.find(d.templateCode(),d.templateVersion()), d, pi.getTradeType()));
     }
     static String renderVersion(PiTemplate template, PiDocumentSnapshot document) {
+        return renderVersion(template, document, template == null ? null : template.tradeType());
+    }
+    /**
+     * 单据版式由销售类型决定，已发布模板只提供卖方和银行资料：
+     * 外销（销售订单 → 外销）使用 260728英国builtPI 原件底板 PI_V6；欧洲销售与交付使用 France_1104_PI 的 PI_EUROPE_V2；
+     * 没有销售入口标识的历史 PI 按 SalesType.ofPi 归类，国内内销输出购销合同。仅用于草稿预览和新归档，已入队文件保留原版本。
+     */
+    static String renderVersion(PiTemplate template, PiDocumentSnapshot document, String tradeType) {
         if (document != null && document.business() != null) {
-            // 销售入口决定单据版式；已发布模板继续提供卖方和银行资料。
-            // PI_V5 为 260728英国builtPI 的五列参考版式，欧洲独立使用 France_1104。
-            if ("CHINA_SALES".equals(document.business().salesChannel())) return "PI_V5";
-            if ("CZECH_PI".equals(document.business().salesChannel())) return "PI_EUROPE_V1";
+            var business = document.business();
+            return switch (com.bike.server.order.SalesType.ofPi(tradeType, business.salesChannel(), business.domesticShipment())) {
+                case com.bike.server.order.SalesType.EUROPE -> PiEuropeDocumentRendererV2.VERSION;
+                case com.bike.server.order.SalesType.EXPORT -> PiUkInvoiceRenderer.VERSION;
+                default -> PiDomesticContractRenderer.VERSION;
+            };
         }
         return renderVersion(template);
     }
@@ -82,6 +96,9 @@ public class PiTemplateService {
     }
     static boolean isSelectableLayout(String layout) {
         return layout != null && Set.of("DOMESTIC_V3","EXPORT_V3","STANDARD_V3","INVOICE_V1").contains(layout);
+    }
+    private static boolean sameOptional(String expected,String actual){
+        return Objects.equals(expected==null||expected.isBlank()?null:expected.trim(),actual==null||actual.isBlank()?null:actual.trim());
     }
     private static BusinessException invalid(){return new BusinessException("PI_TEMPLATE_INVALID","须填写完整卖方国家、联系人、电话、Email及银行资料，并选择可用版式");}
 }

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- V59：销售订单销售类型及单据银行、税号资料。只由 V59__sales_document_routing 按顺序执行，已执行后不可修改。 -->
+<mapper namespace="com.bike.server.order.SalesDocumentSchemaMapper">
+  <update id="addOrderSalesType">
+    ALTER TABLE bike_sales_order
+      ADD COLUMN sales_type VARCHAR(16) NULL COMMENT '销售类型：DOMESTIC内销购销合同/EXPORT外销PI/EUROPE欧洲PI；NULL为历史订单待选类型' AFTER status,
+      ADD KEY idx_bike_sales_order_sales_type (sales_type, created_at)
+  </update>
+  <update id="addTemplateBankDetails">
+    ALTER TABLE bike_pi_template
+      ADD COLUMN bank_address VARCHAR(500) NULL COMMENT '收款银行地址',
+      ADD COLUMN swift_code VARCHAR(64) NULL COMMENT 'SWIFT Code',
+      ADD COLUMN bank_code VARCHAR(64) NULL COMMENT 'Bank Code',
+      ADD COLUMN branch_code VARCHAR(64) NULL COMMENT 'Branch Code',
+      ADD COLUMN seller_registration_no VARCHAR(100) NULL COMMENT '卖方商业登记号（如 KVK-No.）',
+      ADD COLUMN seller_vat_no VARCHAR(100) NULL COMMENT '卖方 VAT 号'
+  </update>
+</mapper>

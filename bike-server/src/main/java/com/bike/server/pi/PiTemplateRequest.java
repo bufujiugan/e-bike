@@ -17,6 +17,24 @@ public record PiTemplateRequest(
         @NotBlank(message="请填写卖方国家/地区") @Size(max=100, message="卖方国家/地区：最多100字") String sellerCountry,
         @NotBlank(message="请填写卖方联系人") @Size(max=100, message="卖方联系人：最多100字") String sellerContactName,
         @NotBlank(message="请填写卖方电话") @Size(max=64, message="卖方电话：最多64位") String sellerPhone,
-        @NotBlank(message="请填写卖方Email") @Email(message="卖方Email：请填写有效的邮箱地址，例如 sales@example.com") @Size(max=254, message="卖方Email：最多254位") String sellerEmail) {
-    public PiTemplateRequest { if(sellerContact==null)sellerContact=""; }
+        @NotBlank(message="请填写卖方Email") @Email(message="卖方Email：请填写有效的邮箱地址，例如 sales@example.com") @Size(max=254, message="卖方Email：最多254位") String sellerEmail,
+        @Size(max=500, message="银行地址：最多500字") String bankAddress,
+        @Size(max=64, message="SWIFT Code：最多64位") String swiftCode,
+        @Size(max=64, message="Bank Code：最多64位") String bankCode,
+        @Size(max=64, message="Branch Code：最多64位") String branchCode,
+        @Size(max=100, message="卖方登记号：最多100位") String sellerRegistrationNo,
+        @Size(max=100, message="卖方VAT号：最多100位") String sellerVatNo) {
+    public PiTemplateRequest {
+        if(sellerContact==null)sellerContact="";
+        bankAddress=trimToNull(bankAddress); swiftCode=trimToNull(swiftCode); bankCode=trimToNull(bankCode);
+        branchCode=trimToNull(branchCode); sellerRegistrationNo=trimToNull(sellerRegistrationNo); sellerVatNo=trimToNull(sellerVatNo);
+    }
+    /** V59 之前的请求字段，新增银行与税号资料为空。 */
+    public PiTemplateRequest(String templateCode,String templateVersion,String tradeType,String layoutCode,String sellerName,String sellerAddress,
+            String sellerContact,String bankName,String bankAccount,String beneficiary,String reason,String sellerCountry,String sellerContactName,
+            String sellerPhone,String sellerEmail) {
+        this(templateCode,templateVersion,tradeType,layoutCode,sellerName,sellerAddress,sellerContact,bankName,bankAccount,beneficiary,reason,
+                sellerCountry,sellerContactName,sellerPhone,sellerEmail,null,null,null,null,null,null);
+    }
+    private static String trimToNull(String value){return value==null||value.isBlank()?null:value.trim();}
 }

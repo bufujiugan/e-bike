@@ -93,9 +93,10 @@ public class PiQuantityService {
             } catch(com.fasterxml.jackson.core.JsonProcessingException error) {fail("PI_AUDIT_FAILED","PI数量修订审计无法保存");}
         }
         var pi=pis.selectById(piId);
+        String salesType=salesType(pi);
         for(var source:selected) {
-            var order=converter.convert(source.lockId(),new com.bike.server.lock.LockOrderRequest(pi.getCustomerId(),source.quantity(),
-                    "PI_REV_"+UUID.randomUUID(),pi.getPlannedShipDate()));
+            var order=converter.convertForPi(source.lockId(),new com.bike.server.lock.LockOrderRequest(pi.getCustomerId(),source.quantity(),
+                    "PI_REV_"+UUID.randomUUID(),pi.getPlannedShipDate(),salesType),salesType);
             if(series.link(piId,order.getId(),"SKU_REVISION")!=1
                     || quantities.convertedSource(piId,source.lockId(),order.getId())!=1
                     || orders.updateStatus(order.getId(),"CONFIRMED")!=1)
@@ -210,4 +211,14 @@ public class PiQuantityService {
     }
     private record Change(PiFulfillmentLine before,int quantity) {}
     private static void fail(String code,String message){throw new BusinessException(code,message);}
+    /** 修订新增来源生成的履约订单沿用 PI 的销售类型。 */
+    private String salesType(PiView pi) {
+        PiDocumentSnapshot document=pi.getDocument();
+        if(document==null&&pi.getDocumentJson()!=null) {
+            try { document=json.readValue(pi.getDocumentJson(),PiDocumentSnapshot.class); }
+            catch(com.fasterxml.jackson.core.JsonProcessingException error) { throw new IllegalStateException("PI业务资料读取失败",error); }
+        }
+        var business=document==null?null:document.business();
+        return com.bike.server.order.SalesType.ofPi(pi.getTradeType(),business==null?null:business.salesChannel(),business==null?null:business.domesticShipment());
+    }
 }

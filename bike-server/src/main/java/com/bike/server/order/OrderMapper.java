@@ -7,8 +7,11 @@ import java.util.List;
 
 @Mapper
 public interface OrderMapper {
-    List<SalesOrderView> selectPage(@Param("keyword") String keyword, @Param("status") String status, @Param("agentId") Long agentId, @Param("offset") long offset, @Param("limit") long limit);
-    long count(@Param("keyword") String keyword, @Param("status") String status, @Param("agentId") Long agentId);
+    List<SalesOrderView> selectPage(@Param("keyword") String keyword, @Param("status") String status, @Param("agentId") Long agentId, @Param("salesTypes") List<String> salesTypes, @Param("offset") long offset, @Param("limit") long limit);
+    long count(@Param("keyword") String keyword, @Param("status") String status, @Param("agentId") Long agentId, @Param("salesTypes") List<String> salesTypes);
+    default List<SalesOrderView> selectPage(String keyword, String status, Long agentId, long offset, long limit) { return selectPage(keyword, status, agentId, null, offset, limit); }
+    default long count(String keyword, String status, Long agentId) { return count(keyword, status, agentId, null); }
+    int assignSalesType(@Param("id") long id, @Param("salesType") String salesType);
     SalesOrderView selectById(@Param("id") long id);
     SalesOrderView selectByNo(@Param("orderNo") String orderNo);
     List<OrderVehicleView> selectShippedVehicles(@Param("orderId") long orderId);

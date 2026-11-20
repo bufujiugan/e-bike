@@ -29,11 +29,12 @@ class PiEuropeDocumentRendererTest {
         var selector=new PiTemplateService(templates,null,null,null);
         for(String trade:new String[]{"DOMESTIC","EXPORT"}) {
             var pi=sample(1);pi.setTradeType(trade);selector.selectRenderer(pi);
-            assertThat(pi.getDocumentRenderVersion()).isEqualTo("PI_EUROPE_V1");
+            // 新草稿与新归档使用修正后的 France 版式；已入队的 PI_EUROPE_V1 仍按原版本生成。
+            assertThat(pi.getDocumentRenderVersion()).isEqualTo(PiEuropeDocumentRendererV2.VERSION);
             var pis=mock(PiMapper.class);when(pis.selectItems(pi.getId())).thenReturn(pi.getItems());
             var archive=new PiExportArchive(null,pis,null,json,null);ReflectionTestUtils.setField(archive,"templates",templates);
             var saved=archive.publicSnapshot(pi);
-            assertThat(saved.getDocumentRenderVersion()).isEqualTo("PI_EUROPE_V1");
+            assertThat(saved.getDocumentRenderVersion()).isEqualTo(PiEuropeDocumentRendererV2.VERSION);
             assertThat(saved.getDocument().bankAccount()).isEqualTo("SAMPLE-ACCOUNT");
         }
         var ordinary=PiDocumentServiceTest.sample(1);selector.selectRenderer(ordinary);

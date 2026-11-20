@@ -5,6 +5,14 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public class SalesOrderView {
+    /** 生效销售类型（含历史 PI 推断）；为空表示待选类型。 */
+    private String salesType;
+    /** 经办人明确选择并保存的销售类型；历史推断时为空。 */
+    private String selectedSalesType;
+    public String getSalesType() { return salesType; }
+    public void setSalesType(String value) { salesType = value; }
+    public String getSelectedSalesType() { return selectedSalesType; }
+    public void setSelectedSalesType(String value) { selectedSalesType = value; }
     private Boolean hasLinkedPi;
     public Boolean getHasLinkedPi() { return hasLinkedPi; }
     public void setHasLinkedPi(Boolean value) { hasLinkedPi = value; }

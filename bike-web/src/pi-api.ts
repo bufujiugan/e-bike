@@ -20,10 +20,16 @@ export type PiDocument = {
   tradeTerms?: string | null; buyerCountry?: string | null; sellerCountry?: string | null
   buyerContactName?: string | null; buyerPhone?: string | null; buyerEmail?: string | null; businessOwner?: string | null
   sellerContactName?: string | null; sellerPhone?: string | null; sellerEmail?: string | null
+  // V59：银行附加资料、卖方登记号/VAT（随模板带入）及买方 VAT、发货地址、单据品类标题
+  bankAddress?: string | null; swiftCode?: string | null; bankCode?: string | null; branchCode?: string | null
+  sellerRegistrationNo?: string | null; sellerVatNo?: string | null
+  buyerVatNo?: string | null; dispatchAddress?: string | null; productCategory?: string | null
 }
 export type PiTemplate = Pick<PiDocument, 'templateCode' | 'templateVersion' | 'sellerName' | 'sellerAddress' | 'sellerContact' | 'bankName' | 'bankAccount' | 'beneficiary'> & {
   id: number; tradeType: string; layoutCode: string; publishReason: string; publishedAt: string
   sellerCountry: string | null; sellerContactName: string | null; sellerPhone: string | null; sellerEmail: string | null
+  bankAddress?: string | null; swiftCode?: string | null; bankCode?: string | null; branchCode?: string | null
+  sellerRegistrationNo?: string | null; sellerVatNo?: string | null
 }
 export type PiTemplatePublish = Omit<PiTemplate, 'id' | 'publishedAt' | 'publishReason'> & {
   reason: string; sellerCountry: string; sellerContactName: string; sellerPhone: string; sellerEmail: string
@@ -72,7 +78,7 @@ export type PiDispatchBatch = { id: number; batchNo: string; sourceType: string;
 export type PiLockOption = { id: number; lockNo: string; skuId: number; skuCode: string; productName: string; modelId: number; remainingQty: number; expireTime: string }
 export type PiMasterOption = { id: number; code: string; name: string }
 export type PiSkuOption = { id: number; modelId?: number; productModelId?: number; skuCode: string; productName: string; specification?: string; enabled?: boolean }
-export type PiOrderOption = { id: number; orderNo: string; customerId: number; agentId?: number | null; agentName?: string; status: string; plannedShipDate?: string | null; modelId?: number; skuId?: number | null; skuCode?: string; productName?: string; specification?: string; enabled?: boolean; skuQuantity?: number }
+export type PiOrderOption = { id: number; orderNo: string; customerId: number; agentId?: number | null; agentName?: string; status: string; salesType?: 'DOMESTIC' | 'EXPORT' | 'EUROPE' | null; plannedShipDate?: string | null; modelId?: number; skuId?: number | null; skuCode?: string; productName?: string; specification?: string; enabled?: boolean; skuQuantity?: number }
 export type PiOptions = { customers: PiMasterOption[]; agents: PiMasterOption[]; skus: PiSkuOption[]; orders: PiOrderOption[]; warehouses?: PiMasterOption[] }
 export type PiCreate = {
   revisionSources?: { lockId: number; quantity: number }[]

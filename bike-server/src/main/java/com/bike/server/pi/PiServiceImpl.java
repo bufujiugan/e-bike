@@ -160,6 +160,20 @@ public class PiServiceImpl implements PiService {
         return persistDraft(null, request);
     }
 
+    /** 页面新建入口：新单必须来自明确的销售入口，单据模板由入口决定；通用 PI 工作台只办理已有单据。 */
+    @Override
+    @Transactional
+    public PiView createFromSalesEntry(PiCreateRequest request) {
+        requireSalesEntry(request);
+        return create(request);
+    }
+
+    static void requireSalesEntry(PiCreateRequest request) {
+        var business=request==null||request.document()==null?null:request.document().business();
+        if(business==null||business.salesChannel()==null)
+            throw new BusinessException("PI_SALES_CHANNEL_REQUIRED","新建 PI 请从「销售订单 → 外销」或「欧洲销售与交付 → 正常 PI 销售」进入；内销请办理购销合同");
+    }
+
     @Override
     @Transactional
     public PiView update(long id, PiCreateRequest request) {

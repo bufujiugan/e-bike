@@ -1,0 +1,10 @@
+/* 锁定转单 / 订单办理中的销售去向选择卡片 */
+.lock-sales-types{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0}
+.lock-sales-types button{display:grid;align-content:start;gap:6px;text-align:left;padding:14px;border:1px solid #d5e0ea;border-radius:10px;background:#fff;cursor:pointer;color:#264861;font:inherit}
+.lock-sales-types button:disabled{cursor:not-allowed;opacity:.6}
+.lock-sales-types button strong{font-size:15px}
+.lock-sales-types button small{color:#8a6a4c}
+.lock-sales-types button span{color:#647b8e;line-height:1.6;font-size:12px}
+.lock-sales-types button.active{border-color:#b6502f;background:#fff6f0;box-shadow:inset 0 3px #b6502f}
+.lock-sales-types+.el-form,.lock-sales-types~.el-radio-group{margin-bottom:12px}
+@media(max-width:640px){.lock-sales-types{grid-template-columns:1fr}}

@@ -138,7 +138,7 @@ class PiSkuRevisionMysqlTest {
             assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(2);
             var acknowledged=f.tx(()->f.pis.update(draft.getId(),edit(draft,replacement(),source(lock))));
             assertThat(acknowledged.getRevisionSources().getFirst().expiresAt()).isEqualTo(lock.getExpireTime().plusHours(1));
-            f.tx(()->f.conversion.convert(lock.getId(),new LockOrderRequest(1L,1,"competing-conversion",null)));
+            f.tx(()->f.conversion.convert(lock.getId(),new LockOrderRequest(1L,1,"competing-conversion",null,"DOMESTIC")));
             assertThatThrownBy(()->f.tx(()->f.pis.confirm(draft.getId()))).isInstanceOfSatisfying(BusinessException.class,
                     e->assertThat(e.getCode()).isEqualTo("PI_REVISION_SOURCE_UNAVAILABLE"));
             assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(3);
@@ -177,7 +177,7 @@ class PiSkuRevisionMysqlTest {
             var lock=f.tx(()->f.locks.create(new SkuLockRequest("source-with-two",1L,null,null,null,List.of(new SkuLockRequest.Item(11,2))))).getFirst();
             var draft=revision(f,original,"preclaimed-request");
             f.tx(()->f.pis.update(draft.getId(),edit(draft,replacement(),source(lock))));
-            var separate=f.tx(()->f.conversion.convert(lock.getId(),new LockOrderRequest(1L,1,"PI_REV_"+draft.getId()+"_"+lock.getId(),null)));
+            var separate=f.tx(()->f.conversion.convert(lock.getId(),new LockOrderRequest(1L,1,"PI_REV_"+draft.getId()+"_"+lock.getId(),null,"DOMESTIC")));
             var archives=mock(PiExportArchive.class);
             doThrow(new IllegalStateException("archive queue unavailable")).when(archives).enqueue(any(),eq("CONFIRMATION"));
             ReflectionTestUtils.setField(f.pis,"archives",archives);

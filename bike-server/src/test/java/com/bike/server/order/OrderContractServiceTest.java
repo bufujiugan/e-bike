@@ -40,7 +40,24 @@ class OrderContractServiceTest {
         order.setId(81L); order.setOrderNo("SO-CONTRACT-TEST"); order.setCustomerId(12L);
         order.setCustomerName("测试需方有限公司"); order.setModelId(20L); order.setModelName("测试车型 M");
         order.setOrderQty(3); order.setStatus("CONFIRMED"); order.setUpdatedAt(LocalDateTime.of(2026, 11, 19, 10, 0));
+        order.setSalesType(SalesType.DOMESTIC);
         when(orders.get(81L)).thenReturn(order);
+    }
+
+    @Test void requiresExplicitDomesticSalesTypeInsteadOfGuessingFromMissingPi() {
+        order.setSalesType(null);
+        var pending = service.prepareContract(81);
+        assertThat(pending.available()).isFalse();
+        assertThat(pending.reason()).contains("销售类型");
+        for (String type : List.of(SalesType.EXPORT, SalesType.EUROPE)) {
+            order.setSalesType(type);
+            assertThat(service.prepareContract(81).available()).isFalse();
+            assertThat(service.prepareContract(81).reason()).contains(SalesType.label(type)).contains("PI");
+        }
+        order.setSalesType(SalesType.DOMESTIC);
+        var payload = validPayload();
+        order.setSalesType(SalesType.EXPORT);
+        assertThatThrownBy(() -> generate(payload)).isInstanceOf(BusinessException.class).hasMessageContaining("外销");
     }
 
     @AfterEach void cleanup() { SecurityContextHolder.clearContext(); validation.close(); }

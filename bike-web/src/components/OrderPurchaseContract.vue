@@ -11,6 +11,7 @@ type Contract = {
   bankName: string; bankAccount: string; clauses: string[]
 }
 const props = defineProps<{ order: { id: number; orderNo: string; modelName: string; orderQty: number; updatedAt: string } }>()
+const emit = defineEmits<{ downloaded: [] }>()
 const contract = ref<Contract>(), form = ref<FormInstance>(), loading = ref(false), exporting = ref(false)
 const error = ref(''), unavailable = ref(''), reviewed = ref(false), errorSummary = ref<HTMLElement>()
 let version = 0
@@ -56,6 +57,7 @@ async function exportContract() {
     anchor.href = url; anchor.download = `购销合同-${contract.value.contractNo.replace(/[\\/:*?"<>|]/g, '_')}.xlsx`
     document.body.append(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000)
     ElMessage.success('购销合同已生成并开始下载')
+    emit('downloaded')
   } catch (cause) {
     error.value = '合同生成失败，请重试'
     if (api.isAxiosError(cause)) {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
+import { salesIntentState } from '../sales-routing'
 import type { PermissionContext } from '../permissions'
 import CzechPiWorkspace from './CzechPiWorkspace.vue'
 import FactorySalesWorkspace from './FactorySalesWorkspace.vue'
@@ -7,6 +8,8 @@ import EuropeSalesGuide from './EuropeSalesGuide.vue'
 defineProps<{ context: (PermissionContext & { userType?: string; username?: string }) | null }>()
 const emit=defineEmits<{navigate:[view:string]}>()
 const mode=ref('pi'),guideVisible=ref(false)
+// 锁定转单或订单办理选择“欧洲 · PI”后进入正常 PI 销售。
+watch(()=>salesIntentState.intent,intent=>{if(intent?.salesType==='EUROPE')mode.value='pi'},{immediate:true})
 </script>
 <template>
   <section class="europe-sales">

@@ -24,7 +24,7 @@ public class OrderServiceImpl implements OrderService {
     public OrderServiceImpl(OrderMapper orderMapper) { this.orderMapper = orderMapper; }
 
     @Override
-    public PageResponse<SalesOrderView> list(String keyword, String status, long page, long pageSize) {
+    public PageResponse<SalesOrderView> list(String keyword, String status, String salesTypes, long page, long pageSize) {
         requireOrderRead();
         customerScope.lockForBusiness();
         long p = Math.max(1, page), size = Math.min(100, Math.max(1, pageSize));
@@ -33,9 +33,10 @@ public class OrderServiceImpl implements OrderService {
         if (CurrentOperator.hasRole("WEB_AGENT") && agentId == null) {
             throw new BusinessException("AGENT_NOT_BOUND", "当前账号未绑定代理商");
         }
-        var records = orderMapper.selectPage(normalized, status, agentId, (p - 1) * size, size);
+        var types = SalesType.filter(salesTypes);
+        var records = orderMapper.selectPage(normalized, status, agentId, types, (p - 1) * size, size);
         records.forEach(OrderServiceImpl::redactReservationForAgent);
-        return new PageResponse<>(records, p, size, orderMapper.count(normalized, status, agentId));
+        return new PageResponse<>(records, p, size, orderMapper.count(normalized, status, agentId, types));
     }
 
     @Override
@@ -74,6 +75,28 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional
+    public SalesOrderView assignSalesType(long id, String salesType) {
+        requireWrite();
+        String selected = SalesType.require(salesType);
+        orderMapper.selectForUpdate(id);
+        SalesOrderView order = get(id);
+        if (Set.of("CANCELLED", "CLOSED").contains(order.getStatus())) {
+            throw new BusinessException("INVALID_STATUS_TRANSITION", "已作废或关闭的订单不能选择销售类型");
+        }
+        if (order.getSalesType() != null) {
+            if (selected.equals(order.getSalesType())) return order;
+            throw new BusinessException("ORDER_SALES_TYPE_LOCKED", "本订单已确定为「" + SalesType.label(order.getSalesType()) + "」，不能修改销售类型");
+        }
+        if (orderMapper.assignSalesType(id, selected) != 1) {
+            throw new BusinessException("ORDER_SALES_TYPE_LOCKED", "订单销售类型已被他人确定，请刷新后核对");
+        }
+        orderMapper.insertOperationLog("ORDER_UPDATE", order.getOrderNo(), "确定销售类型", CurrentOperator.id(),
+                CurrentOperator.username(), order.getStatus(), order.getStatus(), CurrentOperator.clientIp(), SalesType.label(selected));
+        return get(id);
+    }
+
+    @Override
+    @Transactional
     public SalesOrderView update(long id, SalesOrderCreateRequest request) {
         requireWrite();
         if (guard != null) guard.lock();
@@ -105,6 +128,9 @@ public class OrderServiceImpl implements OrderService {
         SalesOrderView order = get(id);
         if (!Set.of("DRAFT", "PENDING").contains(order.getStatus())) {
             throw new BusinessException("INVALID_STATUS_TRANSITION", "订单当前不可确认");
+        }
+        if (order.getSalesType() == null) {
+            throw new BusinessException("ORDER_SALES_TYPE_REQUIRED", "请先在订单办理中选择销售类型（内销购销合同、外销 PI 或欧洲 PI）后再确认");
         }
         if (orderMapper.updateStatus(id, "CONFIRMED") != 1) throw new BusinessException("ORDER_UPDATE_FAILED", "订单确认失败");
         orderMapper.insertOperationLog("ORDER_UPDATE", order.getOrderNo(), "确认订单", CurrentOperator.id(),

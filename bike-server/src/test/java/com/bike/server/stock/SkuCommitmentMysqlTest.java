@@ -103,8 +103,8 @@ class SkuCommitmentMysqlTest {
     @Test void conversionPreservesSkuDeadlineAndCommitmentAndEnforcesCustomer() throws Exception {
         try(var f=new Fixture()) {
             var lock=f.tx(()->f.locks.create(request("convert-red",10,1))).getFirst();
-            code(()->f.tx(()->f.conversion.convert(lock.getId(),new LockOrderRequest(2L,1,"wrong-customer",null))),"LOCK_CUSTOMER_MISMATCH");
-            var conversion=new LockOrderRequest(1L,1,"convert-request",null);
+            code(()->f.tx(()->f.conversion.convert(lock.getId(),new LockOrderRequest(2L,1,"wrong-customer",null,"DOMESTIC"))),"LOCK_CUSTOMER_MISMATCH");
+            var conversion=new LockOrderRequest(1L,1,"convert-request",null,"DOMESTIC");
             var order=f.tx(()->f.conversion.convert(lock.getId(),conversion));
             assertThat(f.tx(()->f.conversion.convert(lock.getId(),conversion)).getId()).isEqualTo(order.getId());
             assertThat(order.getAgentId()).isNull();
@@ -307,9 +307,10 @@ class SkuCommitmentMysqlTest {
                     "agent_model_access(agent_id BIGINT,model_id BIGINT,enabled INT)",
                     "product_model(id BIGINT PRIMARY KEY,model_name VARCHAR(100),enabled INT)",
                     "production_sku(id BIGINT PRIMARY KEY,model_id BIGINT,sku_code VARCHAR(64),product_name VARCHAR(100),specification VARCHAR(100),enabled INT)",
-                    "sales_order(id BIGINT AUTO_INCREMENT PRIMARY KEY,order_no VARCHAR(64),customer_id BIGINT,agent_id BIGINT,status VARCHAR(32),planned_ship_date DATE,remark VARCHAR(500),created_by BIGINT,created_at DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),updated_at DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3))",
+                    "sales_order(id BIGINT AUTO_INCREMENT PRIMARY KEY,order_no VARCHAR(64),customer_id BIGINT,agent_id BIGINT,status VARCHAR(32),sales_type VARCHAR(16),planned_ship_date DATE,remark VARCHAR(500),created_by BIGINT,created_at DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),updated_at DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3))",
                     "sales_order_item(id BIGINT AUTO_INCREMENT PRIMARY KEY,order_id BIGINT,product_model_id BIGINT,ordered_qty INT,shipped_qty INT DEFAULT 0)",
                     "production_mutex(id INT PRIMARY KEY)",
+                    "factory_sales_order_link(factory_order_id BIGINT,order_id BIGINT)",
                     "inventory_lock(id BIGINT AUTO_INCREMENT PRIMARY KEY,lock_no VARCHAR(64),agent_id BIGINT NOT NULL,product_model_id BIGINT,lock_qty INT,released_qty INT DEFAULT 0,converted_qty INT DEFAULT 0,status VARCHAR(32),expire_time DATETIME(3),created_by BIGINT,created_at DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),released_at DATETIME(3),remark VARCHAR(500))",
                     "inventory_lock_detail(id BIGINT AUTO_INCREMENT PRIMARY KEY,lock_id BIGINT,product_model_id BIGINT,lock_qty INT)",
                     "order_reservation(order_id BIGINT PRIMARY KEY,source_lock_id BIGINT,request_id VARCHAR(64),model_id BIGINT,reserved_qty INT,expires_at DATETIME(3),expiry_audited_at DATETIME(3),hold_mode VARCHAR(16) DEFAULT 'TIMED',payment_hold_pi_id BIGINT,payment_held_at DATETIME(3),payment_held_by BIGINT,payment_held_amount DECIMAL(18,2),released_at DATETIME(3))",
@@ -400,7 +401,7 @@ class SkuCommitmentMysqlTest {
         }
         SalesOrderView skuOrder(int qty) {
             var lock=tx(()->locks.create(request("sku-order",10,qty))).getFirst();
-            return tx(()->conversion.convert(lock.getId(),new LockOrderRequest(1L,qty,"sku-order-conversion",null)));
+            return tx(()->conversion.convert(lock.getId(),new LockOrderRequest(1L,qty,"sku-order-conversion",null,"DOMESTIC")));
         }
         <T>T tx(Supplier<T> work) {
             var auth=new UsernamePasswordAuthenticationToken("sku-tester",null,List.of(new SimpleGrantedAuthority("ROLE_SUPER_ADMIN")));

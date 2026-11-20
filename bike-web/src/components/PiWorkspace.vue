@@ -29,8 +29,9 @@ import PiFeeInput from './PiFeeInput.vue'
 import PurchaseContractNumber from './PurchaseContractNumber.vue'
 import '../styles/pi-draft.css'
 import { salesScenarioDefaults, salesScenarioFilters, matchesSalesScenario, salesChannelLayoutName, type PiSalesScenario } from '../pi-sales-scenario'
+import { clearSalesIntent, salesTypeLabel, type SalesIntent } from '../sales-routing'
 
-const props = withDefaults(defineProps<{ context: (PermissionContext & { userType?: string; username?: string }) | null; initialKeyword?: string; europe?: boolean; salesScenario?: PiSalesScenario; allowCreate?: boolean }>(), { allowCreate: true })
+const props = withDefaults(defineProps<{ context: (PermissionContext & { userType?: string; username?: string }) | null; initialKeyword?: string; europe?: boolean; salesScenario?: PiSalesScenario; allowCreate?: boolean; intent?: SalesIntent | null; genericEntry?: boolean }>(), { allowCreate: true, intent: null, genericEntry: false })
 const scenario = computed(() => props.salesScenario ? salesScenarioDefaults(props.salesScenario) : undefined)
 const emit = defineEmits<{ navigate: [view: string] }>()
 const isAgent = computed(() => hasRole(props.context, 'WEB_AGENT') || props.context?.userType === 'AGENT')
@@ -90,10 +91,10 @@ async function chooseProfile(id?: number) {
   } catch(e) { if (selectionVersion === profileSelectionVersion && sessionId === localDraftId && createVisible.value) { createError.value = message(e, '选用配置失败'); draft.document.business.fulfillmentProfileId = null } }
   finally { if (selectionVersion === profileSelectionVersion && sessionId === localDraftId) optionsBusy.value = false }
 }
-const fixedDocumentFields = ['sellerName', 'sellerAddress', 'sellerContact', 'sellerCountry', 'sellerContactName', 'sellerPhone', 'sellerEmail', 'bankName', 'bankAccount', 'beneficiary', 'templateCode', 'templateVersion']
+const fixedDocumentFields = ['sellerName', 'sellerAddress', 'sellerContact', 'sellerCountry', 'sellerContactName', 'sellerPhone', 'sellerEmail', 'bankName', 'bankAccount', 'beneficiary', 'templateCode', 'templateVersion', 'bankAddress', 'swiftCode', 'bankCode', 'branchCode', 'sellerRegistrationNo', 'sellerVatNo']
 function chooseTemplate(value: PiTemplate) {
   if (value.tradeType !== draft.tradeType || !isSelectablePiLayout(value.layoutCode)) return
-  for (const key of fixedDocumentFields as (keyof PiTemplate)[]) Object.assign(draft.document, { [key]: value[key] })
+  for (const key of fixedDocumentFields as (keyof PiTemplate)[]) Object.assign(draft.document, { [key]: value[key] ?? '' })
 }
 const canPay = computed(() => allowed('PI_PAYMENT_CONFIRM'))
 const canReversePayment = computed(() => allowed('PI_PAYMENT_REVERSE'))
@@ -358,7 +359,7 @@ const selectedAgent = computed(() => options.value.agents.find(agent => agent.id
 const draftQuantity = computed(() => draft.items.reduce((sum, item) => sum + (item.skuId && Number.isSafeInteger(item.quantity) ? item.quantity : 0), 0))
 const buyerFields: [keyof PiDocument, string, number][] = [
   ['buyerContactName', '买方联系人', 100], ['buyerPhone', '买方电话', 64], ['buyerEmail', '买方 Email', 254],
-  ['buyerCountry', '买方国家 / 地区', 100], ['businessOwner', '业务归属', 150],
+  ['buyerCountry', '买方国家 / 地区', 100], ['buyerVatNo', '买方 VAT 号（选填）', 100], ['businessOwner', '业务归属', 150],
   ['buyerContact', '买方联系方式', 300], ['buyerAddress', '买方地址', 1000],
 ]
 function isBuyerRequired(key: keyof PiDocument) {
@@ -489,7 +490,11 @@ function closeDraft(done?: () => void) {
   if (draftFingerprint() !== draftBaseline || activeLocalDraft) { leaveDraftVisible.value = true; return }
   finishClosingDraft(done)
 }
-const filteredOrders = computed(() => [...new Map(options.value.orders.filter(order => order.customerId === draft.customerId).map(order => [order.id, order])).values()])
+// 销售入口只能关联同一销售类型的订单；待选类型订单须先在订单办理中选择类型。
+const scenarioSalesType = computed(() => draft.document.business?.salesChannel === 'CHINA_SALES' ? 'EXPORT' : draft.document.business?.salesChannel === 'CZECH_PI' ? 'EUROPE' : undefined)
+const filteredOrders = computed(() => [...new Map(options.value.orders.filter(order => order.customerId === draft.customerId
+  && (!scenarioSalesType.value || editingId.value != null || order.salesType === scenarioSalesType.value)).map(order => [order.id, order])).values()])
+const hiddenTypeOrders = computed(() => scenarioSalesType.value && editingId.value == null ? new Set(options.value.orders.filter(order => order.customerId === draft.customerId && order.salesType !== scenarioSalesType.value).map(order => order.id)).size : 0)
 function chooseSourceOrder(id?: number) {
   if (!id) return
   const sources = options.value.orders.filter(order => order.id === id)
@@ -520,7 +525,8 @@ async function chooseCustomer(id: number) {
     if (version !== customerLoadVersion || draft.customerId !== id || !createVisible.value) return
     Object.assign(draft.document, { buyerAddress: customer.address || '', buyerCountry: customer.country || '', shippingAddress: customer.address || '',
       buyerContact: [customer.contactName, customer.contactPhone].filter(Boolean).join(' / '), buyerContactName: customer.contactName || '', buyerPhone: customer.contactPhone || '', buyerEmail: customer.email || '', businessOwner: customer.businessOwner || '' })
-    draft.currencyCode = customer.preferredCurrency || 'CNY'
+    // 客户未设置偏好币种时保留销售入口默认币种（外销 USD、欧洲 EUR）。
+    draft.currencyCode = customer.preferredCurrency || scenario.value?.currencyCode || 'CNY'
   } catch (error) { if (version === customerLoadVersion) { customerLoadFailed.value = true; createError.value = message(error, '客户商务资料带入失败，请重新选择客户') } }
   finally { if (version === customerLoadVersion) customerBusy.value = false }
 }
@@ -705,6 +711,7 @@ async function openCreate(mode: 'new' | 'locks' = 'new') {
     draft.currencyCode = scenario.value.currencyCode
     draft.document.business.domesticShipment = scenario.value.domesticShipment
     draft.document.business.salesChannel = scenario.value.salesChannel
+    if (scenario.value.salesChannel === 'CHINA_SALES') draft.document.productCategory = 'EBIKE and FRAME'
     draft.document.business.collectionEntity = draft.tradeType === 'EXPORT' ? 'HONG_KONG' : 'GUANGTA'
     draft.document.business.orderSource = 'NEW_BUSINESS'
   }
@@ -1004,7 +1011,41 @@ function beforePageUnload(event: BeforeUnloadEvent) {
   if (createVisible.value && !persistLocalDraft()) { event.preventDefault(); event.returnValue = '' }
 }
 function saveOnPageHide() { persistLocalDraft() }
+// 来自锁定转单 / 订单办理的跳转：自动打开对应新建流程，并带入客户、来源锁定或来源订单。
+let appliedIntent: SalesIntent | null = null
+async function applyIntent() {
+  const intent = props.intent
+  if (!intent || intent === appliedIntent || !canWrite.value || !canCreateInScope.value || createVisible.value || restoringDraft.value) return
+  appliedIntent = intent; clearSalesIntent(intent)
+  try {
+    if (intent.kind === 'lock') {
+      await openCreate('locks')
+      if (!createVisible.value || !intent.customerId) { ElMessage.info(`请选择客户后加入来源锁定 ${intent.lockNo}`); return }
+      if (!options.value.customers.some(item => item.id === intent.customerId)) options.value.customers.push({ id: intent.customerId, code: '', name: intent.customerName || '锁定客户' })
+      lockKeyword.value = intent.lockNo
+      draft.customerId = intent.customerId
+      await nextTick(); void chooseCustomer(intent.customerId)
+      await loadLocks()
+      const lock = lockRows.value.find(row => row.id === intent.lockId)
+      if (lock) addLock(lock)
+      else ElMessage.warning(`未找到可转换的锁定 ${intent.lockNo}，可能已到期或已被转换，请刷新核对`)
+    } else {
+      await openCreate('new')
+      if (!createVisible.value || !draft.document.business) return
+      draft.document.business.orderSource = 'EXISTING_ORDER'
+      optionKeyword.value = intent.orderNo
+      await loadOptions()
+      if (!options.value.customers.some(item => item.id === intent.customerId)) options.value.customers.push({ id: intent.customerId, code: '', name: intent.customerName || '订单客户' })
+      draft.customerId = intent.customerId
+      await nextTick(); void chooseCustomer(intent.customerId)
+      if (filteredOrders.value.some(order => order.id === intent.orderId)) { draft.sourceOrderId = intent.orderId; chooseSourceOrder(intent.orderId) }
+      else ElMessage.warning(`订单 ${intent.orderNo} 当前不能关联新 PI，请核对订单状态、销售类型或是否已有出库`)
+    }
+  } catch (error) { ElMessage.error(message(error, '自动打开新建 PI 失败，请手动新建')) }
+}
+watch([() => props.intent, canCreateInScope, canWrite], () => { void applyIntent() })
 onMounted(() => {
+  void nextTick().then(applyIntent)
   refreshLocalDrafts()
   window.addEventListener('beforeunload', beforePageUnload)
   window.addEventListener('pagehide', saveOnPageHide)
@@ -1031,6 +1072,7 @@ onBeforeUnmount(() => {
     <el-empty v-if="!canRead" description="当前账号没有 PI 查看权限" />
     <template v-else>
       <div class="pi-heading"><div><h2>{{ scenario?.title || (europe ? '正常 PI 销售' : isAgent ? '我的 PI 单据' : 'PI 与销售履约') }}</h2><p>{{ europe ? '按实际出货仓办理 PI；新单默认简化办理，客户收款与付 Totem 分别登记。' : isAgent ? '查看已发布的单据、商品和物流进度。' : '维护商品与交易条款，跟进收款、放行和物流。' }}</p></div></div>
+      <el-alert v-if="genericEntry && internal" title="此处用于查询和办理已有 PI。新建 PI 请按销售类型进入：外销到「销售订单 → 外销」（260728英国builtPI 模板），欧洲到「欧洲销售与交付 → 正常 PI 销售」（France_1104_PI 模板）；内销办理购销合同。" type="warning" :closable="false" />
       <el-alert v-if="scenario" :title="salesScenario === 'CHINA_EXPORT' ? '国内外销使用 PI 流程，固定采用 260728英国builtPI 模板；请核对本单收款与交付约定。' : '欧洲内销、外销均使用 PI 流程，固定采用 France_1104_PI 模板；出货仓、税费和银行资料按本单约定填写。'" type="info" :closable="false" />
       <section v-if="europe" class="europe-order-scope" aria-label="欧洲订单出货仓">
         <label for="europe-warehouse">捷克出货仓</label>
@@ -1121,7 +1163,7 @@ onBeforeUnmount(() => {
                   <el-alert v-if="fromLocks" title="将从所选锁单生成并关联履约订单，沿用原锁单的客户、代理商与数量。" type="info" :closable="false" />
                   <el-alert v-else-if="!hasBoundOrders && draft.document.business?.orderSource === 'NEW_BUSINESS'" title="仅用于没有原订单的新业务。发出 PI 后付款达到收款门槛，或客户收到货后付款获批后，按所选仓库保留库存并生成关联订单；已有锁单或订单请使用对应入口。" type="warning" :closable="false" />
                   <div class="pi-draft-grid">
-                    <el-form-item v-if="!fromLocks && (draft.sourceOrderId || !hasBoundOrders && draft.document.business?.orderSource === 'EXISTING_ORDER')" label="来源销售订单" required data-draft-field="sourceOrder" :error="fieldError('sourceOrder')"><el-select v-model="draft.sourceOrderId" aria-label="来源销售订单" clearable filterable :disabled="!draft.customerId || hasBoundOrders || editingRevision" placeholder="先选择客户，再选择原订单" @change="chooseSourceOrder"><el-option v-for="order in filteredOrders" :key="order.id" :value="order.id" :label="order.orderNo" /></el-select><p class="pi-field-help">自动带入原订单的代理商、SKU 和数量，复用原库存占用。</p></el-form-item>
+                    <el-form-item v-if="!fromLocks && (draft.sourceOrderId || !hasBoundOrders && draft.document.business?.orderSource === 'EXISTING_ORDER')" label="来源销售订单" required data-draft-field="sourceOrder" :error="fieldError('sourceOrder')"><el-select v-model="draft.sourceOrderId" aria-label="来源销售订单" clearable filterable :disabled="!draft.customerId || hasBoundOrders || editingRevision" placeholder="先选择客户，再选择原订单" @change="chooseSourceOrder"><el-option v-for="order in filteredOrders" :key="order.id" :value="order.id" :label="order.orderNo" /></el-select><p class="pi-field-help">自动带入原订单的代理商、SKU 和数量，复用原库存占用。<template v-if="scenarioSalesType">仅显示已确定为「{{ salesTypeLabel(scenarioSalesType) }}」的订单<template v-if="hiddenTypeOrders">，该客户另有 {{ hiddenTypeOrders }} 笔其他类型或待选类型订单未显示（请先在订单办理中选择类型）</template>。</template></p></el-form-item>
                     <el-form-item label="所属代理商"><el-select v-model="draft.agentId" aria-label="所属代理商" :disabled="editingRevision || fixedItems && !fromLocks" clearable filterable placeholder="选择代理商；关联订单后自动带入"><el-option v-for="agent in options.agents" :key="agent.id" :value="agent.id" :label="agent.code + ' · ' + agent.name" /></el-select></el-form-item>
                   </div>
                 </div>
@@ -1162,14 +1204,14 @@ onBeforeUnmount(() => {
             <section v-show="draftStep === 1" class="pi-draft-step">
               <div class="pi-step-heading"><span class="pi-eyebrow">STEP 02</span><h2>把交易约定说清楚。</h2><p>模板负责固定资料，你只需填写这笔订单的实际约定。</p></div>
               <section class="pi-form-card" data-draft-field="template"><PiTemplatePicker :fixed-layout-name="fixedLayoutName" :trade-type="draft.tradeType" :document="draft.document" :can-manage="canManageTemplates" :disabled="actionBusy || Boolean(draftProfile)" :profile-bound="Boolean(draftProfile)" :manage-disabled="actionBusy" :refresh-key="templateRefreshKey" @select="chooseTemplate" @manage="openTemplates()" @adjust="openTemplates" /></section>
-              <section class="pi-form-card" data-draft-field="bank"><div class="pi-section-heading"><h3>收款信息 · {{ draft.document.business?.collectionEntity || '待选择' }}</h3></div><p class="pi-field-help">模板带入账户后可按本单更新；保存为本单快照，已确认单据须通过修订调整。</p><div class="pi-draft-grid"><el-form-item label="收款银行" required><el-input v-model="draft.document.bankName" maxlength="200" /></el-form-item><el-form-item label="收款账户" required><el-input v-model="draft.document.bankAccount" maxlength="200" /></el-form-item><el-form-item label="收款人 / 公司全称" required><el-input v-model="draft.document.beneficiary" maxlength="200" /></el-form-item></div></section>
+              <section class="pi-form-card" data-draft-field="bank"><div class="pi-section-heading"><h3>收款信息 · {{ draft.document.business?.collectionEntity || '待选择' }}</h3></div><p class="pi-field-help">模板带入账户后可按本单更新；保存为本单快照，已确认单据须通过修订调整。</p><div class="pi-draft-grid"><el-form-item label="收款银行" required><el-input v-model="draft.document.bankName" maxlength="200" /></el-form-item><el-form-item label="收款账户" required><el-input v-model="draft.document.bankAccount" maxlength="200" /></el-form-item><el-form-item label="收款人 / 公司全称" required><el-input v-model="draft.document.beneficiary" maxlength="200" /></el-form-item><el-form-item label="银行地址 Bank Address（选填）" class="pi-span-two"><el-input v-model="draft.document.bankAddress" maxlength="500" /></el-form-item><el-form-item label="SWIFT Code（选填）"><el-input v-model="draft.document.swiftCode" maxlength="64" /></el-form-item><el-form-item label="Bank Code（选填）"><el-input v-model="draft.document.bankCode" maxlength="64" /></el-form-item><el-form-item label="Branch Code（选填）"><el-input v-model="draft.document.branchCode" maxlength="64" /></el-form-item></div><p class="pi-field-help">银行附加资料及卖方登记号 / VAT 随模板带入；单据按原件位置显示，未填写的栏目留空。</p></section>
               <section class="pi-form-card"><div class="pi-section-heading"><div><h3>付款约定</h3><p>收款门槛不会自动填写比例；请按实际约定确认。</p></div></div>
                 <el-form-item label="付款条款" required data-draft-field="paymentTerms" :error="fieldError('paymentTerms')"><el-input v-model="draft.document.paymentTerms" aria-label="付款条款" type="textarea" :rows="3" maxlength="2000" placeholder="填写双方约定的付款方式、时间及条件" /></el-form-item>
                 <div class="pi-draft-grid"><el-form-item label="定金约定金额" required data-draft-field="deposit" :error="fieldError('deposit')"><el-input v-model="draft.depositRequiredAmount" aria-label="定金约定金额" inputmode="decimal" placeholder="无门槛须明确填写 0.00"><template #append>{{ draft.currencyCode.toUpperCase() }}</template></el-input><span class="pi-field-help">发出 PI 后付款按本金额保留库存；客户收到货后付款按授权保留，到账另行登记。</span></el-form-item><el-form-item label="发货放行门槛" data-draft-field="shipment" :error="fieldError('shipment')"><el-input v-model="draft.shipmentRequiredAmount" aria-label="发货放行门槛" inputmode="decimal" placeholder="选填"><template #append>{{ draft.currencyCode.toUpperCase() }}</template></el-input><span class="pi-field-help">选填，仅作记录，不限制发货放行。</span></el-form-item></div>
               </section>
               <section class="pi-form-card"><div class="pi-section-heading"><h3>交付安排</h3><span class="pi-muted">带 * 的为必填项</span></div>
                 <el-form-item label="交付条款" required data-draft-field="deliveryTerms" :error="fieldError('deliveryTerms')"><el-input v-model="draft.document.deliveryTerms" aria-label="交付条款" type="textarea" :rows="3" maxlength="2000" placeholder="填写交货地点、交付责任及其他约定" /></el-form-item>
-                <div class="pi-draft-grid"><el-form-item label="计划发货日期"><el-date-picker v-model="draft.plannedShipDate" aria-label="计划发货日期" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" /></el-form-item><el-form-item label="运输方式" required data-draft-field="transportMode" :error="fieldError('transportMode')"><el-input v-model="draft.document.transportMode" aria-label="运输方式" maxlength="100" placeholder="填写实际运输方式，例如卡车运输或客户自提" /></el-form-item><el-form-item label="开单日期" required data-draft-field="issueDate" :error="fieldError('issueDate')"><el-date-picker v-model="draft.document.issueDate" aria-label="开单日期" type="date" value-format="YYYY-MM-DD" /></el-form-item><el-form-item label="有效期至" required data-draft-field="validUntil" :error="fieldError('validUntil')"><el-date-picker v-model="draft.document.validUntil" aria-label="有效期至" type="date" value-format="YYYY-MM-DD" /></el-form-item><el-form-item v-if="draft.tradeType === 'EXPORT' || draft.document.tradeTerms" label="贸易术语（选填）" data-draft-field="tradeTerms" :error="fieldError('tradeTerms')" class="pi-span-two"><el-input v-model="draft.document.tradeTerms" aria-label="贸易术语" maxlength="100" placeholder="非欧盟或涉及报关时按合同填写，例如 DDP、DAP" /><span class="pi-field-help">欧盟地区采用卡车运输或客户自提且无贸易术语约定时可留空。</span></el-form-item><el-form-item label="收货地址" required data-draft-field="shippingAddress" :error="fieldError('shippingAddress')" class="pi-span-two"><el-input v-model="draft.document.shippingAddress" aria-label="收货地址" type="textarea" :rows="2" maxlength="1000" placeholder="从客户资料带入，可针对本单修改" /></el-form-item></div>
+                <div class="pi-draft-grid"><el-form-item label="计划发货日期"><el-date-picker v-model="draft.plannedShipDate" aria-label="计划发货日期" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" /></el-form-item><el-form-item label="运输方式" required data-draft-field="transportMode" :error="fieldError('transportMode')"><el-input v-model="draft.document.transportMode" aria-label="运输方式" maxlength="100" placeholder="填写实际运输方式，例如卡车运输或客户自提" /></el-form-item><el-form-item label="开单日期" required data-draft-field="issueDate" :error="fieldError('issueDate')"><el-date-picker v-model="draft.document.issueDate" aria-label="开单日期" type="date" value-format="YYYY-MM-DD" /></el-form-item><el-form-item label="有效期至" required data-draft-field="validUntil" :error="fieldError('validUntil')"><el-date-picker v-model="draft.document.validUntil" aria-label="有效期至" type="date" value-format="YYYY-MM-DD" /></el-form-item><el-form-item v-if="draft.tradeType === 'EXPORT' || draft.document.tradeTerms" label="贸易术语（选填）" data-draft-field="tradeTerms" :error="fieldError('tradeTerms')" class="pi-span-two"><el-input v-model="draft.document.tradeTerms" aria-label="贸易术语" maxlength="100" placeholder="非欧盟或涉及报关时按合同填写，例如 DDP、DAP" /><span class="pi-field-help">欧盟地区采用卡车运输或客户自提且无贸易术语约定时可留空。</span></el-form-item><el-form-item label="收货地址" required data-draft-field="shippingAddress" :error="fieldError('shippingAddress')" class="pi-span-two"><el-input v-model="draft.document.shippingAddress" aria-label="收货地址" type="textarea" :rows="2" maxlength="1000" placeholder="从客户资料带入，可针对本单修改" /></el-form-item><el-form-item v-if="draft.document.business?.salesChannel === 'CZECH_PI' || draft.document.dispatchAddress" label="发货地址 Dispatch Address（选填）" class="pi-span-two"><el-input v-model="draft.document.dispatchAddress" aria-label="发货地址" type="textarea" :rows="2" maxlength="1000" placeholder="实际发货仓库名称及地址，显示在 France_1104_PI 的 Dispatch Address" /></el-form-item><el-form-item v-if="draft.document.business?.salesChannel === 'CHINA_SALES' || draft.document.productCategory" label="单据品类标题（选填）" class="pi-span-two"><el-input v-model="draft.document.productCategory" aria-label="单据品类标题" maxlength="120" placeholder="显示在 INVOICE 下方，例如 EBIKE and FRAME" /></el-form-item></div>
               </section>
               <section class="pi-form-card"><details class="pi-disclosure pi-fees-disclosure" data-draft-field="fees" :open="feesExpanded" @toggle="feesExpanded = ($event.target as HTMLDetailsElement).open"><summary><span><strong>整单折扣与费用</strong><small>有运费、税费或额外折扣时填写</small></span><span>按需展开</span></summary><div class="pi-draft-grid"><el-form-item label="全单追加折扣"><PiFeeInput v-model="draft.discountAmount" aria-label="全单追加折扣" /></el-form-item><el-form-item label="全单追加税费"><PiFeeInput v-model="draft.taxAmount" aria-label="全单追加税费" /></el-form-item><el-form-item label="运费"><PiFeeInput v-model="draft.freightAmount" aria-label="运费" /></el-form-item><el-form-item label="其他费用"><PiFeeInput v-model="draft.otherFeeAmount" aria-label="其他费用" /></el-form-item></div></details><el-form-item label="备注（选填）"><el-input v-model="draft.remark" aria-label="PI 备注" type="textarea" :rows="2" maxlength="1000" show-word-limit /></el-form-item></section>
             </section>
