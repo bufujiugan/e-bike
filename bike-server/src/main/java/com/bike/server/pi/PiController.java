@@ -47,6 +47,12 @@ public class PiController {
         return ApiResponse.success("查询成功",conversions.options(customerId,agentId,anyAgent,keyword,page));
     }
 
+    @GetMapping("/lock-options/summary")
+    public ApiResponse<java.util.Map<String,Object>> lockOptionSummary(@RequestParam long customerId,
+            @RequestParam(required=false) Long agentId,@RequestParam(defaultValue="false") boolean anyAgent) {
+        return ApiResponse.success("查询成功",conversions.optionSummary(customerId,agentId,anyAgent));
+    }
+
     @GetMapping
     public ApiResponse<PageResponse<PiView>> list(@RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status, @RequestParam(defaultValue = "1") long page,

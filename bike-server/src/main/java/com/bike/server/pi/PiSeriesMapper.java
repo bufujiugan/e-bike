@@ -23,6 +23,8 @@ public interface PiSeriesMapper {
     List<java.util.Map<String,Object>> lockOptions(@Param("customerId") long customerId,
             @Param("agentId") Long agentId,@Param("anyAgent") boolean anyAgent,@Param("keyword") String keyword,@Param("offset") long offset);
     long countLockOptions(@Param("customerId") long customerId,@Param("agentId") Long agentId,@Param("anyAgent") boolean anyAgent,@Param("keyword") String keyword);
+    /** 可转锁定为空时，统计该客户 SKU 锁定不可选的原因（到期 / 已转完 / 属于其他代理商）。 */
+    java.util.Map<String,Object> lockOptionSummary(@Param("customerId") long customerId,@Param("agentId") Long agentId,@Param("anyAgent") boolean anyAgent);
     List<PiShipmentGate> gates(@Param("orderId") long orderId);
     Integer remainingForVehicle(@Param("piId") long piId, @Param("vehicleId") long vehicleId);
     int holdAfterPayment(@Param("orderId") long orderId, @Param("piId") long piId,

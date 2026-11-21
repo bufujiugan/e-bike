@@ -65,7 +65,8 @@ async function load() {
     const result = (await api.get(`/api/orders/by-no/${encodeURIComponent(props.orderNo)}`)).data.data
     if (current !== version) return
     order.value = result
-    if (canPrepareContract.value && result.salesType === 'DOMESTIC') {
+    // 购销合同只在第一步（确认订单前）填写；确认后的出库页面不再加载合同。
+    if (canPrepareContract.value && result.salesType === 'DOMESTIC' && ['DRAFT', 'PENDING'].includes(result.status)) {
       try {
         const preparation = (await api.get(`/api/orders/${result.id}/purchase-contract`)).data.data
         if (current === version) contractPreparation.value = preparation
@@ -85,7 +86,7 @@ async function load() {
 async function confirm() {
   if (!canConfirm.value || saving.value) return
   const reminder = contractDownloaded.value ? '' : '本窗口尚未生成购销合同，建议先生成并核对合同。'
-  try { await ElMessageBox.confirm(`${reminder}确认订单 ${order.value.orderNo}，共 ${order.value.orderQty} 台？确认后仍可重新下载购销合同。`, '确认销售订单', { type: 'warning' }) }
+  try { await ElMessageBox.confirm(`${reminder}确认订单 ${order.value.orderNo}，共 ${order.value.orderQty} 台？确认后进入出库环节，不再显示购销合同填写页，请先下载保存合同。`, '确认销售订单', { type: 'warning' }) }
   catch { return }
   saving.value = true
   try {
@@ -155,7 +156,6 @@ watch(() => props.orderNo, () => { showPi.value = false; showContract.value = fa
         <PiWorkspace v-if="showPi && hasLinkedPi" :context="context" :initial-keyword="order.orderNo" :allow-create="false" />
         <el-descriptions title="订单与来源" :column="1" border>
           <el-descriptions-item label="销售类型">{{ salesTypeLabel(salesType) }}<template v-if="salesType && !order.selectedSalesType"> （按已关联单据归类）</template></el-descriptions-item>
-          <el-descriptions-item v-if="salesType === 'DOMESTIC' && !beforeConfirm && canGenerateContract" label="购销合同（内销）"><el-button link type="primary" @click="toggleContract">{{ showContract ? '收起' : '重新生成 / 下载购销合同' }}</el-button></el-descriptions-item>
           <el-descriptions-item v-if="internal" label="购销合同方">{{ order.purchaseContractParty === 'YINSANHUAN' ? '银三环' : order.purchaseContractParty || '未登记' }}</el-descriptions-item>
           <el-descriptions-item v-if="internal" label="购销合同号"><PurchaseContractNumber :value="order.purchaseContractNo" /></el-descriptions-item>
           <el-descriptions-item label="来源锁定">{{ order.sourceLockNo || '无来源锁定' }}<span v-if="sourceLock"> · {{ sourceLock.skuCode || sourceLock.modelName }} · 锁定 {{ sourceLock.lockQty }} 台 · 已转 {{ sourceLock.convertedQty }} 台</span></el-descriptions-item>
@@ -163,7 +163,6 @@ watch(() => props.orderNo, () => { showPi.value = false; showContract.value = fa
           <el-descriptions-item :label="order.status === 'CANCELLED' ? '取消说明 / 备注' : '备注'">{{ order.remark || '—' }}</el-descriptions-item>
           <el-descriptions-item label="创建 / 修改">{{ time(order.createdAt) }} / {{ time(order.updatedAt) }}</el-descriptions-item>
         </el-descriptions>
-        <OrderPurchaseContract v-if="salesType === 'DOMESTIC' && !beforeConfirm && contractOpened && canGenerateContract" v-show="showContract" :order="order" @downloaded="contractDownloaded = true" />
         <el-alert v-if="lockError" :title="lockError" type="warning" :closable="false" />
         <h3>本单已出库车辆（{{ order.shippedVehicles?.length ?? 0 }}）</h3>
         <el-table :data="order.shippedVehicles ?? []" max-height="360" empty-text="本单尚无有效出库车辆">

@@ -40,6 +40,14 @@ public class PiConversionService {
         boolean all=anyAgent&&agentId==null;
         return new PageResponse<>(series.lockOptions(customerId,agentId,all,query,(p-1)*20),p,20,series.countLockOptions(customerId,agentId,all,query));
     }
+    /** 可转锁定为空时给前端提示原因：到期、已转完 / 已释放、属于其他代理商的数量。权限与锁定查询一致。 */
+    @Transactional(readOnly=true)
+    public Map<String,Object> optionSummary(long customerId,Long agentId,boolean anyAgent) {
+        CurrentOperator.requireInternalWebAccess();
+        for(String permission:List.of("PI_READ","PI_WRITE","AGENT_LOCK_WRITE"))CurrentOperator.requirePermission(permission);
+        customerScope.requireCustomer(customerId);
+        return series.lockOptionSummary(customerId,agentId,anyAgent&&agentId==null);
+    }
     /** 页面“从 SKU 锁定生成 PI”：与新建 PI 相同，须来自外销或欧洲销售入口。 */
     @Transactional
     public PiView convertFromSalesEntry(PiConversionRequest input) {

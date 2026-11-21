@@ -17,6 +17,17 @@
   </select>
   <select id="countLockOptions" resultType="long">SELECT COUNT(*) FROM bike_inventory_lock l
     JOIN bike_production_sku s ON s.id=l.sku_id WHERE <include refid="lockOptionsWhere"/></select>
+  <select id="lockOptionSummary" resultType="map">
+    SELECT COUNT(*) totalCount,
+      COALESCE(SUM(CASE WHEN l.status IN ('LOCKED','PARTIAL_CONVERTED') AND l.expire_time&gt;NOW(3) AND l.lock_qty&gt;l.released_qty+l.converted_qty
+        <if test="!anyAgent">AND NOT (l.agent_id &lt;=&gt; #{agentId})</if><if test="anyAgent">AND 1=0</if> THEN 1 ELSE 0 END),0) otherAgentCount,
+      COALESCE(SUM(CASE WHEN l.lock_qty&gt;l.released_qty+l.converted_qty AND (l.status='EXPIRED'
+        OR (l.status IN ('LOCKED','PARTIAL_CONVERTED') AND l.expire_time&lt;=NOW(3))) THEN 1 ELSE 0 END),0) expiredCount,
+      COALESCE(SUM(CASE WHEN l.status IN ('CONVERTED','RELEASED','CANCELLED') OR l.lock_qty&lt;=l.released_qty+l.converted_qty THEN 1 ELSE 0 END),0) finishedCount,
+      MAX(CASE WHEN l.lock_qty&gt;l.released_qty+l.converted_qty AND (l.status='EXPIRED'
+        OR (l.status IN ('LOCKED','PARTIAL_CONVERTED') AND l.expire_time&lt;=NOW(3))) THEN l.expire_time END) lastExpiredAt
+    FROM bike_inventory_lock l WHERE l.scope_type='SKU' AND l.customer_id=#{customerId}
+  </select>
   <insert id="insertSeries">INSERT INTO bike_pi_series(pi_no,current_pi_id,next_revision)
     SELECT pi_no,id,revision+1 FROM bike_pi WHERE id=#{piId} AND series_id IS NULL</insert>
   <update id="assignSeries">UPDATE bike_pi p JOIN bike_pi_series s ON s.current_pi_id=p.id SET p.series_id=s.id

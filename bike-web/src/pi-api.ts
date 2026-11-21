@@ -76,6 +76,8 @@ export type PiView = {
 export type PiFulfillment = { orderId: number; orderNo: string; status: string; skuId?: number | null; skuCode?: string | null; orderedQty: number; shippedQty: number; closedQty: number; remainingQty: number; reservationStatus: ReservationStatus }
 export type PiDispatchBatch = { id: number; batchNo: string; sourceType: string; executionPiId?: number | null; status: string; originalQty: number; activeQty: number; createdAt: string }
 export type PiLockOption = { id: number; lockNo: string; skuId: number; skuCode: string; productName: string; modelId: number; remainingQty: number; expireTime: string; agentId?: number | null; agentName?: string | null }
+/** 可转锁定为空时的原因统计：该客户全部 SKU 锁定 / 其他代理商 / 已到期 / 已转完或释放。 */
+export type PiLockSummary = { totalCount: number; otherAgentCount: number; expiredCount: number; finishedCount: number; lastExpiredAt?: string | null }
 export type PiMasterOption = { id: number; code: string; name: string }
 export type PiSkuOption = { id: number; modelId?: number; productModelId?: number; skuCode: string; productName: string; specification?: string; enabled?: boolean }
 export type PiOrderOption = { id: number; orderNo: string; customerId: number; agentId?: number | null; agentName?: string; status: string; salesType?: 'DOMESTIC' | 'EXPORT' | 'EUROPE' | null; plannedShipDate?: string | null; modelId?: number; skuId?: number | null; skuCode?: string; productName?: string; specification?: string; enabled?: boolean; skuQuantity?: number }
@@ -128,6 +130,7 @@ export const piApi = {
   async create(body: PiCreate) { return (await api.post<{ data: PiView }>('/api/pis', body)).data.data },
   async convert(body: { requestId: string; sources: { lockId: number; quantity: number }[]; pi: PiCreate }) { return (await api.post<{ data: PiView }>('/api/pis/from-locks', body)).data.data },
   async lockOptions(params: { customerId: number; agentId?: number; keyword?: string; page: number; anyAgent?: boolean }) { return (await api.get<{ data: { records: PiLockOption[]; total: number } }>('/api/pis/lock-options', { params })).data.data },
+  async lockOptionSummary(params: { customerId: number; agentId?: number; anyAgent?: boolean }) { return (await api.get<{ data: PiLockSummary }>('/api/pis/lock-options/summary', { params })).data.data },
   async update(id: number, body: PiCreate) { return (await api.put<{ data: PiView }>(`/api/pis/${id}`, body)).data.data },
   async cancel(id: number, reason: string) { return (await api.post<{ data: PiView }>(`/api/pis/${id}/cancel`, { reason })).data.data },
   async confirm(id: number) { return (await api.post<{ data: PiView }>(`/api/pis/${id}/confirm`, {})).data.data },

@@ -7,7 +7,7 @@ import { createPiLocalDraftStore, type DraftItem, type PiDraftForm, type PiLocal
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
 import { hasPermission, hasRole, type PermissionContext } from '../permissions'
-import { piApi, reservationLabel, type Money, type PiCreate, type PiDocument, type PiOptions, type PiPayment, type PiView, type PiLockOption, type PiLogistics, type PiWorkflow, type PiWorkflowComplete } from '../pi-api'
+import { piApi, reservationLabel, type Money, type PiCreate, type PiDocument, type PiOptions, type PiPayment, type PiView, type PiLockOption, type PiLockSummary, type PiLogistics, type PiWorkflow, type PiWorkflowComplete } from '../pi-api'
 import PiReceiptAttachments from './PiReceiptAttachments.vue'
 import PiTemplates from './PiTemplates.vue'
 import PiFulfillmentProfiles from './PiFulfillmentProfiles.vue'
@@ -204,6 +204,7 @@ const actionBusy = ref(false), createVisible = ref(false), optionsBusy = ref(fal
 const editingId = ref<number | null>(null)
 const fromLocks = ref(false), lockBusy = ref(false), lockError = ref(''), lockPage = ref(1), lockTotal = ref(0), lockKeyword = ref('')
 const lockRows = ref<PiLockOption[]>([]), selectedLocks = ref<Array<PiLockOption & { quantity: number }>>([])
+const lockSummary = ref<PiLockSummary | null>(null)
 let conversionKey = '', conversionFingerprint = '', lockVersion = 0
 const fixedItems = computed(() => fromLocks.value || Boolean(draft.sourceOrderId) || Boolean(editingId.value && detail.value?.fulfillment?.length))
 const hasBoundOrders = computed(() => Boolean(editingId.value && (detail.value?.sourceOrderId || detail.value?.fulfillment?.length)))
@@ -541,14 +542,42 @@ watch([() => draft.customerId, () => draft.agentId], () => {
 })
 async function loadLocks() {
   if ((!fromLocks.value && !revisionFulfillment.value) || !draft.customerId) return
-  const version = ++lockVersion; lockBusy.value = true; lockError.value = ''
+  const version = ++lockVersion; lockBusy.value = true; lockError.value = ''; lockSummary.value = null
   try {
     // 新建时未选代理商：查该客户全部代理商下的锁定（含无代理商），加入后自动带入代理商。
     const anyAgent = fromLocks.value && !revisionFulfillment.value && !draft.agentId && !selectedLocks.value.length
     const found = await piApi.lockOptions({ customerId: draft.customerId, agentId: draft.agentId, keyword: lockKeyword.value.trim() || undefined, page: lockPage.value, anyAgent: anyAgent || undefined })
     if (version === lockVersion) { lockRows.value = found.records; lockTotal.value = found.total }
+    // 一条都查不到时，再统计该客户锁定为什么不能用（到期 / 已转完 / 其他代理商），失败不影响主流程。
+    if (version === lockVersion && found.total === 0) {
+      try {
+        const summary = await piApi.lockOptionSummary({ customerId: draft.customerId, agentId: draft.agentId, anyAgent: anyAgent || undefined })
+        if (version === lockVersion) lockSummary.value = summary
+      } catch { /* 原因统计仅作提示 */ }
+    }
   } catch (error) { if (version === lockVersion) lockError.value = message(error, '来源锁定加载失败') }
   finally { if (version === lockVersion) lockBusy.value = false }
+}
+const lockEmptyReasons = computed(() => {
+  const summary = lockSummary.value
+  if (!summary) return []
+  const reasons: string[] = []
+  const keyword = lockKeyword.value.trim()
+  if (keyword) reasons.push(`按「${keyword}」没有搜到，可清空搜索框再查`)
+  if (!Number(summary.totalCount)) { reasons.push('该客户还没有做过 SKU 锁定'); return reasons }
+  if (Number(summary.expiredCount)) reasons.push(`${summary.expiredCount} 条已到期${summary.lastExpiredAt ? `（最近一条 ${String(summary.lastExpiredAt).replace('T', ' ').slice(0, 16)} 到期）` : ''}，需到锁定页重新锁定或延期`)
+  if (Number(summary.finishedCount)) reasons.push(`${summary.finishedCount} 条已全部转单或已释放`)
+  if (Number(summary.otherAgentCount)) reasons.push(`${summary.otherAgentCount} 条属于其他代理商，可清空上方「所属代理商」后再查`)
+  return reasons
+})
+// 没有可用锁定时，直接改成普通新建 PI：保留客户、代理商和已填的单据信息，商品改为手动选 SKU。
+function switchToNewPi() {
+  if (!fromLocks.value || revisionFulfillment.value) return
+  lockVersion++; lockBusy.value = false
+  fromLocks.value = false; selectedLocks.value = []; lockRows.value = []; lockTotal.value = 0; lockSummary.value = null
+  conversionKey = ''; conversionFingerprint = ''
+  draft.items = [newItem()]
+  ElMessage.success('已改为新建 PI，请在「商品明细」中选择 SKU、填写数量和单价')
 }
 function syncLockItems() {
   if (revisionFulfillment.value) return
@@ -1191,7 +1220,17 @@ onBeforeUnmount(() => {
         <p v-if="revisionFulfillment" class="pi-hint">新增SKU或新增独立履约子单时选择同客户来源锁定，数量计入下方商品总数量；草稿不转换，确认修订才生效并沿用原截止时间。删除来源选择不会自动删除商品行。</p>
         <div class="pi-filters"><el-input v-model="lockKeyword" placeholder="按锁定单号或 SKU 搜索" /><el-button :disabled="!draft.customerId" :loading="lockBusy" @click="lockPage = 1; loadLocks()">查找来源锁定</el-button></div>
         <el-alert v-if="lockError" :title="lockError" type="error" :closable="false" />
-        <el-table :data="lockRows" v-loading="lockBusy" :empty-text="draft.customerId ? '该客户没有可转换的SKU锁定（已到期、已转完或属于其他代理商的不显示）' : '选择客户后查询可转换的SKU锁定'">
+        <el-table :data="lockRows" v-loading="lockBusy">
+          <template #empty>
+            <div v-if="!draft.customerId" class="pi-lock-empty">选择客户后查询可转换的SKU锁定</div>
+            <div v-else class="pi-lock-empty">
+              <strong>该客户没有可转换的 SKU 锁定</strong>
+              <ul v-if="lockEmptyReasons.length"><li v-for="reason in lockEmptyReasons" :key="reason">{{ reason }}</li></ul>
+              <p v-else>只显示未到期、仍有剩余可转数量的 SKU 锁定。</p>
+              <p v-if="fromLocks && !revisionFulfillment">不需要锁定的话，可以直接新建 PI，自己选 SKU、填数量和单价。</p>
+              <el-button v-if="fromLocks && !revisionFulfillment" type="primary" plain @click="switchToNewPi">改用新建 PI（直接选 SKU）</el-button>
+            </div>
+          </template>
       <RecordIdColumn />
           <el-table-column prop="lockNo" label="来源锁定" min-width="180" /><el-table-column prop="skuCode" label="SKU" /><el-table-column label="代理商" min-width="120"><template #default="{ row }">{{ row.agentName || '无代理商' }}</template></el-table-column><el-table-column prop="remainingQty" label="剩余可转" width="100" /><el-table-column prop="expireTime" label="原截止" min-width="170" />
           <el-table-column label="选择" width="90"><template #default="{ row }"><el-button link :disabled="selectedLocks.some(item => item.id === row.id)" @click="addLock(row)">加入</el-button></template></el-table-column>
@@ -1367,4 +1406,5 @@ onBeforeUnmount(() => {
 .europe-order-scope{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:16px 18px;margin-bottom:18px;border:1px solid #dbe4ee;border-radius:10px;background:#f6f9fc}.europe-order-scope label{font-weight:600;white-space:nowrap}.europe-order-scope .el-select{width:320px;max-width:100%}.europe-order-scope p{flex-basis:100%;margin:0;color:#65758a;font-size:13px;line-height:1.7}.europe-order-scope .el-alert{width:100%;margin:0}
 .pi-workspace{padding:28px 32px;min-width:0;max-width:1500px;margin:auto}.pi-heading{display:flex;justify-content:space-between;gap:20px;align-items:center;margin-bottom:24px}.pi-heading h2{margin:0 0 7px;font-size:24px}.pi-heading p,.pi-hint{color:#65758a;font-size:13px;line-height:1.7}.pi-heading p{margin:0}.pi-filters{display:flex;gap:12px;align-items:center;margin-bottom:18px}.pi-filters>.el-input{max-width:340px}.pi-filters>.el-select{width:160px}.el-pagination{margin-top:20px;justify-content:flex-end;flex-wrap:wrap}.el-alert{margin:12px 0}.pi-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 18px}.pi-form .el-select,.pi-form .el-date-editor,.el-form-item .el-date-editor{width:100%}.pi-form h3{font-size:16px;margin:22px 0 14px}.pi-items-scroll{overflow-x:auto;margin-bottom:12px}.pi-draft-items{min-width:1020px}.pi-draft-items th,.pi-draft-items td{padding:10px 6px}.pi-draft-items th:first-child{width:340px}.pi-draft-items .el-input-number{width:108px}.pi-draft-items .el-input{min-width:98px}.pi-draft-items .el-select{min-width:320px}.pi-amounts{margin-top:24px}.pi-preview{background:#f1f7fc;border-radius:8px;padding:14px 18px;display:flex;flex-direction:column;gap:7px;align-self:start}.pi-preview span{font-size:12px;color:#52687d}.pi-preview strong{font-size:23px;color:#1677c8}.pi-preview small{font-size:11px;line-height:1.6;color:#748196}.pi-detail{min-height:140px}.pi-detail-heading{display:flex;justify-content:space-between;align-items:center;gap:20px;margin:8px 0 18px}.pi-detail-heading>div{display:flex;gap:12px;flex-wrap:wrap;align-items:center}.pi-detail-heading span{font-size:13px;color:#65758a}.pi-grand-total{font-size:24px;color:#1677c8}.pi-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}.pi-actions .el-button+.el-button{margin-left:0}.pi-tab-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.pi-totals{display:flex;justify-content:flex-end;gap:22px;flex-wrap:wrap;background:#f6f9fc;padding:18px;margin-top:16px}.pi-totals span{display:flex;flex-direction:column;gap:8px;color:#65758a;font-size:12px}.pi-totals b{font-size:15px;color:#23364d}.pi-prewrap{white-space:pre-wrap;overflow-wrap:anywhere}.el-tabs{margin-top:18px}@media(max-width:900px){.pi-workspace{padding:22px 18px}.pi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.pi-filters{flex-wrap:wrap}}@media(max-width:580px){.pi-grid{grid-template-columns:1fr}.pi-heading{align-items:flex-start;flex-direction:column}.pi-detail-heading{align-items:flex-start;flex-direction:column}.pi-filters>.el-input{max-width:none;width:100%}.pi-grand-total{font-size:21px}}
 .release-receipts{margin:16px 0 20px}.release-receipts-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}.release-receipts .el-alert{margin:10px 0 0}
+.pi-lock-empty{padding:18px 12px;line-height:1.8;color:#65758a;font-size:13px;text-align:center}.pi-lock-empty strong{display:block;color:#3b4a5c;font-size:14px;margin-bottom:4px}.pi-lock-empty ul{display:inline-block;margin:4px 0;padding-left:18px;text-align:left}.pi-lock-empty p{margin:4px 0}.pi-lock-empty .el-button{margin-top:8px}
 </style>
