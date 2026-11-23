@@ -55,8 +55,18 @@ class CustomerScopeMysqlTest {
         final com.bike.server.trace.TraceMapper trace;
         final OrderServiceImpl orders;
         Fixture()throws Exception {
-            f.exec("ALTER TABLE @sys_user ADD username VARCHAR(100),ADD user_type VARCHAR(32) NOT NULL DEFAULT 'WEB_OPERATOR',ADD enabled TINYINT NOT NULL DEFAULT 1,ADD customer_scope_version BIGINT NOT NULL DEFAULT 0");
-            f.exec("INSERT INTO @sys_user(id,username,display_name) VALUES(1,'sales-a','销售甲'),(2,'sales-b','销售乙'),(3,'manager','范围管理员')");
+            f.exec("""
+                    ALTER TABLE @sys_user ADD username VARCHAR(100), ADD user_type VARCHAR(32) NOT NULL DEFAULT 'WEB_OPERATOR',
+                        ADD enabled TINYINT NOT NULL DEFAULT 1, ADD customer_scope_version BIGINT NOT NULL DEFAULT 0,
+                        ADD created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+                        ADD updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+                    """);
+            f.exec("""
+                    INSERT INTO @sys_user(id, username, display_name, created_at) VALUES
+                        (1, 'sales-a', '销售甲', '2026-01-02 00:00:00'),
+                        (2, 'sales-b', '销售乙', '2026-01-01 00:00:00'),
+                        (3, 'manager', '范围管理员', '2026-01-03 00:00:00')
+                    """);
             f.exec("ALTER TABLE @operation_log ADD operation_time DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)");
             f.exec("ALTER TABLE @agent ADD agent_code VARCHAR(64)");
             f.exec("ALTER TABLE @customer ADD contact_name VARCHAR(100),ADD contact_phone VARCHAR(64),ADD created_at DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),ADD updated_at DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3)");

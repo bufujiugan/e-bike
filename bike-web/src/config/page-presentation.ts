@@ -22,6 +22,7 @@ export const pagePresentation: Record<string, { title: string; description: stri
   'stock-out': { title: '出库记录', description: '管理整车出库记录与交付信息，支持快速查询、出库核对与数据导出', theme: 'stock-out', motto: '高效 · 准确 · 可追溯' },
   stock: { title: '出入库记录', description: '整车入库、出库及撤销记录，清晰掌握库存流转情况', theme: 'stock-flow', motto: '数字化流转 · 让生产更高效' },
   orders: { title: '销售订单', description: '管理客户订单，跟踪订单履约进度，从库存锁定到出库交付的全过程', theme: 'orders', motto: '连接客户 · 高效交付' },
+  'completed-orders': { title: '已完成订单', description: '按订单号或客户名称查询已全部出库的销售订单', theme: 'orders', motto: '' },
 }
 export const productionFlow: ProcessStep[] = ['生产工单', '计划车辆', '作业中', '四码完成', '聚合码', '打印', '质检', '入库'].map(label => ({ label }))
 export const assemblyFlow: ProcessStep[] = ['车架组装', '电机安装', '电池安装', '线束连接', '功能测试', '整车质检', '包装入库'].map(label => ({ label }))

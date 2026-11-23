@@ -2,6 +2,10 @@ package com.bike.server.production;
 
 import static org.assertj.core.api.Assertions.*;
 import com.bike.server.production.migration.V16__production_workflow;
+import com.bike.server.production.migration.V57__unified_fulfillment;
+import com.bike.server.production.migration.V58__europe_sales;
+import com.bike.server.production.migration.V59__sales_document_routing;
+import com.bike.server.production.migration.V60__dispatch_notifications;
 import java.sql.*;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
@@ -10,30 +14,31 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 /** 仅针对两个新建的专用空库，禁止清库或重复覆盖已有业务数据。 */
 @EnabledIfEnvironmentVariable(named="BIKE_MIGRATION_CLEAN_URL",matches=".+")
 class MigrationMysqlTest {
-  private static final int LATEST_VERSION = 55;
+  private static final int LATEST_VERSION = 60;
+  private static final int COLLATION_BASELINE = 55;
   Flyway flyway(String url,String target) {
     assertThat(url).contains("/bike_migration_");
     var config=Flyway.configure().dataSource(url,System.getenv("BIKE_MYSQL_TEST_USER"),System.getenv("BIKE_MYSQL_TEST_PASSWORD"))
-        .locations("classpath:db/migration-prod").table("bike_schema_history").javaMigrations(new V16__production_workflow()).cleanDisabled(true);
+        .locations("classpath:db/migration-prod").table("bike_schema_history")
+        .javaMigrations(new V16__production_workflow(), new V57__unified_fulfillment(),
+            new V58__europe_sales(), new V59__sales_document_routing(), new V60__dispatch_notifications()).cleanDisabled(true);
     if(target!=null)config.target(target);
     return config.load();
   }
   Connection connection(String url)throws Exception{return DriverManager.getConnection(url,System.getenv("BIKE_MYSQL_TEST_USER"),System.getenv("BIKE_MYSQL_TEST_PASSWORD"));}
   @Test void emptyProductionDatabaseMigratesWithoutBusinessSeed() throws Exception {
     String url=System.getenv("BIKE_MIGRATION_CLEAN_URL");
-    Flyway flyway=flyway(url,null);
-    assertThat(flyway.info().applied()).isEmpty();
-    assertThat(flyway.migrate().migrationsExecuted).isEqualTo(LATEST_VERSION);
-    flyway.validate();assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo(Integer.toString(LATEST_VERSION));
+    var baseline = flyway(url, Integer.toString(COLLATION_BASELINE));
+    assertThat(baseline.info().applied()).isEmpty();
+    migrateThroughDispatchNotifications(url, baseline, COLLATION_BASELINE);
     try(var conn=connection(url);var sql=conn.createStatement()) {
       try(var result=sql.executeQuery("SELECT (SELECT COUNT(*) FROM bike_vehicle)+(SELECT COUNT(*) FROM bike_part)+(SELECT COUNT(*) FROM bike_sales_order)")){result.next();assertThat(result.getInt(1)).isZero();}
       try(var result=sql.executeQuery("SELECT must_change_password,auth_version FROM bike_sys_user WHERE username='admin'")){assertThat(result.next()).isTrue();assertThat(result.getInt(1)).isEqualTo(1);assertThat(result.getLong(2)).isZero();}
       try(var result=sql.executeQuery("SELECT COUNT(*) FROM bike_production_scan_failure")){result.next();assertThat(result.getInt(1)).isZero();}
       try(var result=sql.executeQuery("SELECT COUNT(*) FROM bike_agent_model_access")){result.next();assertThat(result.getInt(1)).isZero();}
       try(var result=sql.executeQuery("SELECT COUNT(*) FROM bike_pi_revision_source")){result.next();assertThat(result.getInt(1)).isZero();}
-      verifyManagementPermission(sql); verifyAfterSalesAndPiSchema(sql); verifyDatabaseCollation(sql); verifyProductionWorkOrderSchema(sql); verifyListTimestampSchema(sql);
+      verifyManagementPermission(sql); verifyAfterSalesAndPiSchema(sql); verifyProductionWorkOrderSchema(sql); verifyListTimestampSchema(sql);
     }
-    assertThat(flyway.migrate().migrationsExecuted).isZero();
   }
   @Test void upgradeFromV16PreservesExistingParts() throws Exception {
     String url=System.getenv("BIKE_MIGRATION_UPGRADE_URL");
@@ -46,15 +51,16 @@ class MigrationMysqlTest {
     Flyway v24=flyway(url,"24");assertThat(v24.migrate().migrationsExecuted).isEqualTo(8);v24.validate();
     try(var conn=connection(url);var sql=conn.createStatement()) {
       insertExpiredPaidReservation(sql); insertLegacyAfterSales(sql);
-      sql.executeUpdate("INSERT INTO bike_production_task(id,sku_id,batch_no,created_by) SELECT 'migration-task-0001',id,'MIGRATION-BATCH','migration' FROM bike_production_sku ORDER BY id LIMIT 1");
+      sql.executeUpdate("INSERT INTO bike_production_sku(id,model_id,sku_code,product_name,template_id) VALUES(9001,9001,'MIGRATE-SKU','迁移保留SKU',1)");
+      sql.executeUpdate("INSERT INTO bike_production_task(id,sku_id,batch_no,created_by) VALUES('migration-task-0001',9001,'MIGRATION-BATCH','migration')");
     }
-    Flyway next=flyway(url,null);assertThat(next.migrate().migrationsExecuted).isEqualTo(LATEST_VERSION - 24);next.validate();
+    var baseline = flyway(url, Integer.toString(COLLATION_BASELINE));
+    migrateThroughDispatchNotifications(url, baseline, COLLATION_BASELINE - 24);
     try(var conn=connection(url);var sql=conn.createStatement();var result=sql.executeQuery("SELECT remark,qc_status FROM bike_part WHERE part_sn='MIGRATION-PRESERVE-001'")) {
       assertThat(result.next()).isTrue();assertThat(result.getString(1)).isEqualTo("升级保留验收");assertThat(result.getString(2)).isEqualTo("PASSED");
     }
-    assertThat(next.migrate().migrationsExecuted).isZero();
     try(var conn=connection(url);var sql=conn.createStatement()) {
-      verifyManagementPermission(sql); verifyAfterSalesAndPiSchema(sql); verifyDatabaseCollation(sql); verifyProductionWorkOrderSchema(sql); verifyListTimestampSchema(sql);
+      verifyManagementPermission(sql); verifyAfterSalesAndPiSchema(sql); verifyProductionWorkOrderSchema(sql); verifyListTimestampSchema(sql);
       verifyLegacyAfterSales(sql);
       try(var result=sql.executeQuery("SELECT w.work_order_no,w.batch_no,w.planned_quantity,t.work_order_id FROM bike_production_task t JOIN bike_production_work_order w ON w.id=t.work_order_id WHERE t.id='migration-task-0001'")) {
         assertThat(result.next()).isTrue();assertThat(result.getString("work_order_no")).startsWith("HIST-");assertThat(result.getString("batch_no")).isEqualTo("MIGRATION-BATCH");assertThat(result.getInt("planned_quantity")).isEqualTo(1);assertThat(result.getLong("work_order_id")).isPositive();
@@ -79,6 +85,35 @@ class MigrationMysqlTest {
       try(var result=sql.executeQuery("SELECT COUNT(DISTINCT batch_id) FROM bike_stock_out_batch_item WHERE stock_out_id IN (9001,9002)")){result.next();assertThat(result.getInt(1)).isEqualTo(2);}
       try(var result=sql.executeQuery("SELECT stock_out_batch_id,link_type,status,tracking_no,revision FROM bike_pi_logistics WHERE id=9001")){assertThat(result.next()).isTrue();assertThat(result.getObject(1)).isNull();assertThat(result.getString(2)).isEqualTo("LEGACY_UNLINKED");assertThat(result.getString(3)).isEqualTo("SHIPPED");assertThat(result.getString(4)).isEqualTo("OLD-TRACK");assertThat(result.getInt(5)).isEqualTo(1);}
       try(var result=sql.executeQuery("SELECT action,JSON_UNQUOTE(JSON_EXTRACT(snapshot,'$.trackingNo')) FROM bike_pi_logistics_history WHERE logistics_id=9001")){assertThat(result.next()).isTrue();assertThat(result.getString(1)).isEqualTo("MIGRATED_CURRENT");assertThat(result.getString(2)).isEqualTo("OLD-TRACK");assertThat(result.next()).isFalse();}
+    }
+  }
+  private void migrateThroughDispatchNotifications(String url, Flyway baseline, int baselineMigrations) throws Exception {
+    assertThat(baseline.migrate().migrationsExecuted).isEqualTo(baselineMigrations);
+    try (var conn = connection(url); var sql = conn.createStatement()) {
+      verifyDatabaseCollation(sql);
+    }
+
+    var latest = flyway(url, null);
+    assertThat(latest.migrate().migrationsExecuted).isEqualTo(LATEST_VERSION - COLLATION_BASELINE);
+    latest.validate();
+    assertThat(latest.info().current().getVersion().getVersion()).isEqualTo(Integer.toString(LATEST_VERSION));
+    assertThat(latest.migrate().migrationsExecuted).isZero();
+    try (var conn = connection(url); var sql = conn.createStatement()) {
+      try (var result = sql.executeQuery("""
+          SELECT (SELECT COUNT(*) FROM bike_dispatch_notification)
+               + (SELECT COUNT(*) FROM bike_dispatch_notification_read)
+          """)) {
+        assertThat(result.next()).isTrue();
+        assertThat(result.getInt(1)).isZero();
+      }
+      try (var result = sql.executeQuery("""
+          SELECT COUNT(*) FROM information_schema.tables
+          WHERE table_schema=DATABASE() AND table_collation='utf8mb4_unicode_ci'
+            AND table_name IN ('bike_dispatch_notification', 'bike_dispatch_notification_read')
+          """)) {
+        assertThat(result.next()).isTrue();
+        assertThat(result.getInt(1)).isEqualTo(2);
+      }
     }
   }
   private void insertExpiredPaidReservation(Statement sql)throws Exception {

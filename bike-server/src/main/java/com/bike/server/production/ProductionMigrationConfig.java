@@ -6,6 +6,10 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class ProductionMigrationConfig {
   @Bean
+  public com.bike.server.production.migration.V60__dispatch_notifications dispatchNotificationsMigration() {
+    return new com.bike.server.production.migration.V60__dispatch_notifications();
+  }
+  @Bean
   public com.bike.server.production.migration.V59__sales_document_routing salesDocumentRoutingMigration() {
     return new com.bike.server.production.migration.V59__sales_document_routing();
   }

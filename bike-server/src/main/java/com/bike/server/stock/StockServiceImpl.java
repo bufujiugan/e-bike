@@ -3,6 +3,7 @@ package com.bike.server.stock;
 import com.bike.server.common.BusinessException;
 import com.bike.server.common.CurrentOperator;
 import com.bike.server.common.PageResponse;
+import com.bike.server.notification.DispatchNotificationService;
 import com.bike.server.vehicle.VehicleView;
 import com.bike.server.order.OrderMapper;
 import com.bike.server.order.SalesOrderView;
@@ -26,6 +27,7 @@ public class StockServiceImpl implements StockService {
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.pi.PiShipmentGuard piShipmentGuard;
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.pi.PiDispatchRecorder dispatchRecorder;
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.pi.PiLogisticsMapper logistics;
+    @org.springframework.beans.factory.annotation.Autowired private DispatchNotificationService dispatchNotifications;
     public StockServiceImpl(StockMapper stockMapper, OrderMapper orderMapper) { this.stockMapper = stockMapper; this.orderMapper = orderMapper; }
 
     @Override public StockValidationResult validateStockIn(StockValidationRequest request) {
@@ -100,7 +102,9 @@ public class StockServiceImpl implements StockService {
 
     @Override @Transactional
     public StockRecordView stockOut(StockOutRequest request) {
-        return performStockOut(request,null);
+        StockRecordView firstRecord = performStockOut(request, null);
+        dispatchNotifications.recordOrderDispatch(firstRecord, request.vehicleQrCodes().size());
+        return firstRecord;
     }
 
     @Override @Transactional

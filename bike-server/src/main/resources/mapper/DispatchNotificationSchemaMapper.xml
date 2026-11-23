@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- V60 迁移使用，发布后保持此文件的校验和不变。 -->
+<mapper namespace="com.bike.server.notification.DispatchNotificationSchemaMapper">
+  <update id="createNotifications">
+    CREATE TABLE bike_dispatch_notification (
+        id BIGINT NOT NULL AUTO_INCREMENT,
+        kind VARCHAR(16) NOT NULL COMMENT 'ORDER 或 PI',
+        source_id BIGINT NOT NULL COMMENT '首条订单出库流水 ID 或 PI 出库批次 ID',
+        customer_id BIGINT NOT NULL,
+        document_id BIGINT NOT NULL COMMENT '销售订单 ID 或执行时 PI ID',
+        document_no VARCHAR(64) NOT NULL,
+        batch_no VARCHAR(64) NULL,
+        quantity INT NOT NULL,
+        dispatched_at DATETIME(3) NOT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY uk_dispatch_notice_source (kind, source_id),
+        KEY idx_dispatch_notice_customer (customer_id, id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='实际出库通知'
+  </update>
+  <update id="createReadReceipts">
+    CREATE TABLE bike_dispatch_notification_read (
+        notification_id BIGINT NOT NULL,
+        user_id BIGINT NOT NULL,
+        read_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        PRIMARY KEY (notification_id, user_id),
+        KEY idx_dispatch_notice_read_user (user_id, notification_id),
+        CONSTRAINT fk_dispatch_notice_read_notice FOREIGN KEY (notification_id) REFERENCES bike_dispatch_notification(id),
+        CONSTRAINT fk_dispatch_notice_read_user FOREIGN KEY (user_id) REFERENCES bike_sys_user(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='出库通知按账号保存的已读记录'
+  </update>
+</mapper>

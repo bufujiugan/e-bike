@@ -31,9 +31,9 @@ import '../styles/pi-draft.css'
 import { salesScenarioDefaults, salesScenarioFilters, matchesSalesScenario, salesChannelLayoutName, type PiSalesScenario } from '../pi-sales-scenario'
 import { clearSalesIntent, salesTypeLabel, type SalesIntent } from '../sales-routing'
 
-const props = withDefaults(defineProps<{ context: (PermissionContext & { userType?: string; username?: string }) | null; initialKeyword?: string; europe?: boolean; salesScenario?: PiSalesScenario; allowCreate?: boolean; intent?: SalesIntent | null; genericEntry?: boolean }>(), { allowCreate: true, intent: null, genericEntry: false })
+const props = withDefaults(defineProps<{ context: (PermissionContext & { userType?: string; username?: string }) | null; initialKeyword?: string; europe?: boolean; salesScenario?: PiSalesScenario; allowCreate?: boolean; intent?: SalesIntent | null; genericEntry?: boolean; requestedDetailId?: number | null }>(), { allowCreate: true, intent: null, genericEntry: false })
 const scenario = computed(() => props.salesScenario ? salesScenarioDefaults(props.salesScenario) : undefined)
-const emit = defineEmits<{ navigate: [view: string] }>()
+const emit = defineEmits<{ navigate: [view: string]; detailRequested: [] }>()
 const isAgent = computed(() => hasRole(props.context, 'WEB_AGENT') || props.context?.userType === 'AGENT')
 const isPda = computed(() => hasRole(props.context, 'PDA_OPERATOR') || props.context?.userType === 'PDA_OPERATOR')
 const internal = computed(() => !isAgent.value && !isPda.value)
@@ -1088,6 +1088,11 @@ async function applyIntent() {
   } catch (error) { ElMessage.error(message(error, '自动打开新建 PI 失败，请手动新建')) }
 }
 watch([() => props.intent, canCreateInScope, canWrite], () => { void applyIntent() })
+watch([() => props.requestedDetailId, canRead], ([id, allowed]) => {
+  if (!id || !allowed) return
+  void openDetail({ id })
+  emit('detailRequested')
+}, { immediate: true })
 onMounted(() => {
   void nextTick().then(applyIntent)
   refreshLocalDrafts()

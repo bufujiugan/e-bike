@@ -8,6 +8,10 @@ public final class CustomerScopeTestSupport {
     private CustomerScopeTestSupport() {}
     public static <T> T isolated(T service) {
         ReflectionTestUtils.setField(service,"customerScope",mock(CustomerScopeAccess.class));
+        if (service instanceof com.bike.server.stock.StockServiceImpl) {
+            ReflectionTestUtils.setField(service, "dispatchNotifications",
+                    mock(com.bike.server.notification.DispatchNotificationService.class));
+        }
         if(service instanceof com.bike.server.pi.PiReceiptAttachmentService) {
             var pis=mock(com.bike.server.pi.PiMapper.class);
             when(pis.selectById(anyLong())).thenReturn(new com.bike.server.pi.PiView());

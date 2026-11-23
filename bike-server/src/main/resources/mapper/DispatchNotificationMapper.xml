@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.notification.DispatchNotificationMapper">
+  <insert id="insertNotification">
+    INSERT INTO bike_dispatch_notification
+      (kind, source_id, customer_id, document_id, document_no, batch_no, quantity, dispatched_at)
+    VALUES (#{kind}, #{sourceId}, #{customerId}, #{documentId}, #{documentNo}, #{batchNo}, #{quantity}, #{dispatchedAt})
+    ON DUPLICATE KEY UPDATE id = bike_dispatch_notification.id
+  </insert>
+
+  <sql id="visibleNotifications">
+    FROM bike_dispatch_notification n
+    LEFT JOIN bike_dispatch_notification_read r ON r.notification_id = n.id AND r.user_id = #{audience.userId}
+    WHERE (
+      (#{audience.orderAllowed} = TRUE AND n.kind = 'ORDER')
+      OR (#{audience.piAllowed} = TRUE AND n.kind = 'PI')
+    )
+    <if test="audience.customerScopeUserId != null">
+      AND EXISTS (
+        SELECT 1 FROM bike_user_customer_scope cs
+        WHERE cs.user_id = #{audience.customerScopeUserId} AND cs.customer_id = n.customer_id
+      )
+    </if>
+  </sql>
+
+  <sql id="notificationColumns">
+    n.id, n.kind, n.document_id, n.document_no, n.batch_no, n.quantity, n.dispatched_at, r.read_at
+  </sql>
+
+  <select id="selectNotifications" resultType="com.bike.server.notification.DispatchNotification">
+    SELECT <include refid="notificationColumns"/>
+    <include refid="visibleNotifications"/>
+    <if test="unreadOnly">AND r.notification_id IS NULL</if>
+    ORDER BY n.id DESC
+    LIMIT #{offset}, #{limit}
+  </select>
+
+  <select id="countNotifications" resultType="long">
+    SELECT COUNT(*)
+    <include refid="visibleNotifications"/>
+    <if test="unreadOnly">AND r.notification_id IS NULL</if>
+  </select>
+
+  <select id="selectNextUnread" resultType="com.bike.server.notification.DispatchNotification">
+    SELECT <include refid="notificationColumns"/>
+    <include refid="visibleNotifications"/>
+    AND r.notification_id IS NULL AND n.id &gt; #{afterId}
+    ORDER BY n.id ASC
+    LIMIT 1
+  </select>
+
+  <select id="selectVisibleCustomer" resultType="long">
+    SELECT n.customer_id
+    <include refid="visibleNotifications"/>
+    AND n.id = #{id}
+  </select>
+
+  <insert id="insertReadReceipt">
+    INSERT INTO bike_dispatch_notification_read (notification_id, user_id)
+    VALUES (#{id}, #{userId})
+    ON DUPLICATE KEY UPDATE read_at = bike_dispatch_notification_read.read_at
+  </insert>
+</mapper>

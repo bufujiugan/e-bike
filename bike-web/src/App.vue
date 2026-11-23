@@ -33,6 +33,7 @@ function continueProduction(stage: string, sku: { id: number; skuCode: string; m
 }
 function refreshOrderJourney() { workflowRefreshKey.value++; void loadModule(activeView.value) }
 const PiWorkspace = defineAsyncComponent(() => import('./components/PiWorkspace.vue'))
+const CompletedOrdersPage = defineAsyncComponent(() => import('./views/CompletedOrdersPage.vue'))
 const EuropeSalesWorkspace = defineAsyncComponent(() => import('./components/EuropeSalesWorkspace.vue'))
 const AfterSalesWorkspace = defineAsyncComponent(() => import('./components/AfterSalesWorkspace.vue'))
 const CustomerScopeEditor = defineAsyncComponent(() => import('./components/CustomerScopeEditor.vue'))
@@ -42,6 +43,8 @@ const CustomerProfiles = defineAsyncComponent(() => import('./components/Custome
 const CustomerWorkspace = defineAsyncComponent(() => import('./components/CustomerWorkspace.vue'))
 const CustomerAccountCreate = defineAsyncComponent(() => import('./components/CustomerAccountCreate.vue'))
 const CustomerOrderNotifications = defineAsyncComponent(() => import('./components/CustomerOrderNotifications.vue'))
+const DispatchNotifications = defineAsyncComponent(() => import('./components/DispatchNotifications.vue'))
+const dispatchPiId = ref<number | null>(null)
 
 
 function flattenNavItems(items: NavItem[]): NavItem[] {
@@ -57,6 +60,7 @@ const authContext = ref<AuthContext | null>(null)
 const isAgentAccount = computed(() => hasRole(authContext.value, 'WEB_AGENT'))
 const isCustomerAccount = computed(() => authContext.value?.userType === 'CUSTOMER')
 const canReceiveCustomerOrders = computed(() => !!authContext.value && !authContext.value.mustChangePassword && !isCustomerAccount.value && !isAgentAccount.value && !hasRole(authContext.value, 'PDA_OPERATOR') && hasPermission(authContext.value, 'ORDER_READ') && hasPermission(authContext.value, 'ORDER_WRITE'))
+const canReceiveDispatchNotifications = computed(() => !!authContext.value && !authContext.value.mustChangePassword && !isCustomerAccount.value && !isAgentAccount.value && !hasRole(authContext.value, 'PDA_OPERATOR') && hasAnyPermission(authContext.value, ['ORDER_READ', 'PI_READ']))
 const passwordChangeVisible = ref(false)
 const accountSettingsVisible = ref(false)
 const currentPassword = ref('')
@@ -118,6 +122,7 @@ const navGroups: NavGroup[] = [
     items: [
       { key: 'orders', label: '销售订单', shortLabel: '订单', path: '/orders' },
       { key: 'pis', label: 'PI 与履约', shortLabel: 'PI', path: '/pis' },
+      { key: 'completed-orders', label: '已完成订单', shortLabel: '已完成', path: '/completed-orders', icon: 'check' },
       { key: 'europe-orders', label: '欧洲销售与交付', shortLabel: '欧洲', path: '/europe-orders', icon: 'orders' },
       { key: 'customers', label: '客户管理', shortLabel: '客户', path: '/master/customers' },
       { key: 'agents', label: '代理商管理', shortLabel: '代理商', path: '/master/agents' },
@@ -166,6 +171,7 @@ const navPermissionMap: Record<string, string[]> = {
   'file-reviews': ['FILE_REVIEW_MANAGE'],
   'customer-scopes': ['CUSTOMER_SCOPE_MANAGE'],
   pis: ['PI_READ'],
+  'completed-orders': ['ORDER_READ'],
   'europe-orders': ['PI_READ'],
   'sku-inventory': ['INVENTORY_READ', 'AGENT_INVENTORY_READ'],
   'after-sales': ['AFTER_SALES_READ'],
@@ -576,7 +582,7 @@ async function loadModule(module: string) {
   const requestVersion = ++moduleRequestVersion
   dataLoading.value = false
   if (!authContext.value || authContext.value.mustChangePassword || isCustomerAccount.value || module === 'customer-orders') return
-  if (module.startsWith('production') || ['workflow', 'trace', 'pis', 'europe-orders', 'after-sales', 'sku-inventory', 'customer-scopes', 'file-reviews'].includes(module)) return
+  if (module.startsWith('production') || ['workflow', 'trace', 'pis', 'completed-orders', 'europe-orders', 'after-sales', 'sku-inventory', 'customer-scopes', 'file-reviews'].includes(module)) return
   if (module === 'dashboard') return loadDashboard(requestVersion)
   dataLoading.value = true
   dataError.value = ''
@@ -700,6 +706,7 @@ function openOperationGuideStage(stage: string) {
 }
 
 function clearSession() {
+  dispatchPiId.value = null
   localStorage.removeItem('bike_access_token')
   loggedIn.value = false
   password.value = ''
@@ -1190,7 +1197,11 @@ async function submitPrimaryAction() {
 
   <AppLayout v-else :groups="visibleNavGroups" :active="activeView" :title="activeNav?.label ?? '工作台'" :group="activeGroupLabel" :username="username" :role="userRoleLabel" :last-loaded="lastLoadedAt" @navigate="navigate" @guide="operationGuideVisible = true" @settings="openAccountSettings" @logout="logout">
 
-    <template #notifications><CustomerOrderNotifications v-if="canReceiveCustomerOrders" :key="username" @order="journeyOrderNo = $event" /></template>
+    <template #notifications>
+      <CustomerOrderNotifications v-if="canReceiveCustomerOrders" :key="username" @order="journeyOrderNo = $event" />
+      <DispatchNotifications v-if="canReceiveDispatchNotifications" :key="username + '-dispatch'"
+        @order="journeyOrderNo = $event" @pi="dispatchPiId = $event; navigate('pis')" />
+    </template>
     <el-empty v-if="!authContext" description="正在加载账号信息…" />
     <el-empty v-else-if="passwordChangeVisible" description="请先修改初始密码" />
     <CustomerWorkspace v-else-if="isCustomerAccount" :key="username" />
@@ -1202,7 +1213,9 @@ async function submitPrimaryAction() {
       <TraceQuery v-else-if="activeView === 'trace' && !passwordChangeVisible" />
       <SkuInventoryPanel v-else-if="activeView === 'sku-inventory' && !passwordChangeVisible" :context="authContext" @navigate="navigate" @convert="changeInventoryLock([$event], 'convert')" />
       <EuropeSalesWorkspace v-else-if="activeView === 'europe-orders' && !passwordChangeVisible" :context="authContext" @navigate="navigate" />
-      <PiWorkspace v-else-if="activeView === 'pis' && !passwordChangeVisible" :context="authContext" :allow-create="false" generic-entry @navigate="navigate" />
+      <PiWorkspace v-else-if="activeView === 'pis' && !passwordChangeVisible" :context="authContext" :allow-create="false"
+        :requested-detail-id="dispatchPiId" generic-entry @detail-requested="dispatchPiId = null" @navigate="navigate" />
+      <CompletedOrdersPage v-else-if="activeView === 'completed-orders' && hasPermission(authContext, 'ORDER_READ')" />
       <CustomerScopeManager v-else-if="activeView === 'customer-scopes' && !passwordChangeVisible && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'CUSTOMER_SCOPE_MANAGE')" />
       <FileReviewManager v-else-if="activeView === 'file-reviews' && !passwordChangeVisible && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'FILE_REVIEW_MANAGE')" />
       <AfterSalesWorkspace v-else-if="activeView === 'after-sales' && !passwordChangeVisible" :auth-context="authContext" />

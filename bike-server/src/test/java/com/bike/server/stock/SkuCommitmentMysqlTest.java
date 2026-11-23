@@ -259,6 +259,7 @@ class SkuCommitmentMysqlTest {
         final com.bike.server.dashboard.DashboardMapper dashboard;
         final ProductionGuard guard;
         final SqlSessionTemplate session;
+        final com.bike.server.notification.DispatchNotificationService dispatchNotifications;
         final SkuLockService locks;
         final LockOrderService conversion;
         final StockServiceImpl stock;
@@ -275,9 +276,10 @@ class SkuCommitmentMysqlTest {
         Fixture(boolean withPi) throws Exception {
             var config=new Configuration(new Environment("sku-commitment",new SpringManagedTransactionFactory(),source));
             config.setMapUnderscoreToCamelCase(true);
-            for(String name:List.of("InventoryPolicyMapper","AuditPolicyMapper","AgentModelAccessMapper","InventoryLockMapper","SkuLockMapper","SkuInventoryMapper","OrderMapper","OrderReservationMapper","ProductionMapper","VehicleMapper","StockMapper","OperationLogMapper","ModuleMapper","DashboardMapper","PiMapper","PiSeriesMapper","PiShipmentMapper","PiDispatchMapper","PiLogisticsMapper","PiQuantityMapper","PiWarehouseProjectionFixtureMapper","PiBusinessMapper","PaymentPriorityMapper","PaymentPrioritySqlFixture"))
+            for(String name:List.of("InventoryPolicyMapper","AuditPolicyMapper","AgentModelAccessMapper","InventoryLockMapper","SkuLockMapper","SkuInventoryMapper","OrderMapper","OrderReservationMapper","ProductionMapper","VehicleMapper","StockMapper","OperationLogMapper","ModuleMapper","DashboardMapper","PiMapper","PiSeriesMapper","PiShipmentMapper","PiDispatchMapper","PiLogisticsMapper","PiQuantityMapper","PiWarehouseProjectionFixtureMapper","PiBusinessMapper","PaymentPriorityMapper","PaymentPrioritySqlFixture","DispatchNotificationMapper","DispatchNotificationSchemaMapper","CustomerScopeMapper"))
                 try(var input=Resources.getResourceAsStream("mapper/"+name+".xml")) {
-                    var xml=new String(input.readAllBytes(),StandardCharsets.UTF_8).replace("bike_",prefix);
+                    var xml=new String(input.readAllBytes(),StandardCharsets.UTF_8).replace("bike_",prefix)
+                            .replace("CONSTRAINT fk_dispatch_notice_", "CONSTRAINT " + prefix + "fk_dispatch_notice_");
                     new XMLMapperBuilder(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)),config,name,config.getSqlFragments()).parse();
                 }
             session=new SqlSessionTemplate(new SqlSessionFactoryBuilder().build(config));
@@ -294,6 +296,10 @@ class SkuCommitmentMysqlTest {
             var inventoryGuard=new OrderInventoryGuard(reservations);
             ReflectionTestUtils.setField(inventoryGuard,"skuInventoryGuard",skuGuard);
             stock=com.bike.server.common.CustomerScopeTestSupport.isolated(new StockServiceImpl(stockMapper,orders));
+            dispatchNotifications = new com.bike.server.notification.DispatchNotificationServiceImpl(
+                    session.getMapper(com.bike.server.notification.DispatchNotificationMapper.class),
+                    new com.bike.server.common.CustomerScopeAccess(session.getMapper(com.bike.server.common.CustomerScopeMapper.class)));
+            ReflectionTestUtils.setField(stock, "dispatchNotifications", dispatchNotifications);
             ReflectionTestUtils.setField(stock,"productionGuard",guard);
             ReflectionTestUtils.setField(stock,"inventoryGuard",inventoryGuard);
             var coordinator=new OrderReservationCoordinator(guard,reservations,session.getMapper(OperationLogMapper.class),json);
@@ -328,6 +334,10 @@ class SkuCommitmentMysqlTest {
                     exec("CREATE TABLE @"+ddl+" ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
                     tables.add(ddl.substring(0,ddl.indexOf('(')));
                 }
+                session.update("com.bike.server.notification.DispatchNotificationSchemaMapper.createNotifications");
+                tables.add("dispatch_notification");
+                session.update("com.bike.server.notification.DispatchNotificationSchemaMapper.createReadReceipts");
+                tables.add("dispatch_notification_read");
                 session.update("warehouseProjectionFixture.addInventoryLockUpdatedAt");
                 try(var input=Resources.getResourceAsStream("db/migration/V28__sku_inventory_commitments.sql")) {
                     String ddl=new String(input.readAllBytes(),StandardCharsets.UTF_8).replace("bike_",prefix)
@@ -381,6 +391,7 @@ class SkuCommitmentMysqlTest {
                     var recorder=new com.bike.server.pi.PiDispatchRecorder(dispatchMapper);
                     ReflectionTestUtils.setField(stock,"dispatchRecorder",recorder);
                     dispatch=com.bike.server.common.CustomerScopeTestSupport.isolated(new com.bike.server.pi.PiDispatchService(dispatchMapper,piSeries,recorder,stock,orders,guard,session.getMapper(OperationLogMapper.class),validation.getValidator(),json));
+                    ReflectionTestUtils.setField(dispatch, "dispatchNotifications", dispatchNotifications);
                     logisticsMapper=session.getMapper(com.bike.server.pi.PiLogisticsMapper.class);
                     logistics=com.bike.server.common.CustomerScopeTestSupport.isolated(new com.bike.server.pi.PiLogisticsService(logisticsMapper,mapper,piSeries,dispatchMapper,orders,guard,session.getMapper(OperationLogMapper.class),validation.getValidator(),json));
                     ReflectionTestUtils.setField(stock,"logistics",logisticsMapper);

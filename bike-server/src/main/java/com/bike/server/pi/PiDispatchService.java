@@ -1,6 +1,7 @@
 package com.bike.server.pi;
 
 import com.bike.server.common.*;
+import com.bike.server.notification.DispatchNotificationService;
 import com.bike.server.order.OrderMapper;
 import com.bike.server.production.ProductionGuard;
 import com.bike.server.stock.*;
@@ -14,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class PiDispatchService {
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.common.CustomerScopeAccess customerScope;
+    @org.springframework.beans.factory.annotation.Autowired private DispatchNotificationService dispatchNotifications;
     private final PiDispatchMapper mapper;
     private final PiSeriesMapper series;
     private final PiDispatchRecorder recorder;
@@ -78,6 +80,7 @@ public class PiDispatchService {
         if(result.activeQty()!=vehicles.size())fail("PI_BATCH_FAILED","出库批次数量校验失败");
         if(logs.insert("STOCK_OUT_BATCH",result.batchNo(),"PI整批出库",CurrentOperator.id(),CurrentOperator.username(),null,
                 "{\"quantity\":"+result.activeQty()+"}",CurrentOperator.clientIp(),"PI:"+piId)!=1)fail("PI_BATCH_FAILED","出库批次审计失败");
+        dispatchNotifications.recordPiDispatch(result, (String) header.get("piNo"));
         return result;
     }
     public Map<String,Object> warehouseBatch(long id) {
