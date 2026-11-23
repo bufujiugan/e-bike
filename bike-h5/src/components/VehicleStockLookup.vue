@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/language'
 import { ref } from 'vue'
 import axios from '../api'
 
@@ -35,17 +36,17 @@ async function lookup() {
 <template>
   <section class="form-section operation-section">
     <form class="pda-card operation-card" @submit.prevent="lookup">
-      <van-field v-model="code" label="整车编码" placeholder="扫描或输入聚合码、车架 SN"
+      <van-field v-model="code" :label='tr("整车编码")' :placeholder='tr("扫描或输入聚合码、车架 SN")'
         maxlength="512" :disabled="loading" clearable autofocus @keydown.enter.prevent="lookup"
         @update:model-value="location = null; error = ''" />
-      <van-button block type="primary" native-type="submit" :loading="loading">查询库存</van-button>
+      <van-button block type="primary" native-type="submit" :loading="loading">{{ tr("查询库存") }}</van-button>
     </form>
-    <p v-if="error" role="alert">{{ error }}</p>
-    <van-cell-group v-if="location" inset title="在库整车">
-      <van-cell title="车架 SN" :value="location.frameSn" />
-      <van-cell title="车型" :value="location.modelName" />
-      <van-cell title="仓库" :value="location.warehouseName" />
-      <van-cell title="库位" :value="location.locationName" />
+    <p v-if="error" role="alert">{{ tr(error) }}</p>
+    <van-cell-group v-if="location" inset :title='tr("在库整车")'>
+      <van-cell :title='tr("车架 SN")' :value="location.frameSn" />
+      <van-cell :title='tr("车型")' :value="location.modelName" />
+      <van-cell :title='tr("仓库")' :value="location.warehouseName" />
+      <van-cell :title='tr("库位")' :value="location.locationName" />
     </van-cell-group>
   </section>
 </template>

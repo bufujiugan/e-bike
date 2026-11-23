@@ -5,54 +5,54 @@
         message
       }}</text>
       <view v-if="pending" class="card"
-        ><text class="text error">上次入库结果未确认，请先追溯核对。</text
+        ><text class="text error">{{ tr("上次入库结果未确认，请先追溯核对。") }}</text
         ><action-button
-          label="打开追溯"
+          :label='tr("打开追溯")'
           secondary
           @click="go('trace/trace')" /><action-button
-          label="已核对，解除锁定"
+          :label='tr("已核对，解除锁定")'
           secondary
           :disabled="busy"
           @click="acknowledgePending"
       /></view>
       <view class="card"
-        ><choice-list
+        ><choice-list :empty-label="tr('暂无可选记录')"
           :value="warehouseId"
           :options="warehouseOptions"
-          label="仓库"
+          :label='tr("仓库")'
           :disabled="busy || !ready"
           @input="chooseWarehouse"
         />
-        <choice-list
+        <choice-list :empty-label="tr('暂无可选记录')"
           v-model="locationId"
           :options="locationOptions"
-          label="库位"
+          :label='tr("库位")'
           :disabled="busy || !ready"
         />
         <form-field
           :value="code"
-          label="整车聚合码"
+          :label='tr("整车聚合码")'
           :disabled="busy || !!pending"
           @input="changeCode"
           @confirm="validate"
         />
         <action-button
-          label="启动设备扫码"
+          :label='tr("启动设备扫码")'
           secondary
           :disabled="busy || !ready || !!pending"
           @click="triggerScan"
         />
         <action-button
-          label="校验车辆"
+          :label='tr("校验车辆")'
           secondary
           :disabled="busy || !ready || !!pending"
           @click="validate"
         />
         <text v-if="checked" class="text"
-          >校验通过：{{ checked.frameSn || code }}</text
+          >{{ tr("校验通过：") }}{{ checked.frameSn || code }}</text
         >
         <action-button
-          label="确认入库"
+          :label='tr("确认入库")'
           :disabled="
             busy ||
             !ready ||

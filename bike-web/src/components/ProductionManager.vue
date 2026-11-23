@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr, trInline } from '../i18n/language'
 import RecordIdColumn from './table/RecordIdColumn.vue'
 import { createUuid } from '../utils/uuid'
 import { computed, ref, reactive, watch, onMounted, onUnmounted } from "vue";
@@ -91,9 +92,9 @@ function openCreateTask() {
   createTaskVisible.value = true;
 }
 async function saveTask() {
-  if (!props.canManage || !taskDraft.skuId) { ElMessage.warning('请选择商品规格'); return; }
-  if (!taskDraft.batchNo.trim()) { ElMessage.warning('请填写生产批次'); return; }
-  if (!Number.isInteger(taskDraft.plannedQuantity) || taskDraft.plannedQuantity < 1) { ElMessage.warning('计划数量必须大于0'); return; }
+  if (!props.canManage || !taskDraft.skuId) { ElMessage.warning(tr('请选择商品规格')); return; }
+  if (!taskDraft.batchNo.trim()) { ElMessage.warning(tr('请填写生产批次')); return; }
+  if (!Number.isInteger(taskDraft.plannedQuantity) || taskDraft.plannedQuantity < 1) { ElMessage.warning(tr('计划数量必须大于0')); return; }
   await perform(async () => {
     pendingTask.value ??= { requestId: createUuid(), skuId: taskDraft.skuId!, batchNo: taskDraft.batchNo.trim(), plannedQuantity: taskDraft.plannedQuantity };
     let created;
@@ -103,7 +104,7 @@ async function saveTask() {
       throw error;
     }
     pendingTask.value = undefined; createTaskVisible.value = false;
-    detail.value = created; detailTaskPage.value = 1; ElMessage.success('生产单已创建，可在当前页面开始扫码');
+    detail.value = created; detailTaskPage.value = 1; ElMessage.success(tr('生产单已创建，可在当前页面开始扫码'));
     page.value = 1; await load();
   });
 }
@@ -184,7 +185,7 @@ async function openSkuNames(row: any) {
   skuNamesVisible.value = true;
   skuNamesBusy.value = true;
   try { await loadSkuNames(); }
-  catch (error) { ElMessage.error(api.isAxiosError(error) ? error.response?.data?.message ?? "Name列表加载失败" : "Name列表加载失败"); }
+  catch (error) { ElMessage.error(tr(api.isAxiosError(error) ? error.response?.data?.message ?? "Name列表加载失败" : "Name列表加载失败")); }
   finally { skuNamesBusy.value = false; }
 }
 function normalizeNameEan(row: SkuNameDraft, value: string) {
@@ -198,12 +199,12 @@ async function previewNameBarcode(row: SkuNameDraft) {
     row.eanBarcodeDataUrl = (await api.get(`/api/production/barcodes/ean/${row.ean}`)).data.data.dataUrl;
   } catch (error) {
     row.eanBarcodeDataUrl = undefined;
-    ElMessage.warning(api.isAxiosError(error) ? error.response?.data?.message ?? "EAN无法生成条码" : "EAN无法生成条码");
+    ElMessage.warning(tr(api.isAxiosError(error) ? error.response?.data?.message ?? "EAN无法生成条码" : "EAN无法生成条码"));
   } finally { row.barcodeLoading = false; }
 }
 async function saveSkuNames() {
   if (!selectedSku.value || skuNamesBusy.value) return;
-  if (!skuNames.value.length) { ElMessage.warning("请至少添加一个Name"); return; }
+  if (!skuNames.value.length) { ElMessage.warning(tr("请至少添加一个Name")); return; }
   skuNamesBusy.value = true;
   try {
     await api.put(`/api/production/skus/${selectedSku.value.id}/names`, {
@@ -211,9 +212,9 @@ async function saveSkuNames() {
     });
     await loadSkuNames();
     skus.value = (await api.get("/api/production/skus")).data.data;
-    ElMessage.success("Name列表已保存");
+    ElMessage.success(tr("Name列表已保存"));
   } catch (error) {
-    ElMessage.error(api.isAxiosError(error) ? error.response?.data?.message ?? "Name列表保存失败" : "Name列表保存失败");
+    ElMessage.error(tr(api.isAxiosError(error) ? error.response?.data?.message ?? "Name列表保存失败" : "Name列表保存失败"));
   } finally { skuNamesBusy.value = false; }
 }
 const template = reactive({
@@ -252,7 +253,7 @@ const createdSkuCodePending = ref('');
 async function viewSkuImages(id: number) {
   await perform(async () => {
     const images = (await api.get(`/api/production/skus/${id}/images`)).data.data;
-    if (!images.length) { ElMessage.info('该 SKU 暂无商品图片'); return; }
+    if (!images.length) { ElMessage.info(tr('该 SKU 暂无商品图片')); return; }
     await loadImage(images[0].id);
   });
 }
@@ -283,9 +284,9 @@ async function perform(action: () => Promise<void>) {
     await action();
   } catch (e) {
     ElMessage.error(
-      api.isAxiosError(e)
+      tr(api.isAxiosError(e)
         ? (e.response?.data?.message ?? "请求失败")
-        : String(e),
+        : String(e)),
     );
   } finally {
     loading.value = false;
@@ -395,7 +396,7 @@ async function discardSkuImageDraft() {
 }
 async function saveSku() {
   if (skuImagesBusy.value) return;
-  if (skuImageUpload.value?.hasPending()) { ElMessage.warning('商品图片尚未上传成功，请重试后再保存'); return; }
+  if (skuImageUpload.value?.hasPending()) { ElMessage.warning(tr('商品图片尚未上传成功，请重试后再保存')); return; }
   await perform(async () => {
     const creating = !editingId.value;
     const createdNow = creating && !createdSkuCodePending.value;
@@ -419,7 +420,7 @@ async function saveSku() {
     if (createTaskVisible.value) taskDraft.skuId = savedSkuId;
     skuVisible.value = false;
     await load();
-    ElMessage.success(skuImages.value.length ? "SKU和商品图片已保存" : "SKU已保存");
+    ElMessage.success(tr(skuImages.value.length ? "SKU和商品图片已保存" : "SKU已保存"));
   });
 }
 function editTemplate(row: any) {
@@ -431,7 +432,7 @@ async function saveTemplate() {
     await api.put(`/api/production/templates/${template.id}`, template);
     templateVisible.value = false;
     await load();
-    ElMessage.success("模板新版本已发布，旧标签保持原版");
+    ElMessage.success(tr("模板新版本已发布，旧标签保持原版"));
   });
 }
 async function viewTask(id: string | number, taskPage = 1) {
@@ -443,17 +444,17 @@ async function viewTask(id: string | number, taskPage = 1) {
 async function changeWorkOrderStatus(row: any, action: 'pause' | 'resume') {
   try {
     const prompt = await ElMessageBox.prompt(
-      action === 'pause' ? '暂停后手持设备不能继续扫码，请填写原因' : '恢复后手持设备可继续扫码，请填写原因',
-      action === 'pause' ? '暂停生产工单' : '恢复生产工单',
-      { inputValidator: value => !!value?.trim() || '原因不能为空' },
+      tr(action === 'pause' ? '暂停后手持设备不能继续扫码，请填写原因' : '恢复后手持设备可继续扫码，请填写原因'),
+      tr(action === 'pause' ? '暂停生产工单' : '恢复生产工单'),
+      { inputValidator: value => !!value?.trim() || tr('原因不能为空') },
     );
     await perform(async () => {
       await api.post(`/api/production/work-orders/${row.id}/${action}`, { reason: prompt.value.trim() });
       await load();
-      ElMessage.success(action === 'pause' ? '生产工单已暂停' : '生产工单已恢复');
+      ElMessage.success(tr(action === 'pause' ? '生产工单已暂停' : '生产工单已恢复'));
     });
   } catch (error) {
-    if (error !== 'cancel' && error !== 'close') ElMessage.error('操作未完成');
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(tr('操作未完成'));
   }
 }
 async function preview(id: string) {
@@ -473,7 +474,7 @@ async function printManual() {
     if (!previewJob.value || !labelReady.value || !labelFrame.value?.contentWindow) throw new Error('标签尚未加载完成');
     previewJob.value = (await api.post(`/api/production/prints/${previewJob.value.id}/claim`, {terminal:'web-manual'})).data.data;
     labelFrame.value.contentWindow.print();
-    ElMessage.info('请核对打印结果，再回报所选任务');
+    ElMessage.info(tr('请核对打印结果，再回报所选任务'));
     await load();
   });
 }
@@ -483,15 +484,15 @@ async function reportManual(status: string) {
     await api.post(`/api/production/prints/${previewJob.value.id}/result`, {status,message:status==='SUBMITTED'?'操作员确认已提交浏览器打印':status==='FAILED'?'操作员确认打印失败':'实物结果待核对'});
     previewJob.value = (await api.get(`/api/production/prints/${previewJob.value.id}`)).data.data;
     await load();
-    ElMessage.success('打印结果已记录');
+    ElMessage.success(tr('打印结果已记录'));
   });
 }
 async function resolve(row: any) {
   try {
     const r = await ElMessageBox.prompt(
-      "请填写检查结果和解除原因",
-      "解除隔离",
-      { inputValidator: (v) => !!v?.trim() || "原因不能为空" },
+      tr("请填写检查结果和解除原因"),
+      tr("解除隔离"),
+      { inputValidator: (v) => !!v?.trim() || tr("原因不能为空") },
     );
     await perform(async () => {
       await api.post(`/api/production/issues/${row.id}/resolve`, {
@@ -500,15 +501,15 @@ async function resolve(row: any) {
       await load();
     });
   } catch (e) {
-    if (e !== "cancel" && e !== "close") ElMessage.error("操作未完成");
+    if (e !== "cancel" && e !== "close") ElMessage.error(tr("操作未完成"));
   }
 }
 async function reprint(row: any) {
   try {
     const r = await ElMessageBox.prompt(
-      "确认已核对实物，再填写补打原因",
-      "新建补打任务",
-      { inputValidator: (v) => !!v?.trim() || "原因不能为空" },
+      tr("确认已核对实物，再填写补打原因"),
+      tr("新建补打任务"),
+      { inputValidator: (v) => !!v?.trim() || tr("原因不能为空") },
     );
     await perform(async () => {
       await api.post(`/api/production/prints/${row.id}/reprint`, {
@@ -517,7 +518,7 @@ async function reprint(row: any) {
       await load();
     });
   } catch (e) {
-    if (e !== "cancel" && e !== "close") ElMessage.error("操作未完成");
+    if (e !== "cancel" && e !== "close") ElMessage.error(tr("操作未完成"));
   }
 }
 async function createIssue() {
@@ -531,7 +532,7 @@ async function createIssue() {
     issue.code = "";
     issue.reason = "";
     await load();
-    ElMessage.success("异常已登记并隔离");
+    ElMessage.success(tr("异常已登记并隔离"));
   });
 }
 let imageRequestVersion = 0;
@@ -559,9 +560,9 @@ async function loadImage(id: string) {
 async function releasePart(row: any) {
   try {
     const r = await ElMessageBox.prompt(
-      "仅复检合格后放行，请填写复检结果",
-      "旧件复检放行",
-      { inputValidator: (v) => !!v?.trim() || "结果不能为空" },
+      tr("仅复检合格后放行，请填写复检结果"),
+      tr("旧件复检放行"),
+      { inputValidator: (v) => !!v?.trim() || tr("结果不能为空") },
     );
     await perform(async () => {
       await api.post(
@@ -571,7 +572,7 @@ async function releasePart(row: any) {
       await load();
     });
   } catch (e) {
-    if (e !== "cancel" && e !== "close") ElMessage.error("操作未完成");
+    if (e !== "cancel" && e !== "close") ElMessage.error(tr("操作未完成"));
   }
 }
 onUnmounted(() => { disposed = true; pendingReload = false; pendingWarehouseReload = false; closeImage(); });
@@ -591,28 +592,28 @@ onMounted(() =>
     <div v-show="!detail" class="production-list-view">
     <template v-if="isOverview">
       <ProductionOverview :tasks="tasks" :total="total" :loading="loading" :error="readError" :can-create="canManage" @detail="viewTask" @create="openCreateTask" @refresh="queryTasks" @more="scrollToTaskList" @issues="showIssueRecords" />
-      <AlertCard v-if="readError" tone="error" title="生产数据加载失败" :description="readError"><template #action><el-button size="small" @click="queryTasks">重试</el-button></template></AlertCard>
+      <AlertCard v-if="readError" tone="error" :title='tr("生产数据加载失败")' :description="tr(readError)"><template #action><el-button size="small" @click="queryTasks">{{ tr("重试") }}</el-button></template></AlertCard>
     </template>
     <div v-else class="production-data-card">
-    <SectionHeader :title="tab === 'tasks' ? '生产单列表' : productionTabs.find(item => item.name === tab)?.label ?? '业务列表'" />
+    <SectionHeader :title="tr(tab === 'tasks' ? tr('生产单列表') : productionTabs.find(item => item.name === tab)?.label ?? tr('业务列表'))" />
     <div v-if="tab === 'tasks'" class="toolbar production-toolbar task-toolbar">
       <div class="task-filters">
-        <el-select v-model="taskSkuId" class="task-sku-filter" clearable aria-label="商品规格筛选" placeholder="所有商品规格（SKU）" @change="queryTasks"><template #prefix><AppIcon name="inventory" /></template><el-option v-for="s in skus" :key="s.id" :value="s.id" :label="s.skuCode" /></el-select>
-        <el-select v-model="taskStatus" class="task-status-filter" clearable aria-label="工单状态筛选" placeholder="所有状态" @change="queryTasks"><template #prefix><AppIcon name="layers" /></template><el-option label="已下达" value="RELEASED"/><el-option label="已暂停" value="PAUSED"/><el-option label="已完成" value="COMPLETED"/></el-select>
-        <el-input v-model="keyword" class="production-search" clearable aria-label="搜索工单、编码或批次" placeholder="搜索工单、编码或批次" @keyup.enter="queryTasks" @clear="queryTasks"><template #prefix><AppIcon name="search" /></template></el-input>
-        <div class="production-date-filter"><span>工单日期</span><el-date-picker v-model="taskDates" aria-label="工单创建日期范围" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" @change="queryTasks" /></div>
+        <el-select v-model="taskSkuId" class="task-sku-filter" clearable :aria-label='tr("商品规格筛选")' :placeholder='tr("所有商品规格（SKU）")' @change="queryTasks"><template #prefix><AppIcon name="inventory" /></template><el-option v-for="s in skus" :key="s.id" :value="s.id" :label="s.skuCode" /></el-select>
+        <el-select v-model="taskStatus" class="task-status-filter" clearable :aria-label='tr("工单状态筛选")' :placeholder='tr("所有状态")' @change="queryTasks"><template #prefix><AppIcon name="layers" /></template><el-option :label='tr("已下达")' value="RELEASED"/><el-option :label='tr("已暂停")' value="PAUSED"/><el-option :label='tr("已完成")' value="COMPLETED"/></el-select>
+        <el-input v-model="keyword" class="production-search" clearable :aria-label='tr("搜索工单、编码或批次")' :placeholder='tr("搜索工单、编码或批次")' @keyup.enter="queryTasks" @clear="queryTasks"><template #prefix><AppIcon name="search" /></template></el-input>
+        <div class="production-date-filter"><span>{{ tr("工单日期") }}</span><el-date-picker v-model="taskDates" :aria-label='tr("工单创建日期范围")' type="daterange" value-format="YYYY-MM-DD" :start-placeholder='tr("开始日期")' :end-placeholder='tr("结束日期")' @change="queryTasks" /></div>
       </div>
       <div class="task-actions">
-        <el-button @click="taskSkuId = undefined; taskStatus = ''; taskDates = []; keyword = ''; queryTasks()">重置筛选</el-button>
-        <el-button class="production-refresh" @click="queryTasks"><AppIcon name="refresh" />刷新</el-button>
-        <el-button v-if="canManage" type="primary" class="create-task-button" @click="openCreateTask"><AppIcon name="plus" />新建生产单</el-button>
+        <el-button @click="taskSkuId = undefined; taskStatus = ''; taskDates = []; keyword = ''; queryTasks()">{{ tr("重置筛选") }}</el-button>
+        <el-button class="production-refresh" @click="queryTasks"><AppIcon name="refresh" />{{ tr("刷新") }}</el-button>
+        <el-button v-if="canManage" type="primary" class="create-task-button" @click="openCreateTask"><AppIcon name="plus" />{{ tr("新建生产单") }}</el-button>
       </div>
     </div>
     <div v-else class="toolbar production-toolbar" :class="{ 'sku-toolbar': tab === 'skus', 'inventory-toolbar': tab === 'inventory' }">
       <template v-if="tab === 'inventory'"><el-select
           v-model="inventorySkuId"
           clearable
-          placeholder="所有商品规格（SKU）"
+          :placeholder='tr("所有商品规格（SKU）")'
           @change="perform(load)"
           ><el-option
             v-for="s in skus"
@@ -622,7 +623,7 @@ onMounted(() =>
         ><el-select
           v-model="warehouseId"
           clearable
-          placeholder="所有仓库"
+          :placeholder='tr("所有仓库")'
           @change="perform(warehouseChanged)"
           ><el-option
             v-for="w in warehouses"
@@ -630,84 +631,84 @@ onMounted(() =>
             :value="w.id"
             :label="w.name"
         /></el-select>
-        <el-select v-model="locationId" clearable placeholder="所有库位" :disabled="!warehouseId" @change="perform(load)"><el-option v-for="location in locations" :key="location.id" :label="location.name" :value="location.id" /></el-select>
+        <el-select v-model="locationId" clearable :placeholder='tr("所有库位")' :disabled="!warehouseId" @change="perform(load)"><el-option v-for="location in locations" :key="location.id" :label="location.name" :value="location.id" /></el-select>
       </template>
-      <el-input v-if="['issues', 'quarantine', 'scan-failures'].includes(tab)" v-model="keyword" class="production-search" clearable aria-label="搜索工单、编码或批次" placeholder="搜索工单、编码或批次" @keyup.enter="queryTasks" @clear="queryTasks"><template #prefix><AppIcon name="search" /></template></el-input>
-      <el-input v-if="tab === 'skus'" v-model="skuSearch" class="sku-search" clearable aria-label="搜索 SKU、MODEL、标题或品类" placeholder="搜索 SKU、MODEL、标题或品类"><template #prefix><AppIcon name="search" /></template></el-input>
-      <el-button class="production-refresh" @click="queryTasks"><AppIcon name="refresh" />刷新</el-button>
-      <el-button v-if="tab === 'skus' && canManage" class="sku-import-button" @click="skuImportVisible = true"><AppIcon name="download" />导入 SKU</el-button>
-      <el-button v-if="tab === 'skus' && canManage" type="primary" @click="editSku()"><AppIcon name="plus" />新增 SKU</el-button>
+      <el-input v-if="['issues', 'quarantine', 'scan-failures'].includes(tab)" v-model="keyword" class="production-search" clearable :aria-label='tr("搜索工单、编码或批次")' :placeholder='tr("搜索工单、编码或批次")' @keyup.enter="queryTasks" @clear="queryTasks"><template #prefix><AppIcon name="search" /></template></el-input>
+      <el-input v-if="tab === 'skus'" v-model="skuSearch" class="sku-search" clearable :aria-label='tr("搜索 SKU、MODEL、标题或品类")' :placeholder='tr("搜索 SKU、MODEL、标题或品类")'><template #prefix><AppIcon name="search" /></template></el-input>
+      <el-button class="production-refresh" @click="queryTasks"><AppIcon name="refresh" />{{ tr("刷新") }}</el-button>
+      <el-button v-if="tab === 'skus' && canManage" class="sku-import-button" @click="skuImportVisible = true"><AppIcon name="download" />{{ tr("导入 SKU") }}</el-button>
+      <el-button v-if="tab === 'skus' && canManage" type="primary" @click="editSku()"><AppIcon name="plus" />{{ tr("新增 SKU") }}</el-button>
     </div>
 
     <template v-if="tab === 'inventory'">
       <DataTable :loading="loading" :error="readError" :rows="inventoryRows" :max-height="moduleTableMaxHeight"
         >
-      <RecordIdColumn prop="skuId" label="SKU ID" /><RecordIdColumn prop="modelId" label="车型 ID" /><RecordIdColumn prop="warehouseId" label="仓库 ID" /><RecordIdColumn prop="locationId" label="库位 ID" /><el-table-column prop="skuCode" label="SKU" /><el-table-column
+      <RecordIdColumn prop="skuId" label="SKU ID" /><RecordIdColumn prop="modelId" :label='tr("车型 ID")' /><RecordIdColumn prop="warehouseId" :label='tr("仓库 ID")' /><RecordIdColumn prop="locationId" :label='tr("库位 ID")' /><el-table-column prop="skuCode" label="SKU" /><el-table-column
           prop="productName"
-          label="商品" /><el-table-column
+          :label='tr("商品")' /><el-table-column
           prop="warehouseName"
-          label="仓库" /><el-table-column
+          :label='tr("仓库")' /><el-table-column
           prop="locationName"
-          label="库位" /><el-table-column
+          :label='tr("库位")' /><el-table-column
           prop="physicalQty"
-          label="实物数量" /><el-table-column
+          :label='tr("实物数量")' /><el-table-column
           prop="quarantinedQty"
-          label="其中隔离"
+          :label='tr("其中隔离")'
       /></DataTable>
       <p>
-        包含全部已入库车辆，旧车标记“历史未关联”；隔离车辆不能流转。车型锁定数量请在库存管理查看。
+        {{ tr("包含全部已入库车辆，旧车标记“历史未关联”；隔离车辆不能流转。车型锁定数量请在库存管理查看。") }}
       </p></template
     >
     <DataTable :loading="loading" :error="readError" v-if="tab === 'quarantine'" :rows="quarantinedParts" :max-height="moduleTableMaxHeight"
       >
-      <RecordIdColumn /><el-table-column prop="code" label="隔离旧件编码" /><el-table-column
+      <RecordIdColumn /><el-table-column prop="code" :label='tr("隔离旧件编码")' /><el-table-column
         prop="codeType"
-        label="类型"
-      /><el-table-column prop="qcStatus" label="质检状态" /><el-table-column label="创建时间" min-width="165"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column><el-table-column label="修改时间" min-width="165"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column><el-table-column
+        :label='tr("类型")'
+      /><el-table-column prop="qcStatus" :label='tr("质检状态")' /><el-table-column :label='tr("创建时间")' min-width="165"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column><el-table-column :label='tr("修改时间")' min-width="165"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column><el-table-column
         v-if="canManage"
-        label="操作"
+        :label='tr("操作")'
         ><template #default="s"
           ><el-button link type="primary" @click="releasePart(s.row)"
-            >复检合格放行</el-button
+            >{{ tr("复检合格放行") }}</el-button
           ></template
         ></el-table-column
       ></DataTable
     >
     <DataTable :loading="loading" :error="readError" v-if="tab === 'scan-failures'" :rows="scanFailures" :max-height="moduleTableMaxHeight">
       <RecordIdColumn />
-      <el-table-column label="创建时间" min-width="170"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column>
-      <el-table-column label="修改时间" min-width="170"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column>
-      <el-table-column prop="taskId" label="任务" min-width="210" />
-      <el-table-column prop="code" label="输入编码" min-width="160" />
-      <el-table-column prop="codeType" label="类型" />
-      <el-table-column prop="operatorName" label="操作人" />
-      <el-table-column prop="errorCode" label="失败代码" min-width="170" />
-      <el-table-column prop="reason" label="原因" min-width="220" />
+      <el-table-column :label='tr("创建时间")' min-width="170"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column>
+      <el-table-column :label='tr("修改时间")' min-width="170"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column>
+      <el-table-column prop="taskId" :label='tr("任务")' min-width="210" />
+      <el-table-column prop="code" :label='tr("输入编码")' min-width="160" />
+      <el-table-column prop="codeType" :label='tr("类型")' />
+      <el-table-column prop="operatorName" :label='tr("操作人")' />
+      <el-table-column prop="errorCode" :label='tr("失败代码")' min-width="170" />
+      <el-table-column prop="reason" :label='tr("原因")' min-width="220" />
     </DataTable>
     <template v-if="tab === 'tasks'">
-      <p class="task-list-hint"><AppIcon name="info" />一个工单关联一个 SKU、一个批次和多台车；首次扫码时自动创建单车记录，进入工单即可连续扫码、打印和入库。</p>
-      <DataTable :loading="loading" :error="readError" :rows="tasks" class="production-task-table" scrollbar-always-on stripe :max-height="moduleTableMaxHeight" row-key="id" empty-title="暂无生产工单">
+      <p class="task-list-hint"><AppIcon name="info" />{{ tr("一个工单关联一个 SKU、一个批次和多台车；首次扫码时自动创建单车记录，进入工单即可连续扫码、打印和入库。") }}</p>
+      <DataTable :loading="loading" :error="readError" :rows="tasks" class="production-task-table" scrollbar-always-on stripe :max-height="moduleTableMaxHeight" row-key="id" :empty-title='tr("暂无生产工单")'>
       <RecordIdColumn />
-        <el-table-column prop="workOrderNo" label="工单号" min-width="150" show-overflow-tooltip />
-        <el-table-column prop="skuCode" label="商品规格（SKU）" min-width="100" show-overflow-tooltip>
-          <template #header><el-tooltip content="SKU是商品规格编号，用来区分同一车型的颜色、电池容量等配置。"><span>商品规格（SKU）</span></el-tooltip></template>
+        <el-table-column prop="workOrderNo" :label='tr("工单号")' min-width="150" show-overflow-tooltip />
+        <el-table-column prop="skuCode" :label='tr("商品规格（SKU）")' min-width="100" show-overflow-tooltip>
+          <template #header><el-tooltip :content='tr("SKU是商品规格编号，用来区分同一车型的颜色、电池容量等配置。")'><span>{{ tr("商品规格（SKU）") }}</span></el-tooltip></template>
         </el-table-column>
-        <el-table-column prop="batchNo" label="批次" min-width="110" show-overflow-tooltip />
-        <el-table-column prop="plannedQuantity" label="计划" width="72" />
-        <el-table-column prop="completedQuantity" label="已完成" width="78" />
-        <el-table-column prop="inProgressQuantity" label="作业中" width="72" />
-        <el-table-column prop="issueQuantity" label="异常" width="65" />
-        <el-table-column label="状态" width="88"><template #default="{ row }"><StatusTag :label="states[row.status] ?? row.status" :tone="row.status === 'COMPLETED' ? 'green' : row.status === 'RELEASED' ? 'blue' : 'muted'" /></template></el-table-column>
-        <el-table-column label="创建时间 ↓" width="165"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column>
-        <el-table-column label="修改时间" width="165"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column>
-        <el-table-column prop="createdBy" label="创建人" width="70" show-overflow-tooltip />
-        <el-table-column label="操作" width="185" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="viewTask(row.id)">工单办理</el-button><el-button v-if="canManage && row.status === 'RELEASED'" link @click="changeWorkOrderStatus(row, 'pause')">暂停</el-button><el-button v-if="canManage && row.status === 'PAUSED'" link @click="changeWorkOrderStatus(row, 'resume')">恢复</el-button></template></el-table-column>
+        <el-table-column prop="batchNo" :label='tr("批次")' min-width="110" show-overflow-tooltip />
+        <el-table-column prop="plannedQuantity" :label='tr("计划")' width="72" />
+        <el-table-column prop="completedQuantity" :label='tr("已完成")' width="78" />
+        <el-table-column prop="inProgressQuantity" :label='tr("作业中")' width="72" />
+        <el-table-column prop="issueQuantity" :label='tr("异常")' width="65" />
+        <el-table-column :label='tr("状态")' width="88"><template #default="{ row }"><StatusTag :label="tr(states[row.status] ?? row.status)" :tone="row.status === 'COMPLETED' ? 'green' : row.status === 'RELEASED' ? 'blue' : 'muted'" /></template></el-table-column>
+        <el-table-column :label='tr("创建时间 ↓")' width="165"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column>
+        <el-table-column :label='tr("修改时间")' width="165"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column>
+        <el-table-column prop="createdBy" :label='tr("创建人")' width="70" show-overflow-tooltip />
+        <el-table-column :label='tr("操作")' width="185" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="viewTask(row.id)">{{ tr("工单办理") }}</el-button><el-button v-if="canManage && row.status === 'RELEASED'" link @click="changeWorkOrderStatus(row, 'pause')">{{ tr("暂停") }}</el-button><el-button v-if="canManage && row.status === 'PAUSED'" link @click="changeWorkOrderStatus(row, 'resume')">{{ tr("恢复") }}</el-button></template></el-table-column>
       </DataTable>
     </template>
     <template v-if="tab === 'skus'">
-      <DataTable :loading="loading" :error="readError" :rows="pagedSkus" class="production-sku-table" scrollbar-always-on row-key="id" :max-height="moduleTableMaxHeight" :empty-title="skuSearch ? '没有匹配的商品 SKU' : '暂无商品 SKU'">
+      <DataTable :loading="loading" :error="readError" :rows="pagedSkus" class="production-sku-table" scrollbar-always-on row-key="id" :max-height="moduleTableMaxHeight" :empty-title="skuSearch ? tr('没有匹配的商品 SKU') : tr('暂无商品 SKU')">
       <RecordIdColumn />
-        <el-table-column prop="productName" label="标签标题" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="productName" :label='tr("标签标题")' min-width="180" show-overflow-tooltip />
         <el-table-column prop="modelCode" label="MODEL" min-width="120" show-overflow-tooltip />
         <el-table-column prop="category" label="CATEGORY" min-width="100"><template #default="{ row }">{{ row.category || '—' }}</template></el-table-column>
         <el-table-column prop="batteryDescription" label="BATTERY" min-width="145" show-overflow-tooltip><template #default="{ row }">{{ row.batteryDescription || '—' }}</template></el-table-column>
@@ -716,66 +717,66 @@ onMounted(() =>
         <el-table-column prop="grossWeightKg" label="G.W." width="90"><template #default="{ row }">{{ row.grossWeightKg ? `${row.grossWeightKg} KG` : '—' }}</template></el-table-column>
         <el-table-column prop="netWeightKg" label="N.W." width="90"><template #default="{ row }">{{ row.netWeightKg ? `${row.netWeightKg} KG` : '—' }}</template></el-table-column>
         <el-table-column prop="nameCount" label="Name" width="80"><template #default="{ row }">{{ row.nameCount ?? 0 }}</template></el-table-column>
-        <el-table-column label="状态" width="80"><template #default="{ row }"><span class="sku-status" :class="{ disabled: !row.enabled }">{{ row.enabled ? '启用' : '停用' }}</span></template></el-table-column>
-        <el-table-column label="创建时间 ↓" min-width="165"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column>
-        <el-table-column label="修改时间" min-width="165"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column>
-        <el-table-column label="操作" width="310" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="continueWithSku('tasks', row)">安排生产</el-button><el-button link type="primary" @click="openSkuNames(row)">Name 列表</el-button><el-button link type="primary" @click="viewSkuImages(row.id)">商品图片</el-button><el-button v-if="canManage" link type="primary" @click="editSku(row)">编辑</el-button></template></el-table-column>
+        <el-table-column :label='tr("状态")' width="80"><template #default="{ row }"><span class="sku-status" :class="{ disabled: !row.enabled }">{{ row.enabled ? tr('启用') : tr('停用') }}</span></template></el-table-column>
+        <el-table-column :label='tr("创建时间 ↓")' min-width="165"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column>
+        <el-table-column :label='tr("修改时间")' min-width="165"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column>
+        <el-table-column :label='tr("操作")' width="310" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="continueWithSku('tasks', row)">{{ tr("安排生产") }}</el-button><el-button link type="primary" @click="openSkuNames(row)">{{ tr("Name 列表") }}</el-button><el-button link type="primary" @click="viewSkuImages(row.id)">{{ tr("商品图片") }}</el-button><el-button v-if="canManage" link type="primary" @click="editSku(row)">{{ tr("编辑") }}</el-button></template></el-table-column>
       </DataTable>
       <Pagination v-model:page="skuPage" v-model:page-size="skuPageSize" :sizes="[20, 50, 100]" :total="filteredSkus.length" :disabled="loading" />
     </template>
     <DataTable :loading="loading" :error="readError" v-if="tab === 'templates'" :rows="templates" :max-height="moduleTableMaxHeight"
       >
-      <RecordIdColumn /><el-table-column prop="name" label="标签模板" /><el-table-column
+      <RecordIdColumn /><el-table-column prop="name" :label='tr("标签模板")' /><el-table-column
         prop="widthMm"
-        label="宽 mm"
-      /><el-table-column prop="heightMm" label="高 mm" /><el-table-column
+        :label='tr("宽 mm")'
+      /><el-table-column prop="heightMm" :label='tr("高 mm")' /><el-table-column
         prop="heading"
-        label="标题"
-      /><el-table-column prop="version" label="版本" /><el-table-column label="创建时间 ↓" min-width="165"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column><el-table-column label="修改时间" min-width="165"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column><el-table-column
+        :label='tr("标题")'
+      /><el-table-column prop="version" :label='tr("版本")' /><el-table-column :label='tr("创建时间 ↓")' min-width="165"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column><el-table-column :label='tr("修改时间")' min-width="165"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column><el-table-column
         v-if="canManage"
-        label="操作"
+        :label='tr("操作")'
         ><template #default="s"
           ><el-button link type="primary" @click="editTemplate(s.row)"
-            >配置版式</el-button
+            >{{ tr("配置版式") }}</el-button
           ></template
         ></el-table-column
       ></DataTable
     >
     <template v-if="tab === 'issues'">
       <el-form v-if="canReportIssue" inline
-        ><el-form-item label="编码"
-          ><el-input v-model="issue.code" maxlength="200" placeholder="整车聚合码或部件码" /></el-form-item
-        ><el-form-item label="异常原因"
+        ><el-form-item :label='tr("编码")'
+          ><el-input v-model="issue.code" maxlength="200" :placeholder='tr("整车聚合码或部件码")' /></el-form-item
+        ><el-form-item :label='tr("异常原因")'
           ><el-input v-model="issue.reason" maxlength="500" /></el-form-item
-        ><el-button type="danger" :disabled="issueImagesBusy" @click="createIssue">登记并隔离</el-button></el-form>
-      <p v-if="canReportIssue && lastIssueId">照片归属：{{ savedIssueCode }} · 异常 {{ lastIssueId }}</p>
+        ><el-button type="danger" :disabled="issueImagesBusy" @click="createIssue">{{ tr("登记并隔离") }}</el-button></el-form>
+      <p v-if="canReportIssue && lastIssueId">{{ trInline("照片归属：") }}{{ savedIssueCode }} {{ trInline("· 异常") }} {{ lastIssueId }}</p>
       <BusinessAttachmentUpload v-if="canReportIssue && lastIssueId" :key="lastIssueId" :endpoint="`/api/production/issues/${lastIssueId}/images`" images-only @saved="perform(load)" @busy="issueImagesBusy = $event" />
       <DataTable :loading="loading" :error="readError" :rows="issues" :max-height="moduleTableMaxHeight"
         >
-      <RecordIdColumn /><el-table-column label="聚合码 / 部件码" min-width="200" show-overflow-tooltip><template #default="{ row }">{{ row.vehicleQrCode || row.code }}</template></el-table-column><el-table-column
+      <RecordIdColumn /><el-table-column :label='tr("聚合码 / 部件码")' min-width="200" show-overflow-tooltip><template #default="{ row }">{{ row.vehicleQrCode || row.code }}</template></el-table-column><el-table-column
           prop="reason"
-          label="异常原因"
-        /><el-table-column label="状态"
+          :label='tr("异常原因")'
+        /><el-table-column :label='tr("状态")'
           ><template #default="s">{{
-            states[s.row.status]
+            tr(states[s.row.status])
           }}</template></el-table-column
-        ><el-table-column prop="createdBy" label="登记人" /><el-table-column label="创建时间 ↓" min-width="165"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column><el-table-column label="修改时间" min-width="165"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column><el-table-column
+        ><el-table-column prop="createdBy" :label='tr("登记人")' /><el-table-column :label='tr("创建时间 ↓")' min-width="165"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column><el-table-column :label='tr("修改时间")' min-width="165"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column><el-table-column
           prop="resolution"
-          label="解除说明"
-        /><el-table-column label="操作"
+          :label='tr("解除说明")'
+        /><el-table-column :label='tr("操作")'
           ><template #default="s"
             ><el-button
               v-for="a in s.row.attachments"
               :key="a.id"
               link
               @click="showImage(a.id)"
-              >查看图片</el-button
+              >{{ tr("查看图片") }}</el-button
             ><el-button
               v-if="canManage && s.row.status === 'OPEN'"
               link
               type="primary"
               @click="resolve(s.row)"
-              >解除隔离</el-button
+              >{{ tr("解除隔离") }}</el-button
             ></template
           ></el-table-column
         ></DataTable
@@ -783,7 +784,7 @@ onMounted(() =>
     </template>
     <template v-if="tab === 'prints'"
       ><el-alert
-        title="自动打印终端领取待打印任务。已提交表示送入打印队列；超时未回报需核对实物后补打。"
+        :title='tr("自动打印终端领取待打印任务。已提交表示送入打印队列；超时未回报需核对实物后补打。")'
         type="info"
         :closable="false"
       /><DataTable :loading="loading" :error="readError" :rows="prints" :max-height="moduleTableMaxHeight"
@@ -791,17 +792,17 @@ onMounted(() =>
           prop="id"
           label="ID"
           min-width="280"
-        /><el-table-column label="状态"
+        /><el-table-column :label='tr("状态")'
           ><template #default="s">{{
-            states[s.row.status]
+            tr(states[s.row.status])
           }}</template></el-table-column
-        ><el-table-column prop="reason" label="打印原因" /><el-table-column
+        ><el-table-column prop="reason" :label='tr("打印原因")' /><el-table-column
           prop="terminal"
-          label="打印终端"
-        /><el-table-column prop="message" label="结果" /><el-table-column label="创建时间 ↓" min-width="165"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column><el-table-column label="修改时间" min-width="165"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column><el-table-column
-          label="操作"
+          :label='tr("打印终端")'
+        /><el-table-column prop="message" :label='tr("结果")' /><el-table-column :label='tr("创建时间 ↓")' min-width="165"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column><el-table-column :label='tr("修改时间")' min-width="165"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column><el-table-column
+          :label='tr("操作")'
           ><template #default="s"
-            ><el-button link @click="preview(s.row.id)">预览</el-button
+            ><el-button link @click="preview(s.row.id)">{{ tr("预览") }}</el-button
             ><el-button
               v-if="
                 canOperate && !['PENDING', 'PROCESSING'].includes(s.row.status)
@@ -809,7 +810,7 @@ onMounted(() =>
               link
               type="primary"
               @click="reprint(s.row)"
-              >补打</el-button
+              >{{ tr("补打") }}</el-button
             ></template
           ></el-table-column
         ></DataTable
@@ -819,140 +820,140 @@ onMounted(() =>
     </div>
     </div>
     <SkuImportDialog v-if="canManage" v-model="skuImportVisible" @imported="refreshSkusAfterImport" />
-    <el-dialog v-model="createTaskVisible" title="创建生产单" width="520px" :close-on-click-modal="false" :close-on-press-escape="!loading" :show-close="!loading">
-      <p class="production-dialog-help">一个工单只关联一次商品规格、批次和计划数量。现场每台车在首次扫码时自动生成单车记录。</p>
-      <el-alert v-if="pendingTask" title="上次请求未确认，请重试原工单，系统会防止重复创建。" type="info" :closable="false" />
+    <el-dialog v-model="createTaskVisible" :title='tr("创建生产单")' width="520px" :close-on-click-modal="false" :close-on-press-escape="!loading" :show-close="!loading">
+      <p class="production-dialog-help">{{ tr("一个工单只关联一次商品规格、批次和计划数量。现场每台车在首次扫码时自动生成单车记录。") }}</p>
+      <el-alert v-if="pendingTask" :title='tr("上次请求未确认，请重试原工单，系统会防止重复创建。")' type="info" :closable="false" />
       <el-form label-position="top" @submit.prevent="saveTask">
-        <el-form-item label="商品规格（SKU）" required><el-select v-model="taskDraft.skuId" :disabled="loading || !!pendingTask" filterable placeholder="请选择商品规格"><el-option v-for="s in skus.filter(item => item.enabled)" :key="s.id" :value="s.id" :label="s.skuCode + ' · ' + s.productName" /></el-select><el-button link type="primary" :disabled="loading || !!pendingTask" @click="prepareWorkOrderSku">没有需要的规格？在这里新增商品</el-button></el-form-item>
-        <el-form-item label="生产批次" required><el-input v-model="taskDraft.batchNo" :disabled="loading || !!pendingTask" maxlength="64" placeholder="同一批量生产使用统一批次" /></el-form-item>
-        <el-form-item label="计划数量" required><el-input-number v-model="taskDraft.plannedQuantity" :disabled="loading || !!pendingTask" :min="1" :max="1000000" controls-position="right" /></el-form-item>
+        <el-form-item :label='tr("商品规格（SKU）")' required><el-select v-model="taskDraft.skuId" :disabled="loading || !!pendingTask" filterable :placeholder='tr("请选择商品规格")'><el-option v-for="s in skus.filter(item => item.enabled)" :key="s.id" :value="s.id" :label="s.skuCode + ' · ' + s.productName" /></el-select><el-button link type="primary" :disabled="loading || !!pendingTask" @click="prepareWorkOrderSku">{{ tr("没有需要的规格？在这里新增商品") }}</el-button></el-form-item>
+        <el-form-item :label='tr("生产批次")' required><el-input v-model="taskDraft.batchNo" :disabled="loading || !!pendingTask" maxlength="64" :placeholder='tr("同一批量生产使用统一批次")' /></el-form-item>
+        <el-form-item :label='tr("计划数量")' required><el-input-number v-model="taskDraft.plannedQuantity" :disabled="loading || !!pendingTask" :min="1" :max="1000000" controls-position="right" /></el-form-item>
       </el-form>
-      <template #footer><el-button :disabled="loading" @click="createTaskVisible = false">取消</el-button><el-button type="primary" :loading="loading" @click="saveTask">{{ pendingTask ? '重试创建' : '创建并开始生产' }}</el-button></template>
+      <template #footer><el-button :disabled="loading" @click="createTaskVisible = false">{{ tr("取消") }}</el-button><el-button type="primary" :loading="loading" @click="saveTask">{{ pendingTask ? tr('重试创建') : tr('创建并开始生产') }}</el-button></template>
     </el-dialog>
-    <el-dialog v-model="skuVisible" :title="editingId ? '编辑商品 SKU' : '新增商品 SKU'" width="820px" class="sku-editor-dialog" :close-on-click-modal="false" :close-on-press-escape="!skuBusy" :show-close="!skuBusy" @closed="discardSkuImageDraft">
-      <p class="sku-editor-intro">这里维护标签亮黄色区域的主信息；一个 SKU 可在 Name 列表中绑定多条 Name 明细。</p>
+    <el-dialog v-model="skuVisible" :title="editingId ? tr('编辑商品 SKU') : tr('新增商品 SKU')" width="820px" class="sku-editor-dialog" :close-on-click-modal="false" :close-on-press-escape="!skuBusy" :show-close="!skuBusy" @closed="discardSkuImageDraft">
+      <p class="sku-editor-intro">{{ tr("这里维护标签亮黄色区域的主信息；一个 SKU 可在 Name 列表中绑定多条 Name 明细。") }}</p>
       <el-form class="sku-editor-form" label-position="top" :disabled="loading">
-        <el-form-item label="车型" required>
-          <el-select v-model="sku.modelId" :disabled="!!editingId || !!createdSkuCodePending" filterable placeholder="请选择车型">
+        <el-form-item :label='tr("车型")' required>
+          <el-select v-model="sku.modelId" :disabled="!!editingId || !!createdSkuCodePending" filterable :placeholder='tr("请选择车型")'>
             <el-option v-for="m in models" :key="m.id" :label="m.name" :value="m.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="SKU 编码" required>
-          <el-input v-model="sku.skuCode" :disabled="!!editingId || !!createdSkuCodePending" maxlength="64" placeholder="填写唯一的商品规格编号" />
+        <el-form-item :label='tr("SKU 编码")' required>
+          <el-input v-model="sku.skuCode" :disabled="!!editingId || !!createdSkuCodePending" maxlength="64" :placeholder='tr("填写唯一的商品规格编号")' />
         </el-form-item>
-        <el-form-item label="标签标题" required><el-input v-model="sku.productName" maxlength="100" placeholder="如 TEEWING Flux One A" /></el-form-item>
-        <el-form-item label="规格"><el-input v-model="sku.specification" maxlength="100" placeholder="如颜色、电池容量等" /></el-form-item>
-        <el-form-item label="CATEGORY"><el-input v-model="sku.category" maxlength="64" placeholder="如 EBIKE、Frameset" /></el-form-item>
-        <el-form-item label="BATTERY"><el-input v-model="sku.batteryDescription" maxlength="100" placeholder="如 Battery included" /></el-form-item>
+        <el-form-item :label='tr("标签标题")' required><el-input v-model="sku.productName" maxlength="100" :placeholder='tr("如 TEEWING Flux One A")' /></el-form-item>
+        <el-form-item :label='tr("规格")'><el-input v-model="sku.specification" maxlength="100" :placeholder='tr("如颜色、电池容量等")' /></el-form-item>
+        <el-form-item label="CATEGORY"><el-input v-model="sku.category" maxlength="64" :placeholder='tr("如 EBIKE、Frameset")' /></el-form-item>
+        <el-form-item label="BATTERY"><el-input v-model="sku.batteryDescription" maxlength="100" :placeholder='tr("如 Battery included")' /></el-form-item>
         <el-form-item label="QUANTITY"><el-input-number v-model="sku.packageQuantity" :min="1" :max="10000" controls-position="right" /><span class="sku-field-unit">PCS</span></el-form-item>
-        <el-form-item label="CARTON SIZE"><el-input v-model="sku.cartonSizeCm" maxlength="64" placeholder="如 173.5*26.5*89"><template #append>CM</template></el-input></el-form-item>
+        <el-form-item label="CARTON SIZE"><el-input v-model="sku.cartonSizeCm" maxlength="64" :placeholder='tr("如 173.5*26.5*89")'><template #append>CM</template></el-input></el-form-item>
         <el-form-item label="G.W."><el-input-number v-model="sku.grossWeightKg" :min="0.001" :precision="3" :step="0.1" controls-position="right" /><span class="sku-field-unit">KG</span></el-form-item>
         <el-form-item label="N.W."><el-input-number v-model="sku.netWeightKg" :min="0.001" :precision="3" :step="0.1" controls-position="right" /><span class="sku-field-unit">KG</span></el-form-item>
-        <el-form-item label="标签模板" required>
+        <el-form-item :label='tr("标签模板")' required>
           <el-select v-model="sku.templateId"><el-option v-for="t in templates" :key="t.id" :label="t.name" :value="t.id" /></el-select>
         </el-form-item>
-        <el-form-item label="状态"><el-switch v-model="sku.enabled" aria-label="启用商品 SKU" /><span class="sku-enabled-label">{{ sku.enabled ? '启用' : '停用' }}</span></el-form-item>
+        <el-form-item :label='tr("状态")'><el-switch v-model="sku.enabled" :aria-label='tr("启用商品 SKU")' /><span class="sku-enabled-label">{{ sku.enabled ? tr('启用') : tr('停用') }}</span></el-form-item>
       </el-form>
-      <section class="sku-editor-images" aria-label="商品图片管理">
-        <h3>商品图片</h3>
+      <section class="sku-editor-images" :aria-label='tr("商品图片管理")'>
+        <h3>{{ tr("商品图片") }}</h3>
         <div v-if="skuImages.length" class="sku-image-links">
-          <el-button v-for="(a, index) in skuImages" :key="a.id" :disabled="skuBusy" @click="showImage(a.id)">查看图片 {{ index + 1 }}</el-button>
+          <el-button v-for="(a, index) in skuImages" :key="a.id" :disabled="skuBusy" @click="showImage(a.id)">{{ trInline("查看图片") }} {{ index + 1 }}</el-button>
         </div>
         <BusinessAttachmentUpload ref="skuImageUpload" v-if="skuVisible" :key="skuEditorSessionKey" :endpoint="editingId ? `/api/production/skus/${editingId}/images` : `/api/production/sku-image-drafts/${skuImageDraftToken}`" images-only auto-upload :disabled="loading || (!!createdSkuCodePending && !editingId)" @saved="skuImageSaved" @busy="skuImagesBusy = $event" />
       </section>
       <template #footer>
-        <el-button :disabled="skuBusy" @click="skuVisible = false">取消</el-button>
-        <el-button type="primary" :loading="loading" :disabled="skuImagesBusy" @click="saveSku">保存</el-button>
+        <el-button :disabled="skuBusy" @click="skuVisible = false">{{ tr("取消") }}</el-button>
+        <el-button type="primary" :loading="loading" :disabled="skuImagesBusy" @click="saveSku">{{ tr("保存") }}</el-button>
       </template>
     </el-dialog>
-    <el-dialog v-model="skuNamesVisible" :title="`Name 列表 · ${selectedSku?.modelCode ?? ''}`" width="min(1120px, 96vw)" class="sku-name-dialog" :close-on-click-modal="false" :close-on-press-escape="!skuNamesBusy" :show-close="!skuNamesBusy">
+    <el-dialog v-model="skuNamesVisible" :title="tr('Name 列表 · {value0}', { value0: selectedSku?.modelCode ?? '' })" width="min(1120px, 96vw)" class="sku-name-dialog" :close-on-click-modal="false" :close-on-press-escape="!skuNamesBusy" :show-close="!skuNamesBusy">
       <div class="sku-name-summary">
         <div><span>MODEL</span><strong>{{ selectedSku?.modelCode || '—' }}</strong></div>
-        <div><span>标签标题</span><strong>{{ selectedSku?.productName || '—' }}</strong></div>
-        <el-button v-if="canManage" type="primary" plain :disabled="skuNamesBusy" @click="addSkuName"><AppIcon name="plus" />添加 Name</el-button>
+        <div><span>{{ tr("标签标题") }}</span><strong>{{ selectedSku?.productName || '—' }}</strong></div>
+        <el-button v-if="canManage" type="primary" plain :disabled="skuNamesBusy" @click="addSkuName"><AppIcon name="plus" />{{ tr("添加 Name") }}</el-button>
       </div>
-      <DataTable :loading="skuNamesBusy" :rows="skuNames" row-key="clientKey" empty-title="尚未绑定 Name">
+      <DataTable :loading="skuNamesBusy" :rows="skuNames" row-key="clientKey" :empty-title='tr("尚未绑定 Name")'>
       <RecordIdColumn />
         <el-table-column label="NAME" min-width="235">
-          <template #default="{ row }"><el-input v-model="row.name" :disabled="!canManage" maxlength="128" placeholder="填写唯一 Name" /></template>
+          <template #default="{ row }"><el-input v-model="row.name" :disabled="!canManage" maxlength="128" :placeholder='tr("填写唯一 Name")' /></template>
         </el-table-column>
         <el-table-column label="EAN" min-width="180">
-          <template #default="{ row }"><el-input :model-value="row.ean" :disabled="!canManage" inputmode="numeric" maxlength="13" placeholder="13位数字" @input="normalizeNameEan(row, $event)" @blur="previewNameBarcode(row)" /></template>
+          <template #default="{ row }"><el-input :model-value="row.ean" :disabled="!canManage" inputmode="numeric" maxlength="13" :placeholder='tr("13位数字")' @input="normalizeNameEan(row, $event)" @blur="previewNameBarcode(row)" /></template>
         </el-table-column>
-        <el-table-column label="一维码" min-width="210">
-          <template #default="{ row }"><div class="ean-barcode-preview" v-loading="row.barcodeLoading"><img v-if="row.eanBarcodeDataUrl" :src="row.eanBarcodeDataUrl" :alt="`${row.ean} 一维码`" /><span v-else>{{ row.ean ? '输入完成后自动生成' : '—' }}</span></div></template>
+        <el-table-column :label='tr("一维码")' min-width="210">
+          <template #default="{ row }"><div class="ean-barcode-preview" v-loading="row.barcodeLoading"><img v-if="row.eanBarcodeDataUrl" :src="row.eanBarcodeDataUrl" :alt="tr('{value0} 一维码', { value0: row.ean })" /><span v-else>{{ row.ean ? tr('输入完成后自动生成') : '—' }}</span></div></template>
         </el-table-column>
         <el-table-column label="S/N" min-width="180">
-          <template #default="{ row }"><el-input v-model="row.sn" :disabled="!canManage" maxlength="128" placeholder="填写唯一 SN" /></template>
+          <template #default="{ row }"><el-input v-model="row.sn" :disabled="!canManage" maxlength="128" :placeholder='tr("填写唯一 SN")' /></template>
         </el-table-column>
-        <el-table-column label="状态" width="90">
-          <template #default="{ row }"><el-switch v-model="row.enabled" :disabled="!canManage" aria-label="启用 Name" /></template>
+        <el-table-column :label='tr("状态")' width="90">
+          <template #default="{ row }"><el-switch v-model="row.enabled" :disabled="!canManage" :aria-label='tr("启用 Name")' /></template>
         </el-table-column>
-        <el-table-column label="创建时间" min-width="165"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column>
-        <el-table-column label="修改时间" min-width="165"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column>
-        <el-table-column v-if="canManage" label="操作" width="75" fixed="right">
-          <template #default="{ row }"><el-button v-if="!row.id" link type="danger" @click="removeUnsavedSkuName(row)">移除</el-button></template>
+        <el-table-column :label='tr("创建时间")' min-width="165"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column>
+        <el-table-column :label='tr("修改时间")' min-width="165"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column>
+        <el-table-column v-if="canManage" :label='tr("操作")' width="75" fixed="right">
+          <template #default="{ row }"><el-button v-if="!row.id" link type="danger" @click="removeUnsavedSkuName(row)">{{ tr("移除") }}</el-button></template>
         </el-table-column>
       </DataTable>
-      <template #footer><el-button :disabled="skuNamesBusy" @click="skuNamesVisible = false">关闭</el-button><el-button v-if="canManage" type="primary" :loading="skuNamesBusy" @click="saveSkuNames">保存全部</el-button></template>
+      <template #footer><el-button :disabled="skuNamesBusy" @click="skuNamesVisible = false">{{ tr("关闭") }}</el-button><el-button v-if="canManage" type="primary" :loading="skuNamesBusy" @click="saveSkuNames">{{ tr("保存全部") }}</el-button></template>
     </el-dialog>
-    <el-dialog v-model="templateVisible" title="标签版式" width="500px"
+    <el-dialog v-model="templateVisible" :title='tr("标签版式")' width="500px"
       ><el-form label-width="100px"
-        ><el-form-item label="模板名称"
+        ><el-form-item :label='tr("模板名称")'
           ><el-input v-model="template.name" maxlength="100" /></el-form-item
-        ><el-form-item label="标签标题"
+        ><el-form-item :label='tr("标签标题")'
           ><el-input v-model="template.heading" maxlength="100" /></el-form-item
-        ><el-form-item label="宽度 mm"
+        ><el-form-item :label='tr("宽度 mm")'
           ><el-input-number
             v-model="template.widthMm"
             :min="60"
             :max="210" /></el-form-item
-        ><el-form-item label="高度 mm"
+        ><el-form-item :label='tr("高度 mm")'
           ><el-input-number
             v-model="template.heightMm"
             :min="60"
             :max="297" /></el-form-item
-        ><el-form-item label="版式"
+        ><el-form-item :label='tr("版式")'
           ><el-select v-model="template.layout"
-            ><el-option label="标准" value="STANDARD" /><el-option
-              label="紧凑"
+            ><el-option :label='tr("标准")' value="STANDARD" /><el-option
+              :label='tr("紧凑")'
               value="COMPACT" /></el-select></el-form-item></el-form
       ><template #footer
         ><el-button type="primary" :loading="loading" @click="saveTemplate"
-          >发布新版本</el-button
+          >{{ tr("发布新版本") }}</el-button
         ></template
       ></el-dialog
     >
-    <el-dialog :model-value="!!vehicleJourney" title="单车办理 · 打印与库存流转" width="min(1080px,96vw)" @close="vehicleJourney = undefined; journeyVersion++">
+    <el-dialog :model-value="!!vehicleJourney" :title='tr("单车办理 · 打印与库存流转")' width="min(1080px,96vw)" @close="vehicleJourney = undefined; journeyVersion++">
       <div v-loading="journeyBusy" v-if="vehicleJourney">
-        <p>车架：{{ vehicleJourney.frameSn || '—' }} · 总码：{{ vehicleJourney.qrCode || '四码未完成' }}</p>
-        <el-alert v-if="journeyError" type="error" :title="journeyError" :closable="false" /><el-button v-if="journeyError" @click="openVehicleJourney(vehicleJourney)">重试关联记录</el-button>
-        <h3>本车打印记录</h3><el-table :data="vehiclePrints" empty-text="暂无打印任务；四码完成后自动生成首次打印任务"><el-table-column prop="id" label="ID" min-width="180" /><el-table-column label="状态" min-width="100"><template #default="{row}">{{ states[row.status] ?? row.status }}</template></el-table-column><el-table-column label="创建时间 ↓" min-width="165"><template #default="{row}">{{ formatDateTime(row.createdAt) }}</template></el-table-column><el-table-column label="修改时间" min-width="165"><template #default="{row}">{{ formatDateTime(row.updatedAt) }}</template></el-table-column><el-table-column label="操作" width="130"><template #default="{row}"><el-button link type="primary" @click="preview(row.id)">预览 / 打印</el-button></template></el-table-column></el-table>
-        <p>打印提交后请核对实物标签；返回生产单的「办理入库」即可继续，也可由入库人员使用 PDA 扫码办理。</p>
-        <el-button v-if="vehicleTrace?.vehicle.currentOrderNo && hasPermission(context,'ORDER_READ')" type="primary" @click="emit('order',String(vehicleTrace.vehicle.currentOrderNo))">打开本车关联订单 {{ vehicleTrace.vehicle.currentOrderNo }}</el-button>
+        <p>{{ trInline("车架：") }}{{ vehicleJourney.frameSn || '—' }} {{ trInline("· 总码：") }}{{ vehicleJourney.qrCode || tr('四码未完成') }}</p>
+        <el-alert v-if="journeyError" type="error" :title="tr(journeyError)" :closable="false" /><el-button v-if="journeyError" @click="openVehicleJourney(vehicleJourney)">{{ tr("重试关联记录") }}</el-button>
+        <h3>{{ tr("本车打印记录") }}</h3><el-table :data="vehiclePrints" :empty-text='tr("暂无打印任务；四码完成后自动生成首次打印任务")'><el-table-column prop="id" label="ID" min-width="180" /><el-table-column :label='tr("状态")' min-width="100"><template #default="{row}">{{ tr(states[row.status] ?? row.status) }}</template></el-table-column><el-table-column :label='tr("创建时间 ↓")' min-width="165"><template #default="{row}">{{ formatDateTime(row.createdAt) }}</template></el-table-column><el-table-column :label='tr("修改时间")' min-width="165"><template #default="{row}">{{ formatDateTime(row.updatedAt) }}</template></el-table-column><el-table-column :label='tr("操作")' width="130"><template #default="{row}"><el-button link type="primary" @click="preview(row.id)">{{ tr("预览 / 打印") }}</el-button></template></el-table-column></el-table>
+        <p>{{ tr("打印提交后请核对实物标签；返回生产单的「办理入库」即可继续，也可由入库人员使用 PDA 扫码办理。") }}</p>
+        <el-button v-if="vehicleTrace?.vehicle.currentOrderNo && hasPermission(context,'ORDER_READ')" type="primary" @click="emit('order',String(vehicleTrace.vehicle.currentOrderNo))">{{ trInline("打开本车关联订单") }} {{ vehicleTrace.vehicle.currentOrderNo }}</el-button>
         <TraceDetails v-if="vehicleTrace" :data="vehicleTrace" />
-        <p v-else-if="vehicleJourney.qrCode && !hasPermission(context,'TRACE_READ')">当前账号没有追溯权限，库存及出入库履历请由有权限的人员查看。</p>
+        <p v-else-if="vehicleJourney.qrCode && !hasPermission(context,'TRACE_READ')">{{ tr("当前账号没有追溯权限，库存及出入库履历请由有权限的人员查看。") }}</p>
       </div>
     </el-dialog>
-    <el-dialog v-model="previewVisible" title="外箱标签预览" @closed="printRefreshKey++"
-      ><p v-if="previewJob">{{ states[previewJob.status] }} · {{ previewJob.message || previewJob.reason }}</p><iframe
+    <el-dialog v-model="previewVisible" :title='tr("外箱标签预览")' @closed="printRefreshKey++"
+      ><p v-if="previewJob">{{ tr(states[previewJob.status]) }} · {{ previewJob.message || previewJob.reason }}</p><iframe
         ref="labelFrame"
         @load="labelReady = true"
         :srcdoc="labelHtml"
-        title="标签"
+        :title='tr("标签")'
         sandbox="allow-same-origin allow-modals"
         style="width: 100%; height: 620px; border: 0"
     /><template #footer>
-      <el-button v-if="canOperate && previewJob?.status === 'PENDING'" :disabled="loading || !labelReady" type="primary" @click="printManual">人工打印此任务</el-button>
-      <el-button v-if="canReportPrint" :disabled="loading" @click="reportManual('SUBMITTED')">确认已提交打印</el-button>
-      <el-button v-if="canReportPrint" :disabled="loading" @click="reportManual('FAILED')">确认失败</el-button>
-      <el-button v-if="canReportPrint" :disabled="loading" @click="reportManual('UNKNOWN')">结果待核对</el-button>
+      <el-button v-if="canOperate && previewJob?.status === 'PENDING'" :disabled="loading || !labelReady" type="primary" @click="printManual">{{ tr("人工打印此任务") }}</el-button>
+      <el-button v-if="canReportPrint" :disabled="loading" @click="reportManual('SUBMITTED')">{{ tr("确认已提交打印") }}</el-button>
+      <el-button v-if="canReportPrint" :disabled="loading" @click="reportManual('FAILED')">{{ tr("确认失败") }}</el-button>
+      <el-button v-if="canReportPrint" :disabled="loading" @click="reportManual('UNKNOWN')">{{ tr("结果待核对") }}</el-button>
     </template></el-dialog>
     <el-dialog
       :model-value="!!imageUrl"
-      title="图片预览"
+      :title='tr("图片预览")'
       @close="closeImage"
-      ><img :src="imageUrl" alt="业务图片" style="max-width: 100%"
+      ><img :src="imageUrl" :alt='tr("业务图片")' style="max-width: 100%"
     /></el-dialog>
   </section>
 </template>

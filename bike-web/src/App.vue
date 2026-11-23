@@ -7,6 +7,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import PermissionGate from './components/PermissionGate.vue'
 import AppIcon from './components/AppIcon.vue'
 import AppLayout from './components/layout/AppLayout.vue'
+import LanguageMenu from './components/layout/LanguageMenu.vue'
+import { componentLocale, tr, trInline } from './i18n/language'
 import AccountSettingsDialog from './components/layout/AccountSettingsDialog.vue'
 import BusinessModulePage from './views/BusinessModulePage.vue'
 import { salesTypeOptions, salesTypeNavKey, setSalesIntent, type SalesIntent, type SalesType } from './sales-routing'
@@ -375,7 +377,7 @@ async function loadLinkedOrders() {
     const response=await axios.get(`/api/inventory-locks/${linkedLockId.value}/orders`,{...authConfig(),params:{page:linkedOrdersPage.value,pageSize:20}})
     linkedOrders.value=response.data.data.records
     linkedOrdersTotal.value=response.data.data.total
-  } catch(error) { ElMessage.error(axios.isAxiosError(error)?error.response?.data?.message??'关联订单加载失败':'关联订单加载失败') }
+  } catch(error) { ElMessage.error(tr(axios.isAxiosError(error)?error.response?.data?.message??'关联订单加载失败':'关联订单加载失败')) }
   finally {linkedOrdersLoading.value=false}
 }
 async function openLinkedOrders(row:string[]) {
@@ -388,7 +390,7 @@ async function openLinkedOrders(row:string[]) {
     linkedOrdersTotal.value=0
     linkedOrdersVisible.value=true
     await loadLinkedOrders()
-  } catch(error) {ElMessage.error(axios.isAxiosError(error)?error.response?.data?.message??'锁定加载失败':'锁定加载失败')}
+  } catch(error) {ElMessage.error(tr(axios.isAxiosError(error)?error.response?.data?.message??'锁定加载失败':'锁定加载失败'))}
 }
 function locateLinkedOrder(orderNo: string) {
   linkedOrdersVisible.value = false
@@ -419,8 +421,8 @@ function continueOrderToPi(intent: SalesIntent) {
   navigate(salesTypeNavKey(intent.salesType))
 }
 async function submitLockOrder() {
-  if (lockOrderForm.salesType !== 'DOMESTIC') { ElMessage.error('请先选择转单去向'); return }
-  if (!lockOrderForm.customerId) { ElMessage.error('请选择订单客户'); return }
+  if (lockOrderForm.salesType !== 'DOMESTIC') { ElMessage.error(tr('请先选择转单去向')); return }
+  if (!lockOrderForm.customerId) { ElMessage.error(tr('请选择订单客户')); return }
   lockOrderSubmitting.value = true
   try {
     const response = await axios.post(`/api/inventory-locks/${lockOrderForm.lockId}/orders`, {
@@ -428,12 +430,12 @@ async function submitLockOrder() {
       plannedShipDate: lockOrderForm.plannedShipDate || null, salesType: 'DOMESTIC'
     }, authConfig())
     lockOrderVisible.value = false
-    ElMessage.success(`已创建内销订单 ${response.data.data.orderNo}，库存占用已保留；请在订单办理中生成购销合同后确认订单`)
+    ElMessage.success(tr("已创建内销订单 {value0}，库存占用已保留；请在订单办理中生成购销合同后确认订单", { value0: response.data.data.orderNo }))
     workflowRefreshKey.value++
     if (hasPermission(authContext.value, 'ORDER_READ')) journeyOrderNo.value = response.data.data.orderNo
     await loadModule(activeView.value)
   } catch (error) {
-    ElMessage.error(axios.isAxiosError(error) ? error.response?.data?.message ?? '转单失败，可重试当前请求' : '转单失败')
+    ElMessage.error(tr(axios.isAxiosError(error) ? error.response?.data?.message ?? '转单失败，可重试当前请求' : '转单失败'))
   } finally { lockOrderSubmitting.value = false }
 }
 async function manageOrderReservation(row: string[], action: 'renew' | 'close') {
@@ -443,22 +445,22 @@ async function manageOrderReservation(row: string[], action: 'renew' | 'close') 
     if (action === 'renew') {
       const fulfilledTimed = order.reservationStatus === 'FULFILLED' && order.reservationHoldMode === 'TIMED'
       if (!['TIMED_ACTIVE', 'EXPIRED_REQUIRES_REACQUIRE'].includes(order.reservationStatus) && !fulfilledTimed) {
-        ElMessage.warning(`当前占用状态为“${reservationLabel(order.reservationStatus)}”，无需或不能重新占用`)
+        ElMessage.warning(tr("当前占用状态为“{value0}”，无需或不能重新占用", { value0: reservationLabel(order.reservationStatus) }))
         await loadModule(activeView.value)
         return
       }
-      const hours = await ElMessageBox.prompt(fulfilledTimed ? '订单已履约，本次续期用于后续受控撤销出库，不会自动撤销。请输入小时数（1–720）' : '输入重新占用的小时数（1–720）；保存时重新检查可用库存', '重新确认库存占用', { inputValue: '48', inputValidator: (v: string) => Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= 720 ? true : '请输入1至720整数' })
-      const reason = await ElMessageBox.prompt('请输入重新占用原因', '重新确认库存占用', { inputValidator: (v: string) => v.trim().length > 0 && v.length <= 500 ? true : '请填写500字以内原因' })
+      const hours = await ElMessageBox.prompt(tr(fulfilledTimed ? '订单已履约，本次续期用于后续受控撤销出库，不会自动撤销。请输入小时数（1–720）' : '输入重新占用的小时数（1–720）；保存时重新检查可用库存'), tr('重新确认库存占用'), { inputValue: '48', inputValidator: (v: string) => Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= 720 ? true : tr('请输入1至720整数') })
+      const reason = await ElMessageBox.prompt(tr('请输入重新占用原因'), tr('重新确认库存占用'), { inputValidator: (v: string) => v.trim().length > 0 && v.length <= 500 ? true : tr('请填写500字以内原因') })
       await axios.post(`/api/orders/${order.id}/reservation/renew`, { hours: Number(hours.value), reason: reason.value }, authConfig())
     } else {
-      const reason = await ElMessageBox.prompt('关闭未发货数量并释放对应占用，已发货历史保留；关闭后不能撤销已有出库。请输入原因', '关闭剩余数量', { inputValidator: (v: string) => v.trim().length > 0 && v.length <= 500 ? true : '请填写500字以内原因' })
+      const reason = await ElMessageBox.prompt(tr('关闭未发货数量并释放对应占用，已发货历史保留；关闭后不能撤销已有出库。请输入原因'), tr('关闭剩余数量'), { inputValidator: (v: string) => v.trim().length > 0 && v.length <= 500 ? true : tr('请填写500字以内原因') })
       await axios.post(`/api/orders/${order.id}/close-remainder`, { reason: reason.value }, authConfig())
     }
-    ElMessage.success(action === 'renew' ? '库存占用已重新确认' : '剩余数量已关闭')
+    ElMessage.success(tr(action === 'renew' ? '库存占用已重新确认' : '剩余数量已关闭'))
     await loadModule(activeView.value)
   } catch (error) {
     if (error === 'cancel' || error === 'close') return
-    ElMessage.error(axios.isAxiosError(error) ? error.response?.data?.message ?? '操作失败' : '操作失败')
+    ElMessage.error(tr(axios.isAxiosError(error) ? error.response?.data?.message ?? '操作失败' : '操作失败'))
   }
 }
 const agentAccessOptions = ref<Array<{id: number; name: string; code: string; status: string}>>([])
@@ -478,7 +480,7 @@ async function editAgentAccess(row: string[]) {
     agentAccessModels.value = access.data.data
     agentAccessVisible.value = true
   } catch (error) {
-    ElMessage.error(axios.isAxiosError(error) ? error.response?.data?.message ?? '授权加载失败' : '授权加载失败')
+    ElMessage.error(tr(axios.isAxiosError(error) ? error.response?.data?.message ?? '授权加载失败' : '授权加载失败'))
   }
 }
 async function saveAgentAccess() {
@@ -486,16 +488,25 @@ async function saveAgentAccess() {
   try {
     await axios.put(`/api/master/agents/${agentAccessId.value}/model-access`, { modelIds: agentAccessModels.value }, authConfig())
     agentAccessVisible.value = false
-    ElMessage.success('车型授权已更新')
+    ElMessage.success(tr('车型授权已更新'))
   } catch (error) {
-    ElMessage.error(axios.isAxiosError(error) ? error.response?.data?.message ?? '授权更新失败' : '授权更新失败')
+    ElMessage.error(tr(axios.isAxiosError(error) ? error.response?.data?.message ?? '授权更新失败' : '授权更新失败'))
   } finally { agentAccessSaving.value = false }
 }
 const rolesLoaded = ref(false)
 const actionForm = reactive<Record<string, string | number | null>>({ code: '', name: '', contactName: '', contactPhone: '', partSn: '', partType: 'MOTOR', supplierId: null, batchNo: '', qcStatus: 'PASSED', customerId: null, agentId: null, modelId: null, warehouseId: null, orderQty: 1, plannedShipDate: '', remark: '', password: '', displayName: '', userType: 'WEB_OPERATOR', workstationId: null, roleCode: '', roleName: '', workstationCode: '', workstationName: '', workstationType: 'ASSEMBLY', configKey: '', configValue: '', lockQty: 1, expireTime: '', newPartSn: '', reason: '' })
 const actionTitle = computed(() => {
-  const title = ({ master: `新增${activeNav.value?.label ?? '资料'}`, part: '新增零部件', order: '新建销售订单', user: '新增用户', role: '新增角色', workstation: '新增工位', config: '更新系统配置', location: '新增库位', lock: '创建库存锁定', rework: '创建返工记录', intent: '提交采购意向' }[actionKind.value] ?? `新增${activeNav.value?.label ?? '资料'}`)
-  return editingId.value === null ? title : title.replace(/^新增|^新建/, '编辑')
+  const editing = editingId.value !== null
+  const titles: Record<string, [string, string]> = {
+    part: ['新增零部件', '编辑零部件'], order: ['新建销售订单', '编辑销售订单'],
+    user: ['新增用户', '编辑用户'], role: ['新增角色', '编辑角色'],
+    workstation: ['新增工位', '编辑工位'], location: ['新增库位', '编辑库位'],
+    config: ['更新系统配置', '更新系统配置'], lock: ['创建库存锁定', '创建库存锁定'],
+    rework: ['创建返工记录', '创建返工记录'], intent: ['提交采购意向', '提交采购意向'],
+  }
+  const titlesForAction = titles[actionKind.value]
+  if (titlesForAction) return tr(titlesForAction[editing ? 1 : 0])
+  return tr(editing ? '编辑{section}' : '新增{section}', { section: tr(activeNav.value?.label ?? '资料') })
 })
 const editableMasterModules = new Set(['models', 'customers', 'suppliers', 'agents', 'warehouses'])
 const canImportActiveModule = computed(() => {
@@ -558,7 +569,10 @@ function changeUserAccountType() {
 }
 const detailDialogVisible = ref(false)
 const detailLoading = ref(false)
-const detailTitle = ref('详情')
+const detailSection = ref('')
+const detailTitle = computed(() => detailSection.value
+  ? tr('{section}详情', { section: tr(detailSection.value) })
+  : tr('详情'))
 const detailData = ref<Record<string, unknown>>({})
 
 function authConfig() {
@@ -655,10 +669,10 @@ async function login() {
     }
     applyAuthorizedLandingView()
     await loadModule(activeView.value)
-    ElMessage.success('登录成功')
+    ElMessage.success(tr('登录成功'))
   } catch (error) {
     const message = axios.isAxiosError(error) ? error.response?.data?.message ?? '登录失败' : '登录失败'
-    ElMessage.error(message)
+    ElMessage.error(tr(message))
   } finally {
     loading.value = false
   }
@@ -767,7 +781,7 @@ async function logout() {
     clearSession()
   } catch (error) {
     if (axios.isAxiosError(error) && error.response?.status === 401) clearSession()
-    else ElMessage.error('退出未完成，请检查网络后重试')
+    else ElMessage.error(tr('退出未完成，请检查网络后重试'))
   }
 }
 
@@ -782,15 +796,15 @@ function openAccountSettings() {
 async function submitPasswordChange() {
   if (passwordChanging.value) return
   if (!currentPassword.value) {
-    ElMessage.error('请输入当前密码')
+    ElMessage.error(tr('请输入当前密码'))
     return
   }
   if (newPassword.value.length < 8 || newPassword.value.length > 100) {
-    ElMessage.error('新密码长度必须为 8-100')
+    ElMessage.error(tr('新密码长度必须为 8-100'))
     return
   }
   if (newPassword.value !== confirmPassword.value) {
-    ElMessage.error('两次输入的新密码不一致')
+    ElMessage.error(tr('两次输入的新密码不一致'))
     return
   }
   passwordChanging.value = true
@@ -801,9 +815,9 @@ async function submitPasswordChange() {
     confirmPassword.value = ''
     passwordChangeVisible.value = false
     clearSession()
-    ElMessage.success('密码已更新，请使用新密码重新登录')
+    ElMessage.success(tr('密码已更新，请使用新密码重新登录'))
   } catch (error) {
-    ElMessage.error(axios.isAxiosError(error) ? error.response?.data?.message ?? '密码修改失败' : '密码修改失败')
+    ElMessage.error(tr(axios.isAxiosError(error) ? error.response?.data?.message ?? '密码修改失败' : '密码修改失败'))
   } finally {
     passwordChanging.value = false
   }
@@ -884,7 +898,7 @@ async function openRowAction(row: string[]) {
     }
     actionDialogVisible.value = true
   } catch (error) {
-    ElMessage.error(axios.isAxiosError(error) ? error.response?.data?.message ?? '编辑数据加载失败' : error instanceof Error ? error.message : '编辑数据加载失败')
+    ElMessage.error(tr(axios.isAxiosError(error) ? error.response?.data?.message ?? '编辑数据加载失败' : error instanceof Error ? error.message : '编辑数据加载失败'))
   }
 }
 
@@ -914,10 +928,10 @@ async function toggleSystemStatus(row: string[]) {
     const endpoint = module === 'locations' ? `/api/master/locations/${id}/status` : `/api/${module === 'users' ? 'users' : module === 'roles' ? 'roles' : 'workstations'}/${id}/status`
     const statusIndex = module === 'locations' ? 4 : 3
     await axios.put(endpoint, null, { params: { enabled: row[statusIndex] !== '启用' }, ...authConfig() })
-    ElMessage.success('状态已更新')
+    ElMessage.success(tr('状态已更新'))
     await loadModule(activeView.value)
   } catch (error) {
-    ElMessage.error(axios.isAxiosError(error) ? error.response?.data?.message ?? '状态更新失败' : error instanceof Error ? error.message : '状态更新失败')
+    ElMessage.error(tr(axios.isAxiosError(error) ? error.response?.data?.message ?? '状态更新失败' : error instanceof Error ? error.message : '状态更新失败'))
   }
 }
 
@@ -926,16 +940,16 @@ async function changeOrderStatus(row: string[], action: 'confirm' | 'cancel') {
     const orderResponse = await axios.get(`/api/orders/by-no/${encodeURIComponent(row[0])}`, authConfig())
     const order = orderResponse.data.data
     if (action === 'cancel') {
-      const prompt = await ElMessageBox.prompt('请输入作废原因', '作废订单', { inputValue: '业务作废', inputValidator: (value: string) => value.trim() ? true : '作废原因不能为空' })
+      const prompt = await ElMessageBox.prompt(tr('请输入作废原因'), tr('作废订单'), { inputValue: '业务作废', inputValidator: (value: string) => value.trim() ? true : tr('作废原因不能为空') })
       await axios.post(`/api/orders/${order.id}/cancel`, null, { params: { reason: prompt.value }, ...authConfig() })
     } else {
       await axios.post(`/api/orders/${order.id}/confirm`, null, authConfig())
     }
-    ElMessage.success(action === 'cancel' ? '订单已作废' : '订单已确认')
+    ElMessage.success(tr(action === 'cancel' ? '订单已作废' : '订单已确认'))
     await loadModule(activeView.value)
   } catch (error) {
     if (error === 'cancel' || (error && typeof error === 'object' && 'message' in error && (error as { message?: string }).message === 'cancel')) return
-    ElMessage.error(axios.isAxiosError(error) ? error.response?.data?.message ?? '订单状态更新失败' : '订单状态更新失败')
+    ElMessage.error(tr(axios.isAxiosError(error) ? error.response?.data?.message ?? '订单状态更新失败' : '订单状态更新失败'))
   }
 }
 
@@ -946,13 +960,13 @@ async function changeInventoryLock(row: string[], action: 'release' | 'convert')
     const lock = response.data.data
     if (!lock) throw new Error('锁定记录不存在或已被更新')
     if (action === 'release') {
-      const prompt = await ElMessageBox.prompt('请输入释放原因', '释放库存锁定', { inputValue: '手工释放', inputValidator: (value: string) => value.trim() ? true : '释放原因不能为空' })
+      const prompt = await ElMessageBox.prompt(tr('请输入释放原因'), tr('释放库存锁定'), { inputValue: '手工释放', inputValidator: (value: string) => value.trim() ? true : tr('释放原因不能为空') })
       await axios.post(`${agentPath}/${lock.id}/release`, null, { params: { reason: prompt.value }, ...authConfig() })
-      ElMessage.success('库存锁定已释放')
+      ElMessage.success(tr('库存锁定已释放'))
     } else {
       const remaining = Number(lock.lockQty) - Number(lock.releasedQty) - Number(lock.convertedQty)
       if (remaining <= 0 || !['LOCKED', 'PARTIAL_CONVERTED'].includes(lock.status)) {
-        ElMessage.warning('该锁定当前没有可转数量，请查看关联订单或刷新锁定列表')
+        ElMessage.warning(tr('该锁定当前没有可转数量，请查看关联订单或刷新锁定列表'))
         workflowRefreshKey.value++
         return
       }
@@ -965,7 +979,7 @@ async function changeInventoryLock(row: string[], action: 'release' | 'convert')
     await loadModule(activeView.value)
   } catch (error) {
     if (error === 'cancel' || (error && typeof error === 'object' && 'message' in error && (error as { message?: string }).message === 'cancel')) return
-    ElMessage.error(axios.isAxiosError(error) ? error.response?.data?.message ?? '库存锁定操作失败' : error instanceof Error ? error.message : '库存锁定操作失败')
+    ElMessage.error(tr(axios.isAxiosError(error) ? error.response?.data?.message ?? '库存锁定操作失败' : error instanceof Error ? error.message : '库存锁定操作失败'))
   }
 }
 
@@ -975,13 +989,13 @@ async function cancelStockRecord(row: string[]) {
     const response = await axios.get(`/api/${type}/by-no/${encodeURIComponent(row[0])}`, authConfig())
     const record = response.data.data
     if (!record) throw new Error('出入库记录不存在或已被更新')
-    const prompt = await ElMessageBox.prompt('请输入撤销原因', '撤销出入库记录', { inputValue: '业务撤销', inputValidator: (value: string) => value.trim() ? true : '撤销原因不能为空' })
+    const prompt = await ElMessageBox.prompt(tr('请输入撤销原因'), tr('撤销出入库记录'), { inputValue: '业务撤销', inputValidator: (value: string) => value.trim() ? true : tr('撤销原因不能为空') })
     await axios.post(`/api/${type}/${record.id}/cancel`, null, { params: { reason: prompt.value }, ...authConfig() })
-    ElMessage.success('记录已撤销')
+    ElMessage.success(tr('记录已撤销'))
     await loadModule(activeView.value)
   } catch (error) {
     if (error === 'cancel' || (error && typeof error === 'object' && 'message' in error && (error as { message?: string }).message === 'cancel')) return
-    ElMessage.error(axios.isAxiosError(error) ? error.response?.data?.message ?? '撤销失败' : error instanceof Error ? error.message : '撤销失败')
+    ElMessage.error(tr(axios.isAxiosError(error) ? error.response?.data?.message ?? '撤销失败' : error instanceof Error ? error.message : '撤销失败'))
   }
 }
 
@@ -994,9 +1008,9 @@ async function downloadModule(module: string) {
     anchor.download = `${module}.xlsx`
     anchor.click()
     URL.revokeObjectURL(url)
-    ElMessage.success('导出成功')
+    ElMessage.success(tr('导出成功'))
   } catch (error) {
-    ElMessage.error(axios.isAxiosError(error) ? error.response?.data?.message ?? '导出失败' : '导出失败')
+    ElMessage.error(tr(axios.isAxiosError(error) ? error.response?.data?.message ?? '导出失败' : '导出失败'))
   }
 }
 
@@ -1011,7 +1025,7 @@ async function downloadPartsTemplate() {
     const response = await axios.get('/api/parts/import-template', {responseType:'blob'})
     const url = URL.createObjectURL(response.data), anchor = document.createElement('a')
     anchor.href = url; anchor.download = 'parts-template.xlsx'; anchor.click(); URL.revokeObjectURL(url)
-  } catch (error) { ElMessage.error(axios.isAxiosError(error) ? error.response?.data?.message ?? '模板下载失败' : '模板下载失败') }
+  } catch (error) { ElMessage.error(tr(axios.isAxiosError(error) ? error.response?.data?.message ?? '模板下载失败' : '模板下载失败')) }
 }
 
 async function importModule(event: Event) {
@@ -1031,7 +1045,7 @@ async function importModule(event: Event) {
     ElMessage[failed > 0 ? 'warning' : 'success'](`导入完成：成功 ${result.successRows} 条${failed > 0 ? `，失败 ${failed} 条` : ''}`)
     await loadModule(activeView.value)
   } catch (error) {
-    ElMessage.error(axios.isAxiosError(error) ? error.response?.data?.message ?? '导入失败' : '导入失败')
+    ElMessage.error(tr(axios.isAxiosError(error) ? error.response?.data?.message ?? '导入失败' : '导入失败'))
   } finally {
     input.value = ''
   }
@@ -1042,8 +1056,8 @@ function openPrimaryAction() {
   if (module === 'trace') return navigate('trace')
   if (module === 'vehicles' || module === 'logs' || module === 'operation-logs' || module === 'customs') return void downloadModule(module === 'operation-logs' ? 'logs' : module)
   if (module === 'inventory') return navigate('inventory-locks')
-  if (module === 'assembly') return ElMessage.info('请在 PDA 组装工位执行扫码绑定')
-  if (module === 'stock' || module === 'stock-in' || module === 'stock-out') return ElMessage.info('请在 PDA 工位执行扫码作业')
+  if (module === 'assembly') return ElMessage.info(tr('请在 PDA 组装工位执行扫码绑定'))
+  if (module === 'stock' || module === 'stock-in' || module === 'stock-out') return ElMessage.info(tr('请在 PDA 工位执行扫码作业'))
   if (module === 'inventory-locks' || module === 'agent-locks') actionKind.value = 'lock'
   else if (module === 'purchase-intents') actionKind.value = 'intent'
   else if (module === 'rework') actionKind.value = 'rework'
@@ -1052,22 +1066,22 @@ function openPrimaryAction() {
   else if (module === 'users') actionKind.value = 'user'
   else if (module === 'roles') actionKind.value = 'role'
   else if (module === 'workstations') actionKind.value = 'workstation'
-  else if (module.startsWith('agent-')) return ElMessage.info('代理商业务请使用对应专用接口')
+  else if (module.startsWith('agent-')) return ElMessage.info(tr('代理商业务请使用对应专用接口'))
   else actionKind.value = module === 'parts' ? 'part' : module === 'orders' ? 'order' : 'master'
   resetActionForm()
   if (actionKind.value === 'order' || actionKind.value === 'part' || actionKind.value === 'lock' || actionKind.value === 'intent' || actionKind.value === 'location') {
-    void loadMasterOptions().catch(() => ElMessage.error('基础资料加载失败，请稍后重试'))
+    void loadMasterOptions().catch(() => ElMessage.error(tr('基础资料加载失败，请稍后重试')))
   }
-  if (actionKind.value === 'user') void Promise.all([loadMasterOptions(), loadSystemOptions()]).catch(() => ElMessage.error('系统选项加载失败，请稍后重试'))
-  if (actionKind.value === 'role' || actionKind.value === 'workstation') void loadSystemOptions().catch(() => ElMessage.error('系统选项加载失败，请稍后重试'))
-  if (actionKind.value === 'role') void axios.get('/api/roles/permissions', authConfig()).then((response) => { permissionOptions.value = response.data.data ?? [] }).catch(() => ElMessage.error('权限列表加载失败，请稍后重试'))
+  if (actionKind.value === 'user') void Promise.all([loadMasterOptions(), loadSystemOptions()]).catch(() => ElMessage.error(tr('系统选项加载失败，请稍后重试')))
+  if (actionKind.value === 'role' || actionKind.value === 'workstation') void loadSystemOptions().catch(() => ElMessage.error(tr('系统选项加载失败，请稍后重试')))
+  if (actionKind.value === 'role') void axios.get('/api/roles/permissions', authConfig()).then((response) => { permissionOptions.value = response.data.data ?? [] }).catch(() => ElMessage.error(tr('权限列表加载失败，请稍后重试')))
   actionDialogVisible.value = true
 }
 
 async function openRowDetail(row: string[]) {
   const module = activeView.value
   if (module === 'orders' && row[0]) { journeyOrderNo.value = row[0]; return }
-  detailTitle.value = `${activeNav.value?.label ?? '记录'}详情`
+  detailSection.value = activeNav.value?.label ?? '记录'
   detailLoading.value = true
   detailDialogVisible.value = true
   try {
@@ -1088,7 +1102,7 @@ async function openRowDetail(row: string[]) {
     detailData.value = response.data.data ?? {}
   } catch (error) {
     detailDialogVisible.value = false
-    ElMessage.error(axios.isAxiosError(error) ? error.response?.data?.message ?? '详情加载失败' : '详情加载失败')
+    ElMessage.error(tr(axios.isAxiosError(error) ? error.response?.data?.message ?? '详情加载失败' : '详情加载失败'))
   } finally {
     detailLoading.value = false
   }
@@ -1097,7 +1111,7 @@ async function openRowDetail(row: string[]) {
 async function downloadVehicleQr(print = false) {
   const vehicleId = Number(detailData.value.id)
   if (!Number.isInteger(vehicleId) || vehicleId <= 0) {
-    ElMessage.error('当前详情没有可下载的整车二维码')
+    ElMessage.error(tr('当前详情没有可下载的整车二维码'))
     return
   }
   try {
@@ -1107,7 +1121,7 @@ async function downloadVehicleQr(print = false) {
       const printWindow = window.open('', '_blank', 'noopener,noreferrer')
       if (!printWindow) {
         URL.revokeObjectURL(url)
-        ElMessage.error('浏览器阻止了打印窗口，请允许弹窗后重试')
+        ElMessage.error(tr('浏览器阻止了打印窗口，请允许弹窗后重试'))
         return
       }
       printWindow.document.write(`<html><head><title>整车二维码</title></head><body style="margin:0;display:grid;place-items:center;min-height:100vh"><img src="${url}" alt="整车二维码" /></body></html>`)
@@ -1125,23 +1139,23 @@ async function downloadVehicleQr(print = false) {
       URL.revokeObjectURL(url)
     }
   } catch (error) {
-    ElMessage.error(axios.isAxiosError(error) ? error.response?.data?.message ?? '二维码下载失败' : '二维码下载失败')
+    ElMessage.error(tr(axios.isAxiosError(error) ? error.response?.data?.message ?? '二维码下载失败' : '二维码下载失败'))
   }
 }
 
 async function regenerateVehicleQr() {
   const vehicleId = Number(detailData.value.id)
   if (!Number.isInteger(vehicleId) || vehicleId <= 0) {
-    ElMessage.error('当前详情没有可更新的整车二维码')
+    ElMessage.error(tr('当前详情没有可更新的整车二维码'))
     return
   }
   try {
     const response = await axios.post(`/api/vehicles/${vehicleId}/qr/regenerate`, null, authConfig())
     detailData.value = response.data.data ?? detailData.value
-    ElMessage.success('整车二维码已重新生成')
+    ElMessage.success(tr('整车二维码已重新生成'))
     await loadModule('vehicles')
   } catch (error) {
-    ElMessage.error(axios.isAxiosError(error) ? error.response?.data?.message ?? '二维码重新生成失败' : '二维码重新生成失败')
+    ElMessage.error(tr(axios.isAxiosError(error) ? error.response?.data?.message ?? '二维码重新生成失败' : '二维码重新生成失败'))
   }
 }
 
@@ -1149,7 +1163,7 @@ async function submitPrimaryAction() {
   if (actionKind.value === 'user' && actionForm.userType === 'PDA_OPERATOR' && selectedJobTypes.value.size > 0) {
     const workstation = workstationOptions.value.find(station => station.id === actionForm.workstationId)
     if (selectedJobTypes.value.size !== 1 || !workstation || !selectedJobTypes.value.has(workstation.workstationType)) {
-      ElMessage.warning('请选择同一工位的岗位角色，并绑定对应工位')
+      ElMessage.warning(tr('请选择同一工位的岗位角色，并绑定对应工位'))
       return
     }
   }
@@ -1216,10 +1230,10 @@ async function submitPrimaryAction() {
       await axios.put(`/api/roles/${savedId}/permissions`, { permissionIds: selectedPermissionIds.value }, authConfig())
     }
     actionDialogVisible.value = false
-    ElMessage.success('保存成功')
+    ElMessage.success(tr('保存成功'))
     await loadModule(activeView.value)
   } catch (error) {
-    ElMessage.error(axios.isAxiosError(error) ? error.response?.data?.message ?? '保存失败' : '保存失败')
+    ElMessage.error(tr(axios.isAxiosError(error) ? error.response?.data?.message ?? '保存失败' : '保存失败'))
   } finally {
     actionSubmitting.value = false
   }
@@ -1227,33 +1241,35 @@ async function submitPrimaryAction() {
 </script>
 
 <template>
+  <el-config-provider :locale="componentLocale">
   <main v-if="!loggedIn" class="login-shell">
-    <div class="login-art" aria-hidden="true"><div class="login-art-copy"><span class="login-kicker">E-BIKE OPERATIONS</span><h1><strong>E-BIKE</strong> 智慧管理系统</h1><p>电动自行车生产 / 库存 / 订单 / 售后一体化平台</p><div class="login-art-tags"><span><AppIcon name="production" />生产管理</span><span><AppIcon name="stock" />库存管理</span><span><AppIcon name="orders" />订单管理</span><span><AppIcon name="service" />售后服务</span></div></div></div>
+    <div class="login-language"><LanguageMenu /></div>
+    <div class="login-art" aria-hidden="true"><div class="login-art-copy"><span class="login-kicker">E-BIKE OPERATIONS</span><h1><strong>E-BIKE</strong> {{ tr("智慧管理系统") }}</h1><p>{{ tr("电动自行车生产 / 库存 / 订单 / 售后一体化平台") }}</p><div class="login-art-tags"><span><AppIcon name="production" />{{ tr("生产管理") }}</span><span><AppIcon name="stock" />{{ tr("库存管理") }}</span><span><AppIcon name="orders" />{{ tr("订单管理") }}</span><span><AppIcon name="service" />{{ tr("售后服务") }}</span></div></div></div>
     <section class="login-panel">
       <div class="login-brand"><span class="brand-mark">B</span><div><strong>BIKE</strong><small>OPERATIONS PLATFORM</small></div></div>
-      <p class="eyebrow">欢迎回来</p>
-      <h2>E-BIKE 智慧管理系统</h2>
-      <p class="description">使用您的账号登录，自动进入对应工作台</p>
+      <p class="eyebrow">{{ tr("欢迎回来") }}</p>
+      <h2>{{ tr("E-BIKE 智慧管理系统") }}</h2>
+      <p class="description">{{ tr("使用您的账号登录，自动进入对应工作台") }}</p>
       <el-form @submit.prevent="login">
-        <el-form-item label="用户名"><el-input v-model="username" autocomplete="username" placeholder="请输入用户名" /></el-form-item>
-        <el-form-item label="密码"><el-input v-model="password" type="password" show-password autocomplete="current-password" placeholder="请输入密码" /></el-form-item>
-        <el-button class="submit" type="primary" :loading="loading" native-type="submit">登录系统</el-button>
+        <el-form-item :label='tr("用户名")'><el-input v-model="username" autocomplete="username" :placeholder='tr("请输入用户名")' /></el-form-item>
+        <el-form-item :label='tr("密码")'><el-input v-model="password" type="password" show-password autocomplete="current-password" :placeholder='tr("请输入密码")' /></el-form-item>
+        <el-button class="submit" type="primary" :loading="loading" native-type="submit">{{ tr("登录系统") }}</el-button>
       </el-form>
-      <p class="login-footnote">生产 · 库存 · 订单 · 售后一体化管理</p>
+      <p class="login-footnote">{{ tr("生产 · 库存 · 订单 · 售后一体化管理") }}</p>
     </section>
   </main>
 
-  <AppLayout v-else :groups="visibleNavGroups" :active="activeView" :title="activeNav?.label ?? '工作台'" :group="activeGroupLabel" :username="username" :role="userRoleLabel" :last-loaded="lastLoadedAt" @navigate="navigate" @guide="operationGuideVisible = true" @settings="openAccountSettings" @logout="logout">
+  <AppLayout v-else :groups="visibleNavGroups" :active="activeView" :title="activeNav?.label ?? tr('工作台')" :group="activeGroupLabel" :username="username" :role="userRoleLabel" :last-loaded="lastLoadedAt" :is-customer="isCustomerAccount" @navigate="navigate" @guide="operationGuideVisible = true" @settings="openAccountSettings" @logout="logout">
 
     <template #notifications>
       <CustomerOrderNotifications v-if="canReceiveCustomerOrders" :key="username" @order="journeyOrderNo = $event" />
       <DispatchNotifications v-if="canReceiveDispatchNotifications" :key="username + '-dispatch'"
         @order="journeyOrderNo = $event" @pi="dispatchPiId = $event; navigate('pis')" />
     </template>
-    <el-empty v-if="!authContext" description="正在加载账号信息…" />
-    <el-empty v-else-if="passwordChangeVisible" description="请先修改初始密码" />
+    <el-empty v-if="!authContext" :description='tr("正在加载账号信息…")' />
+    <el-empty v-else-if="passwordChangeVisible" :description='tr("请先修改初始密码")' />
     <CustomerWorkspace v-else-if="isCustomerAccount" :key="username" />
-    <el-empty v-else-if="isPdaJobAccount" description="请在 PDA 端使用此岗位账号" />
+    <el-empty v-else-if="isPdaJobAccount" :description='tr("请在 PDA 端使用此岗位账号")' />
       <BusinessWorkspace v-else-if="activeView === 'workflow' && !passwordChangeVisible" :context="authContext" :username="username" :refresh-key="workflowRefreshKey" @navigate="navigate" @guide="operationGuideVisible = true" @convert="changeInventoryLock([$event], 'convert')" @order="journeyOrderNo = $event" />
 
       <DashboardPage v-else-if="activeView === 'dashboard'" :metrics="metrics" :status-rows="statusRows" :points="trendRows" :operations="recentOperations" :actions="quickActions" :allowed-views="visibleNavItems.map(item => item.key)" :context="authContext" :loading="dataLoading" :error="dataError" @refresh="loadModule('dashboard')" @navigate="navigate" />
@@ -1268,169 +1284,174 @@ async function submitPrimaryAction() {
       <CustomerScopeManager v-else-if="activeView === 'customer-scopes' && !passwordChangeVisible && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'CUSTOMER_SCOPE_MANAGE')" />
       <FileReviewManager v-else-if="activeView === 'file-reviews' && !passwordChangeVisible && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'FILE_REVIEW_MANAGE')" />
       <AfterSalesWorkspace v-else-if="activeView === 'after-sales' && !passwordChangeVisible" :auth-context="authContext" />
-      <BusinessModulePage v-else :module-key="activeView" :module="activeModule" :title="activeNav?.label ?? '业务记录'" v-model:search="moduleSearch" v-model:page="modulePage" v-model:page-size="modulePageSize" :loading="dataLoading" :error="dataError" :context="authContext" :column-width="moduleColumnWidth" @refresh="loadModule(activeView)" @reset="moduleSearch = ''" @page-change="loadModule(activeView)" @size-change="modulePage = 1; loadModule(activeView)">
+      <BusinessModulePage v-else :module-key="activeView" :module="activeModule" :title="activeNav?.label ?? tr('业务记录')" v-model:search="moduleSearch" v-model:page="modulePage" v-model:page-size="modulePageSize" :loading="dataLoading" :error="dataError" :context="authContext" :column-width="moduleColumnWidth" @refresh="loadModule(activeView)" @reset="moduleSearch = ''" @page-change="loadModule(activeView)" @size-change="modulePage = 1; loadModule(activeView)">
         <template #before-list><CustomerProfiles v-if="activeView === 'customers' && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR')" :can-write="hasPermission(authContext, 'CUSTOMER_PROFILE_WRITE')" /></template>
-        <template #actions><CustomerAccountCreate v-if="activeView === 'users' && isSuperAdmin(authContext)" @created="loadModule('users')" /><div class="module-actions"><button v-if="hasPermission(authContext, 'DATA_EXPORT') && ['parts','inventory','stock-in','stock-out','stock','orders','rework'].includes(activeView)" class="secondary-action" @click="downloadModule(activeView === 'operation-logs' ? 'logs' : activeView)">导出当前查询</button><button v-if="activeView === 'parts' && canImportActiveModule" class="secondary-action" @click="downloadPartsTemplate">下载部件导入模板</button></div><PermissionGate :allowed="canShowPrimaryAction"><div class="module-actions"><button v-if="canImportActiveModule" class="secondary-action" @click="chooseImport(activeView)">导入 Excel</button><button class="primary-action" @click="openPrimaryAction">＋ {{ activeModule?.action }}</button><input ref="importInput" class="hidden-file-input" type="file" accept=".xlsx,.xls" @change="importModule" /></div></PermissionGate></template>
-        <template #row-actions="{ row }"><button v-if="activeView === 'orders'" class="row-action" @click="journeyOrderNo = row[0]">订单办理</button><button v-if="['inventory-locks', 'agent-locks', 'agent-dashboard'].includes(activeView) && hasPermission(authContext, 'ORDER_READ')" class="row-action" @click="openLinkedOrders(row)">关联订单</button><button v-if="activeView === 'orders' && canRenewOrderReservation(row)" class="row-action" @click="manageOrderReservation(row, 'renew')">{{ ['FULFILLED', '已履约'].includes(row[9]) ? '续占用以撤销出库' : '重新占用' }}</button><button v-if="activeView === 'orders' && canWriteActiveModule && ['PARTIAL_SHIPPED', '部分出库'].includes(row[6])" class="row-action" @click="manageOrderReservation(row, 'close')">关闭剩余</button><button v-if="activeView === 'agents' && isSuperAdmin(authContext)" class="row-action" @click="editAgentAccess(row)">车型授权</button><CustomerScopeEditor v-if="activeView === 'users' && hasPermission(authContext, 'CUSTOMER_SCOPE_MANAGE') && ['WEB_ADMIN', 'WEB_OPERATOR'].includes(row[2])" :username="row[0]" /><button v-if="!(activeView === 'users' && row[2] === 'CUSTOMER')" class="row-action" @click="openRowAction(row)">{{ activeView === 'orders' && ((row[7] && row[7] !== '-') || !['DRAFT','PENDING','草稿','待确认'].includes(row[6])) ? '查看详情' : rowActionLabel }}</button><button v-if="canWriteActiveModule && ['users', 'roles', 'workstations', 'locations'].includes(activeView)" class="row-action" @click="toggleSystemStatus(row)">{{ row[activeView === 'locations' ? 4 : 3] === '启用' ? '停用' : '启用' }}</button><button v-if="canWriteActiveModule && activeView === 'orders' && !['SHIPPED', 'PARTIAL_SHIPPED', 'CANCELLED', 'CLOSED', '已完成', '部分出库', '已作废', '已关闭'].includes(row[6])" class="row-action danger-action" @click="changeOrderStatus(row, 'cancel')">作废</button><button v-if="canWriteActiveModule && ['inventory-locks', 'agent-locks'].includes(activeView) && ['锁定中', '部分转订单', 'LOCKED', 'PARTIAL_CONVERTED'].includes(row[7])" class="row-action" @click="changeInventoryLock(row, 'release')">释放</button><button v-if="canWriteActiveModule && ['inventory-locks', 'agent-locks'].includes(activeView) && ['锁定中', '部分转订单', 'LOCKED', 'PARTIAL_CONVERTED'].includes(row[7]) && canConvertLock && Number(row[3]) - Number(row[4]) - Number(row[5]) > 0" class="row-action" @click="changeInventoryLock(row, 'convert')">转订单 / PI</button><button v-if="canWriteActiveModule && ['stock-in', 'stock-out'].includes(activeView) && ['已完成', 'COMPLETED'].includes(row[6])" class="row-action danger-action" @click="cancelStockRecord(row)">撤销</button></template>
+        <template #actions><CustomerAccountCreate v-if="activeView === 'users' && isSuperAdmin(authContext)" @created="loadModule('users')" /><div class="module-actions"><button v-if="hasPermission(authContext, 'DATA_EXPORT') && ['parts','inventory','stock-in','stock-out','stock','orders','rework'].includes(activeView)" class="secondary-action" @click="downloadModule(activeView === 'operation-logs' ? 'logs' : activeView)">{{ tr("导出当前查询") }}</button><button v-if="activeView === 'parts' && canImportActiveModule" class="secondary-action" @click="downloadPartsTemplate">{{ tr("下载部件导入模板") }}</button></div><PermissionGate :allowed="canShowPrimaryAction"><div class="module-actions"><button v-if="canImportActiveModule" class="secondary-action" @click="chooseImport(activeView)">{{ tr("导入 Excel") }}</button><button class="primary-action" @click="openPrimaryAction">＋ {{ tr(activeModule?.action) }}</button><input ref="importInput" class="hidden-file-input" type="file" accept=".xlsx,.xls" @change="importModule" /></div></PermissionGate></template>
+        <template #row-actions="{ row }"><button v-if="activeView === 'orders'" class="row-action" @click="journeyOrderNo = row[0]">{{ tr("订单办理") }}</button><button v-if="['inventory-locks', 'agent-locks', 'agent-dashboard'].includes(activeView) && hasPermission(authContext, 'ORDER_READ')" class="row-action" @click="openLinkedOrders(row)">{{ tr("关联订单") }}</button><button v-if="activeView === 'orders' && canRenewOrderReservation(row)" class="row-action" @click="manageOrderReservation(row, 'renew')">{{ ['FULFILLED', '已履约'].includes(row[9]) ? tr('续占用以撤销出库') : tr('重新占用') }}</button><button v-if="activeView === 'orders' && canWriteActiveModule && ['PARTIAL_SHIPPED', '部分出库'].includes(row[6])" class="row-action" @click="manageOrderReservation(row, 'close')">{{ tr("关闭剩余") }}</button><button v-if="activeView === 'agents' && isSuperAdmin(authContext)" class="row-action" @click="editAgentAccess(row)">{{ tr("车型授权") }}</button><CustomerScopeEditor v-if="activeView === 'users' && hasPermission(authContext, 'CUSTOMER_SCOPE_MANAGE') && ['WEB_ADMIN', 'WEB_OPERATOR'].includes(row[2])" :username="row[0]" /><button v-if="!(activeView === 'users' && row[2] === 'CUSTOMER')" class="row-action" @click="openRowAction(row)">{{ activeView === 'orders' && ((row[7] && row[7] !== '-') || !['DRAFT','PENDING','草稿','待确认'].includes(row[6])) ? tr('查看详情') : tr(rowActionLabel) }}</button><button v-if="canWriteActiveModule && ['users', 'roles', 'workstations', 'locations'].includes(activeView)" class="row-action" @click="toggleSystemStatus(row)">{{ row[activeView === 'locations' ? 4 : 3] === '启用' ? tr('停用') : tr('启用') }}</button><button v-if="canWriteActiveModule && activeView === 'orders' && !['SHIPPED', 'PARTIAL_SHIPPED', 'CANCELLED', 'CLOSED', '已完成', '部分出库', '已作废', '已关闭'].includes(row[6])" class="row-action danger-action" @click="changeOrderStatus(row, 'cancel')">{{ tr("作废") }}</button><button v-if="canWriteActiveModule && ['inventory-locks', 'agent-locks'].includes(activeView) && ['锁定中', '部分转订单', 'LOCKED', 'PARTIAL_CONVERTED'].includes(row[7])" class="row-action" @click="changeInventoryLock(row, 'release')">{{ tr("释放") }}</button><button v-if="canWriteActiveModule && ['inventory-locks', 'agent-locks'].includes(activeView) && ['锁定中', '部分转订单', 'LOCKED', 'PARTIAL_CONVERTED'].includes(row[7]) && canConvertLock && Number(row[3]) - Number(row[4]) - Number(row[5]) > 0" class="row-action" @click="changeInventoryLock(row, 'convert')">{{ tr("转订单 / PI") }}</button><button v-if="canWriteActiveModule && ['stock-in', 'stock-out'].includes(activeView) && ['已完成', 'COMPLETED'].includes(row[6])" class="row-action danger-action" @click="cancelStockRecord(row)">{{ tr("撤销") }}</button></template>
       </BusinessModulePage>
     <template #dialogs>
     <OrderJourney v-if="journeyOrderNo && !passwordChangeVisible && !isCustomerAccount" :order-no="journeyOrderNo" :context="authContext" @close="journeyOrderNo = ''" @changed="refreshOrderJourney" @continue-pi="continueOrderToPi" />
     <ProductionFulfillmentGuide v-if="authContext && !isCustomerAccount" v-model="operationGuideVisible" :context="authContext" initial-view="flow" @navigate="navigate" @stage="openOperationGuideStage" />
-    <el-dialog v-model="importDetailsVisible" title="导入结果" width="min(720px, 95vw)">
-      <template v-if="importDetails"><p>成功 {{ importDetails.successRows }} 条，失败 {{ importDetails.failureRows }} 条。请按错误行修正后重新导入。</p>
-        <el-table :data="importDetails.failures"><el-table-column prop="rowNumber" label="Excel 行号" width="120" /><el-table-column prop="reason" label="错误原因" /></el-table>
+    <el-dialog v-model="importDetailsVisible" :title='tr("导入结果")' width="min(720px, 95vw)">
+      <template v-if="importDetails"><p>{{ trInline("成功") }} {{ importDetails.successRows }} {{ trInline("条，失败") }} {{ importDetails.failureRows }} {{ trInline("条。请按错误行修正后重新导入。") }}</p>
+        <el-table :data="importDetails.failures"><el-table-column prop="rowNumber" :label='tr("Excel 行号")' width="120" /><el-table-column prop="reason" :label='tr("错误原因")' /></el-table>
       </template>
     </el-dialog>
     <el-dialog v-model="actionDialogVisible" :title="actionTitle" :width="actionKind === 'role' ? '680px' : '520px'">
       <el-form v-if="actionKind === 'part'" label-width="100px">
-        <el-form-item label="零部件 SN"><el-input v-model="actionForm.partSn" :disabled="editingId !== null" /></el-form-item>
-        <el-form-item label="零部件类型"><el-select v-model="actionForm.partType" :disabled="editingId !== null"><el-option label="电机" value="MOTOR" /><el-option label="电池" value="BATTERY" /><el-option label="仪表" value="DISPLAY" /></el-select></el-form-item>
-        <el-form-item label="供应商"><el-select v-model="actionForm.supplierId" clearable filterable placeholder="请选择供应商"><el-option v-for="item in masterOptions.suppliers" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
-        <el-form-item label="批次号"><el-input v-model="actionForm.batchNo" /></el-form-item>
-        <el-form-item label="备注"><el-input v-model="actionForm.remark" type="textarea" /></el-form-item>
+        <el-form-item :label='tr("零部件 SN")'><el-input v-model="actionForm.partSn" :disabled="editingId !== null" /></el-form-item>
+        <el-form-item :label='tr("零部件类型")'><el-select v-model="actionForm.partType" :disabled="editingId !== null"><el-option :label='tr("电机")' value="MOTOR" /><el-option :label='tr("电池")' value="BATTERY" /><el-option :label='tr("仪表")' value="DISPLAY" /></el-select></el-form-item>
+        <el-form-item :label='tr("供应商")'><el-select v-model="actionForm.supplierId" clearable filterable :placeholder='tr("请选择供应商")'><el-option v-for="item in masterOptions.suppliers" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
+        <el-form-item :label='tr("批次号")'><el-input v-model="actionForm.batchNo" /></el-form-item>
+        <el-form-item :label='tr("备注")'><el-input v-model="actionForm.remark" type="textarea" /></el-form-item>
       </el-form>
       <el-form v-else-if="actionKind === 'order'" label-width="100px">
-        <el-form-item label="客户"><el-select v-model="actionForm.customerId" filterable placeholder="请选择客户"><el-option v-for="item in masterOptions.customers" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
-        <el-form-item label="代理商"><el-select v-model="actionForm.agentId" clearable filterable placeholder="可选代理商"><el-option v-for="item in masterOptions.agents" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
-        <el-form-item label="车型"><el-select v-model="actionForm.modelId" filterable placeholder="请选择车型"><el-option v-for="item in masterOptions.models" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
-        <el-form-item label="订单数量"><el-input-number v-model="actionForm.orderQty" :min="1" /></el-form-item>
-        <el-form-item label="计划发货"><el-date-picker v-model="actionForm.plannedShipDate" type="date" value-format="YYYY-MM-DD" /></el-form-item>
-        <el-form-item label="备注"><el-input v-model="actionForm.remark" type="textarea" /></el-form-item>
+        <el-form-item :label='tr("客户")'><el-select v-model="actionForm.customerId" filterable :placeholder='tr("请选择客户")'><el-option v-for="item in masterOptions.customers" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
+        <el-form-item :label='tr("代理商")'><el-select v-model="actionForm.agentId" clearable filterable :placeholder='tr("可选代理商")'><el-option v-for="item in masterOptions.agents" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
+        <el-form-item :label='tr("车型")'><el-select v-model="actionForm.modelId" filterable :placeholder='tr("请选择车型")'><el-option v-for="item in masterOptions.models" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
+        <el-form-item :label='tr("订单数量")'><el-input-number v-model="actionForm.orderQty" :min="1" /></el-form-item>
+        <el-form-item :label='tr("计划发货")'><el-date-picker v-model="actionForm.plannedShipDate" type="date" value-format="YYYY-MM-DD" /></el-form-item>
+        <el-form-item :label='tr("备注")'><el-input v-model="actionForm.remark" type="textarea" /></el-form-item>
       </el-form>
       <el-form v-else-if="actionKind === 'user'" label-width="100px">
-        <el-form-item label="用户名"><el-input v-model="actionForm.code" autocomplete="username" :disabled="editingId !== null" /></el-form-item>
-        <el-form-item v-if="editingId === null" label="初始密码"><el-input v-model="actionForm.password" type="password" show-password autocomplete="new-password" /></el-form-item>
-        <el-form-item label="姓名"><el-input v-model="actionForm.displayName" /></el-form-item>
-        <el-form-item label="账号类型">
+        <el-form-item :label='tr("用户名")'><el-input v-model="actionForm.code" autocomplete="username" :disabled="editingId !== null" /></el-form-item>
+        <el-form-item v-if="editingId === null" :label='tr("初始密码")'><el-input v-model="actionForm.password" type="password" show-password autocomplete="new-password" /></el-form-item>
+        <el-form-item :label='tr("姓名")'><el-input v-model="actionForm.displayName" /></el-form-item>
+        <el-form-item :label='tr("账号类型")'>
           <el-select v-model="actionForm.userType" @change="changeUserAccountType">
-            <el-option label="后台账号" value="WEB_OPERATOR" />
-            <el-option label="后台账号（管理员类型）" value="WEB_ADMIN" />
-            <el-option label="PDA操作员" value="PDA_OPERATOR" />
-            <el-option label="代理商" value="AGENT" />
+            <el-option :label='tr("后台账号")' value="WEB_OPERATOR" />
+            <el-option :label='tr("后台账号（管理员类型）")' value="WEB_ADMIN" />
+            <el-option :label='tr("PDA操作员")' value="PDA_OPERATOR" />
+            <el-option :label='tr("代理商")' value="AGENT" />
           </el-select>
         </el-form-item>
-        <el-form-item v-if="actionForm.userType === 'AGENT'" label="代理商"><el-select v-model="actionForm.agentId" clearable filterable><el-option v-for="item in masterOptions.agents" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
-        <el-form-item label="角色">
-          <el-select v-model="selectedRoleIds" multiple clearable filterable placeholder="选择岗位角色">
+        <el-form-item v-if="actionForm.userType === 'AGENT'" :label='tr("代理商")'><el-select v-model="actionForm.agentId" clearable filterable><el-option v-for="item in masterOptions.agents" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
+        <el-form-item :label='tr("角色")'>
+          <el-select v-model="selectedRoleIds" multiple clearable filterable :placeholder='tr("选择岗位角色")'>
             <el-option v-for="item in userRoleOptions" :key="item.id" :label="`${item.roleName}（${item.roleCode}）`" :value="item.id" />
           </el-select>
         </el-form-item>
-        <el-form-item v-if="actionForm.userType !== 'AGENT'" label="工位">
-          <el-select v-model="actionForm.workstationId" clearable filterable placeholder="选择岗位对应的工位">
+        <el-form-item v-if="actionForm.userType !== 'AGENT'" :label='tr("工位")'>
+          <el-select v-model="actionForm.workstationId" clearable filterable :placeholder='tr("选择岗位对应的工位")'>
             <el-option v-for="item in userWorkstationOptions" :key="item.id" :label="`${item.workstationName}（${item.workstationCode}）`" :value="item.id" />
           </el-select>
         </el-form-item>
       </el-form>
       <el-form v-else-if="actionKind === 'role'" label-width="100px">
-        <el-form-item label="角色编码"><el-input v-model="actionForm.roleCode" /></el-form-item>
-        <el-form-item label="角色名称"><el-input v-model="actionForm.roleName" /></el-form-item>
-        <el-form-item label="功能权限"><el-tree ref="permissionTreeRef" class="permission-tree" :data="permissionTreeData" node-key="id" show-checkbox default-expand-all :default-checked-keys="selectedPermissionIds" @check="handlePermissionTreeCheck"><template #default="{ data }"><span class="permission-tree-label"><strong>{{ data.label }}</strong><small v-if="data.permissionCode">{{ data.permissionCode }}</small></span></template></el-tree></el-form-item>
+        <el-form-item :label='tr("角色编码")'><el-input v-model="actionForm.roleCode" /></el-form-item>
+        <el-form-item :label='tr("角色名称")'><el-input v-model="actionForm.roleName" /></el-form-item>
+        <el-form-item :label='tr("功能权限")'><el-tree ref="permissionTreeRef" class="permission-tree" :data="permissionTreeData" node-key="id" show-checkbox default-expand-all :default-checked-keys="selectedPermissionIds" @check="handlePermissionTreeCheck"><template #default="{ data }"><span class="permission-tree-label"><strong>{{ tr(data.label) }}</strong><small v-if="data.permissionCode">{{ data.permissionCode }}</small></span></template></el-tree></el-form-item>
       </el-form>
       <el-form v-else-if="actionKind === 'workstation'" label-width="100px">
-        <el-form-item label="工位编码"><el-input v-model="actionForm.workstationCode" /></el-form-item>
-        <el-form-item label="工位名称"><el-input v-model="actionForm.workstationName" /></el-form-item>
-        <el-form-item label="工位类型"><el-select v-model="actionForm.workstationType"><el-option label="车架工位" value="FRAME" /><el-option label="电机工位" value="MOTOR" /><el-option label="电池工位" value="BATTERY" /><el-option label="仪表工位" value="DISPLAY" /><el-option label="车灯工位" value="LIGHT" /><el-option label="总装工位" value="ASSEMBLY" /><el-option label="入库" value="STOCK_IN" /><el-option label="出库" value="STOCK_OUT" /><el-option label="库存查询" value="STOCK_LOOKUP" /><el-option label="返工" value="REWORK" /></el-select></el-form-item>
+        <el-form-item :label='tr("工位编码")'><el-input v-model="actionForm.workstationCode" /></el-form-item>
+        <el-form-item :label='tr("工位名称")'><el-input v-model="actionForm.workstationName" /></el-form-item>
+        <el-form-item :label='tr("工位类型")'><el-select v-model="actionForm.workstationType"><el-option :label='tr("车架工位")' value="FRAME" /><el-option :label='tr("电机工位")' value="MOTOR" /><el-option :label='tr("电池工位")' value="BATTERY" /><el-option :label='tr("仪表工位")' value="DISPLAY" /><el-option :label='tr("车灯工位")' value="LIGHT" /><el-option :label='tr("总装工位")' value="ASSEMBLY" /><el-option :label='tr("入库")' value="STOCK_IN" /><el-option :label='tr("出库")' value="STOCK_OUT" /><el-option :label='tr("库存查询")' value="STOCK_LOOKUP" /><el-option :label='tr("返工")' value="REWORK" /></el-select></el-form-item>
       </el-form>
       <el-form v-else-if="actionKind === 'config'" label-width="100px">
-        <el-form-item label="配置键"><el-input v-model="actionForm.configKey" /></el-form-item>
-        <el-form-item label="配置值"><el-input v-model="actionForm.configValue" /></el-form-item>
-        <el-form-item label="说明"><el-input v-model="actionForm.remark" type="textarea" /></el-form-item>
+        <el-form-item :label='tr("配置键")'><el-input v-model="actionForm.configKey" /></el-form-item>
+        <el-form-item :label='tr("配置值")'><el-input v-model="actionForm.configValue" /></el-form-item>
+        <el-form-item :label='tr("说明")'><el-input v-model="actionForm.remark" type="textarea" /></el-form-item>
       </el-form>
       <el-form v-else-if="actionKind === 'location'" label-width="100px">
-        <el-form-item label="仓库"><el-select v-model="actionForm.warehouseId" filterable :disabled="editingId !== null"><el-option v-for="item in masterOptions.warehouses" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
-        <el-form-item label="库位编码"><el-input v-model="actionForm.code" /></el-form-item>
-        <el-form-item label="库位名称"><el-input v-model="actionForm.name" /></el-form-item>
+        <el-form-item :label='tr("仓库")'><el-select v-model="actionForm.warehouseId" filterable :disabled="editingId !== null"><el-option v-for="item in masterOptions.warehouses" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
+        <el-form-item :label='tr("库位编码")'><el-input v-model="actionForm.code" /></el-form-item>
+        <el-form-item :label='tr("库位名称")'><el-input v-model="actionForm.name" /></el-form-item>
       </el-form>
       <el-form v-else-if="actionKind === 'lock'" label-width="100px">
-        <el-form-item v-if="!isAgentAccount" label="代理商"><el-select v-model="actionForm.agentId" filterable><el-option v-for="item in masterOptions.agents" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
-        <el-form-item label="车型"><el-select v-model="actionForm.modelId" filterable><el-option v-for="item in masterOptions.models" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
-        <el-form-item label="锁定数量"><el-input-number v-model="actionForm.lockQty" :min="1" /></el-form-item>
-        <el-form-item label="有效期"><el-date-picker v-model="actionForm.expireTime" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" /></el-form-item>
-        <el-form-item label="备注"><el-input v-model="actionForm.remark" type="textarea" /></el-form-item>
+        <el-form-item v-if="!isAgentAccount" :label='tr("代理商")'><el-select v-model="actionForm.agentId" filterable><el-option v-for="item in masterOptions.agents" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
+        <el-form-item :label='tr("车型")'><el-select v-model="actionForm.modelId" filterable><el-option v-for="item in masterOptions.models" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
+        <el-form-item :label='tr("锁定数量")'><el-input-number v-model="actionForm.lockQty" :min="1" /></el-form-item>
+        <el-form-item :label='tr("有效期")'><el-date-picker v-model="actionForm.expireTime" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" /></el-form-item>
+        <el-form-item :label='tr("备注")'><el-input v-model="actionForm.remark" type="textarea" /></el-form-item>
       </el-form>
       <el-form v-else-if="actionKind === 'rework'" label-width="100px">
-        <el-form-item label="聚合码"><el-input v-model="actionForm.code" placeholder="扫描或输入车辆聚合码" /></el-form-item>
-        <el-form-item label="更换类型"><el-select v-model="actionForm.partType"><el-option label="电机" value="MOTOR" /><el-option label="电池" value="BATTERY" /><el-option label="仪表" value="DISPLAY" /></el-select></el-form-item>
-        <el-form-item label="新零部件 SN"><el-input v-model="actionForm.newPartSn" /></el-form-item>
-        <el-form-item label="返工原因"><el-input v-model="actionForm.reason" type="textarea" /></el-form-item>
+        <el-form-item :label='tr("聚合码")'><el-input v-model="actionForm.code" :placeholder='tr("扫描或输入车辆聚合码")' /></el-form-item>
+        <el-form-item :label='tr("更换类型")'><el-select v-model="actionForm.partType"><el-option :label='tr("电机")' value="MOTOR" /><el-option :label='tr("电池")' value="BATTERY" /><el-option :label='tr("仪表")' value="DISPLAY" /></el-select></el-form-item>
+        <el-form-item :label='tr("新零部件 SN")'><el-input v-model="actionForm.newPartSn" /></el-form-item>
+        <el-form-item :label='tr("返工原因")'><el-input v-model="actionForm.reason" type="textarea" /></el-form-item>
       </el-form>
       <el-form v-else-if="actionKind === 'intent'" label-width="100px">
-        <el-form-item v-if="!isAgentAccount" label="代理商"><el-select v-model="actionForm.agentId" filterable><el-option v-for="item in masterOptions.agents" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
-        <el-form-item label="车型"><el-select v-model="actionForm.modelId" filterable><el-option v-for="item in masterOptions.models" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
-        <el-form-item label="意向数量"><el-input-number v-model="actionForm.orderQty" :min="1" /></el-form-item>
-        <el-form-item label="有效期"><el-date-picker v-model="actionForm.expireTime" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" /></el-form-item>
-        <el-form-item label="备注"><el-input v-model="actionForm.remark" type="textarea" /></el-form-item>
+        <el-form-item v-if="!isAgentAccount" :label='tr("代理商")'><el-select v-model="actionForm.agentId" filterable><el-option v-for="item in masterOptions.agents" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
+        <el-form-item :label='tr("车型")'><el-select v-model="actionForm.modelId" filterable><el-option v-for="item in masterOptions.models" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
+        <el-form-item :label='tr("意向数量")'><el-input-number v-model="actionForm.orderQty" :min="1" /></el-form-item>
+        <el-form-item :label='tr("有效期")'><el-date-picker v-model="actionForm.expireTime" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" /></el-form-item>
+        <el-form-item :label='tr("备注")'><el-input v-model="actionForm.remark" type="textarea" /></el-form-item>
       </el-form>
       <el-form v-else label-width="100px">
-        <el-form-item label="编码"><el-input v-model="actionForm.code" /></el-form-item>
-        <el-form-item label="名称"><el-input v-model="actionForm.name" /></el-form-item>
-        <el-form-item label="联系人"><el-input v-model="actionForm.contactName" /></el-form-item>
-        <el-form-item label="联系电话"><el-input v-model="actionForm.contactPhone" /></el-form-item>
+        <el-form-item :label='tr("编码")'><el-input v-model="actionForm.code" /></el-form-item>
+        <el-form-item :label='tr("名称")'><el-input v-model="actionForm.name" /></el-form-item>
+        <el-form-item :label='tr("联系人")'><el-input v-model="actionForm.contactName" /></el-form-item>
+        <el-form-item :label='tr("联系电话")'><el-input v-model="actionForm.contactPhone" /></el-form-item>
       </el-form>
-      <template #footer><el-button @click="actionDialogVisible = false">取消</el-button><el-button type="primary" :loading="actionSubmitting" @click="submitPrimaryAction">保存</el-button></template>
+      <template #footer><el-button @click="actionDialogVisible = false">{{ tr("取消") }}</el-button><el-button type="primary" :loading="actionSubmitting" @click="submitPrimaryAction">{{ tr("保存") }}</el-button></template>
     </el-dialog>
-    <el-dialog v-model="lockOrderVisible" title="锁定转单 · 选择销售去向" width="min(720px, 96vw)" :close-on-click-modal="false">
-      <p>来源：{{ lockOrderForm.lockNo }}<template v-if="lockOrderForm.skuCode"> · 固定 SKU {{ lockOrderForm.skuCode }}</template>。系统不会根据客户或币种判断内外销，请先选择本次转单去向，选定后对应单据不可更改。</p>
-      <div class="lock-sales-types" role="radiogroup" aria-label="转单去向">
+    <el-dialog v-model="lockOrderVisible" :title='tr("锁定转单 · 选择销售去向")' width="min(720px, 96vw)" :close-on-click-modal="false">
+      <p>{{ trInline("来源：") }}{{ lockOrderForm.lockNo }}<template v-if="lockOrderForm.skuCode"> {{ trInline("· 固定 SKU") }} {{ lockOrderForm.skuCode }}</template>{{ trInline("。系统不会根据客户或币种判断内外销，请先选择本次转单去向，选定后对应单据不可更改。") }}</p>
+      <div class="lock-sales-types" role="radiogroup" :aria-label='tr("转单去向")'>
         <button v-for="option in salesTypeOptions" :key="option.value" type="button" role="radio" :aria-checked="lockOrderForm.salesType === option.value" :class="{ active: lockOrderForm.salesType === option.value }" @click="lockOrderForm.salesType = option.value">
-          <strong>{{ option.title }}</strong><small>{{ option.menu }} · 模板：{{ option.template }}</small><span>{{ option.description }}</span>
+          <strong>{{ tr(option.title) }}</strong><small>{{ option.menu }} {{ trInline("· 模板：") }}{{ option.template }}</small><span>{{ tr(option.description) }}</span>
         </button>
       </div>
       <el-form v-if="lockOrderForm.salesType === 'DOMESTIC'" label-width="100px">
-        <el-alert title="转单保留库存占用和原到期时间。订单办理第一步先生成并核对购销合同，再确认订单，确认后才能出库。" type="info" :closable="false" />
-        <el-form-item label="客户"><el-select v-model="lockOrderForm.customerId" :disabled="lockOrderForm.fixedCustomer" filterable><el-option v-for="customer in masterOptions.customers" :key="customer.id" :value="customer.id" :label="`${customer.code} · ${customer.name}`" /></el-select></el-form-item>
-        <el-form-item label="转换数量"><el-input-number v-model="lockOrderForm.quantity" :min="1" :max="lockOrderForm.remaining" :precision="0" /></el-form-item>
-        <el-form-item label="计划出库日"><el-date-picker v-model="lockOrderForm.plannedShipDate" value-format="YYYY-MM-DD" /></el-form-item>
+        <el-alert :title='tr("转单保留库存占用和原到期时间。订单办理第一步先生成并核对购销合同，再确认订单，确认后才能出库。")' type="info" :closable="false" />
+        <el-form-item :label='tr("客户")'><el-select v-model="lockOrderForm.customerId" :disabled="lockOrderForm.fixedCustomer" filterable><el-option v-for="customer in masterOptions.customers" :key="customer.id" :value="customer.id" :label="`${customer.code} · ${customer.name}`" /></el-select></el-form-item>
+        <el-form-item :label='tr("转换数量")'><el-input-number v-model="lockOrderForm.quantity" :min="1" :max="lockOrderForm.remaining" :precision="0" /></el-form-item>
+        <el-form-item :label='tr("计划出库日")'><el-date-picker v-model="lockOrderForm.plannedShipDate" value-format="YYYY-MM-DD" /></el-form-item>
       </el-form>
       <template v-else-if="lockOrderForm.salesType === 'EUROPE'">
-        <el-radio-group v-model="lockOrderForm.europeTradeType" aria-label="欧洲贸易类型"><el-radio-button value="DOMESTIC">欧洲内销</el-radio-button><el-radio-button value="EXPORT">欧洲外销</el-radio-button></el-radio-group>
-        <el-alert title="将进入「欧洲销售与交付 → 正常 PI 销售」，按所选出货仓从这条锁定生成 PI，单据使用 France_1104_PI 模板。" type="info" :closable="false" />
+        <el-radio-group v-model="lockOrderForm.europeTradeType" :aria-label='tr("欧洲贸易类型")'><el-radio-button value="DOMESTIC">{{ tr("欧洲内销") }}</el-radio-button><el-radio-button value="EXPORT">{{ tr("欧洲外销") }}</el-radio-button></el-radio-group>
+        <el-alert :title='tr("将进入「欧洲销售与交付 → 正常 PI 销售」，按所选出货仓从这条锁定生成 PI，单据使用 France_1104_PI 模板。")' type="info" :closable="false" />
       </template>
-      <el-alert v-else-if="lockOrderForm.salesType === 'EXPORT'" title="将进入「销售订单 → 外销」，从这条锁定生成 PI，单据使用 260728英国builtPI 模板；收款达标后由 PI 流程生成履约订单。" type="info" :closable="false" />
-      <template #footer><el-button @click="lockOrderVisible = false">取消</el-button><el-button v-if="lockOrderForm.salesType === 'DOMESTIC'" type="primary" :loading="lockOrderSubmitting" @click="submitLockOrder">创建内销订单</el-button><el-button v-else type="primary" :disabled="!lockOrderForm.salesType" @click="continueLockToPi">{{ lockOrderForm.salesType ? '前往生成 PI' : '请先选择去向' }}</el-button></template>
+      <el-alert v-else-if="lockOrderForm.salesType === 'EXPORT'" :title='tr("将进入「销售订单 → 外销」，从这条锁定生成 PI，单据使用 260728英国builtPI 模板；收款达标后由 PI 流程生成履约订单。")' type="info" :closable="false" />
+      <template #footer><el-button @click="lockOrderVisible = false">{{ tr("取消") }}</el-button><el-button v-if="lockOrderForm.salesType === 'DOMESTIC'" type="primary" :loading="lockOrderSubmitting" @click="submitLockOrder">{{ tr("创建内销订单") }}</el-button><el-button v-else type="primary" :disabled="!lockOrderForm.salesType" @click="continueLockToPi">{{ lockOrderForm.salesType ? tr('前往生成 PI') : tr('请先选择去向') }}</el-button></template>
     </el-dialog>
-    <el-dialog v-model="agentAccessVisible" :title="`${agentAccessName} · 车型授权`" width="620px">
-      <p>选择允许该代理商查看库存、锁定库存和提交采购意向的车型。清空后撤销全部车型授权；历史锁定仍可查看和释放。</p>
-      <el-select v-model="agentAccessModels" multiple filterable placeholder="选择授权车型" style="width: 100%">
-        <el-option v-for="model in agentAccessOptions" :key="model.id" :value="model.id" :label="`${model.code} · ${model.name}${model.status === 'ENABLED' ? '' : '（停用）'}`" :disabled="model.status !== 'ENABLED'" />
+    <el-dialog v-model="agentAccessVisible" :title="tr('{value0} · 车型授权', { value0: agentAccessName })" width="620px">
+      <p>{{ tr("选择允许该代理商查看库存、锁定库存和提交采购意向的车型。清空后撤销全部车型授权；历史锁定仍可查看和释放。") }}</p>
+      <el-select v-model="agentAccessModels" multiple filterable :placeholder='tr("选择授权车型")' style="width: 100%">
+        <el-option v-for="model in agentAccessOptions" :key="model.id" :value="model.id" :label="`${model.code} · ${model.name}${model.status === 'ENABLED' ? '' : tr('（停用）')}`" :disabled="model.status !== 'ENABLED'" />
       </el-select>
-      <template #footer><el-button @click="agentAccessVisible = false">取消</el-button><el-button type="primary" :loading="agentAccessSaving" @click="saveAgentAccess">保存授权</el-button></template>
+      <template #footer><el-button @click="agentAccessVisible = false">{{ tr("取消") }}</el-button><el-button type="primary" :loading="agentAccessSaving" @click="saveAgentAccess">{{ tr("保存授权") }}</el-button></template>
     </el-dialog>
-    <el-dialog v-model="linkedOrdersVisible" :title="`${linkedLockNo} · 关联订单`" width="900px">
-      <el-table :data="linkedOrders" v-loading="linkedOrdersLoading" empty-text="没有转换生成的订单">
+    <el-dialog v-model="linkedOrdersVisible" :title="tr('{value0} · 关联订单', { value0: linkedLockNo })" width="900px">
+      <el-table :data="linkedOrders" v-loading="linkedOrdersLoading" :empty-text='tr("没有转换生成的订单")'>
         <RecordIdColumn />
-        <el-table-column prop="orderNo" label="订单号" min-width="190" />
-        <el-table-column prop="customerName" label="客户" />
-        <el-table-column prop="orderQty" label="订单数量" />
-        <el-table-column prop="shippedQty" label="已发货" />
-        <el-table-column label="状态"><template #default="scope">{{ orderStateNames[scope.row.status] ?? scope.row.status }}</template></el-table-column>
-        <el-table-column label="占用状态" min-width="185"><template #default="scope">{{ reservationLabel(scope.row.reservationStatus, isAgentAccount) }}</template></el-table-column>
-        <el-table-column v-if="!isAgentAccount" label="占用截止" min-width="210"><template #default="scope">{{ ['PAID_HELD','CREDIT_HELD'].includes(scope.row.reservationStatus) ? '待履约或人工关闭' : ['TIMED_ACTIVE', 'EXPIRED_REQUIRES_REACQUIRE'].includes(scope.row.reservationStatus) ? scope.row.reservationExpiresAt || '—' : '—' }}</template></el-table-column>
-        <el-table-column label="操作" width="100" fixed="right"><template #default="scope"><el-button link type="primary" @click="locateLinkedOrder(scope.row.orderNo)">查看订单</el-button></template></el-table-column>
+        <el-table-column prop="orderNo" :label='tr("订单号")' min-width="190" />
+        <el-table-column prop="customerName" :label='tr("客户")' />
+        <el-table-column prop="orderQty" :label='tr("订单数量")' />
+        <el-table-column prop="shippedQty" :label='tr("已发货")' />
+        <el-table-column :label='tr("状态")'><template #default="scope">{{ tr(orderStateNames[scope.row.status] ?? scope.row.status) }}</template></el-table-column>
+        <el-table-column :label='tr("占用状态")' min-width="185"><template #default="scope">{{ tr(reservationLabel(scope.row.reservationStatus, isAgentAccount)) }}</template></el-table-column>
+        <el-table-column v-if="!isAgentAccount" :label='tr("占用截止")' min-width="210"><template #default="scope">{{ ['PAID_HELD','CREDIT_HELD'].includes(scope.row.reservationStatus) ? tr('待履约或人工关闭') : ['TIMED_ACTIVE', 'EXPIRED_REQUIRES_REACQUIRE'].includes(scope.row.reservationStatus) ? scope.row.reservationExpiresAt || '—' : '—' }}</template></el-table-column>
+        <el-table-column :label='tr("操作")' width="100" fixed="right"><template #default="scope"><el-button link type="primary" @click="locateLinkedOrder(scope.row.orderNo)">{{ tr("查看订单") }}</el-button></template></el-table-column>
       </el-table>
       <el-pagination v-model:current-page="linkedOrdersPage" :page-size="20" :total="linkedOrdersTotal" layout="prev, pager, next, total" @current-change="loadLinkedOrders" />
     </el-dialog>
     <el-dialog v-model="detailDialogVisible" :title="detailTitle" width="680px">
       <div v-loading="detailLoading" class="detail-content">
         <RecordDetails v-if="Object.keys(detailData).length" :value="detailData" />
-        <el-empty v-else description="暂无详情数据" />
+        <el-empty v-else :description='tr("暂无详情数据")' />
       </div>
       <template #footer>
-        <el-button v-if="activeView === 'vehicles' && detailData.id" @click="downloadVehicleQr(false)">下载二维码</el-button>
-        <el-button v-if="activeView === 'vehicles' && detailData.id" type="primary" @click="downloadVehicleQr(true)">打印二维码</el-button>
-        <el-button v-if="activeView === 'vehicles' && detailData.id && canWriteActiveModule" type="warning" @click="regenerateVehicleQr">重新生成二维码</el-button>
-        <el-button @click="detailDialogVisible = false">关闭</el-button>
+        <el-button v-if="activeView === 'vehicles' && detailData.id" @click="downloadVehicleQr(false)">{{ tr("下载二维码") }}</el-button>
+        <el-button v-if="activeView === 'vehicles' && detailData.id" type="primary" @click="downloadVehicleQr(true)">{{ tr("打印二维码") }}</el-button>
+        <el-button v-if="activeView === 'vehicles' && detailData.id && canWriteActiveModule" type="warning" @click="regenerateVehicleQr">{{ tr("重新生成二维码") }}</el-button>
+        <el-button @click="detailDialogVisible = false">{{ tr("关闭") }}</el-button>
       </template>
     </el-dialog>
     <AccountSettingsDialog v-model="accountSettingsVisible" v-model:current-password="currentPassword" v-model:new-password="newPassword" v-model:confirm-password="confirmPassword" :username="username" :role="userRoleLabel" :busy="passwordChanging" @submit="submitPasswordChange" />
-    <el-dialog v-model="passwordChangeVisible" title="首次登录请修改密码" width="460px" :close-on-click-modal="false" :show-close="false">
+    <el-dialog v-model="passwordChangeVisible" :title='tr("首次登录请修改密码")' width="460px" :close-on-click-modal="false" :show-close="false">
       <el-form label-width="110px">
-        <el-form-item label="当前密码"><el-input v-model="currentPassword" type="password" show-password autocomplete="current-password" /></el-form-item>
-        <el-form-item label="新密码"><el-input v-model="newPassword" type="password" show-password autocomplete="new-password" /></el-form-item>
-        <el-form-item label="确认新密码"><el-input v-model="confirmPassword" type="password" show-password autocomplete="new-password" /></el-form-item>
+        <el-form-item :label='tr("当前密码")'><el-input v-model="currentPassword" type="password" show-password autocomplete="current-password" /></el-form-item>
+        <el-form-item :label='tr("新密码")'><el-input v-model="newPassword" type="password" show-password autocomplete="new-password" /></el-form-item>
+        <el-form-item :label='tr("确认新密码")'><el-input v-model="confirmPassword" type="password" show-password autocomplete="new-password" /></el-form-item>
       </el-form>
-      <template #footer><el-button type="primary" :loading="passwordChanging" @click="submitPasswordChange">更新密码</el-button></template>
+      <template #footer><el-button type="primary" :loading="passwordChanging" @click="submitPasswordChange">{{ tr("更新密码") }}</el-button></template>
     </el-dialog>
     </template>
   </AppLayout>
+  </el-config-provider>
 </template>
+
+<style scoped>
+.login-language { position: absolute; z-index: 3; top: max(.7rem, env(safe-area-inset-top)); right: max(1rem, env(safe-area-inset-right)); }
+</style>

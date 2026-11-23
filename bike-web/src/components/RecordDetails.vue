@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/language'
 import { computed } from 'vue'
 import PurchaseContractNumber from './PurchaseContractNumber.vue'
 import { reservationLabel, type ReservationStatus } from '../pi-api'
@@ -61,16 +62,16 @@ const tableArray = computed(() => arrayRows.value.length > 0 && arrayRows.value.
   <div class="record-details">
     <template v-if="Array.isArray(value)">
       <el-table v-if="tableArray" :data="arrayRows" max-height="320" stripe>
-        <el-table-column v-for="key in arrayColumns" :key="key" :label="label(key)" :min-width="/QrCode|qrCode/.test(key) ? 240 : 140">
+        <el-table-column v-for="key in arrayColumns" :key="key" :label="tr(label(key))" :min-width="/QrCode|qrCode/.test(key) ? 240 : 140">
           <template #default="{ row }"><RecordDetails v-if="nested(row[key])" :value="row[key]" /><PurchaseContractNumber v-else-if="key === 'purchaseContractNo'" :value="row[key] == null ? null : String(row[key])" /><span v-else class="record-value">{{ display(row[key], key) }}</span></template>
         </el-table-column>
       </el-table>
-      <p v-else-if="!arrayRows.length" class="record-empty">暂无明细</p>
+      <p v-else-if="!arrayRows.length" class="record-empty">{{ tr("暂无明细") }}</p>
       <ul v-else class="record-list"><li v-for="(item, index) in arrayRows" :key="index"><RecordDetails v-if="nested(item)" :value="item" /><span v-else>{{ display(item) }}</span></li></ul>
     </template>
     <dl v-else-if="record(value)" class="record-facts">
       <div v-for="entry in entries" :key="entry.key" :class="{ 'record-wide': nested(entry.value) || /QrCode|qrCode/.test(entry.key), 'record-aggregate': /QrCode|qrCode/.test(entry.key) }">
-        <dt>{{ label(entry.key) }}</dt><dd><RecordDetails v-if="nested(entry.value)" :value="entry.value" /><PurchaseContractNumber v-else-if="entry.key === 'purchaseContractNo'" :value="entry.value == null ? null : String(entry.value)" /><span v-else>{{ display(entry.value, entry.key) }}</span></dd>
+        <dt>{{ tr(label(entry.key)) }}</dt><dd><RecordDetails v-if="nested(entry.value)" :value="entry.value" /><PurchaseContractNumber v-else-if="entry.key === 'purchaseContractNo'" :value="entry.value == null ? null : String(entry.value)" /><span v-else>{{ display(entry.value, entry.key) }}</span></dd>
       </div>
     </dl>
     <span v-else>{{ display(value) }}</span>

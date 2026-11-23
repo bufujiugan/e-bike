@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/language'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import api from '../api'
 import AppIcon from './AppIcon.vue'
@@ -34,8 +35,8 @@ let listRequest: AbortController | undefined
 let readRequest: AbortController | undefined
 let disposed = false
 
-const title = computed(() => view.value === 'list' ? '出库通知' : selection.value?.kind === 'PI' ? 'PI 整批出库成功' : '订单出库成功')
-const bellLabel = computed(() => unreadCount.value ? '出库通知，' + unreadCount.value + ' 条未读' : '出库通知')
+const title = computed(() => tr(view.value === 'list' ? '出库通知' : selection.value?.kind === 'PI' ? 'PI 整批出库成功' : '订单出库成功'))
+const bellLabel = computed(() => unreadCount.value ? tr('出库通知，{count} 条未读', { count: unreadCount.value }) : tr('出库通知'))
 const dialogVisible = computed({
   get: () => view.value !== null,
   set: visible => { if (!visible) view.value = null },
@@ -164,13 +165,13 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <button type="button" class="dispatch-bell" :aria-label="bellLabel" title="出库通知" aria-haspopup="dialog" @click="showList">
+  <button type="button" class="dispatch-bell" :aria-label="bellLabel" :title='tr("出库通知")' aria-haspopup="dialog" @click="showList">
     <AppIcon name="bell" />
     <span v-if="unreadCount" class="dispatch-count" aria-hidden="true">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
   </button>
 
   <el-dialog
-    v-model="dialogVisible" :title="title" width="min(550px, 94vw)" append-to-body
+    v-model="dialogVisible" :title="tr(title)" width="min(550px, 94vw)" append-to-body
     :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving"
     destroy-on-close
   >
@@ -178,9 +179,9 @@ onUnmounted(() => {
       <div class="dispatch-heading">
         <span class="dispatch-heading-icon"><AppIcon :name="view === 'list' ? 'bell' : 'truck'" /></span>
         <div>
-          <h2 :id="titleId" :class="titleClass">{{ title }}</h2>
+          <h2 :id="titleId" :class="titleClass">{{ tr(title) }}</h2>
           <span v-if="view === 'detail' && selection" class="dispatch-meta">
-            {{ displayTime(selection.dispatchedAt) }} · {{ selection.readAt ? '已读' : '未读' }}
+            {{ displayTime(selection.dispatchedAt) }} · {{ tr(selection.readAt ? '已读' : '未读') }}
           </span>
         </div>
       </div>
@@ -188,28 +189,28 @@ onUnmounted(() => {
 
     <template v-if="view === 'list'">
       <div class="dispatch-list-toolbar">
-        <el-button-group aria-label="通知筛选">
-          <el-button :type="unreadOnly ? 'default' : 'primary'" :aria-pressed="!unreadOnly" @click="filterList(false)">全部</el-button>
-          <el-button :type="unreadOnly ? 'primary' : 'default'" :aria-pressed="unreadOnly" @click="filterList(true)">未读</el-button>
+        <el-button-group :aria-label='tr("通知筛选")'>
+          <el-button :type="unreadOnly ? 'default' : 'primary'" :aria-pressed="!unreadOnly" @click="filterList(false)">{{ tr("全部") }}</el-button>
+          <el-button :type="unreadOnly ? 'primary' : 'default'" :aria-pressed="unreadOnly" @click="filterList(true)">{{ tr("未读") }}</el-button>
         </el-button-group>
-        <span class="dispatch-meta">{{ unreadCount }} 条未读</span>
+        <span class="dispatch-meta">{{ tr('{count} 条未读', { count: unreadCount }) }}</span>
       </div>
       <div v-loading="listLoading" class="dispatch-list">
         <div v-if="listError" class="dispatch-list-error" role="status">
-          <span>通知列表加载失败</span><el-button link type="primary" @click="loadList(notices?.page)">重试</el-button>
+          <span>{{ tr("通知列表加载失败") }}</span><el-button link type="primary" @click="loadList(notices?.page)">{{ tr("重试") }}</el-button>
         </div>
         <ul v-else-if="notices?.records.length" class="dispatch-rows">
           <li v-for="notice in notices.records" :key="notice.id">
             <button type="button" class="dispatch-row" @click="openNotice(notice, true)">
               <span>
-                <strong>{{ notice.kind === 'PI' ? 'PI 整批出库' : '订单出库' }} · {{ notice.documentNo }}</strong>
-                <span class="dispatch-meta">{{ displayTime(notice.dispatchedAt) }} · {{ notice.quantity }} 台</span>
+                <strong>{{ tr(notice.kind === 'PI' ? 'PI 整批出库' : '订单出库') }} · {{ notice.documentNo }}</strong>
+                <span class="dispatch-meta">{{ displayTime(notice.dispatchedAt) }} · {{ notice.quantity }} {{ tr("台") }}</span>
               </span>
-              <span :class="['dispatch-state', { 'dispatch-state-unread': !notice.readAt }]">{{ notice.readAt ? '已读' : '未读' }}</span>
+              <span :class="['dispatch-state', { 'dispatch-state-unread': !notice.readAt }]">{{ tr(notice.readAt ? '已读' : '未读') }}</span>
             </button>
           </li>
         </ul>
-        <el-empty v-else-if="!listLoading" :description="unreadOnly ? '暂无未读出库通知' : '暂无出库通知'" :image-size="64" />
+        <el-empty v-else-if="!listLoading" :description="tr(unreadOnly ? '暂无未读出库通知' : '暂无出库通知')" :image-size="64" />
       </div>
       <el-pagination
         v-if="!listError && notices && notices.total > notices.pageSize"
@@ -220,19 +221,19 @@ onUnmounted(() => {
 
     <template v-else-if="view === 'detail' && selection">
       <dl class="dispatch-details">
-        <dt>{{ selection.kind === 'PI' ? 'PI 编号' : '订单号' }}</dt><dd>{{ selection.documentNo }}</dd>
-        <template v-if="selection.batchNo"><dt>出库批次号</dt><dd>{{ selection.batchNo }}</dd></template>
-        <dt>本次出库</dt><dd>{{ selection.quantity }} 台</dd>
+        <dt>{{ tr(selection.kind === 'PI' ? 'PI 编号' : '订单号') }}</dt><dd>{{ selection.documentNo }}</dd>
+        <template v-if="selection.batchNo"><dt>{{ tr("出库批次号") }}</dt><dd>{{ selection.batchNo }}</dd></template>
+        <dt>{{ tr("本次出库") }}</dt><dd>{{ selection.quantity }} {{ tr("台") }}</dd>
       </dl>
-      <el-alert v-if="saveError" title="已读状态保存失败，请重试" type="warning" :closable="false" />
+      <el-alert v-if="saveError" :title='tr("已读状态保存失败，请重试")' type="warning" :closable="false" />
     </template>
 
     <template v-if="view === 'detail' && selection" #footer>
       <el-button :disabled="saving" @click="acknowledge(false)">
-        {{ selection.readAt ? '返回列表' : '我知道了' }}
+        {{ tr(selection.readAt ? '返回列表' : '我知道了') }}
       </el-button>
       <el-button type="primary" :disabled="saving" @click="acknowledge(true)">
-        {{ saving ? '正在保存…' : '查看详情' }}
+        {{ tr(saving ? '正在保存…' : '查看详情') }}
       </el-button>
     </template>
   </el-dialog>

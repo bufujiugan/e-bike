@@ -5,54 +5,54 @@
         message
       }}</text>
       <view v-if="pending" class="card"
-        ><text class="text error">上次返工结果未确认，请先追溯核对。</text
+        ><text class="text error">{{ tr("上次返工结果未确认，请先追溯核对。") }}</text
         ><action-button
-          label="打开追溯"
+          :label='tr("打开追溯")'
           secondary
           @click="go('trace/trace')" /><action-button
-          label="已核对，解除锁定"
+          :label='tr("已核对，解除锁定")'
           secondary
           :disabled="busy"
           @click="acknowledgePending"
       /></view>
       <view class="card"
-        ><choice-list
+        ><choice-list :empty-label="tr('暂无可选记录')"
           v-model="scanTarget"
-          label="扫码填入位置"
+          :label='tr("扫码填入位置")'
           :options="targets"
           :disabled="busy"
         />
         <form-field
           v-model="vehicleQrCode"
-          label="整车聚合码"
+          :label='tr("整车聚合码")'
           :disabled="busy || !!pending"
           @focus="scanTarget = 'vehicle'"
         />
-        <choice-list
+        <choice-list :empty-label="tr('暂无可选记录')"
           v-model="partType"
-          label="更换部件类型"
+          :label='tr("更换部件类型")'
           :options="types"
           :disabled="busy || !!pending"
         />
         <form-field
           v-model="newPartSn"
-          label="新部件 SN"
+          :label='tr("新部件 SN")'
           :disabled="busy || !!pending"
           @focus="scanTarget = 'part'"
         />
         <form-field
           v-model="reason"
-          label="返工原因"
+          :label='tr("返工原因")'
           :disabled="busy || !!pending"
         />
         <action-button
-          label="启动设备扫码"
+          :label='tr("启动设备扫码")'
           secondary
           :disabled="busy || !ready || !!pending"
           @click="triggerScan"
         />
         <action-button
-          label="确认返工换件"
+          :label='tr("确认返工换件")'
           :disabled="busy || !ready || !!pending"
           @click="submit"
         />

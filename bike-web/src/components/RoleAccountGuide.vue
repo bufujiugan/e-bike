@@ -1,53 +1,57 @@
+<script setup lang="ts">
+import { tr } from '../i18n/language'
+</script>
+
 <template>
   <article class="role-account-guide">
     <header class="guide-lead">
-      <h2>角色与账户</h2>
-      <p>账号类型决定进入哪个工作台和所属范围；角色授予可访问的页面与操作权限。权限由服务端校验，菜单是否显示不替代权限控制。</p>
+      <h2>{{ tr("角色与账户") }}</h2>
+      <p>{{ tr("账号类型决定进入哪个工作台和所属范围；角色授予可访问的页面与操作权限。权限由服务端校验，菜单是否显示不替代权限控制。") }}</p>
     </header>
 
     <section class="guide-section">
-      <h3>账号类型</h3>
+      <h3>{{ tr("账号类型") }}</h3>
       <div class="guide-table-wrap">
         <table>
-          <thead><tr><th>账号类型</th><th>必须绑定</th><th>登录后的范围</th></tr></thead>
+          <thead><tr><th>{{ tr("账号类型") }}</th><th>{{ tr("必须绑定") }}</th><th>{{ tr("登录后的范围") }}</th></tr></thead>
           <tbody>
-            <tr><td>WEB_ADMIN</td><td>管理员角色</td><td>内部 Web；SUPER_ADMIN 拥有系统管理权限</td></tr>
-            <tr><td>WEB_OPERATOR</td><td>至少一个业务角色</td><td>内部 Web；可见功能由角色权限决定</td></tr>
-            <tr><td>PDA_OPERATOR</td><td>操作工位及岗位角色</td><td>PDA/H5；按工位开放扫码作业</td></tr>
-            <tr><td>AGENT</td><td>代理商公司</td><td>代理商工作台；仅限授权代理商及车型范围</td></tr>
-            <tr><td>CUSTOMER</td><td>客户公司</td><td>客户工作台；仅查看和提交所属公司的订单</td></tr>
+            <tr><td>WEB_ADMIN</td><td>{{ tr("管理员角色") }}</td><td>{{ tr("内部 Web；SUPER_ADMIN 拥有系统管理权限") }}</td></tr>
+            <tr><td>WEB_OPERATOR</td><td>{{ tr("至少一个业务角色") }}</td><td>{{ tr("内部 Web；可见功能由角色权限决定") }}</td></tr>
+            <tr><td>PDA_OPERATOR</td><td>{{ tr("操作工位及岗位角色") }}</td><td>{{ tr("PDA/H5；按工位开放扫码作业") }}</td></tr>
+            <tr><td>AGENT</td><td>{{ tr("代理商公司") }}</td><td>{{ tr("代理商工作台；仅限授权代理商及车型范围") }}</td></tr>
+            <tr><td>CUSTOMER</td><td>{{ tr("客户公司") }}</td><td>{{ tr("客户工作台；仅查看和提交所属公司的订单") }}</td></tr>
           </tbody>
         </table>
       </div>
-      <p class="guide-note">普通员工按岗位分配最少需要的角色；不要把 SUPER_ADMIN 用作日常账号。</p>
+      <p class="guide-note">{{ tr("普通员工按岗位分配最少需要的角色；不要把 SUPER_ADMIN 用作日常账号。") }}</p>
     </section>
 
     <section class="guide-section">
-      <h3>新增内部账号并分配角色</h3>
+      <h3>{{ tr("新增内部账号并分配角色") }}</h3>
       <ol>
-        <li>使用超级管理员账号登录，打开 <strong>资料与设置 → 用户管理</strong>，点击“新增用户”。</li>
-        <li>填写用户名、初始密码和姓名，选择账号类型。PDA 操作员必须选择工位；代理商账号必须绑定代理商公司。</li>
-        <li>在“角色”中选择该岗位所需角色并保存。账号需要多个岗位权限时可选择多个角色。</li>
-        <li>新建或调整角色时打开 <strong>资料与设置 → 角色权限</strong>，创建/编辑角色并勾选功能权限。回到“用户管理”，编辑目标账号即可调整它的角色。</li>
+        <li>{{ tr("使用超级管理员账号登录，打开") }} <strong>{{ tr("资料与设置 → 用户管理") }}</strong>{{ tr("，点击“新增用户”。") }}</li>
+        <li>{{ tr("填写用户名、初始密码和姓名，选择账号类型。PDA 操作员必须选择工位；代理商账号必须绑定代理商公司。") }}</li>
+        <li>{{ tr("在“角色”中选择该岗位所需角色并保存。账号需要多个岗位权限时可选择多个角色。") }}</li>
+        <li>{{ tr("新建或调整角色时打开") }} <strong>{{ tr("资料与设置 → 角色权限") }}</strong>{{ tr("，创建/编辑角色并勾选功能权限。回到“用户管理”，编辑目标账号即可调整它的角色。") }}</li>
       </ol>
     </section>
 
     <section class="guide-section">
-      <h3>新增客户登录账号</h3>
+      <h3>{{ tr("新增客户登录账号") }}</h3>
       <ol>
-        <li>在 <strong>资料与设置 → 用户管理</strong> 点击“新增客户登录账号”。</li>
-        <li>选择新建客户公司或绑定已有客户公司，再填写登录账号、联系人姓名和初始密码。</li>
-        <li>保存后系统自动设置 CUSTOMER 账号类型、绑定所属客户公司并分配 WEB_CUSTOMER 角色；客户账号不需要在角色页手动配置。</li>
-        <li>客户使用与员工相同的登录入口。首次登录必须修改密码，随后自动进入客户工作台；没有公开自助注册入口。</li>
+        <li>{{ tr("在") }} <strong>{{ tr("资料与设置 → 用户管理") }}</strong> {{ tr("点击“新增客户登录账号”。") }}</li>
+        <li>{{ tr("选择新建客户公司或绑定已有客户公司，再填写登录账号、联系人姓名和初始密码。") }}</li>
+        <li>{{ tr("保存后系统自动设置 CUSTOMER 账号类型、绑定所属客户公司并分配 WEB_CUSTOMER 角色；客户账号不需要在角色页手动配置。") }}</li>
+        <li>{{ tr("客户使用与员工相同的登录入口。首次登录必须修改密码，随后自动进入客户工作台；没有公开自助注册入口。") }}</li>
       </ol>
     </section>
 
     <section class="guide-section guide-section-last">
-      <h3>日常维护</h3>
+      <h3>{{ tr("日常维护") }}</h3>
       <ul>
-        <li>新增员工岗位或调整可见功能：先在“角色权限”维护角色权限，再在“用户管理”把角色分配给账号。</li>
-        <li>代理商车型范围在代理商资料的“车型授权”中维护；PDA 账号的工位在用户资料中维护。</li>
-        <li>账号离岗或不再使用时，在“用户管理”停用账号；停用后该账号不能继续登录。</li>
+        <li>{{ tr("新增员工岗位或调整可见功能：先在“角色权限”维护角色权限，再在“用户管理”把角色分配给账号。") }}</li>
+        <li>{{ tr("代理商车型范围在代理商资料的“车型授权”中维护；PDA 账号的工位在用户资料中维护。") }}</li>
+        <li>{{ tr("账号离岗或不再使用时，在“用户管理”停用账号；停用后该账号不能继续登录。") }}</li>
       </ul>
     </section>
   </article>

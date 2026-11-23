@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/language'
 import { computed, ref, watch } from 'vue'
 import { peekSalesIntent } from '../sales-routing'
 import type { PermissionContext } from '../permissions'
@@ -18,11 +19,11 @@ watch(intent, value => { if (value) mode.value = value.europeTradeType === 'DOME
 <template>
   <section>
     <template v-if="!agent">
-      <p>欧洲内销和外销均办理 PI，统一使用 France_1104_PI 模板，按实际交易填写税费、收款资料及交付安排。</p>
-      <el-radio-group v-model="mode" aria-label="欧洲销售类型" class="sales-scenario-tabs">
-        <el-radio-button value="CZECH_DOMESTIC">内销</el-radio-button>
-        <el-radio-button value="CZECH_EXPORT">外销</el-radio-button>
-        <el-radio-button value="HISTORY">全部／历史 PI</el-radio-button>
+      <p>{{ tr("欧洲内销和外销均办理 PI，统一使用 France_1104_PI 模板，按实际交易填写税费、收款资料及交付安排。") }}</p>
+      <el-radio-group v-model="mode" :aria-label='tr("欧洲销售类型")' class="sales-scenario-tabs">
+        <el-radio-button value="CZECH_DOMESTIC">{{ tr("内销") }}</el-radio-button>
+        <el-radio-button value="CZECH_EXPORT">{{ tr("外销") }}</el-radio-button>
+        <el-radio-button value="HISTORY">{{ tr("全部／历史 PI") }}</el-radio-button>
       </el-radio-group>
     </template>
     <PiWorkspace :key="agent ? 'agent' : mode" :context="context" europe

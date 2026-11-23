@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../../i18n/language'
 import { computed, nextTick, ref, watch } from 'vue'
 import AppIcon from '../AppIcon.vue'
 import MascotCompanion from '../common/MascotCompanion.vue'
@@ -67,35 +68,35 @@ watch([() => props.active, displayGroups], async ([key]) => {
 <template>
   <aside class="sm-sidebar" :class="{ 'is-sidebar-collapsed': collapsed }">
     <div class="sm-sidebar-top">
-      <div class="workspace-brand" title="BIKE 工作空间 · 智能制造管理平台">
+      <div class="workspace-brand" :title='tr("BIKE 工作空间 · 智能制造管理平台")'>
         <span class="workspace-brand-mark" aria-hidden="true">B</span>
-        <span class="workspace-brand-copy"><strong>BIKE 工作空间</strong><small>智能制造管理平台</small></span>
+        <span class="workspace-brand-copy"><strong>{{ tr("BIKE 工作空间") }}</strong><small>{{ tr("智能制造管理平台") }}</small></span>
       </div>
-      <button type="button" class="sm-sidebar-collapse" :class="{ 'is-collapsed': collapsed }" :aria-label="collapsed ? '展开侧边栏' : '收起侧边栏'" :title="collapsed ? '展开侧边栏' : '收起侧边栏'" @click="emit('update:collapsed', !collapsed)"><AppIcon name="sidebar-collapse" /></button>
+      <button type="button" class="sm-sidebar-collapse" :class="{ 'is-collapsed': collapsed }" :aria-label="tr(collapsed ? '展开侧边栏' : '收起侧边栏')" :title="tr(collapsed ? '展开侧边栏' : '收起侧边栏')" @click="emit('update:collapsed', !collapsed)"><AppIcon name="sidebar-collapse" /></button>
     </div>
-    <nav ref="navigation" aria-label="主导航">
+    <nav ref="navigation" :aria-label='tr("主导航")'>
       <section v-for="group in displayGroups" :key="group.label" class="sm-nav-group">
-        <button type="button" class="sm-nav-heading" :class="{ 'is-expanded': !collapsedGroups.has(group.label), 'has-active-child': group.items.some(item => item.key === active || hasActiveChild(item)) }" :title="group.label" :aria-label="group.label" :aria-controls="`sidebar-group-${group.id}`" :aria-expanded="!collapsedGroups.has(group.label)" @click="toggleGroup(group.label)">
-          <AppIcon :name="group.icon" class="sm-group-icon" /><span class="sm-nav-label">{{ group.label }}</span><small class="sm-nav-count">{{ group.items.length }}</small><span class="sm-chevron-surface" aria-hidden="true"><AppIcon name="chevron" class="sm-nav-chevron" :class="{ 'is-expanded': !collapsedGroups.has(group.label) }" /></span>
+        <button type="button" class="sm-nav-heading" :class="{ 'is-expanded': !collapsedGroups.has(group.label), 'has-active-child': group.items.some(item => item.key === active || hasActiveChild(item)) }" :title="tr(group.label)" :aria-label="tr(group.label)" :aria-controls="`sidebar-group-${group.id}`" :aria-expanded="!collapsedGroups.has(group.label)" @click="toggleGroup(group.label)">
+          <AppIcon :name="group.icon" class="sm-group-icon" /><span class="sm-nav-label">{{ tr(group.label) }}</span><small class="sm-nav-count">{{ group.items.length }}</small><span class="sm-chevron-surface" aria-hidden="true"><AppIcon name="chevron" class="sm-nav-chevron" :class="{ 'is-expanded': !collapsedGroups.has(group.label) }" /></span>
         </button>
         <div v-show="!collapsedGroups.has(group.label)" :id="`sidebar-group-${group.id}`" class="sm-nav-items">
           <div v-for="item in group.items" :key="item.key" class="sm-nav-entry" :class="{ 'is-directory': item.children?.length && !item.path }">
             <div class="sm-nav-parent-row" :class="{ 'is-active': active === item.key, 'has-active-child': hasActiveChild(item), 'is-expanded': item.children?.length && expandedSubmenus.has(item.key) }">
-              <button type="button" class="sm-nav-link" :class="{ 'is-active': active === item.key }" :title="item.label" :aria-label="item.label" :aria-current="active === item.key ? 'page' : undefined" :aria-expanded="item.children?.length && !item.path ? expandedSubmenus.has(item.key) : undefined" :aria-controls="item.children?.length && !item.path ? `sidebar-submenu-${item.key}` : undefined" @click="item.children?.length && !item.path ? toggleSubmenu(item.key) : emit('navigate', item.key)">
-                <AppIcon :name="item.icon ?? item.key" /><span class="sm-nav-label">{{ item.label }}</span><span v-if="item.children?.length && !item.path" class="sm-chevron-surface" aria-hidden="true"><AppIcon name="chevron" class="sm-nav-chevron" :class="{ 'is-expanded': expandedSubmenus.has(item.key) }" /></span>
+              <button type="button" class="sm-nav-link" :class="{ 'is-active': active === item.key }" :title="tr(item.label)" :aria-label="tr(item.label)" :aria-current="active === item.key ? 'page' : undefined" :aria-expanded="item.children?.length && !item.path ? expandedSubmenus.has(item.key) : undefined" :aria-controls="item.children?.length && !item.path ? `sidebar-submenu-${item.key}` : undefined" @click="item.children?.length && !item.path ? toggleSubmenu(item.key) : emit('navigate', item.key)">
+                <AppIcon :name="item.icon ?? item.key" /><span class="sm-nav-label">{{ tr(item.label) }}</span><span v-if="item.children?.length && !item.path" class="sm-chevron-surface" aria-hidden="true"><AppIcon name="chevron" class="sm-nav-chevron" :class="{ 'is-expanded': expandedSubmenus.has(item.key) }" /></span>
               </button>
-              <button v-if="item.children?.length && item.path" type="button" class="sm-submenu-toggle" :title="`${expandedSubmenus.has(item.key) ? '收起' : '展开'}${item.label}子菜单`" :aria-label="`${expandedSubmenus.has(item.key) ? '收起' : '展开'}${item.label}子菜单`" :aria-controls="`sidebar-submenu-${item.key}`" :aria-expanded="expandedSubmenus.has(item.key)" @click="toggleSubmenu(item.key)"><AppIcon name="chevron" class="sm-nav-chevron" :class="{ 'is-expanded': expandedSubmenus.has(item.key) }" /></button>
+              <button v-if="item.children?.length && item.path" type="button" class="sm-submenu-toggle" :title="tr(expandedSubmenus.has(item.key) ? '收起{item}子菜单' : '展开{item}子菜单', { item: tr(item.label) })" :aria-label="tr(expandedSubmenus.has(item.key) ? '收起{item}子菜单' : '展开{item}子菜单', { item: tr(item.label) })" :aria-controls="`sidebar-submenu-${item.key}`" :aria-expanded="expandedSubmenus.has(item.key)" @click="toggleSubmenu(item.key)"><AppIcon name="chevron" class="sm-nav-chevron" :class="{ 'is-expanded': expandedSubmenus.has(item.key) }" /></button>
             </div>
             <div v-if="item.children?.length" v-show="expandedSubmenus.has(item.key)" :id="`sidebar-submenu-${item.key}`" class="sm-nav-children">
-              <button v-for="child in item.children" :key="child.key" type="button" class="sm-nav-link sm-nav-child" :class="{ 'is-active': active === child.key }" :title="child.label" :aria-label="child.label" :aria-current="active === child.key ? 'page' : undefined" @click="emit('navigate', child.key)"><AppIcon :name="child.icon ?? child.key" /><span class="sm-nav-label">{{ child.label }}</span></button>
+              <button v-for="child in item.children" :key="child.key" type="button" class="sm-nav-link sm-nav-child" :class="{ 'is-active': active === child.key }" :title="tr(child.label)" :aria-label="tr(child.label)" :aria-current="active === child.key ? 'page' : undefined" @click="emit('navigate', child.key)"><AppIcon :name="child.icon ?? child.key" /><span class="sm-nav-label">{{ tr(child.label) }}</span></button>
             </div>
           </div>
         </div>
       </section>
     </nav>
     <footer class="workspace-sidebar-footer">
-      <div class="sidebar-companion" aria-hidden="true"><span>今天也一起，<br /><strong>稳稳向前。</strong></span><MascotCompanion compact /></div>
-      <button type="button" class="workspace-logout" title="退出登录" aria-label="退出登录" @click="emit('logout')"><AppIcon name="logout" /><span class="sm-nav-label">退出登录</span></button>
+      <div class="sidebar-companion" aria-hidden="true"><span>{{ tr("今天也一起，") }}<br /><strong>{{ tr("稳稳向前。") }}</strong></span><MascotCompanion compact /></div>
+      <button type="button" class="workspace-logout" :title='tr("退出登录")' :aria-label='tr("退出登录")' @click="emit('logout')"><AppIcon name="logout" /><span class="sm-nav-label">{{ tr("退出登录") }}</span></button>
     </footer>
   </aside>
 </template>

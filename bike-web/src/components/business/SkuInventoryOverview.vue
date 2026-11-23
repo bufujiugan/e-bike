@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../../i18n/language'
 import { computed } from 'vue'
 import type { Metric } from '../../config/page-presentation'
 import MetricGrid from '../dashboard/MetricGrid.vue'
@@ -17,4 +18,4 @@ const sources = computed(() => props.error ? null : donutOption([{ name: '订单
 const structure = computed(() => props.error ? null : barOption([{ name: '订单占用', value: sum('orderReservedQty') }, { name: '临时锁定', value: sum('temporaryLockedQty') }, { name: 'SKU净可用', value: sum('availableQty') }]))
 const health = computed(() => props.error ? null : barOption([{ name: '物理库存', value: sum('physicalQty') }, { name: '隔离库存', value: sum('quarantinedQty') }, { name: '库存缺口', value: sum('shortageQty') }]))
 </script>
-<template><MetricGrid :items="metrics" :loading="loading" /><div class="sm-chart-grid"><ChartCard title="锁定来源分析" description="当前页 SKU · 已提供的锁定来源" :option="sources" :loading="loading" /><ChartCard title="锁定结构" description="当前页 SKU · 保留原库存口径" :option="structure" :loading="loading" /><ChartCard title="库存健康度" description="当前页数量 · 不虚构健康阈值" :option="health" :loading="loading" /></div></template>
+<template><MetricGrid :items="metrics" :loading="loading" /><div class="sm-chart-grid"><ChartCard :title='tr("锁定来源分析")' :description='tr("当前页 SKU · 已提供的锁定来源")' :option="sources" :loading="loading" /><ChartCard :title='tr("锁定结构")' :description='tr("当前页 SKU · 保留原库存口径")' :option="structure" :loading="loading" /><ChartCard :title='tr("库存健康度")' :description='tr("当前页数量 · 不虚构健康阈值")' :option="health" :loading="loading" /></div></template>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/language'
 import { onMounted, onUnmounted, ref } from 'vue'
 import api from '../api'
 const emit = defineEmits<{order:[orderNo:string]}>()
@@ -33,17 +34,17 @@ onMounted(load)
 onUnmounted(()=>{disposed=true;if(timer)clearTimeout(timer)})
 </script>
 <template>
-  <div class="customer-notice-trigger"><el-badge :value="notices.length" :hidden="!notices.length"><el-button @click="visible=true;refresh()">客户新订单</el-button></el-badge></div>
-  <el-dialog v-model="visible" title="客户订单提醒" width="min(640px,94vw)" :close-on-click-modal="false">
-    <el-alert v-if="error" :title="error" type="warning" :closable="false" />
-    <p class="notice-hint">以下客户订单等待业务确认。查看后可在订单办理中继续处理。</p>
-    <el-empty v-if="!notices.length&&!error" description="暂无未读客户订单" />
+  <div class="customer-notice-trigger"><el-badge :value="notices.length" :hidden="!notices.length"><el-button @click="visible=true;refresh()">{{ tr("客户新订单") }}</el-button></el-badge></div>
+  <el-dialog v-model="visible" :title='tr("客户订单提醒")' width="min(640px,94vw)" :close-on-click-modal="false">
+    <el-alert v-if="error" :title="tr(error)" type="warning" :closable="false" />
+    <p class="notice-hint">{{ tr("以下客户订单等待业务确认。查看后可在订单办理中继续处理。") }}</p>
+    <el-empty v-if="!notices.length&&!error" :description='tr("暂无未读客户订单")' />
     <article v-for="notice in notices" :key="notice.id" class="customer-notice">
-      <h3>{{ notice.customerName }} <el-tag type="warning">待确认</el-tag></h3><p>{{ notice.orderNo }}</p>
-      <dl><dt>车型 / 数量</dt><dd>{{ notice.modelName }} · {{ notice.orderQty }} 台</dd><dt>期望发货</dt><dd>{{ notice.plannedShipDate || '待协商' }}</dd><dt>备注</dt><dd>{{ notice.remark || '无' }}</dd><dt>提交时间</dt><dd>{{ notice.createdAt }}</dd></dl>
-      <el-button :disabled="saving" @click="acknowledge(notice,false)">标记已读</el-button><el-button type="primary" :disabled="saving" @click="acknowledge(notice,true)">查看订单</el-button>
+      <h3>{{ notice.customerName }} <el-tag type="warning">{{ tr("待确认") }}</el-tag></h3><p>{{ notice.orderNo }}</p>
+      <dl><dt>{{ tr("车型 / 数量") }}</dt><dd>{{ notice.modelName }} · {{ notice.orderQty }} {{ tr("台") }}</dd><dt>{{ tr("期望发货") }}</dt><dd>{{ notice.plannedShipDate || tr('待协商') }}</dd><dt>{{ tr("备注") }}</dt><dd>{{ notice.remark || tr('无') }}</dd><dt>{{ tr("提交时间") }}</dt><dd>{{ notice.createdAt }}</dd></dl>
+      <el-button :disabled="saving" @click="acknowledge(notice,false)">{{ tr("标记已读") }}</el-button><el-button type="primary" :disabled="saving" @click="acknowledge(notice,true)">{{ tr("查看订单") }}</el-button>
     </article>
-    <template #footer><el-button @click="refresh">刷新</el-button><el-button @click="visible=false">稍后处理</el-button></template>
+    <template #footer><el-button @click="refresh">{{ tr("刷新") }}</el-button><el-button @click="visible=false">{{ tr("稍后处理") }}</el-button></template>
   </el-dialog>
 </template>
 <style scoped>

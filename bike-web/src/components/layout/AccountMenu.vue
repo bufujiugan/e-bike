@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../../i18n/language'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { DropdownInstance } from 'element-plus'
@@ -54,11 +55,11 @@ function chooseAvatar(event: Event) {
   input.value = ''
   if (!file) return
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-    ElMessage.warning('请选择 JPG、PNG 或 WebP 图片')
+    ElMessage.warning(tr('请选择 JPG、PNG 或 WebP 图片'))
     return
   }
   if (file.size > 2 * 1024 * 1024) {
-    ElMessage.warning('头像文件不能超过 2 MB')
+    ElMessage.warning(tr('头像文件不能超过 2 MB'))
     return
   }
   discardAvatarDraft()
@@ -69,7 +70,7 @@ function chooseAvatar(event: Event) {
 function previewFailed() {
   if (!draftFile.value) return
   discardAvatarDraft()
-  ElMessage.warning('图片无法读取，请重新选择')
+  ElMessage.warning(tr('图片无法读取，请重新选择'))
 }
 
 function resetAvatarDraft() {
@@ -87,9 +88,9 @@ async function saveAvatar() {
     savedAvatar.value = avatar.imageDataUrl
     avatarError.value = ''
     discardAvatarDraft()
-    ElMessage.success('头像已保存')
+    ElMessage.success(tr('头像已保存'))
   } catch (error) {
-    ElMessage.error(api.isAxiosError(error) ? error.response?.data?.message || '头像保存失败，请重试' : '头像保存失败，请重试')
+    ElMessage.error(tr(api.isAxiosError(error) ? error.response?.data?.message || '头像保存失败，请重试' : '头像保存失败，请重试'))
   } finally {
     avatarSaving.value = false
   }
@@ -118,7 +119,7 @@ function selectAccountAction(command: string) {
 
 <template>
   <el-dropdown ref="dropdown" trigger="click" placement="bottom-end" popper-class="sm-account-popover" :show-arrow="false" @visible-change="isOpen = $event" @command="selectAccountAction">
-    <button ref="avatarButton" type="button" class="account-avatar-trigger" :class="{ 'is-open': isOpen, 'is-collapsed': collapsed }" aria-label="账号菜单" :aria-expanded="isOpen" :title="`${username} · 账号菜单`" @keydown.esc.stop.prevent="closeAccountMenu">
+    <button ref="avatarButton" type="button" class="account-avatar-trigger" :class="{ 'is-open': isOpen, 'is-collapsed': collapsed }" :aria-label='tr("账号菜单")' :aria-expanded="isOpen" :title="tr('{value0} · 账号菜单', { value0: username })" @keydown.esc.stop.prevent="closeAccountMenu">
       <span class="account-avatar" aria-hidden="true"><img v-if="savedAvatar" :src="savedAvatar" alt="" /><template v-else>{{ username.slice(0, 1).toUpperCase() }}</template></span>
       <span class="account-trigger-identity" aria-hidden="true"><strong>{{ username }}</strong><small>{{ role }}</small></span>
       <AppIcon name="chevron" class="account-trigger-chevron" />
@@ -130,28 +131,28 @@ function selectAccountAction(command: string) {
           <div class="account-menu-identity"><strong :title="username">{{ username }}</strong><span>{{ role }}</span></div>
         </div>
         <el-dropdown-menu class="account-menu-actions">
-          <el-dropdown-item command="profile"><AppIcon name="users" /><span>个人资料</span></el-dropdown-item>
-          <el-dropdown-item command="avatar"><AppIcon name="upload" /><span>修改头像</span></el-dropdown-item>
-          <el-dropdown-item command="decoration"><AppIcon name="layers" /><span>更换装饰图片</span></el-dropdown-item>
-          <el-dropdown-item command="settings"><AppIcon name="production" /><span>账号设置</span></el-dropdown-item>
-          <el-dropdown-item command="logout"><AppIcon name="logout" /><span>退出登录</span></el-dropdown-item>
+          <el-dropdown-item command="profile"><AppIcon name="users" /><span>{{ tr("个人资料") }}</span></el-dropdown-item>
+          <el-dropdown-item command="avatar"><AppIcon name="upload" /><span>{{ tr("修改头像") }}</span></el-dropdown-item>
+          <el-dropdown-item command="decoration"><AppIcon name="layers" /><span>{{ tr("更换装饰图片") }}</span></el-dropdown-item>
+          <el-dropdown-item command="settings"><AppIcon name="production" /><span>{{ tr("账号设置") }}</span></el-dropdown-item>
+          <el-dropdown-item command="logout"><AppIcon name="logout" /><span>{{ tr("退出登录") }}</span></el-dropdown-item>
         </el-dropdown-menu>
       </div>
     </template>
   </el-dropdown>
-  <el-dialog v-model="profileVisible" title="个人资料" width="min(28rem, calc(100vw - 2rem))" append-to-body :close-on-click-modal="false" :close-on-press-escape="!avatarSaving" :show-close="!avatarSaving" @closed="discardAvatarDraft">
-    <el-alert v-if="avatarError" type="warning" :closable="false" :title="avatarError"><el-button link :loading="avatarLoading" @click="loadAvatar">重新加载头像</el-button></el-alert>
+  <el-dialog v-model="profileVisible" :title='tr("个人资料")' width="min(28rem, calc(100vw - 2rem))" append-to-body :close-on-click-modal="false" :close-on-press-escape="!avatarSaving" :show-close="!avatarSaving" @closed="discardAvatarDraft">
+    <el-alert v-if="avatarError" type="warning" :closable="false" :title="tr(avatarError)"><el-button link :loading="avatarLoading" @click="loadAvatar">{{ tr("重新加载头像") }}</el-button></el-alert>
     <div class="account-avatar-editor" v-loading="avatarLoading">
-      <span class="account-avatar account-avatar--preview"><img v-if="previewAvatar" :src="previewAvatar" alt="头像预览" @error="previewFailed" /><template v-else>{{ username.slice(0, 1).toUpperCase() }}</template></span>
+      <span class="account-avatar account-avatar--preview"><img v-if="previewAvatar" :src="previewAvatar" :alt='tr("头像预览")' @error="previewFailed" /><template v-else>{{ username.slice(0, 1).toUpperCase() }}</template></span>
       <div class="account-avatar-editor-actions">
-        <div><el-button :disabled="avatarSaving || avatarLoading" @click="fileInput?.click()">选择图片</el-button><el-button v-if="savedAvatar || draftFile" link :disabled="avatarSaving || avatarLoading" @click="resetAvatarDraft">恢复默认</el-button></div>
-        <p>JPG、PNG 或 WebP，最大 2 MB，宽高不超过 4096 像素。图片居中裁切为正方形。</p>
-        <small v-if="hasAvatarChange">预览未保存，点击“保存头像”后生效。</small>
+        <div><el-button :disabled="avatarSaving || avatarLoading" @click="fileInput?.click()">{{ tr("选择图片") }}</el-button><el-button v-if="savedAvatar || draftFile" link :disabled="avatarSaving || avatarLoading" @click="resetAvatarDraft">{{ tr("恢复默认") }}</el-button></div>
+        <p>{{ tr("JPG、PNG 或 WebP，最大 2 MB，宽高不超过 4096 像素。图片居中裁切为正方形。") }}</p>
+        <small v-if="hasAvatarChange">{{ tr("预览未保存，点击“保存头像”后生效。") }}</small>
       </div>
-      <input ref="fileInput" type="file" accept="image/jpeg,image/png,image/webp" aria-label="选择头像图片" hidden :disabled="avatarSaving || avatarLoading" @change="chooseAvatar" />
+      <input ref="fileInput" type="file" accept="image/jpeg,image/png,image/webp" :aria-label='tr("选择头像图片")' hidden :disabled="avatarSaving || avatarLoading" @change="chooseAvatar" />
     </div>
-    <dl class="account-profile-fields"><div><dt>账号名称</dt><dd>{{ username }}</dd></div><div><dt>角色</dt><dd>{{ role }}</dd></div></dl>
-    <template #footer><div class="account-profile-footer"><el-button :disabled="avatarSaving" @click="profileVisible = false">关闭</el-button><el-button :disabled="avatarSaving" @click="profileVisible = false; emit('settings')">账号设置</el-button><el-button type="primary" :disabled="!hasAvatarChange || avatarLoading" :loading="avatarSaving" @click="saveAvatar">保存头像</el-button></div></template>
+    <dl class="account-profile-fields"><div><dt>{{ tr("账号名称") }}</dt><dd>{{ username }}</dd></div><div><dt>{{ tr("角色") }}</dt><dd>{{ role }}</dd></div></dl>
+    <template #footer><div class="account-profile-footer"><el-button :disabled="avatarSaving" @click="profileVisible = false">{{ tr("关闭") }}</el-button><el-button :disabled="avatarSaving" @click="profileVisible = false; emit('settings')">{{ tr("账号设置") }}</el-button><el-button type="primary" :disabled="!hasAvatarChange || avatarLoading" :loading="avatarSaving" @click="saveAvatar">{{ tr("保存头像") }}</el-button></div></template>
   </el-dialog>
   <DecorationImageDialog v-model="decorationVisible" :username="username" />
 </template>

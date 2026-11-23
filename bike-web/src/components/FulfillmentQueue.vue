@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr, trInline } from '../i18n/language'
 import RecordIdColumn from './table/RecordIdColumn.vue'
 import { computed, ref, watch } from 'vue'
 import api from '../api'
@@ -35,27 +36,27 @@ watch(() => [props.kind, props.refreshKey], () => { page.value = 1; void load() 
 </script>
 <template>
   <section class="fulfillment-queue sm-card">
-    <div class="queue-toolbar"><div><h3>{{ kind === 'locks' ? '库存锁定 → 销售订单' : '销售订单 → 出库交付' }}</h3><p>按创建时间倒序 · {{ kind === 'locks' ? '查看锁定，原地转单并继续确认' : '打开一张订单，集中处理确认、PI 放行和出库核对' }}</p></div><el-button :loading="busy" @click="load">刷新</el-button></div>
-    <form v-if="kind === 'orders'" class="queue-toolbar" @submit.prevent="search"><el-input v-model="keyword" placeholder="搜索订单号 / 客户" clearable /><el-select v-model="status" aria-label="订单状态" placeholder="全部状态" clearable><el-option v-for="key in ['DRAFT','PENDING','CONFIRMED','PARTIAL_SHIPPED','SHIPPED','CANCELLED','CLOSED']" :key="key" :value="key" :label="names[key]" /></el-select><el-button native-type="submit" type="primary">查询</el-button></form>
-    <el-alert v-if="error" :title="error" type="error" :closable="false" />
-    <el-table v-loading="busy" :data="rows" max-height="520" empty-text="暂无记录">
+    <div class="queue-toolbar"><div><h3>{{ kind === 'locks' ? tr('库存锁定 → 销售订单') : tr('销售订单 → 出库交付') }}</h3><p>{{ trInline("按创建时间倒序 ·") }} {{ kind === 'locks' ? tr('查看锁定，原地转单并继续确认') : tr('打开一张订单，集中处理确认、PI 放行和出库核对') }}</p></div><el-button :loading="busy" @click="load">{{ tr("刷新") }}</el-button></div>
+    <form v-if="kind === 'orders'" class="queue-toolbar" @submit.prevent="search"><el-input v-model="keyword" :placeholder='tr("搜索订单号 / 客户")' clearable /><el-select v-model="status" :aria-label='tr("订单状态")' :placeholder='tr("全部状态")' clearable><el-option v-for="key in ['DRAFT','PENDING','CONFIRMED','PARTIAL_SHIPPED','SHIPPED','CANCELLED','CLOSED']" :key="key" :value="key" :label="tr(names[key])" /></el-select><el-button native-type="submit" type="primary">{{ tr("查询") }}</el-button></form>
+    <el-alert v-if="error" :title="tr(error)" type="error" :closable="false" />
+    <el-table v-loading="busy" :data="rows" max-height="520" :empty-text='tr("暂无记录")'>
       <RecordIdColumn />
-      <el-table-column :prop="kind === 'locks' ? 'lockNo' : 'orderNo'" label="单号" min-width="200" />
-      <el-table-column v-if="kind === 'orders'" prop="customerName" label="客户" min-width="130" />
+      <el-table-column :prop="kind === 'locks' ? 'lockNo' : 'orderNo'" :label='tr("单号")' min-width="200" />
+      <el-table-column v-if="kind === 'orders'" prop="customerName" :label='tr("客户")' min-width="130" />
       <el-table-column v-if="kind === 'locks'" prop="skuCode" label="SKU" min-width="150" />
-      <el-table-column prop="modelName" label="车型" min-width="120" />
-      <el-table-column label="数量 / 进度" min-width="160"><template #default="{ row }">{{ kind === 'locks' ? `锁定 ${row.lockQty} · 可转 ${remaining(row)}` : `订购 ${row.orderQty} · 已出库 ${row.shippedQty}` }}</template></el-table-column>
-      <el-table-column label="状态" min-width="110"><template #default="{row}">{{ names[row.status] ?? row.status }}</template></el-table-column>
-      <el-table-column label="创建时间 ↓" min-width="170"><template #default="{row}">{{ time(row.createdAt) }}</template></el-table-column><el-table-column label="修改时间" min-width="170"><template #default="{row}">{{ time(row.updatedAt) }}</template></el-table-column>
-      <el-table-column label="继续办理" width="185" fixed="right"><template #default="{row}"><template v-if="kind === 'locks'"><el-button v-if="canConvert && ['LOCKED','PARTIAL_CONVERTED'].includes(row.status) && remaining(row) > 0" link type="primary" @click="emit('convert',row.lockNo)">转订单</el-button><el-button v-if="hasPermission(context,'ORDER_READ')" link type="primary" @click="openLinked(row)">关联订单</el-button></template><el-button v-else link type="primary" @click="emit('order',row.orderNo)">打开订单办理</el-button></template></el-table-column>
+      <el-table-column prop="modelName" :label='tr("车型")' min-width="120" />
+      <el-table-column :label='tr("数量 / 进度")' min-width="160"><template #default="{ row }">{{ kind === 'locks' ? tr("锁定 {value0} · 可转 {value1}", { value0: row.lockQty, value1: remaining(row) }) : tr("订购 {value0} · 已出库 {value1}", { value0: row.orderQty, value1: row.shippedQty }) }}</template></el-table-column>
+      <el-table-column :label='tr("状态")' min-width="110"><template #default="{row}">{{ tr(names[row.status] ?? row.status) }}</template></el-table-column>
+      <el-table-column :label='tr("创建时间 ↓")' min-width="170"><template #default="{row}">{{ time(row.createdAt) }}</template></el-table-column><el-table-column :label='tr("修改时间")' min-width="170"><template #default="{row}">{{ time(row.updatedAt) }}</template></el-table-column>
+      <el-table-column :label='tr("继续办理")' width="185" fixed="right"><template #default="{row}"><template v-if="kind === 'locks'"><el-button v-if="canConvert && ['LOCKED','PARTIAL_CONVERTED'].includes(row.status) && remaining(row) > 0" link type="primary" @click="emit('convert',row.lockNo)">{{ tr("转订单") }}</el-button><el-button v-if="hasPermission(context,'ORDER_READ')" link type="primary" @click="openLinked(row)">{{ tr("关联订单") }}</el-button></template><el-button v-else link type="primary" @click="emit('order',row.orderNo)">{{ tr("打开订单办理") }}</el-button></template></el-table-column>
     </el-table>
     <Pagination v-model:page="page" :total="total" :page-size="20" :disabled="busy" @change="load" />
-    <el-dialog :model-value="!!linkedLock" title="本次锁定的关联订单" width="min(800px,96vw)" @close="linkedLock = undefined; linkedVersion++">
-      <p>{{ linkedLock?.lockNo }}</p><el-alert v-if="linkedError" type="error" :title="linkedError" :closable="false" />
+    <el-dialog :model-value="!!linkedLock" :title='tr("本次锁定的关联订单")' width="min(800px,96vw)" @close="linkedLock = undefined; linkedVersion++">
+      <p>{{ linkedLock?.lockNo }}</p><el-alert v-if="linkedError" type="error" :title="tr(linkedError)" :closable="false" />
       <el-table v-loading="linkedBusy" :data="linked">
-      <RecordIdColumn /><el-table-column prop="orderNo" label="订单号" min-width="200" /><el-table-column prop="customerName" label="客户" /><el-table-column prop="orderQty" label="数量" /><el-table-column label="操作" width="140"><template #default="{row}"><el-button link type="primary" @click="emit('order',row.orderNo); linkedLock = undefined">继续办理</el-button></template></el-table-column></el-table>
+      <RecordIdColumn /><el-table-column prop="orderNo" :label='tr("订单号")' min-width="200" /><el-table-column prop="customerName" :label='tr("客户")' /><el-table-column prop="orderQty" :label='tr("数量")' /><el-table-column :label='tr("操作")' width="140"><template #default="{row}"><el-button link type="primary" @click="emit('order',row.orderNo); linkedLock = undefined">{{ tr("继续办理") }}</el-button></template></el-table-column></el-table>
       <Pagination v-model:page="linkedPage" :total="linkedTotal" :page-size="20" :disabled="linkedBusy" @change="openLinked(linkedLock, linkedPage)" />
-      <el-button v-if="linkedError" @click="openLinked(linkedLock, linkedPage)">重试</el-button>
+      <el-button v-if="linkedError" @click="openLinked(linkedLock, linkedPage)">{{ tr("重试") }}</el-button>
     </el-dialog>
   </section>
 </template>

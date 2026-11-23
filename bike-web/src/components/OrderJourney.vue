@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr, trInline } from '../i18n/language'
 import RecordIdColumn from './table/RecordIdColumn.vue'
 import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -86,25 +87,25 @@ async function load() {
 async function confirm() {
   if (!canConfirm.value || saving.value) return
   const reminder = contractDownloaded.value ? '' : '本窗口尚未生成购销合同，建议先生成并核对合同。'
-  try { await ElMessageBox.confirm(`${reminder}确认订单 ${order.value.orderNo}，共 ${order.value.orderQty} 台？确认后进入出库环节，不再显示购销合同填写页，请先下载保存合同。`, '确认销售订单', { type: 'warning' }) }
+  try { await ElMessageBox.confirm(tr("{value0}确认订单 {value1}，共 {value2} 台？确认后进入出库环节，不再显示购销合同填写页，请先下载保存合同。", { value0: reminder, value1: order.value.orderNo, value2: order.value.orderQty }), tr('确认销售订单'), { type: 'warning' }) }
   catch { return }
   saving.value = true
   try {
     await api.post(`/api/orders/${order.value.id}/confirm`)
-    ElMessage.success('订单已确认，请继续核对发货条件'); emit('changed'); await load()
-  } catch (cause) { ElMessage.error(api.isAxiosError(cause) ? cause.response?.data?.message ?? '订单确认失败，请刷新核对状态' : '订单确认失败，请刷新核对状态') }
+    ElMessage.success(tr('订单已确认，请继续核对发货条件')); emit('changed'); await load()
+  } catch (cause) { ElMessage.error(tr(api.isAxiosError(cause) ? cause.response?.data?.message ?? '订单确认失败，请刷新核对状态' : '订单确认失败，请刷新核对状态')) }
   finally { saving.value = false }
 }
 async function chooseSalesType() {
   const selected = typeChoice.value
   if (!canChooseType.value || !selected || typeSaving.value) return
-  try { await ElMessageBox.confirm(`将订单 ${order.value.orderNo} 确定为「${salesTypeLabel(selected)}」？选定后不可修改。`, '确定销售类型', { type: 'warning' }) }
+  try { await ElMessageBox.confirm(tr("将订单 {value0} 确定为「{value1}」？选定后不可修改。", { value0: order.value.orderNo, value1: salesTypeLabel(selected) }), tr('确定销售类型'), { type: 'warning' }) }
   catch { return }
   typeSaving.value = true
   try {
     await api.post(`/api/orders/${order.value.id}/sales-type`, { salesType: selected })
-    ElMessage.success(`已确定为「${salesTypeLabel(selected)}」`); emit('changed'); await load()
-  } catch (cause) { ElMessage.error(api.isAxiosError(cause) ? cause.response?.data?.message ?? '销售类型保存失败，请刷新核对' : '销售类型保存失败，请刷新核对') }
+    ElMessage.success(tr("已确定为「{value0}」", { value0: salesTypeLabel(selected) })); emit('changed'); await load()
+  } catch (cause) { ElMessage.error(tr(api.isAxiosError(cause) ? cause.response?.data?.message ?? '销售类型保存失败，请刷新核对' : '销售类型保存失败，请刷新核对')) }
   finally { typeSaving.value = false }
 }
 function continuePi() {
@@ -117,62 +118,62 @@ watch(() => props.orderNo, () => { showPi.value = false; showContract.value = fa
 </script>
 
 <template>
-  <el-dialog :model-value="true" title="订单办理 · 从确认到出库" width="min(1120px, 96vw)" :close-on-click-modal="false" :show-close="!saving" :close-on-press-escape="!saving" @close="emit('close')">
-    <el-alert v-if="error" type="error" :title="error" :closable="false" />
+  <el-dialog :model-value="true" :title='tr("订单办理 · 从确认到出库")' width="min(1120px, 96vw)" :close-on-click-modal="false" :show-close="!saving" :close-on-press-escape="!saving" @close="emit('close')">
+    <el-alert v-if="error" type="error" :title="tr(error)" :closable="false" />
     <div v-loading="busy" class="order-journey">
       <template v-if="order">
-        <div class="journey-heading"><div><span class="journey-eyebrow">当前办理订单</span><h2>{{ order.orderNo }}</h2><p>{{ order.customerName }} · {{ order.modelName }}</p></div><div class="journey-heading-actions"><el-tag :type="salesType ? 'success' : 'warning'">{{ salesTypeLabel(salesType) }}</el-tag><el-tag>{{ names[order.status] ?? order.status }}</el-tag><el-button :loading="busy" @click="load">刷新进度</el-button></div></div>
-        <ol v-if="journeyStages.length" class="journey-stages" aria-label="订单办理进度"><li v-for="(step, index) in journeyStages" :key="step.title" :class="step.state" :aria-current="step.state === 'current' ? 'step' : undefined"><span><AppIcon v-if="step.state === 'done'" name="check" /><template v-else>{{ index + 1 }}</template></span><strong>{{ step.title }}</strong></li></ol>
-        <div class="journey-counts"><div>订购数量<strong>{{ order.orderQty }} 台</strong></div><div>已出库<strong>{{ order.shippedQty }} 台</strong></div><div>未出库<strong>{{ Math.max(0, order.orderQty - order.shippedQty) }} 台</strong></div><div>库存占用<strong>{{ reservationLabel(order.reservationStatus) }}</strong></div></div>
+        <div class="journey-heading"><div><span class="journey-eyebrow">{{ tr("当前办理订单") }}</span><h2>{{ order.orderNo }}</h2><p>{{ order.customerName }} · {{ order.modelName }}</p></div><div class="journey-heading-actions"><el-tag :type="salesType ? 'success' : 'warning'">{{ tr(salesTypeLabel(salesType)) }}</el-tag><el-tag>{{ tr(names[order.status] ?? order.status) }}</el-tag><el-button :loading="busy" @click="load">{{ tr("刷新进度") }}</el-button></div></div>
+        <ol v-if="journeyStages.length" class="journey-stages" :aria-label='tr("订单办理进度")'><li v-for="(step, index) in journeyStages" :key="step.title" :class="step.state" :aria-current="step.state === 'current' ? 'step' : undefined"><span><AppIcon v-if="step.state === 'done'" name="check" /><template v-else>{{ index + 1 }}</template></span><strong>{{ tr(step.title) }}</strong></li></ol>
+        <div class="journey-counts"><div>{{ tr("订购数量") }}<strong>{{ order.orderQty }} {{ tr("台") }}</strong></div><div>{{ tr("已出库") }}<strong>{{ order.shippedQty }} {{ tr("台") }}</strong></div><div>{{ tr("未出库") }}<strong>{{ Math.max(0, order.orderQty - order.shippedQty) }} {{ tr("台") }}</strong></div><div>{{ tr("库存占用") }}<strong>{{ tr(reservationLabel(order.reservationStatus)) }}</strong></div></div>
         <el-alert :title="nextStep" type="info" :closable="false" show-icon />
-        <el-alert v-if="order.status === 'CANCELLED' && order.remark?.startsWith('自动取消：')" title="订单已自动取消" :description="order.remark" type="warning" :closable="false" show-icon />
-        <section v-if="active && !salesType" class="journey-step-card" aria-label="选择销售类型">
-          <h3>选择销售类型</h3>
-          <p>本订单尚未确定内销或外销。请按实际业务选择，选定后不可修改；内销生成购销合同，外销与欧洲在对应菜单办理 PI。</p>
-          <div class="lock-sales-types" role="radiogroup" aria-label="销售类型">
-            <button v-for="option in salesTypeOptions" :key="option.value" type="button" role="radio" :aria-checked="typeChoice === option.value" :class="{ active: typeChoice === option.value }" :disabled="!canChooseType" @click="typeChoice = option.value"><strong>{{ option.title }}</strong><small>{{ option.menu }} · 模板：{{ option.template }}</small><span>{{ option.value === 'DOMESTIC' ? '在本窗口生成并核对购销合同，再确认订单。' : '确定后前往对应菜单生成 PI 并关联本订单。' }}</span></button>
+        <el-alert v-if="order.status === 'CANCELLED' && order.remark?.startsWith('自动取消：')" :title='tr("订单已自动取消")' :description="order.remark" type="warning" :closable="false" show-icon />
+        <section v-if="active && !salesType" class="journey-step-card" :aria-label='tr("选择销售类型")'>
+          <h3>{{ tr("选择销售类型") }}</h3>
+          <p>{{ tr("本订单尚未确定内销或外销。请按实际业务选择，选定后不可修改；内销生成购销合同，外销与欧洲在对应菜单办理 PI。") }}</p>
+          <div class="lock-sales-types" role="radiogroup" :aria-label='tr("销售类型")'>
+            <button v-for="option in salesTypeOptions" :key="option.value" type="button" role="radio" :aria-checked="typeChoice === option.value" :class="{ active: typeChoice === option.value }" :disabled="!canChooseType" @click="typeChoice = option.value"><strong>{{ tr(option.title) }}</strong><small>{{ option.menu }} {{ trInline("· 模板：") }}{{ option.template }}</small><span>{{ option.value === 'DOMESTIC' ? tr('在本窗口生成并核对购销合同，再确认订单。') : tr('确定后前往对应菜单生成 PI 并关联本订单。') }}</span></button>
           </div>
-          <el-button v-if="canChooseType" type="primary" :loading="typeSaving" :disabled="!typeChoice" @click="chooseSalesType">确定销售类型</el-button>
-          <el-alert v-else title="请联系有订单维护权限的业务员选择销售类型。" type="warning" :closable="false" />
+          <el-button v-if="canChooseType" type="primary" :loading="typeSaving" :disabled="!typeChoice" @click="chooseSalesType">{{ tr("确定销售类型") }}</el-button>
+          <el-alert v-else :title='tr("请联系有订单维护权限的业务员选择销售类型。")' type="warning" :closable="false" />
         </section>
         <section v-else-if="needsPi" class="journey-step-card">
-          <h3>{{ salesType === 'EXPORT' ? '外销 · PI' : '欧洲 · PI' }}</h3>
-          <p>本订单不生成国内购销合同。请到「{{ salesType === 'EXPORT' ? '销售订单 → 外销' : '欧洲销售与交付 → 正常 PI 销售' }}」新建 PI 并关联本订单，单据使用 {{ salesType === 'EXPORT' ? '260728英国builtPI' : 'France_1104_PI' }} 模板。</p>
-          <el-radio-group v-if="salesType === 'EUROPE'" v-model="europeTradeType" aria-label="欧洲贸易类型"><el-radio-button value="DOMESTIC">欧洲内销</el-radio-button><el-radio-button value="EXPORT">欧洲外销</el-radio-button></el-radio-group>
-          <div class="journey-actions"><el-button v-if="hasPermission(context, 'PI_WRITE')" type="primary" @click="continuePi">前往生成 PI 并关联本订单</el-button></div>
+          <h3>{{ salesType === 'EXPORT' ? tr('外销 · PI') : tr('欧洲 · PI') }}</h3>
+          <p>{{ trInline("本订单不生成国内购销合同。请到「") }}{{ salesType === 'EXPORT' ? tr('销售订单 → 外销') : tr('欧洲销售与交付 → 正常 PI 销售') }}{{ trInline("」新建 PI 并关联本订单，单据使用") }} {{ salesType === 'EXPORT' ? tr('260728英国builtPI') : 'France_1104_PI' }} {{ trInline("模板。") }}</p>
+          <el-radio-group v-if="salesType === 'EUROPE'" v-model="europeTradeType" :aria-label='tr("欧洲贸易类型")'><el-radio-button value="DOMESTIC">{{ tr("欧洲内销") }}</el-radio-button><el-radio-button value="EXPORT">{{ tr("欧洲外销") }}</el-radio-button></el-radio-group>
+          <div class="journey-actions"><el-button v-if="hasPermission(context, 'PI_WRITE')" type="primary" @click="continuePi">{{ tr("前往生成 PI 并关联本订单") }}</el-button></div>
         </section>
         <section v-else-if="salesType === 'DOMESTIC' && beforeConfirm" class="journey-step-card">
-          <h3>第一步：生成购销合同，再确认订单</h3>
-          <el-alert v-if="contractError" :title="contractError" type="error" :closable="false"><el-button text @click="load">重试</el-button></el-alert>
-          <el-alert v-else-if="contractPreparation && !contractPreparation.available" :title="contractPreparation.reason || '当前订单不适用购销合同'" type="info" :closable="false" />
+          <h3>{{ tr("第一步：生成购销合同，再确认订单") }}</h3>
+          <el-alert v-if="contractError" :title="tr(contractError)" type="error" :closable="false"><el-button text @click="load">{{ tr("重试") }}</el-button></el-alert>
+          <el-alert v-else-if="contractPreparation && !contractPreparation.available" :title="contractPreparation.reason || tr('当前订单不适用购销合同')" type="info" :closable="false" />
           <div class="journey-actions">
-            <el-button v-if="canGenerateContract" type="primary" @click="toggleContract">{{ showContract ? '收起购销合同' : '① 生成购销合同' }}</el-button>
-            <el-button v-if="canConfirm" :type="contractDownloaded ? 'primary' : 'default'" :loading="saving" @click="confirm">② 确认订单</el-button>
+            <el-button v-if="canGenerateContract" type="primary" @click="toggleContract">{{ showContract ? tr('收起购销合同') : tr('① 生成购销合同') }}</el-button>
+            <el-button v-if="canConfirm" :type="contractDownloaded ? 'primary' : 'default'" :loading="saving" @click="confirm">{{ tr("② 确认订单") }}</el-button>
           </div>
           <OrderPurchaseContract v-if="contractOpened && canGenerateContract" v-show="showContract" :order="order" @downloaded="contractDownloaded = true" />
         </section>
-        <div v-if="hasLinkedPi && hasPermission(context, 'PI_READ')" class="journey-actions"><el-button @click="showPi = !showPi">{{ showPi ? '收起已关联 PI' : '查看已关联 PI 与履约' }}</el-button></div>
-        <p v-if="['CONFIRMED','PARTIAL_SHIPPED'].includes(order.status)">PDA：进入「出库」，选择客户「{{ order.customerName }}」，搜索订单「{{ order.orderNo }}」，核对后扫描整车总码。<template v-if="hasLinkedPi">已关联 PI 的订单仍需完成原 PI 的确认、到账登记与发货放行。</template></p>
+        <div v-if="hasLinkedPi && hasPermission(context, 'PI_READ')" class="journey-actions"><el-button @click="showPi = !showPi">{{ showPi ? tr('收起已关联 PI') : tr('查看已关联 PI 与履约') }}</el-button></div>
+        <p v-if="['CONFIRMED','PARTIAL_SHIPPED'].includes(order.status)">{{ trInline("PDA：进入「出库」，选择客户「") }}{{ order.customerName }}{{ trInline("」，搜索订单「") }}{{ order.orderNo }}{{ trInline("」，核对后扫描整车总码。") }}<template v-if="hasLinkedPi">{{ tr("已关联 PI 的订单仍需完成原 PI 的确认、到账登记与发货放行。") }}</template></p>
         <PiWorkspace v-if="showPi && hasLinkedPi" :context="context" :initial-keyword="order.orderNo" :allow-create="false" />
-        <el-descriptions title="订单与来源" :column="1" border>
-          <el-descriptions-item label="销售类型">{{ salesTypeLabel(salesType) }}<template v-if="salesType && !order.selectedSalesType"> （按已关联单据归类）</template></el-descriptions-item>
-          <el-descriptions-item v-if="internal" label="购销合同方">{{ order.purchaseContractParty === 'YINSANHUAN' ? '银三环' : order.purchaseContractParty || '未登记' }}</el-descriptions-item>
-          <el-descriptions-item v-if="internal" label="购销合同号"><PurchaseContractNumber :value="order.purchaseContractNo" /></el-descriptions-item>
-          <el-descriptions-item label="来源锁定">{{ order.sourceLockNo || '无来源锁定' }}<span v-if="sourceLock"> · {{ sourceLock.skuCode || sourceLock.modelName }} · 锁定 {{ sourceLock.lockQty }} 台 · 已转 {{ sourceLock.convertedQty }} 台</span></el-descriptions-item>
-          <el-descriptions-item label="计划出库日">{{ order.plannedShipDate || '—' }}</el-descriptions-item>
-          <el-descriptions-item :label="order.status === 'CANCELLED' ? '取消说明 / 备注' : '备注'">{{ order.remark || '—' }}</el-descriptions-item>
-          <el-descriptions-item label="创建 / 修改">{{ time(order.createdAt) }} / {{ time(order.updatedAt) }}</el-descriptions-item>
+        <el-descriptions :title='tr("订单与来源")' :column="1" border>
+          <el-descriptions-item :label='tr("销售类型")'>{{ tr(salesTypeLabel(salesType)) }}<template v-if="salesType && !order.selectedSalesType"> {{ tr("（按已关联单据归类）") }}</template></el-descriptions-item>
+          <el-descriptions-item v-if="internal" :label='tr("购销合同方")'>{{ order.purchaseContractParty === 'YINSANHUAN' ? tr('银三环') : order.purchaseContractParty || tr('未登记') }}</el-descriptions-item>
+          <el-descriptions-item v-if="internal" :label='tr("购销合同号")'><PurchaseContractNumber :value="order.purchaseContractNo" /></el-descriptions-item>
+          <el-descriptions-item :label='tr("来源锁定")'>{{ order.sourceLockNo || tr('无来源锁定') }}<span v-if="sourceLock"> · {{ sourceLock.skuCode || sourceLock.modelName }} {{ trInline("· 锁定") }} {{ sourceLock.lockQty }} {{ trInline("台 · 已转") }} {{ sourceLock.convertedQty }} {{ tr("台") }}</span></el-descriptions-item>
+          <el-descriptions-item :label='tr("计划出库日")'>{{ order.plannedShipDate || '—' }}</el-descriptions-item>
+          <el-descriptions-item :label="order.status === 'CANCELLED' ? tr('取消说明 / 备注') : tr('备注')">{{ order.remark || '—' }}</el-descriptions-item>
+          <el-descriptions-item :label='tr("创建 / 修改")'>{{ time(order.createdAt) }} / {{ time(order.updatedAt) }}</el-descriptions-item>
         </el-descriptions>
-        <el-alert v-if="lockError" :title="lockError" type="warning" :closable="false" />
-        <h3>本单已出库车辆（{{ order.shippedVehicles?.length ?? 0 }}）</h3>
-        <el-table :data="order.shippedVehicles ?? []" max-height="360" empty-text="本单尚无有效出库车辆">
-          <RecordIdColumn prop="vehicleId" label="整车 ID" />
-          <el-table-column prop="vehicleQrCode" label="总码" min-width="180" /><el-table-column prop="frameSn" label="车架码" min-width="170" /><el-table-column prop="stockOutNo" label="出库单号" min-width="180" /><el-table-column label="出库时间" min-width="170"><template #default="{row}">{{ time(row.stockOutTime) }}</template></el-table-column>
+        <el-alert v-if="lockError" :title="tr(lockError)" type="warning" :closable="false" />
+        <h3>{{ trInline("本单已出库车辆（") }}{{ order.shippedVehicles?.length ?? 0 }}）</h3>
+        <el-table :data="order.shippedVehicles ?? []" max-height="360" :empty-text='tr("本单尚无有效出库车辆")'>
+          <RecordIdColumn prop="vehicleId" :label='tr("整车 ID")' />
+          <el-table-column prop="vehicleQrCode" :label='tr("总码")' min-width="180" /><el-table-column prop="frameSn" :label='tr("车架码")' min-width="170" /><el-table-column prop="stockOutNo" :label='tr("出库单号")' min-width="180" /><el-table-column :label='tr("出库时间")' min-width="170"><template #default="{row}">{{ time(row.stockOutTime) }}</template></el-table-column>
         </el-table>
-        <el-collapse><el-collapse-item title="完整订单信息" name="details"><RecordDetails :value="order" /></el-collapse-item></el-collapse>
+        <el-collapse><el-collapse-item :title='tr("完整订单信息")' name="details"><RecordDetails :value="order" /></el-collapse-item></el-collapse>
       </template>
     </div>
-    <template #footer><el-button v-if="error" @click="load">重试</el-button><el-button :disabled="saving" @click="emit('close')">返回工作区</el-button></template>
+    <template #footer><el-button v-if="error" @click="load">{{ tr("重试") }}</el-button><el-button :disabled="saving" @click="emit('close')">{{ tr("返回工作区") }}</el-button></template>
   </el-dialog>
 </template>
 

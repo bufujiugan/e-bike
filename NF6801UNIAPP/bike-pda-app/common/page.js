@@ -5,11 +5,14 @@ import { refreshContext, canEnter } from "./auth.js";
 import { session } from "./storage.js";
 import { createDevice } from "./device.js";
 import { pendingOperation, clearPending } from "./operations.js";
+import { chooseLanguage, getLanguage, setPageTitle, translate } from "./language.js";
 export const confirm = (title, content) =>
   new Promise((resolve) =>
     uni.showModal({
-      title,
-      content,
+      title: translate(title),
+      content: translate(content),
+      confirmText: translate("确认"),
+      cancelText: translate("取消"),
       success: (result) => resolve(result.confirm),
       fail: () => resolve(false),
     }),
@@ -17,6 +20,7 @@ export const confirm = (title, content) =>
 export default {
   components: { ActionButton, FormField, ChoiceList },
   data: () => ({
+    language: "zh-CN",
     busy: false,
     ready: false,
     message: "",
@@ -26,6 +30,8 @@ export default {
     scanStarting: false,
   }),
   async onShow() {
+    this.language = getLanguage();
+    setPageTitle(this.mode, this.language);
     const generation = (this._showGeneration || 0) + 1;
     this._showGeneration = generation;
     this.ready = false;
@@ -61,7 +67,7 @@ export default {
           this._device.open((code) => {
             if (!this.ready || this.busy) {
               uni.showToast({
-                title: "上一条仍在处理，请稍后重扫",
+                title: this.tr("上一条仍在处理，请稍后重扫"),
                 icon: "none",
               });
               return;
@@ -89,12 +95,21 @@ export default {
   },
   onBackPress() {
     if (this.busy) {
-      uni.showToast({ title: "操作处理中，请等待结果", icon: "none" });
+      uni.showToast({ title: this.tr("操作处理中，请等待结果"), icon: "none" });
       return true;
     }
     return false;
   },
   methods: {
+    tr(source) {
+      return translate(source, this.language);
+    },
+    openLanguageMenu() {
+      chooseLanguage((language) => {
+        this.language = language;
+        setPageTitle(this.mode, language);
+      });
+    },
     async run(action, allowUnready = false) {
       if (this.busy) return;
       if (!this.ready && !allowUnready) {

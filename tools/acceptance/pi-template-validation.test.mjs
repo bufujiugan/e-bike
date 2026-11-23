@@ -18,6 +18,7 @@ function harness() {
     computed, nextTick, reactive, ref, watch: () => {},
     defineProps: () => ({ canManage: true }), defineEmits: () => () => {},
     isSelectablePiLayout: () => true, piTemplateLayouts: [], piLayoutLabel: value => value,
+    tr: text => text,
     ElMessage: { success: () => {} },
     ElMessageBox: { confirm: async () => { calls.confirms++; } },
     api: { isAxiosError: error => Boolean(error?.response) },

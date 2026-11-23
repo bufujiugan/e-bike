@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { language, tr, trInline } from '../i18n/language'
 import { computed, nextTick, ref } from 'vue'
 import { fulfillmentSequence, sequenceRoles, type SequenceMessage, type SequenceRole } from './productionFulfillmentSequence'
 
@@ -16,29 +17,49 @@ const laneX = (role: SequenceRole) => 110 + phase.value.roles.indexOf(role) * 18
 const kinds = { action: '岗位操作', result: '系统反馈', condition: '条件 / 异常分支', handoff: '岗位交接' }
 const colors = { action: '#286bd5', result: '#18836c', condition: '#b87518', handoff: '#7660b5' }
 const fills = { action: '#f0f6ff', result: '#edf9f4', condition: '#fff7e9', handoff: '#f5f1fc' }
-const roleSummary = computed(() => [...new Set(phase.value.roles.filter(role => role !== 'system').map(role => sequenceRoles[role].name))].join(' / '))
-type MessageRow = { message: SequenceMessage; index: number; y: number }
+const roleSummary = computed(() => [...new Set(phase.value.roles.filter(role => role !== 'system').map(role => tr(sequenceRoles[role].name)))].join(' / '))
+type MessageRow = { message: SequenceMessage; index: number; y: number; titleLines: string[]; summaryLines: string[]; panelHeight: number }
+function wrap(text: string, width: number): string[] {
+  const english = language.value === 'en'
+  const parts = english ? text.split(/\s+/) : Array.from(text)
+  const lines: string[] = []
+  let line = ''
+  for (const part of parts) {
+    const candidate = line && english ? line + ' ' + part : line + part
+    if (line && candidate.length > width) {
+      lines.push(line)
+      line = part
+    } else {
+      line = candidate
+    }
+  }
+  if (line) lines.push(line)
+  return lines
+}
 const layout = computed(() => {
   const rows: MessageRow[] = [], groups: { title: string; tag: string; y: number; count: number }[] = []
+  const english = language.value === 'en'
   let y = 16, index = 0
   for (const group of phase.value.groups) {
     const visible = group.messages.filter(item => showExceptions.value || item.kind !== 'condition')
     if (visible.length) { groups.push({ title: group.title, tag: group.tag, y, count: visible.length }); y += 58 }
     for (const message of group.messages) {
-      if (showExceptions.value || message.kind !== 'condition') { rows.push({ message, index, y }); y += 126 }
+      if (showExceptions.value || message.kind !== 'condition') {
+        const titleLines = wrap(tr(message.title), english ? 39 : 22)
+        const summaryLines = wrap(tr(message.summary), english ? 48 : 26)
+        const panelHeight = Math.max(75, 22 + titleLines.length * 17 + summaryLines.length * 15)
+        rows.push({ message, index, y, titleLines, summaryLines, panelHeight })
+        y += panelHeight + 51
+      }
       index++
     }
     if (visible.length) y += 14
   }
   return { rows, groups, height: y + 8 }
 })
-const wrap = (text: string, length: number) => Array.from(text).reduce<string[]>((lines, char, index) => {
-  const line = Math.floor(index / length)
-  lines[line] = (lines[line] ?? '') + char
-  return lines
-}, [])
 const centerX = (message: SequenceMessage) => (laneX(message.from) + laneX(message.to)) / 2
-const rowLabel = (row: MessageRow) => `${row.index + 1}. ${row.message.title}，${sequenceRoles[row.message.from].name}到${sequenceRoles[row.message.to].name}`
+const rowLabel = (row: MessageRow) =>
+  `${row.index + 1}. ${tr(row.message.title)} · ${tr(sequenceRoles[row.message.from].name)} → ${tr(sequenceRoles[row.message.to].name)}`
 async function selectMessage(index: number, scroll = false) {
   selectedIndex.value = index
   if (!scroll && window.matchMedia('(max-width:1050px)').matches) {
@@ -70,46 +91,46 @@ function toggleExceptions() {
 
 <template>
   <section class="role-sequence">
-    <header class="sequence-heading"><div><span class="sequence-eyebrow">岗位协作 · 从准备到交付</span><h3>看清每一步，知道何时接手</h3><p>按阶段查看操作与反馈。点击任一箭头步骤，右侧会显示输入、校验、结果和异常处理。</p></div><span class="sequence-count">4 个阶段 · {{ fulfillmentSequence.reduce((total, item) => total + item.groups.reduce((sum, group) => sum + group.messages.length, 0), 0) }} 个协作步骤</span></header>
-    <nav class="phase-tabs" aria-label="时序图阶段">
-      <button v-for="(item, index) in fulfillmentSequence" :key="item.title" type="button" :class="{ active: phaseIndex === index }" :aria-pressed="phaseIndex === index" @click="changePhase(index)"><span class="phase-order">0{{ index + 1 }}</span><span><strong>{{ item.title }}</strong><small>{{ item.subtitle }}</small></span></button>
+    <header class="sequence-heading"><div><span class="sequence-eyebrow">{{ tr("岗位协作 · 从准备到交付") }}</span><h3>{{ tr("看清每一步，知道何时接手") }}</h3><p>{{ tr("按阶段查看操作与反馈。点击任一箭头步骤，右侧会显示输入、校验、结果和异常处理。") }}</p></div><span class="sequence-count">{{ trInline("4 个阶段 ·") }} {{ fulfillmentSequence.reduce((total, item) => total + item.groups.reduce((sum, group) => sum + group.messages.length, 0), 0) }} {{ trInline("个协作步骤") }}</span></header>
+    <nav class="phase-tabs" :aria-label='tr("时序图阶段")'>
+      <button v-for="(item, index) in fulfillmentSequence" :key="item.title" type="button" :class="{ active: phaseIndex === index }" :aria-pressed="phaseIndex === index" @click="changePhase(index)"><span class="phase-order">0{{ index + 1 }}</span><span><strong>{{ tr(item.title) }}</strong><small>{{ tr(item.subtitle) }}</small></span></button>
     </nav>
-    <div class="phase-context"><article><span>什么时候开始</span><p>{{ phase.before }}</p></article><article><span>完成后交出什么</span><p>{{ phase.deliver }}</p></article><article><span>这一阶段特别注意</span><p>{{ phase.decision }}</p></article></div>
-    <div class="sequence-toolbar"><div class="sequence-legend"><span v-for="(name, kind) in kinds" :key="kind"><i :style="{ background: colors[kind] }" />{{ name }}</span></div><button type="button" class="exception-toggle" :aria-pressed="showExceptions" @click="toggleExceptions">{{ showExceptions ? '✓ 已显示条件与异常分支' : '显示条件与异常分支' }}</button></div>
+    <div class="phase-context"><article><span>{{ tr("什么时候开始") }}</span><p>{{ tr(phase.before) }}</p></article><article><span>{{ tr("完成后交出什么") }}</span><p>{{ tr(phase.deliver) }}</p></article><article><span>{{ tr("这一阶段特别注意") }}</span><p>{{ tr(phase.decision) }}</p></article></div>
+    <div class="sequence-toolbar"><div class="sequence-legend"><span v-for="(name, kind) in kinds" :key="kind"><i :style="{ background: colors[kind] }" />{{ tr(name) }}</span></div><button type="button" class="exception-toggle" :aria-pressed="showExceptions" @click="toggleExceptions">{{ showExceptions ? tr('✓ 已显示条件与异常分支') : tr('显示条件与异常分支') }}</button></div>
     <div class="sequence-workspace">
       <div class="chart-panel">
-        <div class="chart-caption"><strong>{{ phase.title }} · {{ messages.length }} 步</strong><span>向下阅读；窄屏可左右滑动</span></div>
-        <div ref="chart" class="sequence-chart" tabindex="0" role="region" :aria-label="`${phase.title}角色时序图，可滚动`">
+        <div class="chart-caption"><strong>{{ tr(phase.title) }} · {{ messages.length }} {{ trInline("步") }}</strong><span>{{ tr("向下阅读；窄屏可左右滑动") }}</span></div>
+        <div ref="chart" class="sequence-chart" tabindex="0" role="region" :aria-label="tr('{value0}角色时序图，可滚动', { value0: tr(phase.title) })">
           <div class="chart-surface" :style="{ minWidth: `${chartWidth}px` }">
-            <div class="lane-headings" :style="{ gridTemplateColumns: `repeat(${phase.roles.length}, 1fr)` }"><div v-for="role in phase.roles" :key="role" :class="{ 'system-lane': role === 'system' }"><strong>{{ sequenceRoles[role].name }}</strong><small>{{ sequenceRoles[role].location }}</small></div></div>
-            <svg class="sequence-canvas" :viewBox="`0 0 ${chartWidth} ${layout.height}`" :width="chartWidth" :height="layout.height" role="group" :aria-label="`${phase.title}操作与交接顺序`">
-              <title>{{ phase.title }}详细角色时序图</title>
+            <div class="lane-headings" :style="{ gridTemplateColumns: `repeat(${phase.roles.length}, 1fr)` }"><div v-for="role in phase.roles" :key="role" :class="{ 'system-lane': role === 'system' }"><strong>{{ tr(sequenceRoles[role].name) }}</strong><small>{{ tr(sequenceRoles[role].location) }}</small></div></div>
+            <svg class="sequence-canvas" :viewBox="`0 0 ${chartWidth} ${layout.height}`" :width="chartWidth" :height="layout.height" role="group" :aria-label="tr('{value0}操作与交接顺序', { value0: tr(phase.title) })">
+              <title>{{ tr(phase.title) }}{{ trInline("详细角色时序图") }}</title>
               <g aria-hidden="true"><line v-for="role in phase.roles" :key="role" :x1="laneX(role)" y1="0" :x2="laneX(role)" :y2="layout.height" stroke="#d5e0ef" stroke-width="1.5" stroke-dasharray="4 5" /></g>
-              <g v-for="(group, index) in layout.groups" :key="group.title" aria-hidden="true"><rect x="12" :y="group.y" :width="chartWidth - 24" height="42" rx="6" fill="#edf2f8"/><text x="26" :y="group.y + 26" class="group-title">{{ index + 1 }} / {{ group.title }}</text><text :x="chartWidth - 28" :y="group.y + 26" text-anchor="end" class="group-tag">{{ group.tag }}</text></g>
+              <g v-for="(group, index) in layout.groups" :key="group.title" aria-hidden="true"><rect x="12" :y="group.y" :width="chartWidth - 24" height="42" rx="6" fill="#edf2f8"/><text x="26" :y="group.y + 26" class="group-title">{{ index + 1 }} / {{ tr(group.title) }}</text><text :x="chartWidth - 28" :y="group.y + 26" text-anchor="end" class="group-tag">{{ tr(group.tag) }}</text></g>
               <g v-for="row in layout.rows" :key="row.index" :data-message-index="row.index" class="message-row" :class="{ selected: selectedIndex === row.index }" tabindex="0" role="button" :aria-label="rowLabel(row)" :aria-pressed="selectedIndex === row.index" @click="selectMessage(row.index)" @keydown.enter.prevent="selectMessage(row.index)" @keydown.space.prevent="selectMessage(row.index)">
-                <rect class="row-focus" x="8" :y="row.y" :width="chartWidth - 16" height="116" rx="8" :fill="selectedIndex === row.index ? '#f3f7fd' : 'transparent'" :stroke="selectedIndex === row.index ? '#9ebfe8' : 'transparent'" />
-                <rect :x="centerX(row.message) - 164" :y="row.y + 4" width="328" height="75" rx="8" :fill="fills[row.message.kind]" :stroke="selectedIndex === row.index ? colors[row.message.kind] : '#dfe8f3'" />
-                <text v-for="(line, index) in wrap(row.message.title, 22)" :key="`title-${index}`" :x="centerX(row.message)" :y="row.y + 25 + index * 17" text-anchor="middle" class="message-title">{{ line }}</text>
-                <text v-for="(line, index) in wrap(row.message.summary, 26)" :key="`summary-${index}`" :x="centerX(row.message)" :y="row.y + 27 + wrap(row.message.title, 22).length * 17 + index * 15" text-anchor="middle" class="message-subtitle">{{ line }}</text>
-                <line :x1="laneX(row.message.from)" :y1="row.y + 96" :x2="laneX(row.message.to)" :y2="row.y + 96" :stroke="colors[row.message.kind]" stroke-width="2" :stroke-dasharray="row.message.kind === 'result' ? '6 4' : undefined" />
-                <path :d="`M ${laneX(row.message.to) + (laneX(row.message.to) > laneX(row.message.from) ? -9 : 9)} ${row.y + 90} L ${laneX(row.message.to)} ${row.y + 96} L ${laneX(row.message.to) + (laneX(row.message.to) > laneX(row.message.from) ? -9 : 9)} ${row.y + 102}`" fill="none" :stroke="colors[row.message.kind]" stroke-width="2" />
-                <circle :cx="laneX(row.message.from)" :cy="row.y + 96" r="11" :fill="colors[row.message.kind]"/><text :x="laneX(row.message.from)" :y="row.y + 100" text-anchor="middle" class="message-number">{{ row.index + 1 }}</text>
+                <rect class="row-focus" x="8" :y="row.y" :width="chartWidth - 16" :height="row.panelHeight + 41" rx="8" :fill="selectedIndex === row.index ? '#f3f7fd' : 'transparent'" :stroke="selectedIndex === row.index ? '#9ebfe8' : 'transparent'" />
+                <rect :x="centerX(row.message) - 164" :y="row.y + 4" width="328" :height="row.panelHeight" rx="8" :fill="fills[row.message.kind]" :stroke="selectedIndex === row.index ? colors[row.message.kind] : '#dfe8f3'" />
+                <text v-for="(line, index) in row.titleLines" :key="`title-${index}`" :x="centerX(row.message)" :y="row.y + 25 + index * 17" text-anchor="middle" class="message-title">{{ line }}</text>
+                <text v-for="(line, index) in row.summaryLines" :key="`summary-${index}`" :x="centerX(row.message)" :y="row.y + 27 + row.titleLines.length * 17 + index * 15" text-anchor="middle" class="message-subtitle">{{ line }}</text>
+                <line :x1="laneX(row.message.from)" :y1="row.y + row.panelHeight + 21" :x2="laneX(row.message.to)" :y2="row.y + row.panelHeight + 21" :stroke="colors[row.message.kind]" stroke-width="2" :stroke-dasharray="row.message.kind === 'result' ? '6 4' : undefined" />
+                <path :d="`M ${laneX(row.message.to) + (laneX(row.message.to) > laneX(row.message.from) ? -9 : 9)} ${row.y + row.panelHeight + 15} L ${laneX(row.message.to)} ${row.y + row.panelHeight + 21} L ${laneX(row.message.to) + (laneX(row.message.to) > laneX(row.message.from) ? -9 : 9)} ${row.y + row.panelHeight + 27}`" fill="none" :stroke="colors[row.message.kind]" stroke-width="2" />
+                <circle :cx="laneX(row.message.from)" :cy="row.y + row.panelHeight + 21" r="11" :fill="colors[row.message.kind]"/><text :x="laneX(row.message.from)" :y="row.y + row.panelHeight + 25" text-anchor="middle" class="message-number">{{ row.index + 1 }}</text>
               </g>
             </svg>
           </div>
         </div>
-        <div class="chart-footer"><span>实线：操作或交接　虚线：系统反馈</span><span>橙色步骤仅在对应条件发生时执行</span></div>
+        <div class="chart-footer"><span>{{ tr("实线：操作或交接　虚线：系统反馈") }}</span><span>{{ tr("橙色步骤仅在对应条件发生时执行") }}</span></div>
       </div>
-      <aside ref="inspector" class="step-inspector" aria-label="所选步骤详情" aria-live="polite">
-        <div class="inspector-top"><span>步骤 {{ String(selectedIndex + 1).padStart(2, '0') }} / {{ messages.length }}</span><span :style="{ color: colors[selected.kind] }">{{ kinds[selected.kind] }}</span></div>
-        <h4>{{ selected.title }}</h4><p class="inspector-route">{{ sequenceRoles[selected.from].name }} <span>→</span> {{ sequenceRoles[selected.to].name }}</p>
-        <dl><div><dt>在哪里做</dt><dd>{{ selected.location }}</dd></div><div><dt>填写 / 核对什么</dt><dd>{{ selected.input }}</dd></div><div><dt>系统校验 / 业务规则</dt><dd>{{ selected.check }}</dd></div><div class="result-detail"><dt>成功后得到什么</dt><dd>{{ selected.result }}</dd></div><div class="recovery-detail"><dt>不成功时怎么办</dt><dd>{{ selected.recovery }}</dd></div></dl>
-        <button type="button" class="detail-entry" @click="emit('select', selected.guideStep)">查看完整操作与页面入口 ↗</button>
-        <div class="step-pagination"><button type="button" :disabled="selectedIndex === 0" @click="selectMessage(selectedIndex - 1, true)">← 上一步</button><button type="button" :disabled="selectedIndex >= messages.length - 1" @click="selectMessage(selectedIndex + 1, true)">下一步 →</button></div>
+      <aside ref="inspector" class="step-inspector" :aria-label='tr("所选步骤详情")' aria-live="polite">
+        <div class="inspector-top"><span>{{ trInline("步骤") }} {{ String(selectedIndex + 1).padStart(2, '0') }} / {{ messages.length }}</span><span :style="{ color: colors[selected.kind] }">{{ tr(kinds[selected.kind]) }}</span></div>
+        <h4>{{ tr(selected.title) }}</h4><p class="inspector-route">{{ tr(sequenceRoles[selected.from].name) }} <span>→</span> {{ tr(sequenceRoles[selected.to].name) }}</p>
+        <dl><div><dt>{{ tr("在哪里做") }}</dt><dd>{{ tr(selected.location) }}</dd></div><div><dt>{{ tr("填写 / 核对什么") }}</dt><dd>{{ tr(selected.input) }}</dd></div><div><dt>{{ tr("系统校验 / 业务规则") }}</dt><dd>{{ tr(selected.check) }}</dd></div><div class="result-detail"><dt>{{ tr("成功后得到什么") }}</dt><dd>{{ tr(selected.result) }}</dd></div><div class="recovery-detail"><dt>{{ tr("不成功时怎么办") }}</dt><dd>{{ tr(selected.recovery) }}</dd></div></dl>
+        <button type="button" class="detail-entry" @click="emit('select', selected.guideStep)">{{ tr("查看完整操作与页面入口 ↗") }}</button>
+        <div class="step-pagination"><button type="button" :disabled="selectedIndex === 0" @click="selectMessage(selectedIndex - 1, true)">{{ tr("← 上一步") }}</button><button type="button" :disabled="selectedIndex >= messages.length - 1" @click="selectMessage(selectedIndex + 1, true)">{{ tr("下一步 →") }}</button></div>
       </aside>
     </div>
-    <div class="phase-handoff"><span>阶段交接</span><p><strong>{{ roleSummary }}</strong><br>{{ phase.deliver }}</p><button v-if="phaseIndex < fulfillmentSequence.length - 1" type="button" @click="changePhase(phaseIndex + 1)">下一阶段：{{ fulfillmentSequence[phaseIndex + 1]?.title }} →</button><span v-else class="handoff-finished">完成后按订单核对实际交付</span></div>
-    <details class="sequence-readable"><summary>展开本阶段全部文字步骤（{{ messages.length }} 步）</summary><ol><li v-for="(message, index) in messages" :key="index"><button type="button" @click="selectMessage(index, true)">{{ index + 1 }}. {{ message.title }}</button><p>{{ sequenceRoles[message.from].name }} → {{ sequenceRoles[message.to].name }} · {{ kinds[message.kind] }}</p><p>{{ message.location }}；{{ message.input }}</p><p><strong>结果：</strong>{{ message.result }}</p></li></ol></details>
+    <div class="phase-handoff"><span>{{ tr("阶段交接") }}</span><p><strong>{{ roleSummary }}</strong><br>{{ tr(phase.deliver) }}</p><button v-if="phaseIndex < fulfillmentSequence.length - 1" type="button" @click="changePhase(phaseIndex + 1)">{{ trInline("下一阶段：") }}{{ tr(fulfillmentSequence[phaseIndex + 1]?.title) }} →</button><span v-else class="handoff-finished">{{ tr("完成后按订单核对实际交付") }}</span></div>
+    <details class="sequence-readable"><summary>{{ trInline("展开本阶段全部文字步骤（") }}{{ messages.length }} {{ trInline("步）") }}</summary><ol><li v-for="(message, index) in messages" :key="index"><button type="button" @click="selectMessage(index, true)">{{ index + 1 }}. {{ tr(message.title) }}</button><p>{{ tr(sequenceRoles[message.from].name) }} → {{ tr(sequenceRoles[message.to].name) }} · {{ tr(kinds[message.kind]) }}</p><p>{{ tr(message.location) }}；{{ tr(message.input) }}</p><p><strong>{{ tr("结果：") }}</strong>{{ tr(message.result) }}</p></li></ol></details>
   </section>
 </template>
 

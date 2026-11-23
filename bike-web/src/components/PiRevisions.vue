@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/language'
 import RecordIdColumn from './table/RecordIdColumn.vue'
 import { createUuid } from '../utils/uuid'
 import { ref, watch } from 'vue'
@@ -38,24 +39,24 @@ function select(row: PiView) { visible.value = false; emit('select', row) }
 </script>
 
 <template>
-  <el-button @click="open">修订与版本历史</el-button>
-  <el-dialog v-model="visible" title="PI 修订与版本历史" width="min(850px, 94vw)" append-to-body :close-on-click-modal="false">
-    <el-alert v-if="error" :title="error" type="error" :closable="false" />
+  <el-button @click="open">{{ tr("修订与版本历史") }}</el-button>
+  <el-dialog v-model="visible" :title='tr("PI 修订与版本历史")' width="min(850px, 94vw)" append-to-body :close-on-click-modal="false">
+    <el-alert v-if="error" :title="tr(error)" type="error" :closable="false" />
     <el-table :data="rows" v-loading="busy">
       <RecordIdColumn />
-      <el-table-column prop="revision" label="版本" width="70" />
-      <el-table-column label="状态"><template #default="{ row }">{{ states[row.status] || row.status }}</template></el-table-column>
-      <el-table-column prop="currencyCode" label="币种" width="70" />
-      <el-table-column prop="totalAmount" label="单据金额" />
-      <el-table-column prop="createdAt" label="创建时间" min-width="170" />
-      <el-table-column label="操作" width="110"><template #default="{ row }"><el-button link type="primary" :disabled="busy" @click="select(row)">查看版本</el-button></template></el-table-column>
+      <el-table-column prop="revision" :label='tr("版本")' width="70" />
+      <el-table-column :label='tr("状态")'><template #default="{ row }">{{ tr(states[row.status] || row.status) }}</template></el-table-column>
+      <el-table-column prop="currencyCode" :label='tr("币种")' width="70" />
+      <el-table-column prop="totalAmount" :label='tr("单据金额")' />
+      <el-table-column prop="createdAt" :label='tr("创建时间")' min-width="170" />
+      <el-table-column :label='tr("操作")' width="110"><template #default="{ row }"><el-button link type="primary" :disabled="busy" @click="select(row)">{{ tr("查看版本") }}</el-button></template></el-table-column>
     </el-table>
     <template v-if="canWrite && ['CONFIRMED', 'RELEASED'].includes(pi.status)">
-      <p>新修订创建为草稿。确认后替代当前版本，并须重新核对发货放行；旧文件、收款及已发车辆保留。</p>
-      <el-alert v-if="rows.some(row => row.status === 'DRAFT')" title="已有修订草稿，请从上表打开继续编辑，或取消该草稿后重新创建。" type="info" :closable="false" />
+      <p>{{ tr("新修订创建为草稿。确认后替代当前版本，并须重新核对发货放行；旧文件、收款及已发车辆保留。") }}</p>
+      <el-alert v-if="rows.some(row => row.status === 'DRAFT')" :title='tr("已有修订草稿，请从上表打开继续编辑，或取消该草稿后重新创建。")' type="info" :closable="false" />
       <template v-else>
-        <el-input v-model="reason" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="填写本次修订原因" :disabled="busy" />
-        <el-button type="primary" :loading="busy" @click="create" style="margin-top: 12px">创建修订草稿</el-button>
+        <el-input v-model="reason" type="textarea" :rows="3" maxlength="500" show-word-limit :placeholder='tr("填写本次修订原因")' :disabled="busy" />
+        <el-button type="primary" :loading="busy" @click="create" style="margin-top: 12px">{{ tr("创建修订草稿") }}</el-button>
       </template>
     </template>
   </el-dialog>

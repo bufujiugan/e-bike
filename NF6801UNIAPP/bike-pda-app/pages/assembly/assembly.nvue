@@ -6,95 +6,95 @@
       }}</text>
       <view v-if="pending" class="card"
         ><text class="text error"
-          >上次写入结果未确认，已阻止再次扫码。请查找并恢复任务。</text
+          >{{ tr("上次写入结果未确认，已阻止再次扫码。请查找并恢复任务。") }}</text
         ><action-button
-          label="已经核对，解除本机锁定"
+          :label='tr("已经核对，解除本机锁定")'
           secondary
           :disabled="busy"
           @click="acknowledgePending"
       /></view>
       <view class="card"
-        ><text class="subtitle">选择生产工单</text>
+        ><text class="subtitle">{{ tr("选择生产工单") }}</text>
         <form-field
           v-model="keyword"
-          label="工单号 / SKU / 商品"
+          :label='tr("工单号 / SKU / 商品")'
           :disabled="busy"
           @confirm="search"
         />
         <action-button
-          label="搜索工单"
+          :label='tr("搜索工单")'
           secondary
           :disabled="busy || !ready"
           @click="search"
         />
-        <choice-list
+        <choice-list :empty-label="tr('暂无可选记录')"
           :value="workOrderId"
           :options="orderOptions"
-          label="已下达工单"
+          :label='tr("已下达工单")'
           :disabled="busy || !!task || !!pending"
           @input="selectOrder"
         />
-        <text class="muted">第 {{ listPage }} 页，共 {{ total }} 条</text>
+        <text class="muted">{{ tr("第") }} {{ listPage }} {{ tr("页，共") }} {{ total }} {{ tr("条") }}</text>
         <action-button
-          label="上一页"
+          :label='tr("上一页")'
           secondary
           :disabled="busy || listPage <= 1"
           @click="run(() => loadOrders(listPage - 1))"
         />
         <action-button
-          label="下一页"
+          :label='tr("下一页")'
           secondary
           :disabled="busy || listPage * pageSize >= total"
           @click="run(() => loadOrders(listPage + 1))"
         />
         <text v-if="selectedOrder" class="text"
-          >当前：{{ selectedOrder.workOrderNo }} · {{ selectedOrder.skuCode }} ·
+          >{{ tr("当前：") }}{{ selectedOrder.workOrderNo }} · {{ selectedOrder.skuCode }} ·
           {{ selectedOrder.completedQuantity }}/{{
             selectedOrder.plannedQuantity
           }}</text
         >
       </view>
       <view class="card"
-        ><text class="subtitle">四码任意顺序</text>
-        <choice-list
+        ><text class="subtitle">{{ tr("四码任意顺序") }}</text>
+        <choice-list :empty-label="tr('暂无可选记录')"
           v-model="expectedType"
-          label="编码类型（未知新车架请选择车架）"
+          :label='tr("编码类型（未知新车架请选择车架）")'
           :options="types"
           :disabled="busy"
         />
         <form-field
           v-model="code"
-          label="车架 / 电机 / 电池 / 仪表编码"
+          :label='tr("车架 / 电机 / 电池 / 仪表编码")'
           :disabled="busy || !!pending"
           @confirm="scan"
         />
         <action-button
-          label="启动设备扫码"
+          :label='tr("启动设备扫码")'
           secondary
           :disabled="busy || !ready || !!pending"
           @click="triggerScan"
         />
         <action-button
-          label="提交当前编码"
+          :label='tr("提交当前编码")'
           :disabled="busy || !ready || !workOrderId || !!pending"
           @click="scan"
         />
         <text class="text">{{
           task
-            ? "任务 " + task.id + " · " + task.scans.length + "/4"
-            : "等待扫描第一项"
+            ? tr("任务 ") + task.id + " · " + task.scans.length + "/4"
+            : tr("等待扫描第一项")
         }}</text>
         <view v-if="task"
           ><text v-for="item in task.scans" :key="item.codeType" class="text"
-            >{{ typeName(item.codeType) }}：{{ item.code }} ·
+            >{{ tr(typeName(item.codeType)) }}：{{ item.code }} ·
             {{ item.operatorName }}</text
           >
           <form-field
             v-model="reason"
-            label="取消本车作业原因"
+            :label='tr("取消本车作业原因")'
             :disabled="busy"
           /><action-button
-            label="取消本车作业"
+            :label='tr("取消本车作业")'
             secondary
             :disabled="busy || !reason.trim() || !!pending"
             @click="cancelTask"
@@ -102,15 +102,15 @@
         </view>
       </view>
       <view v-if="lastCompleted" class="card"
-        ><text class="subtitle">上一台已完成</text
+        ><text class="subtitle">{{ tr("上一台已完成") }}</text
         ><text class="text" selectable>{{ lastCompleted.qrCode }}</text>
         <action-button
-          label="复制聚合码"
+          :label='tr("复制聚合码")'
           secondary
           :disabled="busy"
           @click="copyCode"
         /><action-button
-          label="查看标签并打印"
+          :label='tr("查看标签并打印")'
           :disabled="busy"
           @click="
             go('prints/prints?taskId=' + encodeURIComponent(lastCompleted.id))
@@ -118,20 +118,20 @@
         />
       </view>
       <view class="card"
-        ><text class="subtitle">任务恢复 / 跨设备交接</text
-        ><form-field v-model="taskId" label="任务 ID" :disabled="busy" />
+        ><text class="subtitle">{{ tr("任务恢复 / 跨设备交接") }}</text
+        ><form-field v-model="taskId" :label='tr("任务 ID")' :disabled="busy" />
         <action-button
-          label="恢复任务"
+          :label='tr("恢复任务")'
           secondary
           :disabled="busy || !ready || !taskId"
           @click="run(resume)"
         />
         <form-field
           v-model="recoveryKeyword"
-          label="按已扫编码查找任务"
+          :label='tr("按已扫编码查找任务")'
           :disabled="busy"
         /><action-button
-          label="查找任务"
+          :label='tr("查找任务")'
           secondary
           :disabled="busy || !ready"
           @click="findTasks"
@@ -151,7 +151,7 @@
           @click="restoreRow(row.id)"
         /> </view
       ><action-button
-        label="登记生产异常 / 上传图片"
+        :label='tr("登记生产异常 / 上传图片")'
         secondary
         :disabled="busy"
         @click="go('issues/issues')"

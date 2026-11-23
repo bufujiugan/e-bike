@@ -55,3 +55,25 @@
 .space {
   margin-bottom: 20rpx;
 }
+.language-row {
+  flex-direction: row;
+  justify-content: flex-end;
+  margin-bottom: 12rpx;
+}
+.language-button {
+  width: 112rpx;
+  height: 88rpx;
+  align-items: center;
+  justify-content: center;
+  padding-left: 16rpx;
+  padding-right: 16rpx;
+  border-width: 1rpx;
+  border-color: #d6e2ec;
+  border-radius: 12rpx;
+  background-color: #ffffff;
+}
+.language-button-text {
+  color: #123454;
+  font-size: 26rpx;
+  font-weight: 600;
+}

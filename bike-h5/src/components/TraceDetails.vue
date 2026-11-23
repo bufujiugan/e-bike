@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/language'
 import { computed } from 'vue'
 type Row = Record<string, string | number | null | undefined>
 export type TraceData = {
@@ -21,24 +22,24 @@ const sections = computed(() => [
   { title: '返工换件', rows: props.data.reworkRecords, columns: [['reworkNo','返工单号'],['partType','部件类型'],['oldPartSn','旧件 SN'],['newPartSn','新件 SN'],['operationTime','时间'],['operatorName','操作人'],['reason','原因'],['status','状态']] },
 ])
 const labels: Record<string,string> = { MOTOR:'电机', BATTERY:'电池', DISPLAY:'仪表', FRAME:'车架', COMPLETED:'已完成', CANCELLED:'已撤销', OPEN:'处理中', SHIPPED:'已发运', PLANNED:'计划中', WITHDRAWN:'已撤回', PI_COMMAND:'PI整批出库', ORDER_COMMAND:'订单批量出库', LEGACY_SINGLE:'历史单车记录（非原合批）' }
-function display(value: Row[string]) { const text = value == null || value === '' ? '—' : String(value); return labels[text] ?? text.replace(/^(\d{4}-\d\d-\d\d)T/, '$1 ') }
+function display(value: Row[string]) { const text = value == null || value === '' ? '—' : String(value); return tr(labels[text]) ?? text.replace(/^(\d{4}-\d\d-\d\d)T/, '$1 ') }
 </script>
 
 <template>
   <div class="trace-details" aria-live="polite">
     <section class="trace-block">
-      <h2>整车档案</h2>
-      <dl class="trace-fields"><template v-for="[key,label] in vehicleFields" :key="key"><div><dt>{{ label }}</dt><dd>{{ display(data.vehicle[key]) }}</dd></div></template></dl>
+      <h2>{{ tr("整车档案") }}</h2>
+      <dl class="trace-fields"><template v-for="[key,label] in vehicleFields" :key="key"><div><dt>{{ tr(label) }}</dt><dd>{{ display(data.vehicle[key]) }}</dd></div></template></dl>
     </section>
     <section v-if="data.relatedVehicles?.length" class="trace-block">
-      <h2>关联车辆 <small>含部件曾经绑定的车辆</small></h2>
-      <div class="trace-related"><button v-for="vehicle in data.relatedVehicles" :key="String(vehicle.id)" type="button" @click="$emit('selectCode', String(vehicle.vehicleQrCode || vehicle.frameSn), vehicle.vehicleQrCode ? 'qr' : 'frame')">{{ vehicle.vehicleQrCode || `未生成聚合码 · 车架 ${vehicle.frameSn}` }} · {{ vehicle.statusName }}</button></div>
-      <p class="trace-hint">部件查询的出入库与换件记录包含关联车辆。点击聚合码可查看该车独立的完整历史。</p>
+      <h2>{{ tr("关联车辆") }} <small>{{ tr("含部件曾经绑定的车辆") }}</small></h2>
+      <div class="trace-related"><button v-for="vehicle in data.relatedVehicles" :key="String(vehicle.id)" type="button" @click="$emit('selectCode', String(vehicle.vehicleQrCode || vehicle.frameSn), vehicle.vehicleQrCode ? 'qr' : 'frame')">{{ vehicle.vehicleQrCode || tr("未生成聚合码 · 车架 {value0}", { value0: vehicle.frameSn }) }} · {{ tr(vehicle.statusName) }}</button></div>
+      <p class="trace-hint">{{ tr("部件查询的出入库与换件记录包含关联车辆。点击聚合码可查看该车独立的完整历史。") }}</p>
     </section>
     <section v-for="section in sections" :key="section.title" class="trace-block">
-      <h2>{{ section.title }} <small>{{ section.rows?.length ?? 0 }} 条</small></h2>
-      <p v-if="!section.rows?.length" class="trace-hint">暂无记录</p>
-      <div v-else class="trace-table"><table><thead><tr><th v-for="[key,label] in section.columns" :key="key">{{ label }}</th></tr></thead><tbody><tr v-for="(row,index) in section.rows" :key="index"><td v-for="[key] in section.columns" :key="key">{{ display(row[key]) }}</td></tr></tbody></table></div>
+      <h2>{{ tr(section.title) }} <small>{{ section.rows?.length ?? 0 }} {{ tr("条") }}</small></h2>
+      <p v-if="!section.rows?.length" class="trace-hint">{{ tr("暂无记录") }}</p>
+      <div v-else class="trace-table"><table><thead><tr><th v-for="[key,label] in section.columns" :key="key">{{ tr(label) }}</th></tr></thead><tbody><tr v-for="(row,index) in section.rows" :key="index"><td v-for="[key] in section.columns" :key="key">{{ display(row[key]) }}</td></tr></tbody></table></div>
     </section>
   </div>
 </template>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/language'
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '../api'
@@ -34,46 +35,46 @@ onMounted(async () => {
 function openOrder() { Object.assign(form,{requestId:createUuid(),modelId:undefined,quantity:1,plannedShipDate:'',remark:''}); visible.value = true }
 async function submit() {
   if (saving.value) return
-  if (!form.modelId) { ElMessage.warning('请选择车型'); return }
+  if (!form.modelId) { ElMessage.warning(tr('请选择车型')); return }
   saving.value = true
   try {
     await api.post('/api/customer/orders',{...form, plannedShipDate:form.plannedShipDate || null})
-    visible.value = false; page.value = 1; ElMessage.success('订单已提交，等待业务确认'); await load()
-  } catch (cause) { ElMessage.error(message(cause)) }
+    visible.value = false; page.value = 1; ElMessage.success(tr('订单已提交，等待业务确认')); await load()
+  } catch (cause) { ElMessage.error(tr(message(cause))) }
   finally { saving.value = false }
 }
 </script>
 <template>
   <section class="customer-workspace">
-    <header><div><span class="eyebrow">客户工作台</span><h1>{{ company || '我的订单' }}</h1><p>提交订购需求，查看本公司订单及出库进度。</p></div><el-button type="primary" :disabled="!company" @click="openOrder">＋ 提交订单</el-button></header>
-    <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
-    <div class="customer-note">可订库存会随订单和出入库变化，仅供下单参考；提交订单后不会自动锁定库存，最终数量以业务确认为准。</div>
-    <div class="customer-orders catalog"><div class="orders-heading"><h2>可订车型 <small>{{ models.length }} 款</small></h2><el-button :loading="catalogLoading" @click="loadCatalog">刷新库存</el-button></div>
-      <el-table :data="models" v-loading="catalogLoading" empty-text="暂无可展示车型">
-        <el-table-column prop="name" label="车型" min-width="200" />
-        <el-table-column label="当前可订库存" width="170" align="right"><template #default="{row}"><strong>{{ row.availableQty }}</strong> 台</template></el-table-column>
-        <el-table-column label="状态" width="130"><template #default="{row}"><el-tag :type="row.availableQty > 0 ? 'success' : 'info'">{{ row.availableQty > 0 ? '可订' : '暂时无现货' }}</el-tag></template></el-table-column>
+    <header><div><span class="eyebrow">{{ tr("客户工作台") }}</span><h1>{{ company || tr('我的订单') }}</h1><p>{{ tr("提交订购需求，查看本公司订单及出库进度。") }}</p></div><el-button type="primary" :disabled="!company" @click="openOrder">{{ tr("＋ 提交订单") }}</el-button></header>
+    <el-alert v-if="error" :title="tr(error)" type="error" :closable="false" show-icon />
+    <div class="customer-note">{{ tr("可订库存会随订单和出入库变化，仅供下单参考；提交订单后不会自动锁定库存，最终数量以业务确认为准。") }}</div>
+    <div class="customer-orders catalog"><div class="orders-heading"><h2>{{ tr("可订车型") }} <small>{{ models.length }} {{ tr("款") }}</small></h2><el-button :loading="catalogLoading" @click="loadCatalog">{{ tr("刷新库存") }}</el-button></div>
+      <el-table :data="models" v-loading="catalogLoading" :empty-text='tr("暂无可展示车型")'>
+        <el-table-column prop="name" :label='tr("车型")' min-width="200" />
+        <el-table-column :label='tr("当前可订库存")' width="170" align="right"><template #default="{row}"><strong>{{ row.availableQty }}</strong> {{ tr("台") }}</template></el-table-column>
+        <el-table-column :label='tr("状态")' width="130"><template #default="{row}"><el-tag :type="row.availableQty > 0 ? 'success' : 'info'">{{ tr(row.availableQty > 0 ? '可订' : '暂时无现货') }}</el-tag></template></el-table-column>
       </el-table>
     </div>
-    <div class="customer-orders"><div class="orders-heading"><h2>本公司订单 <small>{{ total }} 笔</small></h2><el-button :loading="loading" @click="load">刷新</el-button></div>
-    <el-table :data="rows" v-loading="loading" empty-text="暂无订单，点击“提交订单”开始订购">
-      <el-table-column prop="orderNo" label="订单编号" min-width="235" />
-      <el-table-column prop="modelName" label="车型" min-width="150" />
-      <el-table-column prop="orderQty" label="订购数量" width="100" />
-      <el-table-column prop="shippedQty" label="已出库" width="90" />
-      <el-table-column label="状态" min-width="125"><template #default="{row}"><el-tag>{{ statuses[row.status] || row.status }}</el-tag></template></el-table-column>
-      <el-table-column prop="plannedShipDate" label="期望发货日期" min-width="130" />
-      <el-table-column prop="remark" label="备注" min-width="160" />
-      <el-table-column prop="createdAt" label="提交时间" min-width="180" />
+    <div class="customer-orders"><div class="orders-heading"><h2>{{ tr("本公司订单") }} <small>{{ total }} {{ tr("笔") }}</small></h2><el-button :loading="loading" @click="load">{{ tr("刷新") }}</el-button></div>
+    <el-table :data="rows" v-loading="loading" :empty-text='tr("暂无订单，点击“提交订单”开始订购")'>
+      <el-table-column prop="orderNo" :label='tr("订单编号")' min-width="235" />
+      <el-table-column prop="modelName" :label='tr("车型")' min-width="150" />
+      <el-table-column prop="orderQty" :label='tr("订购数量")' width="100" />
+      <el-table-column prop="shippedQty" :label='tr("已出库")' width="90" />
+      <el-table-column :label='tr("状态")' min-width="125"><template #default="{row}"><el-tag>{{ tr(statuses[row.status] || row.status) }}</el-tag></template></el-table-column>
+      <el-table-column prop="plannedShipDate" :label='tr("期望发货日期")' min-width="130" />
+      <el-table-column prop="remark" :label='tr("备注")' min-width="160" />
+      <el-table-column prop="createdAt" :label='tr("提交时间")' min-width="180" />
     </el-table><el-pagination v-model:current-page="page" :page-size="20" :total="total" layout="prev, pager, next, total" @current-change="load" /></div>
-    <el-dialog v-model="visible" title="提交订单" width="min(560px,94vw)" :close-on-click-modal="false" :before-close="(done: () => void) => { if (!saving) done() }">
+    <el-dialog v-model="visible" :title='tr("提交订单")' width="min(560px,94vw)" :close-on-click-modal="false" :before-close="(done: () => void) => { if (!saving) done() }">
       <el-form label-position="top" @submit.prevent="submit">
-        <el-form-item label="客户公司">{{ company }}</el-form-item>
-        <el-form-item label="车型" required><el-select v-model="form.modelId" filterable placeholder="请选择车型" :disabled="saving"><el-option v-for="item in models" :key="item.id" :label="`${item.name}（可订 ${item.availableQty} 台）`" :value="item.id" /></el-select></el-form-item>
-        <el-form-item label="订购数量" required><el-input-number v-model="form.quantity" :min="1" :max="100000" :precision="0" :disabled="saving" /></el-form-item>
-        <el-form-item label="期望发货日期"><el-date-picker v-model="form.plannedShipDate" type="date" value-format="YYYY-MM-DD" :disabled="saving" /></el-form-item>
-        <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :maxlength="500" show-word-limit :disabled="saving" /></el-form-item>
-        <el-button :disabled="saving" @click="visible = false">取消</el-button><el-button type="primary" native-type="submit" :loading="saving">确认提交</el-button>
+        <el-form-item :label='tr("客户公司")'>{{ company }}</el-form-item>
+        <el-form-item :label='tr("车型")' required><el-select v-model="form.modelId" filterable :placeholder='tr("请选择车型")' :disabled="saving"><el-option v-for="item in models" :key="item.id" :label="tr('{name}（可订 {quantity} 台）', { name: item.name, quantity: item.availableQty })" :value="item.id" /></el-select></el-form-item>
+        <el-form-item :label='tr("订购数量")' required><el-input-number v-model="form.quantity" :min="1" :max="100000" :precision="0" :disabled="saving" /></el-form-item>
+        <el-form-item :label='tr("期望发货日期")'><el-date-picker v-model="form.plannedShipDate" type="date" value-format="YYYY-MM-DD" :disabled="saving" /></el-form-item>
+        <el-form-item :label='tr("备注")'><el-input v-model="form.remark" type="textarea" :maxlength="500" show-word-limit :disabled="saving" /></el-form-item>
+        <el-button :disabled="saving" @click="visible = false">{{ tr("取消") }}</el-button><el-button type="primary" native-type="submit" :loading="saving">{{ tr("确认提交") }}</el-button>
       </el-form>
     </el-dialog>
   </section>

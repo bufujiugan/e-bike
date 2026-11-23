@@ -2,18 +2,18 @@
   <scroll-view class="page" scroll-y>
     <view class="content">
       <view class="card">
-        <form-field v-model="code" label="整车聚合码或车架 SN"
+        <form-field v-model="code" :label='tr("整车聚合码或车架 SN")'
           :disabled="busy || !ready" @confirm="query" />
-        <action-button label="启动设备扫码" secondary :disabled="busy || !ready" @click="triggerScan" />
-        <action-button label="查询库存" :disabled="busy || !ready" @click="query" />
+        <action-button :label='tr("启动设备扫码")' secondary :disabled="busy || !ready" @click="triggerScan" />
+        <action-button :label='tr("查询库存")' :disabled="busy || !ready" @click="query" />
       </view>
-      <text v-if="message" :class="['feedback', failed ? 'error' : '']">{{ message }}</text>
+      <text v-if="message" :class="['feedback', failed ? 'error' : '']">{{ tr(message) }}</text>
       <view v-if="location && ready" class="card">
-        <text class="subtitle">在库整车</text>
-        <text class="text" selectable>车架 SN：{{ location.frameSn }}</text>
-        <text class="text" selectable>车型：{{ location.modelName }}</text>
-        <text class="text" selectable>仓库：{{ location.warehouseName }}</text>
-        <text class="text" selectable>库位：{{ location.locationName }}</text>
+        <text class="subtitle">{{ tr("在库整车") }}</text>
+        <text class="text" selectable>{{ tr("车架 SN：") }}{{ location.frameSn }}</text>
+        <text class="text" selectable>{{ tr("车型：") }}{{ location.modelName }}</text>
+        <text class="text" selectable>{{ tr("仓库：") }}{{ location.warehouseName }}</text>
+        <text class="text" selectable>{{ tr("库位：") }}{{ location.locationName }}</text>
       </view>
     </view>
   </scroll-view>

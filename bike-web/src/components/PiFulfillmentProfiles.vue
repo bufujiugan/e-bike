@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr, trInline } from '../i18n/language'
 import RecordIdColumn from './table/RecordIdColumn.vue'
 import { isSelectablePiLayout } from '../pi-template-layouts'
 import { computed, onMounted, reactive, ref, toRaw } from 'vue'
@@ -77,11 +78,11 @@ async function publish() {
   error.value = validationMessage()
   if (error.value) return
   busy.value = true; error.value = ''
-  try { const published = await fulfillmentApi.publish(draft); editing.value=false; await load(); emit('published', published); ElMessage.success('配置版本已发布') } catch(e) { error.value=message(e) } finally { busy.value=false }
+  try { const published = await fulfillmentApi.publish(draft); editing.value=false; await load(); emit('published', published); ElMessage.success(tr('配置版本已发布')) } catch(e) { error.value=message(e) } finally { busy.value=false }
 }
 async function availability(row: FulfillmentProfile) {
   try {
-    const { value } = await ElMessageBox.prompt('停用仅限制新单选用，历史单据继续使用该版本。请填写原因。', row.enabled ? '停用配置' : '启用配置', { inputValidator: v => !!v?.trim() || '请填写原因' })
+    const { value } = await ElMessageBox.prompt(tr('停用仅限制新单选用，历史单据继续使用该版本。请填写原因。'), tr(row.enabled ? '停用配置' : '启用配置'), { inputValidator: v => !!v?.trim() || tr('请填写原因') })
     await fulfillmentApi.availability(row.id, !row.enabled, value); await load(); emit('changed')
   } catch(e) { if(e!=='cancel' && e!=='close') error.value=message(e) }
 }
@@ -97,45 +98,45 @@ onMounted(async () => {
 </script>
 <template>
   <section v-loading="busy" class="fulfillment-profiles">
-    <p>履约配置用于约定收款、发货和单据要求。管理员发布一次后，业务员可在相同贸易类型和适用仓库的 PI 中重复选用。调整规则请复制新版本，已确认订单保留原规则。</p>
-    <el-alert v-if="error" :title="error" type="error" :closable="false" />
-    <el-button v-if="canManage" type="primary" @click="begin()">发布新配置</el-button><el-button @click="load">刷新</el-button>
-    <el-table :data="rows" empty-text="尚无配置，可先发布 PI 模板，再建立履约配置">
+    <p>{{ tr("履约配置用于约定收款、发货和单据要求。管理员发布一次后，业务员可在相同贸易类型和适用仓库的 PI 中重复选用。调整规则请复制新版本，已确认订单保留原规则。") }}</p>
+    <el-alert v-if="error" :title="tr(error)" type="error" :closable="false" />
+    <el-button v-if="canManage" type="primary" @click="begin()">{{ tr("发布新配置") }}</el-button><el-button @click="load">{{ tr("刷新") }}</el-button>
+    <el-table :data="rows" :empty-text='tr("尚无配置，可先发布 PI 模板，再建立履约配置")'>
       <RecordIdColumn />
-      <el-table-column prop="name" label="配置名称" min-width="160" /><el-table-column prop="version" label="版本" width="85" />
-      <el-table-column label="贸易类型" width="90"><template #default="{row}">{{ row.tradeType === 'EXPORT' ? '外销' : '内销' }}</template></el-table-column>
-      <el-table-column label="适用仓库" min-width="160"><template #default="{row}">{{ warehouseNames(row) }}</template></el-table-column>
-      <el-table-column label="付款 / 交付" min-width="260"><template #default="{row}">{{ row.rules.paymentMode === 'CREDIT' ? '客户收到货后付款' : '发出 PI 后付款' }} · {{ row.rules.deliveryMode === 'CUSTOMER_PICKUP' ? '客户货代提货' : '我方安排运输' }}</template></el-table-column>
-      <el-table-column prop="collectionEntity" label="收款主体" min-width="150" />
-      <el-table-column label="状态" width="80"><template #default="{row}">{{ row.enabled ? '启用' : '停用' }}</template></el-table-column>
-      <el-table-column type="expand"><template #default="{row}"><p>模板：{{ row.templateCode }} · {{ row.templateVersion }}；适用仓库：{{ warehouseNames(row) }}；所需单据：{{ row.rules.requiredDocuments.join('、') || '无额外单据' }}</p><p>{{ flags.filter(([key]) => row.rules[key]).map(([,label]) => label).join('；') }}{{ row.rules.viaForwarderWarehouse ? '；需送货代仓' : '' }}</p></template></el-table-column>
-      <el-table-column v-if="canManage" label="操作" width="170"><template #default="{row}"><el-button link @click="begin(row)">复制新版本</el-button><el-button link @click="availability(row)">{{ row.enabled ? '停用' : '启用' }}</el-button></template></el-table-column>
+      <el-table-column prop="name" :label='tr("配置名称")' min-width="160" /><el-table-column prop="version" :label='tr("版本")' width="85" />
+      <el-table-column :label='tr("贸易类型")' width="90"><template #default="{row}">{{ row.tradeType === 'EXPORT' ? tr('外销') : tr('内销') }}</template></el-table-column>
+      <el-table-column :label='tr("适用仓库")' min-width="160"><template #default="{row}">{{ warehouseNames(row) }}</template></el-table-column>
+      <el-table-column :label='tr("付款 / 交付")' min-width="260"><template #default="{row}">{{ row.rules.paymentMode === 'CREDIT' ? tr('客户收到货后付款') : tr('发出 PI 后付款') }} · {{ row.rules.deliveryMode === 'CUSTOMER_PICKUP' ? tr('客户货代提货') : tr('我方安排运输') }}</template></el-table-column>
+      <el-table-column prop="collectionEntity" :label='tr("收款主体")' min-width="150" />
+      <el-table-column :label='tr("状态")' width="80"><template #default="{row}">{{ row.enabled ? tr('启用') : tr('停用') }}</template></el-table-column>
+      <el-table-column type="expand"><template #default="{row}"><p>{{ trInline("模板：") }}{{ row.templateCode }} · {{ row.templateVersion }}{{ trInline("；适用仓库：") }}{{ warehouseNames(row) }}{{ trInline("；所需单据：") }}{{ row.rules.requiredDocuments.join('、') || tr('无额外单据') }}</p><p>{{ flags.filter(([key]) => row.rules[key]).map(([,label]) => label).join('；') }}{{ row.rules.viaForwarderWarehouse ? tr('；需送货代仓') : '' }}</p></template></el-table-column>
+      <el-table-column v-if="canManage" :label='tr("操作")' width="170"><template #default="{row}"><el-button link @click="begin(row)">{{ tr("复制新版本") }}</el-button><el-button link @click="availability(row)">{{ row.enabled ? tr('停用') : tr('启用') }}</el-button></template></el-table-column>
     </el-table>
-    <el-dialog v-model="editing" :title="`配置${tradeLabel}收款与发货规则`" width="min(780px,95vw)" append-to-body :close-on-click-modal="false">
-      <el-alert class="profile-guide" type="info" show-icon :closable="false" :title="`${tradeLabel}配置只需完成以下三步`">
-        <ol><li>选择{{ tradeLabel }} PI 模板，核对卖方、银行资料和收款主体。</li><li>选择适用仓库，按实际约定填写付款、运输及单据要求。</li><li>填写配置编码、名称、版本和发布原因，核对后发布。</li></ol>
-        <p v-if="seedWarehouseId">已带入仓库：{{ targetWarehouseName }}。发布匹配的配置后，会自动选入当前 PI 草稿。</p>
+    <el-dialog v-model="editing" :title="tr('配置{value0}收款与发货规则', { value0: tradeLabel })" width="min(780px,95vw)" append-to-body :close-on-click-modal="false">
+      <el-alert class="profile-guide" type="info" show-icon :closable="false" :title="tr('{value0}配置只需完成以下三步', { value0: tradeLabel })">
+        <ol><li>{{ trInline("选择") }}{{ tradeLabel }} {{ trInline("PI 模板，核对卖方、银行资料和收款主体。") }}</li><li>{{ tr("选择适用仓库，按实际约定填写付款、运输及单据要求。") }}</li><li>{{ tr("填写配置编码、名称、版本和发布原因，核对后发布。") }}</li></ol>
+        <p v-if="seedWarehouseId">{{ trInline("已带入仓库：") }}{{ targetWarehouseName }}{{ trInline("。发布匹配的配置后，会自动选入当前 PI 草稿。") }}</p>
       </el-alert>
       <el-form label-position="top" class="profile-form" :disabled="busy" @submit.prevent="publish">
-        <el-form-item label="贸易类型" required><el-select v-model="draft.tradeType" aria-label="配置贸易类型" :disabled="Boolean(seedTradeType)" @change="changeTradeType"><el-option value="EXPORT" label="外销" /><el-option value="DOMESTIC" label="内销" /></el-select><small v-if="seedTradeType" class="profile-help">与当前 PI 保持一致。</small></el-form-item>
-        <el-form-item :label="`${tradeLabel} PI 模板 / 卖方`" required><el-select :model-value="draft.templateCode ? `${draft.templateCode}@${draft.templateVersion}` : ''" aria-label="配置 PI 模板" filterable :placeholder="`请选择已发布的${tradeLabel}模板`" @change="selectTemplate"><el-option v-for="t in matchingTemplates" :key="`${t.templateCode}@${t.templateVersion}`" :value="`${t.templateCode}@${t.templateVersion}`" :label="`${t.templateCode} · ${t.templateVersion} · ${t.sellerName}`" /></el-select><small v-if="!matchingTemplates.length" class="profile-help">尚无可用的{{ tradeLabel }}模板，请先补齐真实卖方和银行资料并发布模板。</small><el-button link type="primary" @click="templateManagerVisible = true">配置{{ tradeLabel }}模板与银行资料</el-button></el-form-item>
-        <el-form-item label="配置编码" required><el-input v-model="draft.profileCode" placeholder="如 STANDARD_DELIVERY（大写英文）" maxlength="64" /></el-form-item>
-        <el-form-item label="版本" required><el-input v-model="draft.version" placeholder="如 1.0" maxlength="32" /></el-form-item>
-        <el-form-item label="配置名称" required><el-input v-model="draft.name" placeholder="如 客户收到货后付款并提货" maxlength="120" /></el-form-item>
-        <el-form-item label="收款主体" required><el-input v-model="draft.collectionEntity" maxlength="200" placeholder="真实收款公司名称或主体编码" /></el-form-item>
-        <el-form-item label="适用仓库（留空表示全部启用仓库）"><el-select v-model="draft.rules.warehouseIds" multiple filterable><el-option v-for="w in warehouses" :key="w.id" :value="w.id" :label="w.name" /></el-select></el-form-item>
-        <el-form-item label="付款方式" required><el-select v-model="draft.rules.paymentMode" @change="draft.rules.paymentMode === 'CREDIT' && (draft.rules.settlementRequired = true)"><el-option value="PREPAY" label="发出 PI 后付款：到账后保留库存并放行" /><el-option value="CREDIT" label="客户收到货后付款：授权后先发货，到账后结案" /></el-select><small class="profile-help">这里只选择流程控制方式，不固定第几天付款。每张 PI 的具体付款时间和条件在“付款条款”中按实际约定填写；收到货后付款仍须逐单授权。</small></el-form-item>
-        <el-form-item label="交付方式" required><el-select v-model="draft.rules.deliveryMode" @change="draft.rules.deliveryMode === 'CUSTOMER_PICKUP' && (draft.rules.viaForwarderWarehouse = false)"><el-option value="SELLER_TRANSPORT" label="我方安排运输（货代或快递）" /><el-option value="CUSTOMER_PICKUP" label="客户货代到仓提货" /></el-select></el-form-item>
-        <el-checkbox v-model="draft.rules.viaForwarderWarehouse" :disabled="draft.rules.deliveryMode === 'CUSTOMER_PICKUP'">我方需先送至货代仓并确认到仓</el-checkbox>
-        <el-checkbox v-for="[key,label] in flags" :key="key" v-model="draft.rules[key]" :disabled="key === 'settlementRequired' && draft.rules.paymentMode === 'CREDIT'">{{ label }}</el-checkbox>
-        <p class="profile-help profile-wide">以上勾选项会成为后续办理要求，请逐项核对。销售合同、购销合同和送货代仓是否需要，按实际业务约定选择。</p>
-        <el-form-item label="必需业务单据"><el-checkbox-group v-model="draft.rules.requiredDocuments"><el-checkbox value="CI">CI 发送</el-checkbox><el-checkbox value="RD">RD 发送及回签</el-checkbox><el-checkbox value="CMR">CMR 回收</el-checkbox></el-checkbox-group><small class="profile-help">仅勾选本业务确实需要的单据；勾选后须完成对应文件办理，才能结案。</small></el-form-item>
-        <el-form-item label="发布原因" required><el-input v-model="draft.reason" maxlength="500" type="textarea" :placeholder="`例如：为${targetWarehouseName}新增${tradeLabel}履约配置`" /></el-form-item>
+        <el-form-item :label='tr("贸易类型")' required><el-select v-model="draft.tradeType" :aria-label='tr("配置贸易类型")' :disabled="Boolean(seedTradeType)" @change="changeTradeType"><el-option value="EXPORT" :label='tr("外销")' /><el-option value="DOMESTIC" :label='tr("内销")' /></el-select><small v-if="seedTradeType" class="profile-help">{{ tr("与当前 PI 保持一致。") }}</small></el-form-item>
+        <el-form-item :label="tr('{value0} PI 模板 / 卖方', { value0: tradeLabel })" required><el-select :model-value="draft.templateCode ? `${draft.templateCode}@${draft.templateVersion}` : ''" :aria-label='tr("配置 PI 模板")' filterable :placeholder="tr('请选择已发布的{value0}模板', { value0: tradeLabel })" @change="selectTemplate"><el-option v-for="t in matchingTemplates" :key="`${t.templateCode}@${t.templateVersion}`" :value="`${t.templateCode}@${t.templateVersion}`" :label="`${t.templateCode} · ${t.templateVersion} · ${t.sellerName}`" /></el-select><small v-if="!matchingTemplates.length" class="profile-help">{{ trInline("尚无可用的") }}{{ tradeLabel }}{{ trInline("模板，请先补齐真实卖方和银行资料并发布模板。") }}</small><el-button link type="primary" @click="templateManagerVisible = true">{{ trInline("配置") }}{{ tradeLabel }}{{ trInline("模板与银行资料") }}</el-button></el-form-item>
+        <el-form-item :label='tr("配置编码")' required><el-input v-model="draft.profileCode" :placeholder='tr("如 STANDARD_DELIVERY（大写英文）")' maxlength="64" /></el-form-item>
+        <el-form-item :label='tr("版本")' required><el-input v-model="draft.version" :placeholder='tr("如 1.0")' maxlength="32" /></el-form-item>
+        <el-form-item :label='tr("配置名称")' required><el-input v-model="draft.name" :placeholder='tr("如 客户收到货后付款并提货")' maxlength="120" /></el-form-item>
+        <el-form-item :label='tr("收款主体")' required><el-input v-model="draft.collectionEntity" maxlength="200" :placeholder='tr("真实收款公司名称或主体编码")' /></el-form-item>
+        <el-form-item :label='tr("适用仓库（留空表示全部启用仓库）")'><el-select v-model="draft.rules.warehouseIds" multiple filterable><el-option v-for="w in warehouses" :key="w.id" :value="w.id" :label="w.name" /></el-select></el-form-item>
+        <el-form-item :label='tr("付款方式")' required><el-select v-model="draft.rules.paymentMode" @change="draft.rules.paymentMode === 'CREDIT' && (draft.rules.settlementRequired = true)"><el-option value="PREPAY" :label='tr("发出 PI 后付款：到账后保留库存并放行")' /><el-option value="CREDIT" :label='tr("客户收到货后付款：授权后先发货，到账后结案")' /></el-select><small class="profile-help">{{ tr("这里只选择流程控制方式，不固定第几天付款。每张 PI 的具体付款时间和条件在“付款条款”中按实际约定填写；收到货后付款仍须逐单授权。") }}</small></el-form-item>
+        <el-form-item :label='tr("交付方式")' required><el-select v-model="draft.rules.deliveryMode" @change="draft.rules.deliveryMode === 'CUSTOMER_PICKUP' && (draft.rules.viaForwarderWarehouse = false)"><el-option value="SELLER_TRANSPORT" :label='tr("我方安排运输（货代或快递）")' /><el-option value="CUSTOMER_PICKUP" :label='tr("客户货代到仓提货")' /></el-select></el-form-item>
+        <el-checkbox v-model="draft.rules.viaForwarderWarehouse" :disabled="draft.rules.deliveryMode === 'CUSTOMER_PICKUP'">{{ tr("我方需先送至货代仓并确认到仓") }}</el-checkbox>
+        <el-checkbox v-for="[key,label] in flags" :key="key" v-model="draft.rules[key]" :disabled="key === 'settlementRequired' && draft.rules.paymentMode === 'CREDIT'">{{ tr(label) }}</el-checkbox>
+        <p class="profile-help profile-wide">{{ tr("以上勾选项会成为后续办理要求，请逐项核对。销售合同、购销合同和送货代仓是否需要，按实际业务约定选择。") }}</p>
+        <el-form-item :label='tr("必需业务单据")'><el-checkbox-group v-model="draft.rules.requiredDocuments"><el-checkbox value="CI">{{ tr("CI 发送") }}</el-checkbox><el-checkbox value="RD">{{ tr("RD 发送及回签") }}</el-checkbox><el-checkbox value="CMR">{{ tr("CMR 回收") }}</el-checkbox></el-checkbox-group><small class="profile-help">{{ tr("仅勾选本业务确实需要的单据；勾选后须完成对应文件办理，才能结案。") }}</small></el-form-item>
+        <el-form-item :label='tr("发布原因")' required><el-input v-model="draft.reason" maxlength="500" type="textarea" :placeholder="tr('例如：为{value0}新增{value1}履约配置', { value0: targetWarehouseName, value1: tradeLabel })" /></el-form-item>
       </el-form>
-      <el-alert v-if="error" :title="error" type="error" :closable="false" />
-      <template #footer><el-button @click="editing=false">取消</el-button><el-button type="primary" :loading="busy" @click="publish">发布不可覆盖的版本</el-button></template>
+      <el-alert v-if="error" :title="tr(error)" type="error" :closable="false" />
+      <template #footer><el-button @click="editing=false">{{ tr("取消") }}</el-button><el-button type="primary" :loading="busy" @click="publish">{{ tr("发布不可覆盖的版本") }}</el-button></template>
     </el-dialog>
-    <el-dialog v-model="templateManagerVisible" :title="`${tradeLabel}模板与银行资料`" width="min(1100px,96vw)" append-to-body destroy-on-close><PiTemplates v-if="templateManagerVisible" :trade-type="draft.tradeType" :can-manage="canManage" selectable @select="useManagedTemplate" /></el-dialog>
+    <el-dialog v-model="templateManagerVisible" :title="tr('{value0}模板与银行资料', { value0: tradeLabel })" width="min(1100px,96vw)" append-to-body destroy-on-close><PiTemplates v-if="templateManagerVisible" :trade-type="draft.tradeType" :can-manage="canManage" selectable @select="useManagedTemplate" /></el-dialog>
   </section>
 </template>
 <style scoped>.profile-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 20px}.profile-form :deep(.el-select){width:100%}.profile-form :deep(.el-form-item){min-width:0}.profile-help{display:block;width:100%;color:var(--el-text-color-secondary);font-size:12px;line-height:1.7;margin:6px 0 0}.profile-wide{grid-column:1 / -1}.profile-guide{margin-bottom:20px}.profile-guide ol{padding-left:20px;margin:8px 0;line-height:1.8}.profile-guide p{margin:8px 0}.profile-form :deep(.el-checkbox){height:auto;white-space:normal}.profile-form :deep(.el-checkbox__label){white-space:normal;line-height:1.7}@media(max-width:600px){.profile-form{grid-template-columns:minmax(0,1fr)}}</style>

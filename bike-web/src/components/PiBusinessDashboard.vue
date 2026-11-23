@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/language'
 import RecordIdColumn from './table/RecordIdColumn.vue'
 import { onMounted, ref, watch } from 'vue'
 import api from '../api'
@@ -36,23 +37,23 @@ watch(() => props.refresh, () => { void summary(); if (visible.value) void load(
 onMounted(summary)
 </script>
 <template>
-  <section aria-label="业务待办看板">
-    <el-alert v-if="summaryError" :title="summaryError" type="error" :closable="false"><el-button link @click="summary">重试</el-button></el-alert>
-    <div class="pi-queue-cards"><template v-for="(label, key) in labels" :key="key"><button v-if="counts[key] != null" type="button" @click="open(String(key))"><span>{{ label }}</span><strong>{{ counts[key] }}</strong></button></template></div>
-    <p class="pi-hint">按当前授权范围实时统计；一个单据可出现在不同待办中，点击查看全部分页明细。</p>
-    <el-dialog v-model="visible" :title="labels[queue]" width="min(1050px, 95vw)">
+  <section :aria-label='tr("业务待办看板")'>
+    <el-alert v-if="summaryError" :title="tr(summaryError)" type="error" :closable="false"><el-button link @click="summary">{{ tr("重试") }}</el-button></el-alert>
+    <div class="pi-queue-cards"><template v-for="(label, key) in labels" :key="key"><button v-if="counts[key] != null" type="button" @click="open(String(key))"><span>{{ tr(label) }}</span><strong>{{ counts[key] }}</strong></button></template></div>
+    <p class="pi-hint">{{ tr("按当前授权范围实时统计；一个单据可出现在不同待办中，点击查看全部分页明细。") }}</p>
+    <el-dialog v-model="visible" :title="tr(labels[queue])" width="min(1050px, 95vw)">
       <p>{{ descriptions[queue] }}</p>
-      <form class="pi-filters" @submit.prevent="search"><el-input v-model="keyword" placeholder="业务编号或客户名称" clearable /><el-button native-type="submit" :loading="busy">查询</el-button></form>
-      <el-alert v-if="error" :title="error" type="error" :closable="false" />
-      <el-table :data="rows" v-loading="busy" empty-text="没有符合条件的待办">
+      <form class="pi-filters" @submit.prevent="search"><el-input v-model="keyword" :placeholder='tr("业务编号或客户名称")' clearable /><el-button native-type="submit" :loading="busy">{{ tr("查询") }}</el-button></form>
+      <el-alert v-if="error" :title="tr(error)" type="error" :closable="false" />
+      <el-table :data="rows" v-loading="busy" :empty-text='tr("没有符合条件的待办")'>
       <RecordIdColumn />
-        <el-table-column label="类型" width="85"><template #default="{ row }">{{ { PI: 'PI', ORDER: '订单', LOCK: '锁定' }[row.recordType as PiQueueRow['recordType']] }}</template></el-table-column>
-        <el-table-column prop="referenceNo" label="业务编号" min-width="220"><template #default="{ row }"><el-button v-if="row.piId" link type="primary" @click="emit('openPi', row.piId)">{{ row.referenceNo }} · R{{ row.revision }}</el-button><span v-else>{{ row.referenceNo }}</span></template></el-table-column>
-        <el-table-column prop="customerName" label="客户" min-width="150" /><el-table-column prop="businessOwner" label="负责人" min-width="120" />
-        <el-table-column prop="shippedQty" label="已发" width="70" /><el-table-column prop="remainingQty" label="剩余" width="70" />
-        <el-table-column v-if="queue === 'EXPIRING_LOCKS'" label="截止时间" min-width="180"><template #default="{ row }">{{ formatDateTime(row.expiresAt) }}</template></el-table-column>
-        <el-table-column label="创建时间" min-width="180"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column>
-        <el-table-column label="修改时间" min-width="180"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column>
+        <el-table-column :label='tr("类型")' width="85"><template #default="{ row }">{{ { PI: 'PI', ORDER: '订单', LOCK: '锁定' }[row.recordType as PiQueueRow['recordType']] }}</template></el-table-column>
+        <el-table-column prop="referenceNo" :label='tr("业务编号")' min-width="220"><template #default="{ row }"><el-button v-if="row.piId" link type="primary" @click="emit('openPi', row.piId)">{{ row.referenceNo }} · R{{ row.revision }}</el-button><span v-else>{{ row.referenceNo }}</span></template></el-table-column>
+        <el-table-column prop="customerName" :label='tr("客户")' min-width="150" /><el-table-column prop="businessOwner" :label='tr("负责人")' min-width="120" />
+        <el-table-column prop="shippedQty" :label='tr("已发")' width="70" /><el-table-column prop="remainingQty" :label='tr("剩余")' width="70" />
+        <el-table-column v-if="queue === 'EXPIRING_LOCKS'" :label='tr("截止时间")' min-width="180"><template #default="{ row }">{{ formatDateTime(row.expiresAt) }}</template></el-table-column>
+        <el-table-column :label='tr("创建时间")' min-width="180"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column>
+        <el-table-column :label='tr("修改时间")' min-width="180"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column>
       </el-table>
       <el-pagination v-model:current-page="page" :page-size="20" :total="total" layout="total, prev, pager, next" @current-change="load" />
     </el-dialog>

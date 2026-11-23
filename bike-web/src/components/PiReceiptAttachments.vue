@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr, trInline } from '../i18n/language'
 import RecordIdColumn from './table/RecordIdColumn.vue'
 import { computed, ref, watch } from 'vue'
 import BusinessAttachmentUpload from './BusinessAttachmentUpload.vue'
@@ -51,19 +52,19 @@ watch(() => [props.modelValue, props.piId, props.payment.id] as const, () => {
 </script>
 
 <template>
-  <el-dialog v-model="visible" title="收款凭证" width="min(800px, 95vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy">
-    <p>到账时间：{{ payment.receivedAt }} · 金额：{{ payment.currencyCode }} {{ payment.amount }}</p>
-    <p v-if="payment.voucherObjectKey" class="receipt-hint">这笔收款保留了早期凭证引用，请核对并补传原文件。可下载凭证以本列表为准。</p>
+  <el-dialog v-model="visible" :title='tr("收款凭证")' width="min(800px, 95vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy">
+    <p>{{ trInline("到账时间：") }}{{ payment.receivedAt }} {{ trInline("· 金额：") }}{{ payment.currencyCode }} {{ payment.amount }}</p>
+    <p v-if="payment.voucherObjectKey" class="receipt-hint">{{ tr("这笔收款保留了早期凭证引用，请核对并补传原文件。可下载凭证以本列表为准。") }}</p>
     <BusinessAttachmentUpload v-if="modelValue && canUpload && payment.status === 'CONFIRMED'" :key="`${piId}/${payment.id}`" :endpoint="`/api/pis/${piId}/payments/${payment.id}/attachments`" @saved="saved" @busy="uploading = $event" />
-    <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
-    <el-table v-loading="loading" :data="rows" empty-text="这笔到账尚无已上传凭证">
+    <el-alert v-if="error" :title="tr(error)" type="error" :closable="false" show-icon />
+    <el-table v-loading="loading" :data="rows" :empty-text='tr("这笔到账尚无已上传凭证")'>
       <RecordIdColumn />
-      <el-table-column prop="fileName" label="凭证文件" min-width="210" />
-      <el-table-column label="大小" width="100"><template #default="scope">{{ Math.max(1, Math.ceil(scope.row.fileSize / 1024)) }} KB</template></el-table-column>
-      <el-table-column prop="createdAt" label="上传时间" min-width="180" />
-      <el-table-column label="操作" width="90"><template #default="scope"><el-button link type="primary" :loading="downloading === scope.row.id" :disabled="busy && downloading !== scope.row.id" @click="download(scope.row)">下载</el-button></template></el-table-column>
+      <el-table-column prop="fileName" :label='tr("凭证文件")' min-width="210" />
+      <el-table-column :label='tr("大小")' width="100"><template #default="scope">{{ Math.max(1, Math.ceil(scope.row.fileSize / 1024)) }} KB</template></el-table-column>
+      <el-table-column prop="createdAt" :label='tr("上传时间")' min-width="180" />
+      <el-table-column :label='tr("操作")' width="90"><template #default="scope"><el-button link type="primary" :loading="downloading === scope.row.id" :disabled="busy && downloading !== scope.row.id" @click="download(scope.row)">{{ tr("下载") }}</el-button></template></el-table-column>
     </el-table>
-    <template #footer><el-button :disabled="busy || loading" @click="load">刷新列表</el-button><el-button :disabled="busy" @click="visible = false">关闭</el-button></template>
+    <template #footer><el-button :disabled="busy || loading" @click="load">{{ tr("刷新列表") }}</el-button><el-button :disabled="busy" @click="visible = false">{{ tr("关闭") }}</el-button></template>
   </el-dialog>
 </template>
 

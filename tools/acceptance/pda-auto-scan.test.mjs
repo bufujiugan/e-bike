@@ -21,6 +21,7 @@ function harness(component) {
         if (name === 'vue') return runtimeVue;
         if (name.includes('useAutoVehicleScan')) return autoScan;
         if (name === 'vant') return { showFailToast: text => notices.push(text), showSuccessToast: text => notices.push(text) };
+        if (name.endsWith('/i18n/language')) return { tr: text => text };
         if (name.endsWith('/api')) return { default: api };
         if (name.includes('permissions')) return { isSuperAdmin: () => true, hasPermission: () => true };
         return {};

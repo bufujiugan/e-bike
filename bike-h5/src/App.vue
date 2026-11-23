@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import LanguageMenu from './components/LanguageMenu.vue'
+import { tr } from './i18n/language'
 import TraceDetails, { type TraceData } from './components/TraceDetails.vue'
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import axios from './api'
@@ -119,7 +121,7 @@ async function loadStockOutOptions() {
       customerId.value = customers.value[0]?.id ?? null
     } else await loadStockOutOrders(1)
   } catch (error) {
-    if (version === customerRequestVersion) showFailToast(axios.isAxiosError(error) ? error.response?.data?.message ?? '客户加载失败' : '客户加载失败')
+    if (version === customerRequestVersion) showFailToast(tr(axios.isAxiosError(error) ? error.response?.data?.message ?? '客户加载失败' : '客户加载失败'))
   }
 }
 
@@ -155,7 +157,7 @@ async function loadStockInOptions() {
     warehouses.value = response.data.data
     if (warehouseId.value === null && warehouseOptions.value.length > 0) warehouseId.value = warehouseOptions.value[0].value
   } catch (error) {
-    showFailToast(axios.isAxiosError(error) ? error.response?.data?.message ?? '仓库加载失败' : '仓库加载失败')
+    showFailToast(tr(axios.isAxiosError(error) ? error.response?.data?.message ?? '仓库加载失败' : '仓库加载失败'))
   }
 }
 
@@ -166,11 +168,11 @@ async function loadOptionsForMode(nextMode: PdaMode) {
 
 async function submitPasswordChange() {
   if (newPassword.value.length < 8 || newPassword.value.length > 100) {
-    showFailToast('新密码长度必须为 8-100')
+    showFailToast(tr('新密码长度必须为 8-100'))
     return
   }
   if (newPassword.value !== confirmPassword.value) {
-    showFailToast('两次输入的新密码不一致')
+    showFailToast(tr('两次输入的新密码不一致'))
     return
   }
   passwordChanging.value = true
@@ -181,9 +183,9 @@ async function submitPasswordChange() {
     confirmPassword.value = ''
     passwordChangeVisible.value = false
     clearSession()
-    showSuccessToast('密码已更新，请使用新密码重新登录')
+    showSuccessToast(tr('密码已更新，请使用新密码重新登录'))
   } catch (error) {
-    showFailToast(axios.isAxiosError(error) ? error.response?.data?.message ?? '密码修改失败' : '密码修改失败')
+    showFailToast(tr(axios.isAxiosError(error) ? error.response?.data?.message ?? '密码修改失败' : '密码修改失败'))
   } finally {
     passwordChanging.value = false
   }
@@ -198,7 +200,7 @@ async function loadLocations() {
     locations.value = response.data.data
     if (locationOptions.value.length > 0) locationId.value = locationOptions.value[0].value
   } catch (error) {
-    showFailToast(axios.isAxiosError(error) ? error.response?.data?.message ?? '库位加载失败' : '库位加载失败')
+    showFailToast(tr(axios.isAxiosError(error) ? error.response?.data?.message ?? '库位加载失败' : '库位加载失败'))
   }
 }
 
@@ -215,10 +217,10 @@ async function login() {
     }
     if (!allowedModes.value.includes(mode.value)) mode.value = allowedModes.value[0] ?? 'assembly'
     await loadOptionsForMode(mode.value)
-    showSuccessToast('登录成功')
+    showSuccessToast(tr('登录成功'))
   } catch (error) {
     const message = axios.isAxiosError(error) ? error.response?.data?.message ?? '登录失败' : '登录失败'
-    showFailToast(message)
+    showFailToast(tr(message))
   } finally {
     loading.value = false
   }
@@ -227,7 +229,7 @@ async function login() {
 async function submitStockIn() {
   if (warehouseId.value === null || locationId.value === null) {
     resultMessage.value = '请选择仓库和库位'
-    showFailToast(resultMessage.value)
+    showFailToast(tr(resultMessage.value))
     return
   }
   busy.value = true
@@ -237,8 +239,8 @@ async function submitStockIn() {
     resultSuccess.value = true
     vehicleQrCode.value = ''
     focusField(vehicleQrField)
-    showSuccessToast('入库完成')
-  } catch (error) { resultMessage.value = axios.isAxiosError(error) ? error.response?.data?.message ?? '入库失败' : '入库失败'; resultSuccess.value = false; showFailToast(resultMessage.value) } finally { busy.value = false }
+    showSuccessToast(tr('入库完成'))
+  } catch (error) { resultMessage.value = axios.isAxiosError(error) ? error.response?.data?.message ?? '入库失败' : '入库失败'; resultSuccess.value = false; showFailToast(tr(resultMessage.value)) } finally { busy.value = false }
 }
 
 async function submitStockOut() {
@@ -246,19 +248,19 @@ async function submitStockOut() {
   if (vehicleQrCode.value.trim()) {
     resultMessage.value = '请先将输入的整车总码校验加入清单，再确认出库'
     resultSuccess.value = false
-    showFailToast(resultMessage.value)
+    showFailToast(tr(resultMessage.value))
     return
   }
   if (customerId.value === null || orderId.value === null) {
     resultMessage.value = '请选择客户和可出库订单'
-    showFailToast(resultMessage.value)
+    showFailToast(tr(resultMessage.value))
     return
   }
   busy.value = true
   try {
     if (scannedVehicleQrs.value.length === 0) {
       resultMessage.value = '请至少扫描一辆整车'
-      showFailToast(resultMessage.value)
+      showFailToast(tr(resultMessage.value))
       return
     }
     const response = await axios.post('/api/stock-out', { customerId: customerId.value, orderId: orderId.value, vehicleQrCodes: scannedVehicleQrs.value, remark: stockOutRemark.value }, { headers: tokenHeaders.value })
@@ -270,8 +272,8 @@ async function submitStockOut() {
     orderId.value = null; selectedOrder.value = null
     await loadStockOutOrders(1)
     focusField(vehicleQrField)
-    showSuccessToast('出库完成')
-  } catch (error) { resultMessage.value = axios.isAxiosError(error) ? error.response?.data?.message ?? '出库失败' : '出库失败'; resultSuccess.value = false; showFailToast(resultMessage.value) } finally { busy.value = false }
+    showSuccessToast(tr('出库完成'))
+  } catch (error) { resultMessage.value = axios.isAxiosError(error) ? error.response?.data?.message ?? '出库失败' : '出库失败'; resultSuccess.value = false; showFailToast(tr(resultMessage.value)) } finally { busy.value = false }
 }
 
 async function scanStockOutVehicle() {
@@ -280,13 +282,13 @@ async function scanStockOutVehicle() {
   if (customerId.value === null || orderId.value === null) {
     resultMessage.value = '请先选择客户和可出库订单'
     resultSuccess.value = false
-    showFailToast(resultMessage.value)
+    showFailToast(tr(resultMessage.value))
     return
   }
   if (orderRemainingQty.value <= 0) {
     resultMessage.value = '订单剩余数量不足，不能继续扫码'
     resultSuccess.value = false
-    showFailToast(resultMessage.value)
+    showFailToast(tr(resultMessage.value))
     return
   }
   const qr = vehicleQrCode.value.trim()
@@ -294,7 +296,7 @@ async function scanStockOutVehicle() {
   if (scannedVehicleQrs.value.includes(qr)) {
     resultMessage.value = '同一整车不能重复扫码'
     resultSuccess.value = false
-    showFailToast(resultMessage.value)
+    showFailToast(tr(resultMessage.value))
     vehicleQrCode.value = ''
     return
   }
@@ -316,7 +318,7 @@ async function scanStockOutVehicle() {
     if (version !== stockOutScanVersion) return
     resultMessage.value = error instanceof Error && !(axios.isAxiosError(error)) ? error.message : axios.isAxiosError(error) ? error.response?.data?.message ?? '二维码校验失败' : '二维码校验失败'
     resultSuccess.value = false
-    showFailToast(resultMessage.value)
+    showFailToast(tr(resultMessage.value))
   } finally {
     stockOutScanBusy.value = false
     if (version === stockOutScanVersion) focusField(vehicleQrField)
@@ -326,7 +328,7 @@ async function scanStockOutVehicle() {
 async function submitRework() {
   if (!reworkQrCode.value.trim() || !reworkNewPartSn.value.trim() || !reworkReason.value.trim()) {
     resultMessage.value = '请填写聚合码、新零部件和返工原因'
-    showFailToast(resultMessage.value)
+    showFailToast(tr(resultMessage.value))
     return
   }
   busy.value = true
@@ -338,11 +340,11 @@ async function submitRework() {
     reworkNewPartSn.value = ''
     reworkReason.value = ''
     focusField(reworkQrField)
-    showSuccessToast('返工完成')
+    showSuccessToast(tr('返工完成'))
   } catch (error) {
     resultMessage.value = axios.isAxiosError(error) ? error.response?.data?.message ?? '返工失败' : '返工失败'
     resultSuccess.value = false
-    showFailToast(resultMessage.value)
+    showFailToast(tr(resultMessage.value))
   } finally { busy.value = false }
 }
 
@@ -356,8 +358,8 @@ async function queryTrace() {
     traceData.value = response.data.data
     resultMessage.value = `${vehicle.vehicleQrCode || '尚未生成聚合码'} · ${vehicle.statusName} · ${vehicle.modelName ?? '-'} · 绑定历史 ${response.data.data.bindingHistory.length} 条`
     resultSuccess.value = true
-    showSuccessToast('追溯查询完成')
-  } catch (error) { resultMessage.value = axios.isAxiosError(error) ? error.response?.data?.message ?? '追溯失败' : error instanceof Error ? error.message : '追溯失败'; resultSuccess.value = false; showFailToast(resultMessage.value) } finally { busy.value = false; focusField(traceField) }
+    showSuccessToast(tr('追溯查询完成'))
+  } catch (error) { resultMessage.value = axios.isAxiosError(error) ? error.response?.data?.message ?? '追溯失败' : error instanceof Error ? error.message : '追溯失败'; resultSuccess.value = false; showFailToast(tr(resultMessage.value)) } finally { busy.value = false; focusField(traceField) }
 }
 
 async function traceRelatedCode(code: string, codeType: 'qr' | 'frame') {
@@ -396,7 +398,7 @@ async function logout() {
     clearSession()
   } catch (error) {
     if (axios.isAxiosError(error) && error.response?.status === 401) clearSession()
-    else showFailToast('退出未完成，请检查网络后重试')
+    else showFailToast(tr('退出未完成，请检查网络后重试'))
   }
 }
 
@@ -468,7 +470,7 @@ if (loggedIn.value) {
     return loadOptionsForMode(mode.value)
   }).catch(() => {
     logout()
-    showFailToast('登录状态已失效，请重新登录')
+    showFailToast(tr('登录状态已失效，请重新登录'))
   })
 }
 </script>
@@ -477,137 +479,145 @@ if (loggedIn.value) {
   <main class="pda-shell" :class="{ 'is-login': !loggedIn }">
     <section v-if="!loggedIn" class="login-panel">
       <header class="login-hero">
+        <LanguageMenu class="login-language" />
         <div class="login-brand"><i aria-hidden="true" /><span>BIKE PDA</span></div>
         <div class="login-hero-visual" aria-hidden="true"><span class="login-scan-frame"><van-icon name="scan" /></span><span class="login-gear"><van-icon name="setting-o" /></span></div>
         <p class="login-manufacturing"><van-icon name="cluster-o" />E-BIKE MANUFACTURING</p>
-        <h1>工位登录</h1>
-        <p class="description">智能制造作业终端</p>
+        <h1>{{ tr("工位登录") }}</h1>
+        <p class="description">{{ tr("智能制造作业终端") }}</p>
       </header>
 
       <section class="login-form-card">
         <header class="login-form-heading">
           <span><van-icon name="manager-o" /></span>
-          <div><h2>账号登录</h2><p>使用已分配的工位账号进入作业</p></div>
+          <div><h2>{{ tr("账号登录") }}</h2><p>{{ tr("使用已分配的工位账号进入作业") }}</p></div>
         </header>
         <van-form @submit="login">
           <div class="login-fields">
             <label>
-              <span>工位账号</span>
-              <van-field v-model="username" name="username" autocomplete="username" placeholder="请输入账号" clearable>
+              <span>{{ tr("工位账号") }}</span>
+              <van-field v-model="username" name="username" autocomplete="username" :placeholder='tr("请输入账号")' clearable>
                 <template #left-icon><van-icon name="contact-o" /></template>
               </van-field>
             </label>
             <label>
-              <span>登录密码</span>
-              <van-field v-model="password" name="password" :type="passwordVisible ? 'text' : 'password'" autocomplete="current-password" placeholder="请输入密码">
+              <span>{{ tr("登录密码") }}</span>
+              <van-field v-model="password" name="password" :type="passwordVisible ? 'text' : 'password'" autocomplete="current-password" :placeholder='tr("请输入密码")'>
                 <template #left-icon><van-icon name="lock" /></template>
-                <template #right-icon><button type="button" class="password-visibility" :aria-label="passwordVisible ? '隐藏密码' : '显示密码'" @click="passwordVisible = !passwordVisible"><van-icon :name="passwordVisible ? 'eye-o' : 'closed-eye'" /></button></template>
+                <template #right-icon><button type="button" class="password-visibility" :aria-label="tr(passwordVisible ? '隐藏密码' : '显示密码')" @click="passwordVisible = !passwordVisible"><van-icon :name="passwordVisible ? 'eye-o' : 'closed-eye'" /></button></template>
               </van-field>
             </label>
           </div>
           <div class="login-action">
-            <van-button block type="primary" native-type="submit" :loading="loading"><van-icon name="sign" />登录工位</van-button>
+            <van-button block type="primary" native-type="submit" :loading="loading"><van-icon name="sign" />{{ tr("登录工位") }}</van-button>
           </div>
         </van-form>
-        <div class="login-terminal-status"><span><i />终端在线</span><span>安全连接</span></div>
+        <div class="login-terminal-status"><span><i />{{ tr("终端在线") }}</span><span>{{ tr("安全连接") }}</span></div>
       </section>
 
       <footer class="login-footer">BIKE PDA · PRODUCTION SYSTEM</footer>
     </section>
     <section v-else class="work-panel pda-work-panel">
-      <header class="work-header"><div><p class="eyebrow">BIKE PDA</p><h1>工位作业</h1><p class="pda-header-tagline">高效 · 准确 · 智能制造</p></div><div class="pda-manufacturing-mark" aria-hidden="true"><van-icon name="setting-o" /><span>E-BIKE<br>MANUFACTURING</span></div><van-button size="small" plain type="primary" @click="logout"><van-icon name="share-o" />退出</van-button></header>
-      <van-dialog v-model:show="passwordChangeVisible" title="首次登录请修改密码" :show-confirm-button="false" :close-on-click-overlay="false">
+      <header class="work-header">
+        <div><p class="eyebrow">BIKE PDA</p><h1>{{ tr("工位作业") }}</h1><p class="pda-header-tagline">{{ tr("高效 · 准确 · 智能制造") }}</p></div>
+        <div class="pda-manufacturing-mark" aria-hidden="true"><van-icon name="setting-o" /><span>E-BIKE<br>MANUFACTURING</span></div>
+        <div class="work-header-actions">
+          <LanguageMenu />
+          <van-button size="small" plain type="primary" @click="logout"><van-icon name="share-o" />{{ tr("退出") }}</van-button>
+        </div>
+      </header>
+      <van-dialog v-model:show="passwordChangeVisible" :title='tr("首次登录请修改密码")' :show-confirm-button="false" :close-on-click-overlay="false">
         <div class="password-dialog-form">
-          <van-field v-model="currentPassword" type="password" label="当前密码" />
-          <van-field v-model="newPassword" type="password" label="新密码" />
-          <van-field v-model="confirmPassword" type="password" label="确认新密码" />
-          <van-button block type="primary" :loading="passwordChanging" @click="submitPasswordChange">更新密码</van-button>
+          <van-field v-model="currentPassword" type="password" :label='tr("当前密码")' />
+          <van-field v-model="newPassword" type="password" :label='tr("新密码")' />
+          <van-field v-model="confirmPassword" type="password" :label='tr("确认新密码")' />
+          <van-button block type="primary" :loading="passwordChanging" @click="submitPasswordChange">{{ tr("更新密码") }}</van-button>
         </div>
       </van-dialog>
       <van-tabs v-if="allowedModes.length > 0" v-model:active="mode" shrink>
-        <van-tab v-if="allowedModes.includes('assembly')" name="assembly" title="组装" />
-        <van-tab v-if="allowedModes.includes('stockIn')" name="stockIn" title="入库" />
-        <van-tab v-if="allowedModes.includes('stockOut')" name="stockOut" title="出库" />
-        <van-tab v-if="allowedModes.includes('stockLookup')" name="stockLookup" title="库存查询" />
-        <van-tab v-if="allowedModes.includes('rework')" name="rework" title="返工" />
-        <van-tab v-if="allowedModes.includes('trace')" name="trace" title="追溯" />
+        <van-tab v-if="allowedModes.includes('assembly')" name="assembly" :title='tr("组装")' />
+        <van-tab v-if="allowedModes.includes('stockIn')" name="stockIn" :title='tr("入库")' />
+        <van-tab v-if="allowedModes.includes('stockOut')" name="stockOut" :title='tr("出库")' />
+        <van-tab v-if="allowedModes.includes('stockLookup')" name="stockLookup" :title='tr("库存查询")' />
+        <van-tab v-if="allowedModes.includes('rework')" name="rework" :title='tr("返工")' />
+        <van-tab v-if="allowedModes.includes('trace')" name="trace" :title='tr("追溯")' />
       </van-tabs>
-      <van-empty v-if="passwordChangeVisible" description="请先修改初始密码" />
-      <van-empty v-else-if="!allowedModes.includes(mode)" description="当前账号没有可用的 PDA 作业" />
+      <van-empty v-if="passwordChangeVisible" :description='tr("请先修改初始密码")' />
+      <van-empty v-else-if="!allowedModes.includes(mode)" :description='tr("当前账号没有可用的 PDA 作业")' />
       <section v-else-if="mode === 'assembly'" class="form-section">
         <ProductionStation v-if="authContext && !passwordChangeVisible" :key="authContext.username" :username="authContext.username" />
       </section>
       <section v-else-if="mode === 'stockIn'" class="form-section stock-in-section">
-        <van-notice-bar class="stock-in-guide" text="选择实际入库仓库和库位后，扫描整车聚合码并确认入库。" wrapable />
+        <van-notice-bar class="stock-in-guide" :text='tr("选择实际入库仓库和库位后，扫描整车聚合码并确认入库。")' wrapable />
         <section class="pda-card">
-          <h2>入库位置</h2>
+          <h2>{{ tr("入库位置") }}</h2>
           <label class="pda-field-label">
-            仓库
-            <select v-model="warehouseId" class="pda-select" aria-label="入库仓库" :disabled="busy">
-              <option :value="null" disabled>请选择仓库</option>
+            {{ tr("仓库") }}
+            <select v-model="warehouseId" class="pda-select" :aria-label='tr("入库仓库")' :disabled="busy">
+              <option :value="null" disabled>{{ tr("请选择仓库") }}</option>
               <option v-for="warehouse in warehouseOptions" :key="warehouse.value" :value="warehouse.value">{{ warehouse.text }}</option>
             </select>
           </label>
           <label class="pda-field-label">
-            库位
-            <select v-model="locationId" class="pda-select" aria-label="入库库位" :disabled="busy || warehouseId === null || locationOptions.length === 0">
-              <option :value="null" disabled>{{ warehouseId === null ? '请先选择仓库' : '请选择库位' }}</option>
+            {{ tr("库位") }}
+            <select v-model="locationId" class="pda-select" :aria-label='tr("入库库位")' :disabled="busy || warehouseId === null || locationOptions.length === 0">
+              <option :value="null" disabled>{{ tr(warehouseId === null ? '请先选择仓库' : '请选择库位') }}</option>
               <option v-for="location in locationOptions" :key="location.value" :value="location.value">{{ location.text }}</option>
             </select>
           </label>
-          <p v-if="warehouseId !== null && locationOptions.length === 0" class="pda-field-hint">当前仓库没有可用库位，请联系管理员维护库位状态。</p>
+          <p v-if="warehouseId !== null && locationOptions.length === 0" class="pda-field-hint">{{ tr("当前仓库没有可用库位，请联系管理员维护库位状态。") }}</p>
         </section>
         <section class="pda-card stock-in-scan-card">
-          <h2>扫描整车</h2>
-          <van-field ref="vehicleQrField" v-model="vehicleQrCode" label="聚合码" placeholder="扫描整车聚合码" clearable autofocus @keyup.enter="validateStockOperation('in')" />
-          <van-button block type="primary" :loading="busy" :disabled="warehouseId === null || locationId === null || !vehicleQrCode.trim()" @click="submitStockIn">确认入库</van-button>
+          <h2>{{ tr("扫描整车") }}</h2>
+          <van-field ref="vehicleQrField" v-model="vehicleQrCode" :label='tr("聚合码")' :placeholder='tr("扫描整车聚合码")' clearable autofocus @keyup.enter="validateStockOperation('in')" />
+          <van-button block type="primary" :loading="busy" :disabled="warehouseId === null || locationId === null || !vehicleQrCode.trim()" @click="submitStockIn">{{ tr("确认入库") }}</van-button>
         </section>
       </section>
       <section v-else-if="mode === 'stockOut'" class="form-section">
-        <van-field v-model="stockOutRemark" label="出库备注" type="textarea" maxlength="400" placeholder="填写本次出库说明" />
-        <van-tabs v-model:active="dispatchMode"><van-tab name="order" title="按订单出库" /><van-tab name="pi" title="PI 多车型整批出库" /></van-tabs>
+        <van-field v-model="stockOutRemark" :label='tr("出库备注")' type="textarea" maxlength="400" :placeholder='tr("填写本次出库说明")' />
+        <van-tabs v-model:active="dispatchMode"><van-tab name="order" :title='tr("按订单出库")' /><van-tab name="pi" :title='tr("PI 多车型整批出库")' /></van-tabs>
         <PiDispatchPanel v-if="authContext && !passwordChangeVisible" v-show="dispatchMode === 'pi'" :key="authContext.username" :username="authContext.username" :active="dispatchMode === 'pi'" />
         <template v-if="dispatchMode === 'order'">
-        <van-field v-model="orderKeyword" label="查找订单" placeholder="输入订单号或车型" maxlength="100" clearable :disabled="customerId === null" @keyup.enter="searchStockOutOrders">
-          <template #button><van-button size="small" type="primary" :loading="orderOptionsLoading" :disabled="customerId === null" @click="searchStockOutOrders">查询</van-button></template>
+        <van-field v-model="orderKeyword" :label='tr("查找订单")' :placeholder='tr("输入订单号或车型")' maxlength="100" clearable :disabled="customerId === null" @keyup.enter="searchStockOutOrders">
+          <template #button><van-button size="small" type="primary" :loading="orderOptionsLoading" :disabled="customerId === null" @click="searchStockOutOrders">{{ tr("查询") }}</van-button></template>
         </van-field>
         <van-dropdown-menu :overlay="false">
-          <van-dropdown-item v-model="customerId" :options="customerOptions" :title="customerId === null ? '选择客户' : undefined" />
-          <van-dropdown-item v-model="orderId" :options="orderOptions" :title="orderId === null ? '选择订单' : undefined" :disabled="orderOptionsLoading || customerId === null" />
+          <van-dropdown-item v-model="customerId" :options="customerOptions" :title="customerId === null ? tr('选择客户') : undefined" />
+          <van-dropdown-item v-model="orderId" :options="orderOptions" :title="orderId === null ? tr('选择订单') : undefined" :disabled="orderOptionsLoading || customerId === null" />
         </van-dropdown-menu>
-        <van-cell title="待出库订单" :value="`共 ${orderTotal} 条 · 第 ${orderPage}/${orderPageCount} 页`">
-          <template #label><van-button size="mini" :disabled="orderOptionsLoading || orderPage <= 1" @click="loadStockOutOrders(orderPage - 1)">上一页</van-button> <van-button size="mini" :disabled="orderOptionsLoading || orderPage >= orderPageCount" @click="loadStockOutOrders(orderPage + 1)">下一页</van-button></template>
+        <van-cell :title='tr("待出库订单")' :value="`共 ${orderTotal} 条 · 第 ${orderPage}/${orderPageCount} 页`">
+          <template #label><van-button size="mini" :disabled="orderOptionsLoading || orderPage <= 1" @click="loadStockOutOrders(orderPage - 1)">{{ tr("上一页") }}</van-button> <van-button size="mini" :disabled="orderOptionsLoading || orderPage >= orderPageCount" @click="loadStockOutOrders(orderPage + 1)">{{ tr("下一页") }}</van-button></template>
         </van-cell>
-        <van-notice-bar v-if="orderOptionsError" :text="orderOptionsError" wrapable color="#c62828" background="#fff0f0" />
-        <van-cell v-else-if="!orderOptionsLoading && !orders.length && customerId !== null" title="当前客户没有匹配的待出库订单" label="可修改搜索条件后查询；只有已确认或部分出库且仍有待发数量的订单可选。" />
+        <van-notice-bar v-if="orderOptionsError" :text="tr(orderOptionsError)" wrapable color="#c62828" background="#fff0f0" />
+        <van-cell v-else-if="!orderOptionsLoading && !orders.length && customerId !== null" :title='tr("当前客户没有匹配的待出库订单")' :label='tr("可修改搜索条件后查询；只有已确认或部分出库且仍有待发数量的订单可选。")' />
         <div class="stock-summary">
-          <van-cell title="订单数量" :value="`${orderTotalQty} 台`" />
-          <van-cell title="已出库数量" :value="`${orderShippedQty} 台`" />
-          <van-cell title="本次剩余可出库" :value="`${orderRemainingQty} 台`" />
+          <van-cell :title='tr("订单数量")' :value="`${orderTotalQty} 台`" />
+          <van-cell :title='tr("已出库数量")' :value="`${orderShippedQty} 台`" />
+          <van-cell :title='tr("本次剩余可出库")' :value="`${orderRemainingQty} 台`" />
         </div>
-        <van-field ref="vehicleQrField" v-model="vehicleQrCode" label="聚合码" placeholder="扫码或粘贴总码，自动加入" clearable autofocus :disabled="busy || stockOutScanBusy || customerId === null || orderId === null || orderRemainingQty <= 0" @keyup.enter="scanStockOutVehicle">
-          <template #button><van-button size="small" type="primary" :loading="stockOutScanBusy" :disabled="busy || !vehicleQrCode.trim() || customerId === null || orderId === null || orderRemainingQty <= 0" @click="scanStockOutVehicle">加入</van-button></template>
+        <van-field ref="vehicleQrField" v-model="vehicleQrCode" :label='tr("聚合码")' :placeholder='tr("扫码或粘贴总码，自动加入")' clearable autofocus :disabled="busy || stockOutScanBusy || customerId === null || orderId === null || orderRemainingQty <= 0" @keyup.enter="scanStockOutVehicle">
+          <template #button><van-button size="small" type="primary" :loading="stockOutScanBusy" :disabled="busy || !vehicleQrCode.trim() || customerId === null || orderId === null || orderRemainingQty <= 0" @click="scanStockOutVehicle">{{ tr("加入") }}</van-button></template>
         </van-field>
-        <p class="pda-field-hint">完整总码扫码后自动校验加入，无需回车；核对清单后再确认出库。</p>
-        <van-cell title="已扫描数量" :value="`${scannedVehicleQrs.length} 台`" />
+        <p class="pda-field-hint">{{ tr("完整总码扫码后自动校验加入，无需回车；核对清单后再确认出库。") }}</p>
+        <van-cell :title='tr("已扫描数量")' :value="`${scannedVehicleQrs.length} 台`" />
         <van-tag v-for="qr in scannedVehicleQrs" :key="qr" type="success" size="large" closeable @close="scannedVehicleQrs = scannedVehicleQrs.filter(item => item !== qr)">{{ qr }}</van-tag>
-        <van-button block type="primary" :loading="busy" :disabled="stockOutScanBusy || !!vehicleQrCode.trim() || !scannedVehicleQrs.length" @click="submitStockOut">确认批量出库</van-button>
+        <van-button block type="primary" :loading="busy" :disabled="stockOutScanBusy || !!vehicleQrCode.trim() || !scannedVehicleQrs.length" @click="submitStockOut">{{ tr("确认批量出库") }}</van-button>
         </template>
       </section>
       <section v-else-if="mode === 'rework'" class="form-section operation-section rework-section">
-        <section class="operation-guide is-warning" aria-label="返工作业提示">
+        <section class="operation-guide is-warning" :aria-label='tr("返工作业提示")'>
           <span><van-icon name="warning-o" /></span>
-          <div><h2>返工换件</h2><p>核对车辆聚合码和新部件 SN，确认后将更新车辆绑定关系并保留换件记录。</p></div>
+          <div><h2>{{ tr("返工换件") }}</h2><p>{{ tr("核对车辆聚合码和新部件 SN，确认后将更新车辆绑定关系并保留换件记录。") }}</p></div>
         </section>
 
         <section class="pda-card operation-card">
           <header class="operation-card-heading">
             <span class="operation-heading-icon is-blue"><van-icon name="scan" /></span>
-            <div><h2>识别返工车辆</h2><p>扫描车辆现有聚合码</p></div>
+            <div><h2>{{ tr("识别返工车辆") }}</h2><p>{{ tr("扫描车辆现有聚合码") }}</p></div>
           </header>
           <div class="pda-input-group">
-            <span class="pda-input-label"><van-icon name="qr" />车辆聚合码</span>
-            <van-field ref="reworkQrField" v-model="reworkQrCode" aria-label="车辆聚合码" placeholder="扫描车辆聚合码" clearable autofocus @keyup.enter="focusField(reworkPartField)">
+            <span class="pda-input-label"><van-icon name="qr" />{{ tr("车辆聚合码") }}</span>
+            <van-field ref="reworkQrField" v-model="reworkQrCode" :aria-label='tr("车辆聚合码")' :placeholder='tr("扫描车辆聚合码")' clearable autofocus @keyup.enter="focusField(reworkPartField)">
               <template #left-icon><van-icon name="scan" /></template>
             </van-field>
           </div>
@@ -616,66 +626,66 @@ if (loggedIn.value) {
         <section class="pda-card operation-card replacement-card">
           <header class="operation-card-heading">
             <span class="operation-heading-icon is-orange"><van-icon name="exchange" /></span>
-            <div><h2>登记更换部件</h2><p>选择部件类型并扫描新件编号</p></div>
+            <div><h2>{{ tr("登记更换部件") }}</h2><p>{{ tr("选择部件类型并扫描新件编号") }}</p></div>
           </header>
           <label class="pda-field-label">
-            <span><van-icon name="setting-o" />更换部件类型</span>
+            <span><van-icon name="setting-o" />{{ tr("更换部件类型") }}</span>
             <span class="pda-select-control">
-              <select v-model="reworkPartType" class="pda-select" aria-label="更换部件类型" :disabled="busy" @change="focusField(reworkPartField)">
-                <option value="BATTERY">电池</option>
-                <option value="MOTOR">电机</option>
-                <option value="DISPLAY">仪表</option>
+              <select v-model="reworkPartType" class="pda-select" :aria-label='tr("更换部件类型")' :disabled="busy" @change="focusField(reworkPartField)">
+                <option value="BATTERY">{{ tr("电池") }}</option>
+                <option value="MOTOR">{{ tr("电机") }}</option>
+                <option value="DISPLAY">{{ tr("仪表") }}</option>
               </select>
               <van-icon name="arrow-down" aria-hidden="true" />
             </span>
           </label>
           <div class="pda-input-group">
-            <span class="pda-input-label"><van-icon name="records-o" />新零部件 SN</span>
-            <van-field ref="reworkPartField" v-model="reworkNewPartSn" aria-label="新零部件 SN" placeholder="扫描新零部件 SN" clearable @keyup.enter="focusField(reworkReasonField)">
+            <span class="pda-input-label"><van-icon name="records-o" />{{ tr("新零部件 SN") }}</span>
+            <van-field ref="reworkPartField" v-model="reworkNewPartSn" :aria-label='tr("新零部件 SN")' :placeholder='tr("扫描新零部件 SN")' clearable @keyup.enter="focusField(reworkReasonField)">
               <template #left-icon><van-icon name="scan" /></template>
             </van-field>
           </div>
           <div class="pda-input-group">
-            <span class="pda-input-label"><van-icon name="description" />返工原因</span>
-            <van-field ref="reworkReasonField" v-model="reworkReason" aria-label="返工原因" placeholder="填写返工原因" type="textarea" rows="3" autosize @keyup.enter="submitRework" />
+            <span class="pda-input-label"><van-icon name="description" />{{ tr("返工原因") }}</span>
+            <van-field ref="reworkReasonField" v-model="reworkReason" :aria-label='tr("返工原因")' :placeholder='tr("填写返工原因")' type="textarea" rows="3" autosize @keyup.enter="submitRework" />
           </div>
-          <van-button class="operation-primary-button" block type="primary" :loading="busy" @click="submitRework"><van-icon name="exchange" />确认换件</van-button>
+          <van-button class="operation-primary-button" block type="primary" :loading="busy" @click="submitRework"><van-icon name="exchange" />{{ tr("确认换件") }}</van-button>
         </section>
       </section>
       <VehicleStockLookup v-else-if="mode === 'stockLookup'" />
       <section v-else class="form-section operation-section trace-section">
-        <section class="operation-guide is-info" aria-label="追溯查询提示">
+        <section class="operation-guide is-info" :aria-label='tr("追溯查询提示")'>
           <span><van-icon name="records-o" /></span>
-          <div><h2>整车追溯</h2><p>支持聚合码、车架 SN 和零部件 SN，查询车辆生产、换件及出入库完整链路。</p></div>
+          <div><h2>{{ tr("整车追溯") }}</h2><p>{{ tr("支持聚合码、车架 SN 和零部件 SN，查询车辆生产、换件及出入库完整链路。") }}</p></div>
         </section>
 
         <section class="pda-card operation-card trace-query-card">
           <header class="operation-card-heading">
             <span class="operation-heading-icon is-blue"><van-icon name="search" /></span>
-            <div><h2>查询追溯链路</h2><p>选择编码类型后扫码或手动输入</p></div>
+            <div><h2>{{ tr("查询追溯链路") }}</h2><p>{{ tr("选择编码类型后扫码或手动输入") }}</p></div>
           </header>
           <label class="pda-field-label">
-            <span><van-icon name="cluster-o" />追溯类型</span>
+            <span><van-icon name="cluster-o" />{{ tr("追溯类型") }}</span>
             <span class="pda-select-control">
-              <select v-model="traceType" class="pda-select" aria-label="追溯类型" :disabled="busy" @change="focusField(traceField)">
-                <option value="qr">整车聚合码</option>
-                <option value="frame">车架 SN</option>
-                <option value="part">零部件 SN</option>
+              <select v-model="traceType" class="pda-select" :aria-label='tr("追溯类型")' :disabled="busy" @change="focusField(traceField)">
+                <option value="qr">{{ tr("整车聚合码") }}</option>
+                <option value="frame">{{ tr("车架 SN") }}</option>
+                <option value="part">{{ tr("零部件 SN") }}</option>
               </select>
               <van-icon name="arrow-down" aria-hidden="true" />
             </span>
           </label>
           <div class="pda-input-group">
-            <span class="pda-input-label"><van-icon name="scan" />追溯编码</span>
-            <van-field ref="traceField" v-model="traceKey" aria-label="追溯编码" placeholder="扫描所选类型的编码" clearable autofocus @keyup.enter="queryTrace">
+            <span class="pda-input-label"><van-icon name="scan" />{{ tr("追溯编码") }}</span>
+            <van-field ref="traceField" v-model="traceKey" :aria-label='tr("追溯编码")' :placeholder='tr("扫描所选类型的编码")' clearable autofocus @keyup.enter="queryTrace">
               <template #left-icon><van-icon name="scan" /></template>
             </van-field>
           </div>
-          <van-button class="operation-primary-button" block type="primary" :loading="busy" @click="queryTrace"><van-icon name="search" />查询完整链路</van-button>
+          <van-button class="operation-primary-button" block type="primary" :loading="busy" @click="queryTrace"><van-icon name="search" />{{ tr("查询完整链路") }}</van-button>
         </section>
         <TraceDetails v-if="traceData" :data="traceData" @select-code="traceRelatedCode" />
       </section>
-      <van-notice-bar v-if="resultMessage" :text="resultMessage" wrapable :color="resultSuccess ? '#16a36a' : '#ee0a24'" :background="resultSuccess ? '#edf9f1' : '#fff1f0'" />
+      <van-notice-bar v-if="resultMessage" :text="tr(resultMessage)" wrapable :color="resultSuccess ? '#16a36a' : '#ee0a24'" :background="resultSuccess ? '#edf9f1' : '#fff1f0'" />
     </section>
   </main>
 </template>

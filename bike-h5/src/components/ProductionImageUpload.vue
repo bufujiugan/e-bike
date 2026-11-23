@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/language'
 import { createUuid } from '../utils/uuid'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import api from '../api'
@@ -60,15 +61,15 @@ onBeforeUnmount(() => { generation++; emit('busy', false) })
 
 <template>
   <section class="attachment-queue">
-    <p>每批最多20张图片；JPG / PNG / WebP，每张最大20MB。</p>
-    <input ref="input" type="file" multiple :accept="accept" :disabled="working || disabled" aria-label="选择生产图片" @change="select" />
-    <div class="queue-actions"><van-button size="small" type="primary" :loading="working" :disabled="!pending || disabled" @click="start()">上传待处理图片</van-button><van-button size="small" :disabled="working || !entries.length" @click="clear">清空当前批次</van-button></div>
-    <p v-if="error" role="alert">{{ error }}</p>
+    <p>{{ tr("每批最多20张图片；JPG / PNG / WebP，每张最大20MB。") }}</p>
+    <input ref="input" type="file" multiple :accept="accept" :disabled="working || disabled" :aria-label='tr("选择生产图片")' @change="select" />
+    <div class="queue-actions"><van-button size="small" type="primary" :loading="working" :disabled="!pending || disabled" @click="start()">{{ tr("上传待处理图片") }}</van-button><van-button size="small" :disabled="working || !entries.length" @click="clear">{{ tr("清空当前批次") }}</van-button></div>
+    <p v-if="error" role="alert">{{ tr(error) }}</p>
     <div v-for="row in entries" :key="row.id" class="queue-item">
       <span>{{ row.file.name }} · {{ Math.ceil(row.file.size / 1024) }} KB</span>
-      <progress :value="row.progress" max="100" :aria-label="row.file.name + '上传进度'" />
-      <span role="status">{{ row.progress }}% · {{ row.message || (row.state === 'uploading' ? '上传并校验中' : '等待上传') }}</span>
-      <van-button v-if="row.state === 'failed'" size="small" :disabled="working || disabled" @click="start(row)">重试此图片</van-button>
+      <progress :value="row.progress" max="100" :aria-label="row.file.name + tr('上传进度')" />
+      <span role="status">{{ row.progress }}% · {{ row.message || (row.state === 'uploading' ? tr('上传并校验中') : tr('等待上传')) }}</span>
+      <van-button v-if="row.state === 'failed'" size="small" :disabled="working || disabled" @click="start(row)">{{ tr("重试此图片") }}</van-button>
     </div>
   </section>
 </template>

@@ -13,7 +13,7 @@
         >{{ String(value) === String(item.value) ? "● " : "○ "
         }}{{ item.text }}</text
       ></view
-    ><text v-if="!options.length" class="label">暂无可选记录</text></view
+    ><text v-if="!options.length" class="label">{{ emptyLabel }}</text></view
   >
 </template>
 <script>
@@ -23,6 +23,7 @@ export default {
     options: { default: () => [] },
     value: [Number, String],
     disabled: Boolean,
+    emptyLabel: { type: String, default: "暂无可选记录" },
   },
   methods: {
     choose(item) {

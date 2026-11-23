@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr, trInline } from '../i18n/language'
 import RecordIdColumn from './table/RecordIdColumn.vue'
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -20,10 +21,10 @@ async function load(next = 1) {
 }
 async function act(row: Row, action: 'reconcile' | 'cleanup') {
   let reason: string
-  try { const result = await ElMessageBox.prompt(action === 'cleanup' ? '清理只针对没有业务引用的文件。请输入核对结论及清理原因。' : '请输入本次核对原因。正在上传的记录会被跳过。', action === 'cleanup' ? '清理未绑定文件' : '重新核对', { inputValidator: value => !!value?.trim() && value.trim().length <= 500 || '请输入1至500字原因', confirmButtonText: '确认', cancelButtonText: '取消' }); reason = result.value.trim() }
+  try { const result = await ElMessageBox.prompt(tr(action === 'cleanup' ? '清理只针对没有业务引用的文件。请输入核对结论及清理原因。' : '请输入本次核对原因。正在上传的记录会被跳过。'), tr(action === 'cleanup' ? '清理未绑定文件' : '重新核对'), { inputValidator: value => !!value?.trim() && value.trim().length <= 500 || tr('请输入1至500字原因'), confirmButtonText: tr('确认'), cancelButtonText: tr('取消') }); reason = result.value.trim() }
   catch { return }
   busy.value = true; error.value = ''
-  try { const updated = (await api.post(`/api/file-reviews/${action}`, { objectKey: row.objectKey, version: row.version, reason })).data.data; ElMessage.success(`当前状态：${labels[updated.state] || updated.state}`) }
+  try { const updated = (await api.post(`/api/file-reviews/${action}`, { objectKey: row.objectKey, version: row.version, reason })).data.data; ElMessage.success(tr("当前状态：{value0}", { value0: labels[updated.state] || updated.state })) }
   catch (e) { error.value = message(e) }
   finally { busy.value = false }
   if (!error.value) await load(page.value)
@@ -38,25 +39,25 @@ onMounted(() => load())
 </script>
 <template>
   <section class="panel data-panel">
-    <h2>上传失败核对</h2>
-    <p>查看上传及业务绑定未完成的文件，核对后清理未绑定文件。已绑定附件保留在原业务中；此处不提供内容下载或重新绑定。</p>
-    <el-alert v-if="error" :title="error" type="error" :closable="false" />
-    <el-form inline @submit.prevent="load()"><el-form-item label="状态"><el-select v-model="state" style="width: 210px" :disabled="busy"><el-option label="待处理（默认）" value="" /><el-option v-for="key in ['PENDING','REVIEW','CLEANUP_PENDING','CLEANED','BOUND']" :key="key" :label="labels[key]" :value="key" /></el-select></el-form-item><el-button native-type="submit" :loading="busy">查询 / 刷新</el-button></el-form>
-    <el-table :data="records" v-loading="busy" empty-text="没有匹配的上传记录">
-      <RecordIdColumn prop="objectKey" label="文件 ID（objectKey）" />
-      <el-table-column label="业务" min-width="135"><template #default="{ row }">{{ purposes[row.purpose] || row.purpose }} · {{ row.businessId }}</template></el-table-column>
-      <el-table-column prop="fileName" label="文件名" min-width="170" show-overflow-tooltip />
-      <el-table-column label="大小" width="100"><template #default="{ row }">{{ (row.fileSize / 1024).toFixed(1) }} KB</template></el-table-column>
-      <el-table-column label="状态" min-width="110"><template #default="{ row }">{{ labels[row.state] }}<br>{{ labels[row.objectState] }}</template></el-table-column>
-      <el-table-column label="核对结果" min-width="180"><template #default="{ row }">{{ errors[row.errorCode] || row.errorCode || '—' }}<br>{{ row.reviewReason || '' }}</template></el-table-column>
-      <el-table-column prop="createdName" label="上传人员" min-width="100" />
-      <el-table-column label="创建时间" min-width="175"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column>
-      <el-table-column label="修改时间" min-width="175"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column>
-      <el-table-column label="操作" width="215"><template #default="{ row }"><el-button size="small" :disabled="busy" @click="act(row, 'reconcile')">核对</el-button><el-button v-if="['REVIEW','CLEANUP_PENDING'].includes(row.state)" size="small" type="danger" :disabled="busy" @click="act(row, 'cleanup')">清理</el-button><el-button size="small" :disabled="busy" @click="showHistory(row)">历史</el-button></template></el-table-column>
+    <h2>{{ tr("上传失败核对") }}</h2>
+    <p>{{ tr("查看上传及业务绑定未完成的文件，核对后清理未绑定文件。已绑定附件保留在原业务中；此处不提供内容下载或重新绑定。") }}</p>
+    <el-alert v-if="error" :title="tr(error)" type="error" :closable="false" />
+    <el-form inline @submit.prevent="load()"><el-form-item :label='tr("状态")'><el-select v-model="state" style="width: 210px" :disabled="busy"><el-option :label='tr("待处理（默认）")' value="" /><el-option v-for="key in ['PENDING','REVIEW','CLEANUP_PENDING','CLEANED','BOUND']" :key="key" :label="tr(labels[key])" :value="key" /></el-select></el-form-item><el-button native-type="submit" :loading="busy">{{ tr("查询 / 刷新") }}</el-button></el-form>
+    <el-table :data="records" v-loading="busy" :empty-text='tr("没有匹配的上传记录")'>
+      <RecordIdColumn prop="objectKey" :label='tr("文件 ID（objectKey）")' />
+      <el-table-column :label='tr("业务")' min-width="135"><template #default="{ row }">{{ tr(purposes[row.purpose] || row.purpose) }} · {{ row.businessId }}</template></el-table-column>
+      <el-table-column prop="fileName" :label='tr("文件名")' min-width="170" show-overflow-tooltip />
+      <el-table-column :label='tr("大小")' width="100"><template #default="{ row }">{{ (row.fileSize / 1024).toFixed(1) }} KB</template></el-table-column>
+      <el-table-column :label='tr("状态")' min-width="110"><template #default="{ row }">{{ tr(labels[row.state]) }}<br>{{ tr(labels[row.objectState]) }}</template></el-table-column>
+      <el-table-column :label='tr("核对结果")' min-width="180"><template #default="{ row }">{{ tr(errors[row.errorCode] || row.errorCode || '—') }}<br>{{ row.reviewReason || '' }}</template></el-table-column>
+      <el-table-column prop="createdName" :label='tr("上传人员")' min-width="100" />
+      <el-table-column :label='tr("创建时间")' min-width="175"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column>
+      <el-table-column :label='tr("修改时间")' min-width="175"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column>
+      <el-table-column :label='tr("操作")' width="215"><template #default="{ row }"><el-button size="small" :disabled="busy" @click="act(row, 'reconcile')">{{ tr("核对") }}</el-button><el-button v-if="['REVIEW','CLEANUP_PENDING'].includes(row.state)" size="small" type="danger" :disabled="busy" @click="act(row, 'cleanup')">{{ tr("清理") }}</el-button><el-button size="small" :disabled="busy" @click="showHistory(row)">{{ tr("历史") }}</el-button></template></el-table-column>
     </el-table>
-    <p>共 {{ total }} 条，第 {{ page }} 页。超时未绑定记录会自动进入核对；文件清理须由授权人员明确申请。</p>
-    <el-button :disabled="busy || page <= 1" @click="load(page - 1)">上一页</el-button><el-button :disabled="busy || page * 20 >= total" @click="load(page + 1)">下一页</el-button>
-    <el-dialog v-model="historyVisible" title="最近100条核对历史" width="850px"><el-table :data="history">
-      <RecordIdColumn /><el-table-column label="操作"><template #default="{ row }">{{ row.action === 'RECONCILE' ? '核对' : '申请清理' }}</template></el-table-column><el-table-column prop="operatorName" label="人员" /><el-table-column prop="reason" label="原因" min-width="200" /><el-table-column label="时间" min-width="175"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column></el-table></el-dialog>
+    <p>{{ trInline("共") }} {{ total }} {{ trInline("条，第") }} {{ page }} {{ trInline("页。超时未绑定记录会自动进入核对；文件清理须由授权人员明确申请。") }}</p>
+    <el-button :disabled="busy || page <= 1" @click="load(page - 1)">{{ tr("上一页") }}</el-button><el-button :disabled="busy || page * 20 >= total" @click="load(page + 1)">{{ tr("下一页") }}</el-button>
+    <el-dialog v-model="historyVisible" :title='tr("最近100条核对历史")' width="850px"><el-table :data="history">
+      <RecordIdColumn /><el-table-column :label='tr("操作")'><template #default="{ row }">{{ row.action === 'RECONCILE' ? tr('核对') : tr('申请清理') }}</template></el-table-column><el-table-column prop="operatorName" :label='tr("人员")' /><el-table-column prop="reason" :label='tr("原因")' min-width="200" /><el-table-column :label='tr("时间")' min-width="175"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column></el-table></el-dialog>
   </section>
 </template>

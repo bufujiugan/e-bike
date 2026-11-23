@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr, trInline } from '../i18n/language'
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '../api'
@@ -43,33 +44,33 @@ async function save() {
   try {
     const result = (await api.put(`/api/users/${userId.value}/customer-scope`, { revision: revision.value, customerIds: selected.value, reason: reason.value.trim() })).data.data
     revision.value = result.revision; selected.value = [...result.customerIds]; assigned.value = result.customers; reason.value = ''
-    ElMessage.success('客户授权已保存，下次请求立即生效')
+    ElMessage.success(tr('客户授权已保存，下次请求立即生效'))
   } catch (e) { error.value = message(e) }
   finally { busy.value = false }
 }
 </script>
 <template>
-  <button class="row-action" @click="open">客户授权</button>
-  <el-dialog v-model="visible" :title="`${username} · 客户授权范围`" width="min(700px, 95vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy">
+  <button class="row-action" @click="open">{{ tr("客户授权") }}</button>
+  <el-dialog v-model="visible" :title="tr('{value0} · 客户授权范围', { value0: username })" width="min(700px, 95vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy">
     <el-form label-position="top" @submit.prevent="save">
-      <el-alert v-if="error" :title="error" type="error" :closable="false" />
-      <p>业务权限与客户授权同时生效。清空名单会撤销此账号的逐客户授权；拥有“全部客户范围”角色或超级管理员角色的账号仍可访问全部客户。</p>
-      <el-form-item label="搜索待授权客户">
-        <el-input v-model="customerSearch" placeholder="客户编号或名称" :disabled="busy || searching" @keydown.enter.prevent="searchCustomers()" />
-        <el-button :disabled="busy || searching" @click="searchCustomers()">查询</el-button>
-        <el-button :disabled="busy || searching || customerPage <= 1" @click="searchCustomers(customerPage - 1)">上一页</el-button>
-        <el-button :disabled="busy || searching || customerPage * 50 >= customerTotal" @click="searchCustomers(customerPage + 1)">下一页</el-button>
-        <span>匹配 {{ customerTotal }} 个客户，第 {{ customerPage }} 页；已选客户跨页保留。</span>
+      <el-alert v-if="error" :title="tr(error)" type="error" :closable="false" />
+      <p>{{ tr("业务权限与客户授权同时生效。清空名单会撤销此账号的逐客户授权；拥有“全部客户范围”角色或超级管理员角色的账号仍可访问全部客户。") }}</p>
+      <el-form-item :label='tr("搜索待授权客户")'>
+        <el-input v-model="customerSearch" :placeholder='tr("客户编号或名称")' :disabled="busy || searching" @keydown.enter.prevent="searchCustomers()" />
+        <el-button :disabled="busy || searching" @click="searchCustomers()">{{ tr("查询") }}</el-button>
+        <el-button :disabled="busy || searching || customerPage <= 1" @click="searchCustomers(customerPage - 1)">{{ tr("上一页") }}</el-button>
+        <el-button :disabled="busy || searching || customerPage * 50 >= customerTotal" @click="searchCustomers(customerPage + 1)">{{ tr("下一页") }}</el-button>
+        <span>{{ trInline("匹配") }} {{ customerTotal }} {{ trInline("个客户，第") }} {{ customerPage }} {{ trInline("页；已选客户跨页保留。") }}</span>
       </el-form-item>
-      <el-form-item label="授权客户">
+      <el-form-item :label='tr("授权客户")'>
         <el-select v-model="selected" multiple filterable :disabled="busy || searching || !userId" style="width:100%">
-          <el-option v-for="customer in options" :key="customer.id" :value="customer.id" :label="`${customer.code} · ${customer.name}${customer.status === 'ENABLED' ? '' : '（停用）'}`" />
+          <el-option v-for="customer in options" :key="customer.id" :value="customer.id" :label="`${customer.code} · ${customer.name}${customer.status === 'ENABLED' ? '' : tr('（停用）')}`" />
         </el-select>
       </el-form-item>
-      <el-form-item label="修改原因" required><el-input v-model="reason" maxlength="500" :disabled="busy" /></el-form-item>
-      <el-button type="primary" native-type="submit" :loading="busy" :disabled="!userId || searching">保存授权</el-button>
-      <el-button :disabled="busy" @click="load">重新读取</el-button>
-      <p>授权版本 {{ revision }}；出现版本冲突时请重新读取，再核对修改。</p>
+      <el-form-item :label='tr("修改原因")' required><el-input v-model="reason" maxlength="500" :disabled="busy" /></el-form-item>
+      <el-button type="primary" native-type="submit" :loading="busy" :disabled="!userId || searching">{{ tr("保存授权") }}</el-button>
+      <el-button :disabled="busy" @click="load">{{ tr("重新读取") }}</el-button>
+      <p>{{ trInline("授权版本") }} {{ revision }}{{ trInline("；出现版本冲突时请重新读取，再核对修改。") }}</p>
     </el-form>
   </el-dialog>
 </template>

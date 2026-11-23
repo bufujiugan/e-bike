@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../../i18n/language'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '../../api'
@@ -74,7 +75,7 @@ async function saveImage() {
   try {
     if (await decoration.save(resetPending.value ? null : draftFile.value)) {
       discardDraft()
-      ElMessage.success('装饰图片已保存，其他设备重新登录后也会加载。')
+      ElMessage.success(tr('装饰图片已保存，其他设备重新登录后也会加载。'))
       emit('update:modelValue', false)
     }
   } catch (error) {
@@ -90,23 +91,23 @@ onBeforeUnmount(discardDraft)
 </script>
 
 <template>
-  <el-dialog :model-value="modelValue" title="更换装饰图片" width="min(560px, calc(100vw - 24px))" class="decoration-image-dialog" append-to-body :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving" @update:model-value="emit('update:modelValue', $event)" @closed="discardDraft">
-    <p class="decoration-description">换上喜欢的宠物、角色或自己的图片。工作台、运营页和侧栏会一起更新。</p>
-    <el-alert v-if="decoration?.loadError.value" type="warning" :closable="false" :title="decoration.loadError.value"><el-button link :loading="decoration.loading.value" :disabled="saving" @click="decoration.reload">重新加载</el-button></el-alert>
+  <el-dialog :model-value="modelValue" :title='tr("更换装饰图片")' width="min(560px, calc(100vw - 24px))" class="decoration-image-dialog" append-to-body :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving" @update:model-value="emit('update:modelValue', $event)" @closed="discardDraft">
+    <p class="decoration-description">{{ tr("换上喜欢的宠物、角色或自己的图片。工作台、运营页和侧栏会一起更新。") }}</p>
+    <el-alert v-if="decoration?.loadError.value" type="warning" :closable="false" :title="tr(decoration.loadError.value)"><el-button link :loading="decoration.loading.value" :disabled="saving" @click="decoration.reload">{{ tr("重新加载") }}</el-button></el-alert>
     <div class="decoration-previews" v-loading="decoration?.loading.value">
-      <div class="decoration-preview"><img :src="previewUrl" alt="页面装饰预览" @load="validatePreview" @error="rejectPreview" /><span>页面大图</span></div>
-      <div class="decoration-preview is-small"><img :src="previewUrl" alt="侧栏装饰预览" /><span>侧栏小图</span></div>
+      <div class="decoration-preview"><img :src="previewUrl" :alt='tr("页面装饰预览")' @load="validatePreview" @error="rejectPreview" /><span>{{ tr("页面大图") }}</span></div>
+      <div class="decoration-preview is-small"><img :src="previewUrl" :alt='tr("侧栏装饰预览")' /><span>{{ tr("侧栏小图") }}</span></div>
     </div>
     <div class="decoration-upload-actions">
-      <el-button :disabled="saving || decoration?.loading.value" @click="input?.click()">选择自己的图片</el-button>
-      <el-button :disabled="saving || decoration?.loading.value || (!decoration?.savedImage.value && !draftFile)" @click="restoreDefault">恢复默认</el-button>
-      <input ref="input" type="file" accept="image/png,image/jpeg,image/webp" hidden aria-label="选择装饰图片" :disabled="saving" @change="chooseImage" />
+      <el-button :disabled="saving || decoration?.loading.value" @click="input?.click()">{{ tr("选择自己的图片") }}</el-button>
+      <el-button :disabled="saving || decoration?.loading.value || (!decoration?.savedImage.value && !draftFile)" @click="restoreDefault">{{ tr("恢复默认") }}</el-button>
+      <input ref="input" type="file" accept="image/png,image/jpeg,image/webp" hidden :aria-label='tr("选择装饰图片")' :disabled="saving" @change="chooseImage" />
     </div>
-    <p class="decoration-hint">支持 PNG、JPG、WebP，最大 2 MB，宽高不超过 4096 像素。等比例显示，不裁切；透明底 PNG 的贴纸效果更好。</p>
-    <p class="decoration-account-note">仅对账号 <strong>{{ username }}</strong> 生效，保存后随账号同步。</p>
-    <p v-if="hasChange" class="decoration-draft-note" role="status">当前为预览，点击“保存图片”后生效。</p>
+    <p class="decoration-hint">{{ tr("支持 PNG、JPG、WebP，最大 2 MB，宽高不超过 4096 像素。等比例显示，不裁切；透明底 PNG 的贴纸效果更好。") }}</p>
+    <p class="decoration-account-note">{{ tr("仅对账号") }} <strong>{{ username }}</strong> {{ tr("生效，保存后随账号同步。") }}</p>
+    <p v-if="hasChange" class="decoration-draft-note" role="status">{{ tr("当前为预览，点击“保存图片”后生效。") }}</p>
     <el-alert v-if="feedback" type="error" :closable="false" :title="feedback" role="alert" />
-    <template #footer><el-button :disabled="saving" @click="emit('update:modelValue', false)">取消</el-button><el-button type="primary" :loading="saving" :disabled="!hasChange || decoration?.loading.value || Boolean(draftFile && !previewReady)" @click="saveImage">保存图片</el-button></template>
+    <template #footer><el-button :disabled="saving" @click="emit('update:modelValue', false)">{{ tr("取消") }}</el-button><el-button type="primary" :loading="saving" :disabled="!hasChange || decoration?.loading.value || Boolean(draftFile && !previewReady)" @click="saveImage">{{ tr("保存图片") }}</el-button></template>
   </el-dialog>
 </template>
 

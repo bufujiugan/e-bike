@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/language'
 import { computed } from 'vue'
 import type { Metric } from '../config/page-presentation'
 import MetricGrid from '../components/dashboard/MetricGrid.vue'
@@ -27,4 +28,4 @@ const metrics = computed<Metric[]>(() => {
   ]
 })
 </script>
-<template><MetricGrid :items="metrics" :loading="loading" /><div :class="direction === 'out' ? 'sm-stock-out-grid' : ''"><TrendCard :title="direction === 'both' ? '库存流转趋势' : `近 7 日${label}趋势`" :points="points" :direction="direction" :loading="loading" :error="error" :permitted="permitted"><template #action><span class="sm-scope-label">近 7 日</span></template><div v-if="direction === 'both' && today" class="sm-today-strip"><strong>今日数据</strong><span>{{ today.date }}</span><span>入库 <b>{{ today.stockIn }}</b></span><span>出库 <b>{{ today.stockOut }}</b></span><span>净变化 <b>{{ today.stockIn - today.stockOut > 0 ? '+' : '' }}{{ today.stockIn - today.stockOut }}</b></span></div></TrendCard><section v-if="direction === 'out'" class="sm-card sm-logistics-art"><AppIcon name="inventory" /><strong>高效 · 准确 · 可追溯</strong><p>让每一辆车，准时出发</p></section></div><slot /></template>
+<template><MetricGrid :items="metrics" :loading="loading" /><div :class="direction === 'out' ? 'sm-stock-out-grid' : ''"><TrendCard :title="tr(direction === 'both' ? '库存流转趋势' : direction === 'out' ? '近 7 日出库趋势' : '近 7 日入库趋势')" :points="points" :direction="direction" :loading="loading" :error="error" :permitted="permitted"><template #action><span class="sm-scope-label">{{ tr("近 7 日") }}</span></template><div v-if="direction === 'both' && today" class="sm-today-strip"><strong>{{ tr("今日数据") }}</strong><span>{{ today.date }}</span><span>{{ tr("入库") }} <b>{{ today.stockIn }}</b></span><span>{{ tr("出库") }} <b>{{ today.stockOut }}</b></span><span>{{ tr("净变化") }} <b>{{ today.stockIn - today.stockOut > 0 ? '+' : '' }}{{ today.stockIn - today.stockOut }}</b></span></div></TrendCard><section v-if="direction === 'out'" class="sm-card sm-logistics-art"><AppIcon name="inventory" /><strong>{{ tr("高效 · 准确 · 可追溯") }}</strong><p>{{ tr("让每一辆车，准时出发") }}</p></section></div><slot /></template>

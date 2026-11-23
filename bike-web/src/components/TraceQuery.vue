@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/language'
 import { nextTick, ref, watch } from 'vue'
 import api from '../api'
 import TraceDetails, { type TraceData } from './TraceDetails.vue'
@@ -22,13 +23,13 @@ async function selectCode(codeValue: string, codeType: 'qr' | 'frame') { type.va
 </script>
 <template>
   <section class="trace-query">
-    <h2>全链路追溯</h2><p>扫描聚合码、车架 SN 或当前/历史部件 SN，查看生产、换件与出入库记录。</p>
+    <h2>{{ tr("全链路追溯") }}</h2><p>{{ tr("扫描聚合码、车架 SN 或当前/历史部件 SN，查看生产、换件与出入库记录。") }}</p>
     <form class="trace-search" @submit.prevent="search">
-      <label>编码类型<select v-model="type"><option value="qr">整车聚合码</option><option value="frame">车架 SN（辅助查询）</option><option value="part">部件 SN（含历史旧件）</option></select></label>
-      <label class="trace-code">追溯编码<input v-model="code" placeholder="请输入或扫描编码" autocomplete="off" /></label>
-      <button type="submit" :disabled="busy">{{ busy ? '查询中…' : '开始追溯查询' }}</button>
+      <label>{{ tr("编码类型") }}<select v-model="type"><option value="qr">{{ tr("整车聚合码") }}</option><option value="frame">{{ tr("车架 SN（辅助查询）") }}</option><option value="part">{{ tr("部件 SN（含历史旧件）") }}</option></select></label>
+      <label class="trace-code">{{ tr("追溯编码") }}<input v-model="code" :placeholder='tr("请输入或扫描编码")' autocomplete="off" /></label>
+      <button type="submit" :disabled="busy">{{ busy ? tr('查询中…') : tr('开始追溯查询') }}</button>
     </form>
-    <p v-if="error" role="alert" class="trace-error">{{ error }}</p>
+    <p v-if="error" role="alert" class="trace-error">{{ tr(error) }}</p>
     <TraceDetails v-if="result" :data="result" @select-code="selectCode" />
   </section>
 </template>

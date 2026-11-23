@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/language'
 import { ref, computed, onMounted, nextTick } from 'vue'
 import api from '../api'
 import ProductionImageUpload from './ProductionImageUpload.vue'
@@ -81,7 +82,7 @@ async function scan() {
     }else message.value=`扫码成功，当前单车已完成 ${result.scans.length}/4`
   })
 }
-async function cancel() { if(!task.value||!reason.value.trim()) {message.value='请填写取消原因';failed.value=true;return}try{await showConfirmDialog({title:'取消当前单车作业',message:'已扫描记录将保留，部件占用会释放，工单计划名额可重新使用。'})}catch(action){if(action!=='cancel')error(action);return}await run(async()=>{await api.post(`/api/production/tasks/${task.value!.id}/cancel`,{reason:reason.value});task.value=undefined;taskId.value='';localStorage.removeItem(taskStorageKey.value);message.value='本车任务已取消，可以扫描下一台';reason.value='';await refreshWorkOrders()}) }
+async function cancel() { if(!task.value||!reason.value.trim()) {message.value='请填写取消原因';failed.value=true;return}try{await showConfirmDialog({title:tr('取消当前单车作业'),message:tr('已扫描记录将保留，部件占用会释放，工单计划名额可重新使用。')})}catch(action){if(action!=='cancel')error(action);return}await run(async()=>{await api.post(`/api/production/tasks/${task.value!.id}/cancel`,{reason:reason.value});task.value=undefined;taskId.value='';localStorage.removeItem(taskStorageKey.value);message.value='本车任务已取消，可以扫描下一台';reason.value='';await refreshWorkOrders()}) }
 async function printBrowser() { await run(async()=>{
   if (!selectedPrint.value || !labelReady.value || !labelFrame.value?.contentWindow) throw new Error('请选择任务并等待标签加载完成')
   const job = (await api.post(`/api/production/prints/${printId.value}/claim`,{terminal:'browser-manual'})).data.data
@@ -123,109 +124,109 @@ onMounted(async()=>{try{await refreshWorkOrders();taskId.value=localStorage.getI
 
 <template>
   <section class="production-station">
-    <section class="production-alert" aria-label="生产扫码提示">
+    <section class="production-alert" :aria-label='tr("生产扫码提示")'>
       <span class="alert-icon"><van-icon name="warning-o" /></span>
-      <p>四码任意顺序扫描，集齐后自动生成聚合码。部件需先登记，新车架请选择车架类型。</p>
+      <p>{{ tr("四码任意顺序扫描，集齐后自动生成聚合码。部件需先登记，新车架请选择车架类型。") }}</p>
     </section>
 
     <section class="station-card work-order-card">
       <header class="card-heading">
         <span class="heading-icon is-blue"><van-icon name="records-o" /></span>
-        <div><h2>当前生产工单</h2><p>选择已下达工单并核对生产信息</p></div>
-        <span class="status-pill" :class="selectedWorkOrder ? 'is-active' : ''">{{ selectedWorkOrder ? '生产作业中' : '等待选择' }}</span>
+        <div><h2>{{ tr("当前生产工单") }}</h2><p>{{ tr("选择已下达工单并核对生产信息") }}</p></div>
+        <span class="status-pill" :class="selectedWorkOrder ? 'is-active' : ''">{{ selectedWorkOrder ? tr('生产作业中') : tr('等待选择') }}</span>
       </header>
 
       <div class="work-order-search">
-        <van-field v-model="workOrderKeyword" aria-label="查找生产工单" placeholder="工单号、SKU 或批次查询" clearable @keyup.enter="run(refreshWorkOrders)">
+        <van-field v-model="workOrderKeyword" :aria-label='tr("查找生产工单")' :placeholder='tr("工单号、SKU 或批次查询")' clearable @keyup.enter="run(refreshWorkOrders)">
           <template #left-icon><van-icon name="search" /></template>
         </van-field>
-        <van-button :loading="busy" :disabled="busy" @click="run(refreshWorkOrders)"><van-icon name="replay" />查询</van-button>
+        <van-button :loading="busy" :disabled="busy" @click="run(refreshWorkOrders)"><van-icon name="replay" />{{ tr("查询") }}</van-button>
       </div>
 
-      <label class="control-label"><span><van-icon name="todo-list-o" />生产工单</span>
-        <select v-model="workOrderId" aria-label="生产工单" :disabled="!!task" @change="selectWorkOrder">
-          <option :value="undefined" disabled>请选择已下达工单</option>
+      <label class="control-label"><span><van-icon name="todo-list-o" />{{ tr("生产工单") }}</span>
+        <select v-model="workOrderId" :aria-label='tr("生产工单")' :disabled="!!task" @change="selectWorkOrder">
+          <option :value="undefined" disabled>{{ tr("请选择已下达工单") }}</option>
           <option v-for="row in selectableWorkOrders" :key="row.id" :value="row.id">{{ row.workOrderNo }} · {{ row.skuCode }} · {{ row.batchNo }}</option>
         </select>
       </label>
-      <p v-if="!busy && workOrderKeyword.trim() && !workOrders.length" class="empty-hint">未找到匹配的已下达工单，请核对工单号、SKU 或批次。</p>
+      <p v-if="!busy && workOrderKeyword.trim() && !workOrders.length" class="empty-hint">{{ tr("未找到匹配的已下达工单，请核对工单号、SKU 或批次。") }}</p>
 
       <div v-if="selectedWorkOrder" class="work-order-details">
-        <div class="detail-row"><span><van-icon name="cluster-o" />SKU 信息</span><strong>{{ selectedWorkOrder.skuCode }} · {{ selectedWorkOrder.productName }}</strong></div>
-        <div class="detail-row"><span><van-icon name="label-o" />批次</span><strong>{{ selectedWorkOrder.batchNo }}</strong></div>
+        <div class="detail-row"><span><van-icon name="cluster-o" />{{ tr("SKU 信息") }}</span><strong>{{ selectedWorkOrder.skuCode }} · {{ selectedWorkOrder.productName }}</strong></div>
+        <div class="detail-row"><span><van-icon name="label-o" />{{ tr("批次") }}</span><strong>{{ selectedWorkOrder.batchNo }}</strong></div>
         <div class="progress-block">
-          <div class="progress-meta"><span><van-icon name="chart-trending-o" />完成进度</span><strong>{{ selectedWorkOrder.completedQuantity }}/{{ selectedWorkOrder.plannedQuantity }}</strong></div>
+          <div class="progress-meta"><span><van-icon name="chart-trending-o" />{{ tr("完成进度") }}</span><strong>{{ selectedWorkOrder.completedQuantity }}/{{ selectedWorkOrder.plannedQuantity }}</strong></div>
           <div class="progress-line"><i :style="{ width: `${workOrderProgress}%` }" /></div>
-          <div class="progress-footer"><span>{{ workOrderProgress }}%</span><span class="in-progress-count">作业中 {{ selectedWorkOrder.inProgressQuantity }}</span></div>
+          <div class="progress-footer"><span>{{ workOrderProgress }}%</span><span class="in-progress-count">{{ tr("作业中") }} {{ selectedWorkOrder.inProgressQuantity }}</span></div>
         </div>
       </div>
-      <div v-else class="work-order-empty"><van-icon name="orders-o" /><span>请选择生产工单后开始扫描</span></div>
+      <div v-else class="work-order-empty"><van-icon name="orders-o" /><span>{{ tr("请选择生产工单后开始扫描") }}</span></div>
     </section>
 
     <section class="station-card scan-card" :class="{ 'has-task': task }">
       <header class="scan-heading">
         <span class="heading-icon is-green"><van-icon name="scan" /></span>
-        <div><h2>{{ task ? '继续扫描当前单车' : '扫描下一台车' }}</h2><p>请扫描车架码 / 部件码，系统将自动识别</p></div>
+        <div><h2>{{ task ? tr('继续扫描当前单车') : tr('扫描下一台车') }}</h2><p>{{ tr("请扫描车架码 / 部件码，系统将自动识别") }}</p></div>
         <span v-if="task" class="scan-count">{{ scanProgress }}/4</span>
       </header>
 
       <div v-if="task" class="current-task-summary">
-        <p><span>单车任务</span><strong>{{ task.id }}</strong></p>
+        <p><span>{{ tr("单车任务") }}</span><strong>{{ task.id }}</strong></p>
         <div class="code-progress-grid">
           <div v-for="(name,type) in labels" :key="type" :class="{ 'is-scanned': task.scans.some(scan => scan.codeType === type) }">
             <van-icon :name="task.scans.some(scan => scan.codeType === type) ? 'checked' : 'underway-o'" />
             <span>{{ name }}</span>
-            <strong>{{ task.scans.find(scan=>scan.codeType===type)?.code || '待扫描' }}</strong>
+            <strong>{{ task.scans.find(scan=>scan.codeType===type)?.code || tr('待扫描') }}</strong>
           </div>
         </div>
       </div>
 
       <div class="scan-controls">
-        <label class="control-label"><span><van-icon name="description-o" />编码类型</span>
-          <select v-model="expectedType" aria-label="编码类型" :disabled="!workOrderId">
-            <option value="">自动识别</option>
+        <label class="control-label"><span><van-icon name="description-o" />{{ tr("编码类型") }}</span>
+          <select v-model="expectedType" :aria-label='tr("编码类型")' :disabled="!workOrderId">
+            <option value="">{{ tr("自动识别") }}</option>
             <option v-for="(name,type) in labels" :key="type" :value="type">{{name}}</option>
           </select>
         </label>
-        <label class="control-label"><span><van-icon name="bars" />扫描编码</span>
-          <van-field ref="scanInput" v-model="scanCode" aria-label="扫描编码" placeholder="首码自动建单车记录，四码可任意顺序" :disabled="busy || !workOrderId" autofocus clearable @keyup.enter="scan">
-            <template #right-icon><button class="scan-focus-button" type="button" aria-label="聚焦扫描输入框" :disabled="busy || !workOrderId" @click="focusScanInput"><van-icon name="scan" /></button></template>
+        <label class="control-label"><span><van-icon name="bars" />{{ tr("扫描编码") }}</span>
+          <van-field ref="scanInput" v-model="scanCode" :aria-label='tr("扫描编码")' :placeholder='tr("首码自动建单车记录，四码可任意顺序")' :disabled="busy || !workOrderId" autofocus clearable @keyup.enter="scan">
+            <template #right-icon><button class="scan-focus-button" type="button" :aria-label='tr("聚焦扫描输入框")' :disabled="busy || !workOrderId" @click="focusScanInput"><van-icon name="scan" /></button></template>
           </van-field>
         </label>
       </div>
 
       <div v-if="busy || message" class="scan-feedback" :class="scanFeedbackClass" role="status">
         <van-icon :name="busy ? 'replay' : failed ? 'close' : 'checked'" :class="{ rotating: busy }" />
-        <span>{{ busy ? '正在校验扫描编码，请稍候…' : message }}</span>
+        <span>{{ busy ? tr('正在校验扫描编码，请稍候…') : message }}</span>
       </div>
 
-      <van-button class="scan-submit" block type="primary" :loading="busy" :disabled="!workOrderId || !scanCode.trim()" @click="scan"><van-icon name="scan" />确认本次扫描</van-button>
+      <van-button class="scan-submit" block type="primary" :loading="busy" :disabled="!workOrderId || !scanCode.trim()" @click="scan"><van-icon name="scan" />{{ tr("确认本次扫描") }}</van-button>
 
       <div v-if="task" class="cancel-task-panel">
-        <van-field v-model="reason" label="取消原因" placeholder="更换已扫描编码时，填写原因后取消当前单车" maxlength="500" />
-        <van-button type="danger" plain :disabled="busy" @click="cancel">取消当前单车并释放占用</van-button>
+        <van-field v-model="reason" :label='tr("取消原因")' :placeholder='tr("更换已扫描编码时，填写原因后取消当前单车")' maxlength="500" />
+        <van-button type="danger" plain :disabled="busy" @click="cancel">{{ tr("取消当前单车并释放占用") }}</van-button>
       </div>
     </section>
 
     <section class="station-card resume-card">
-      <header class="compact-heading"><div><van-icon name="passed" /><h2>单车任务</h2></div><p>跨设备交接时输入任务号</p></header>
+      <header class="compact-heading"><div><van-icon name="passed" /><h2>{{ tr("单车任务") }}</h2></div><p>{{ tr("跨设备交接时输入任务号") }}</p></header>
       <div class="resume-controls">
-        <van-field v-model="taskId" aria-label="单车任务号" placeholder="请输入任务号" clearable />
-        <van-button :disabled="busy || !taskId.trim()" @click="resume"><van-icon name="replay" />恢复 / 刷新进度</van-button>
+        <van-field v-model="taskId" :aria-label='tr("单车任务号")' :placeholder='tr("请输入任务号")' clearable />
+        <van-button :disabled="busy || !taskId.trim()" @click="resume"><van-icon name="replay" />{{ tr("恢复 / 刷新进度") }}</van-button>
       </div>
     </section>
 
     <section class="station-card production-actions-card">
       <div class="production-actions">
-        <button type="button" @click="openIssuePanel"><span class="action-icon is-warning"><van-icon name="warning-o" /></span><strong>登记生产异常</strong><van-icon name="arrow" /></button>
-        <button type="button" @click="openIssuePanel"><span class="action-icon is-photo"><van-icon name="photograph" /></span><strong>上传照片</strong><van-icon name="arrow" /></button>
+        <button type="button" @click="openIssuePanel"><span class="action-icon is-warning"><van-icon name="warning-o" /></span><strong>{{ tr("登记生产异常") }}</strong><van-icon name="arrow" /></button>
+        <button type="button" @click="openIssuePanel"><span class="action-icon is-photo"><van-icon name="photograph" /></span><strong>{{ tr("上传照片") }}</strong><van-icon name="arrow" /></button>
       </div>
       <van-collapse v-if="issuePanel" v-model="issuePanel" accordion>
-        <van-collapse-item title="生产异常与现场照片" name="issue">
-          <van-field v-model="issueCode" label="异常编码" placeholder="整车聚合码或部件码" maxlength="200" />
-          <van-field v-model="issueReason" label="异常原因" type="textarea" placeholder="请描述异常现象和处理要求" maxlength="500" autosize />
-          <van-button block type="danger" plain :loading="busy" :disabled="imageUploading" @click="reportIssue">登记异常并隔离</van-button>
-          <p v-if="issueId" class="issue-owner">照片归属：{{ savedIssueCode }} · 异常 {{ issueId }}</p>
+        <van-collapse-item :title='tr("生产异常与现场照片")' name="issue">
+          <van-field v-model="issueCode" :label='tr("异常编码")' :placeholder='tr("整车聚合码或部件码")' maxlength="200" />
+          <van-field v-model="issueReason" :label='tr("异常原因")' type="textarea" :placeholder='tr("请描述异常现象和处理要求")' maxlength="500" autosize />
+          <van-button block type="danger" plain :loading="busy" :disabled="imageUploading" @click="reportIssue">{{ tr("登记异常并隔离") }}</van-button>
+          <p v-if="issueId" class="issue-owner">{{ tr("照片归属：") }}{{ savedIssueCode }} {{ tr("· 异常") }} {{ issueId }}</p>
           <ProductionImageUpload v-if="issueId" :key="issueId" :endpoint="`/api/production/issues/${issueId}/images`" images-only @busy="imageUploading = $event" />
         </van-collapse-item>
       </van-collapse>
@@ -234,28 +235,28 @@ onMounted(async()=>{try{await refreshWorkOrders();taskId.value=localStorage.getI
     <section v-if="lastCompleted" class="station-card completed-card">
       <div class="completion-summary">
         <span class="completion-icon"><van-icon name="checked" /></span>
-        <div><p>上一台单车已完成，聚合码已生成</p><strong>{{ lastCompleted.qrCode }}</strong></div>
-        <button type="button" aria-label="复制聚合码" @click="copyAggregateCode"><van-icon name="notes-o" /></button>
+        <div><p>{{ tr("上一台单车已完成，聚合码已生成") }}</p><strong>{{ lastCompleted.qrCode }}</strong></div>
+        <button type="button" :aria-label='tr("复制聚合码")' @click="copyAggregateCode"><van-icon name="notes-o" /></button>
       </div>
-      <p class="print-tip">自动打印终端连接后会领取任务；也可展开使用人工打印。</p>
+      <p class="print-tip">{{ tr("自动打印终端连接后会领取任务；也可展开使用人工打印。") }}</p>
       <van-collapse accordion>
-        <van-collapse-item title="打印、结果回报与补打" name="print">
-          <label class="control-label"><span><van-icon name="printer" />打印任务</span>
-            <select v-model="printId" :disabled="busy" @change="run(loadLabel)"><option v-for="job in printJobs" :key="job.id" :value="job.id">{{ printStates[job.status] ?? job.status }} · {{ job.reason || job.id }}</option></select>
+        <van-collapse-item :title='tr("打印、结果回报与补打")' name="print">
+          <label class="control-label"><span><van-icon name="printer" />{{ tr("打印任务") }}</span>
+            <select v-model="printId" :disabled="busy" @change="run(loadLabel)"><option v-for="job in printJobs" :key="job.id" :value="job.id">{{ tr(printStates[job.status] ?? job.status) }} · {{ job.reason || job.id }}</option></select>
           </label>
-          <p v-if="selectedPrint" class="print-state">{{ printStates[selectedPrint.status] }} · {{ selectedPrint.message || '等待处理' }}</p>
-          <div class="print-actions"><van-button size="small" :disabled="busy" @click="run(() => preview())">刷新打印状态</van-button><van-button type="primary" :disabled="busy || !labelReady || selectedPrint?.status !== 'PENDING'" @click="printBrowser">人工打印所选任务</van-button></div>
-          <iframe v-if="labelHtml" ref="labelFrame" :srcdoc="labelHtml" title="整车外箱标签" class="label-frame" sandbox="allow-same-origin allow-modals" @load="labelReady = true" />
-          <div class="print-result-actions"><van-button size="small" :disabled="busy || !canReportPrint" @click="printResult('SUBMITTED')">确认已提交打印</van-button><van-button size="small" :disabled="busy || !canReportPrint" @click="printResult('FAILED')">确认打印失败</van-button><van-button size="small" :disabled="busy || !canReportPrint" @click="printResult('UNKNOWN')">结果无法确认</van-button></div>
+          <p v-if="selectedPrint" class="print-state">{{ tr(printStates[selectedPrint.status]) }} · {{ tr(selectedPrint.message || '等待处理') }}</p>
+          <div class="print-actions"><van-button size="small" :disabled="busy" @click="run(() => preview())">{{ tr("刷新打印状态") }}</van-button><van-button type="primary" :disabled="busy || !labelReady || selectedPrint?.status !== 'PENDING'" @click="printBrowser">{{ tr("人工打印所选任务") }}</van-button></div>
+          <iframe v-if="labelHtml" ref="labelFrame" :srcdoc="labelHtml" :title='tr("整车外箱标签")' class="label-frame" sandbox="allow-same-origin allow-modals" @load="labelReady = true" />
+          <div class="print-result-actions"><van-button size="small" :disabled="busy || !canReportPrint" @click="printResult('SUBMITTED')">{{ tr("确认已提交打印") }}</van-button><van-button size="small" :disabled="busy || !canReportPrint" @click="printResult('FAILED')">{{ tr("确认打印失败") }}</van-button><van-button size="small" :disabled="busy || !canReportPrint" @click="printResult('UNKNOWN')">{{ tr("结果无法确认") }}</van-button></div>
           <template v-if="selectedPrint && ['SUBMITTED','FAILED','UNKNOWN'].includes(selectedPrint.status)">
-            <van-field v-model="reprintReason" label="补打原因" placeholder="核对实物后填写，避免重复出纸" maxlength="500" />
-            <van-button size="small" :disabled="busy || !reprintReason.trim()" @click="reprint">创建补打任务</van-button>
+            <van-field v-model="reprintReason" :label='tr("补打原因")' :placeholder='tr("核对实物后填写，避免重复出纸")' maxlength="500" />
+            <van-button size="small" :disabled="busy || !reprintReason.trim()" @click="reprint">{{ tr("创建补打任务") }}</van-button>
           </template>
         </van-collapse-item>
       </van-collapse>
     </section>
 
-    <div v-if="message" class="result-banner" :class="failed ? 'is-error' : 'is-success'" role="status"><van-icon :name="failed ? 'close' : 'checked'" /><span>{{ message }}</span></div>
+    <div v-if="message" class="result-banner" :class="failed ? 'is-error' : 'is-success'" role="status"><van-icon :name="failed ? 'close' : 'checked'" /><span>{{ tr(message) }}</span></div>
   </section>
 </template>
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr, trInline } from '../i18n/language'
 import RecordIdColumn from './table/RecordIdColumn.vue'
 import { createUuid } from '../utils/uuid'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
@@ -77,7 +78,7 @@ async function save() {
   try {
     result.value = (await api.post('/api/sku-locks', { requestId: retryKey, ...body })).data.data
     selected.value = []; visible.value = false; retryKey = ''; retryPayload = ''
-    ElMessage.success('SKU预锁已登记，可在库存锁定页面继续转订单')
+    ElMessage.success(tr('SKU预锁已登记，可在库存锁定页面继续转订单'))
     await load()
   } catch (cause) { saveError.value = message(cause, '锁定结果未确认，可重试当前内容') }
   finally { saving.value = false }
@@ -86,48 +87,48 @@ watch(modelId, () => { focusedSkuId.value = undefined; page.value = 1; void load
 onMounted(async () => {
   await load()
   try { models.value = (await api.get('/api/master/models')).data.data }
-  catch (cause) { ElMessage.error(message(cause, '车型筛选加载失败')) }
+  catch (cause) { ElMessage.error(tr(message(cause, '车型筛选加载失败'))) }
 })
 </script>
 
 <template>
   <section class="sku-workspace sm-page">
-    <el-alert v-if="focusedSkuId" title="已定位当前商品 SKU；这里显示该 SKU 的全部仓库合计库存，不限定某张生产工单。" type="info" :closable="false" />
+    <el-alert v-if="focusedSkuId" :title='tr("已定位当前商品 SKU；这里显示该 SKU 的全部仓库合计库存，不限定某张生产工单。")' type="info" :closable="false" />
     <SkuInventoryOverview :rows="rows" :loading="busy" :error="error" />
-    <el-alert v-if="error" type="error" :title="error" :closable="false" show-icon />
+    <el-alert v-if="error" type="error" :title="tr(error)" :closable="false" show-icon />
     <section class="sm-card">
-    <FilterBar><el-select v-model="modelId" aria-label="车型筛选" placeholder="全部车型" clearable filterable><el-option v-for="model in models" :key="model.id" :value="model.id" :label="model.name" /></el-select><template #actions><el-button :loading="busy" @click="load"><AppIcon name="refresh" />刷新库存</el-button><el-button v-if="canSeeLocks" @click="emit('navigate', hasRole(context, 'WEB_AGENT') ? 'agent-locks' : 'inventory-locks')">查看库存锁定</el-button><el-button v-if="canWrite && selected.length" type="primary" @click="begin"><AppIcon name="lock" />锁定所选 {{ selected.length }} 个 SKU</el-button></template></FilterBar>
-    <SectionHeader title="SKU 库存锁定列表" description="按具体规格核对库存与占用" />
-    <DataTable :rows="rows" :loading="busy" :error="error" empty-title="暂无 SKU 库存" row-key="skuId">
+    <FilterBar><el-select v-model="modelId" :aria-label='tr("车型筛选")' :placeholder='tr("全部车型")' clearable filterable><el-option v-for="model in models" :key="model.id" :value="model.id" :label="model.name" /></el-select><template #actions><el-button :loading="busy" @click="load"><AppIcon name="refresh" />{{ tr("刷新库存") }}</el-button><el-button v-if="canSeeLocks" @click="emit('navigate', hasRole(context, 'WEB_AGENT') ? 'agent-locks' : 'inventory-locks')">{{ tr("查看库存锁定") }}</el-button><el-button v-if="canWrite && selected.length" type="primary" @click="begin"><AppIcon name="lock" />{{ trInline("锁定所选") }} {{ selected.length }} {{ trInline("个 SKU") }}</el-button></template></FilterBar>
+    <SectionHeader :title='tr("SKU 库存锁定列表")' :description='tr("按具体规格核对库存与占用")' />
+    <DataTable :rows="rows" :loading="busy" :error="error" :empty-title='tr("暂无 SKU 库存")' row-key="skuId">
       <RecordIdColumn prop="skuId" label="SKU ID" />
-      <el-table-column prop="skuCode" label="SKU" min-width="130" /><el-table-column prop="productName" label="商品" min-width="140" /><el-table-column prop="specification" label="规格" min-width="100" /><el-table-column prop="modelName" label="车型" min-width="100" />
-      <el-table-column prop="physicalQty" label="在库" width="75" /><el-table-column prop="quarantinedQty" label="隔离" width="75" /><el-table-column prop="temporaryLockedQty" label="临时锁定" width="90" /><el-table-column prop="orderReservedQty" label="订单占用" width="90" /><el-table-column prop="availableQty" label="SKU净可用" width="105" />
-      <el-table-column label="缺口" width="75"><template #default="{ row }"><span :class="{ shortage: row.shortageQty > 0 }">{{ row.shortageQty }}</span></template></el-table-column>
-      <el-table-column prop="legacyModelCommittedQty" label="历史车型承诺" width="120" /><el-table-column prop="maxNewLockQty" label="库存参考余量" width="110" />
-      <el-table-column v-if="canWrite" label="操作" width="100" fixed="right"><template #default="{ row }"><el-button link type="primary" :disabled="selected.some(item => item.skuId === row.skuId)" @click="add(row)">加入锁定</el-button></template></el-table-column>
-      <template #empty-action><el-button size="small" :disabled="busy" @click="load">刷新数据</el-button></template>
+      <el-table-column prop="skuCode" label="SKU" min-width="130" /><el-table-column prop="productName" :label='tr("商品")' min-width="140" /><el-table-column prop="specification" :label='tr("规格")' min-width="100" /><el-table-column prop="modelName" :label='tr("车型")' min-width="100" />
+      <el-table-column prop="physicalQty" :label='tr("在库")' width="75" /><el-table-column prop="quarantinedQty" :label='tr("隔离")' width="75" /><el-table-column prop="temporaryLockedQty" :label='tr("临时锁定")' width="90" /><el-table-column prop="orderReservedQty" :label='tr("订单占用")' width="90" /><el-table-column prop="availableQty" :label='tr("SKU净可用")' width="105" />
+      <el-table-column :label='tr("缺口")' width="75"><template #default="{ row }"><span :class="{ shortage: row.shortageQty > 0 }">{{ row.shortageQty }}</span></template></el-table-column>
+      <el-table-column prop="legacyModelCommittedQty" :label='tr("历史车型承诺")' width="120" /><el-table-column prop="maxNewLockQty" :label='tr("库存参考余量")' width="110" />
+      <el-table-column v-if="canWrite" :label='tr("操作")' width="100" fixed="right"><template #default="{ row }"><el-button link type="primary" :disabled="selected.some(item => item.skuId === row.skuId)" @click="add(row)">{{ tr("加入锁定") }}</el-button></template></el-table-column>
+      <template #empty-action><el-button size="small" :disabled="busy" @click="load">{{ tr("刷新数据") }}</el-button></template>
     </DataTable>
     <Pagination :total="total" :page-size="20" v-model:page="page" :disabled="busy" @change="load" />
     </section>
-    <AlertCard title="锁定规则" description="SKU预锁数量不受当前库存限制。客户累计收款达到PI约定定金后优先占库；剩余库存不足以满足的其他未付款订单将整单取消并记录原因。预锁不保证供货，已收款和已出库订单不自动取消。" />
-    <section v-if="canWrite && selected.length" class="selection"><h3>待锁定商品（{{ selected.length }} 个 SKU）</h3><div v-for="item in selected" :key="item.skuId" class="selected-row"><strong>{{ item.skuCode }}</strong><el-input-number v-model="item.quantity" :min="1" :max="1000000" :precision="0" /><el-button link type="danger" @click="selected = selected.filter(row => row.skuId !== item.skuId)">移除</el-button></div><el-button type="primary" @click="begin">选择客户并锁定</el-button></section>
-    <section v-if="result.length" class="selection"><h3>本次锁定已保存 · 继续创建订单</h3><el-table :data="result">
-      <RecordIdColumn /><el-table-column prop="lockNo" label="锁定单号" min-width="180" /><el-table-column prop="skuCode" label="SKU" /><el-table-column prop="lockQty" label="数量" /><el-table-column prop="expireTime" label="截止时间" min-width="180" /><el-table-column v-if="canConvert" label="下一步" width="130" fixed="right"><template #default="{row}"><el-button link type="primary" @click="emit('convert',row.lockNo)">直接转订单</el-button></template></el-table-column></el-table><el-button @click="emit('navigate', 'inventory-locks')">查看全部锁定与关联订单</el-button></section>
-    <el-dialog v-model="visible" title="锁定所选 SKU" width="560px" :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving">
-      <el-alert v-if="saveError" type="error" :title="saveError" :closable="false" />
+    <AlertCard :title='tr("锁定规则")' :description='tr("SKU预锁数量不受当前库存限制。客户累计收款达到PI约定定金后优先占库；剩余库存不足以满足的其他未付款订单将整单取消并记录原因。预锁不保证供货，已收款和已出库订单不自动取消。")' />
+    <section v-if="canWrite && selected.length" class="selection"><h3>{{ trInline("待锁定商品（") }}{{ selected.length }} {{ trInline("个 SKU）") }}</h3><div v-for="item in selected" :key="item.skuId" class="selected-row"><strong>{{ item.skuCode }}</strong><el-input-number v-model="item.quantity" :min="1" :max="1000000" :precision="0" /><el-button link type="danger" @click="selected = selected.filter(row => row.skuId !== item.skuId)">{{ tr("移除") }}</el-button></div><el-button type="primary" @click="begin">{{ tr("选择客户并锁定") }}</el-button></section>
+    <section v-if="result.length" class="selection"><h3>{{ tr("本次锁定已保存 · 继续创建订单") }}</h3><el-table :data="result">
+      <RecordIdColumn /><el-table-column prop="lockNo" :label='tr("锁定单号")' min-width="180" /><el-table-column prop="skuCode" label="SKU" /><el-table-column prop="lockQty" :label='tr("数量")' /><el-table-column prop="expireTime" :label='tr("截止时间")' min-width="180" /><el-table-column v-if="canConvert" :label='tr("下一步")' width="130" fixed="right"><template #default="{row}"><el-button link type="primary" @click="emit('convert',row.lockNo)">{{ tr("直接转订单") }}</el-button></template></el-table-column></el-table><el-button @click="emit('navigate', 'inventory-locks')">{{ tr("查看全部锁定与关联订单") }}</el-button></section>
+    <el-dialog v-model="visible" :title='tr("锁定所选 SKU")' width="560px" :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving">
+      <el-alert v-if="saveError" type="error" :title="tr(saveError)" :closable="false" />
       <el-form label-width="100px" :disabled="saving">
-        <el-form-item label="客户" required>
-          <el-select v-model="form.customerId" filterable placeholder="选择锁定所属客户"><el-option v-for="item in customers" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select>
-          <el-button v-if="canCreateMasterData" class="quick-create-link" link type="primary" @click="navigateToMasterData('customers')">没有需要的客户？在这里新增客户</el-button>
+        <el-form-item :label='tr("客户")' required>
+          <el-select v-model="form.customerId" filterable :placeholder='tr("选择锁定所属客户")'><el-option v-for="item in customers" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select>
+          <el-button v-if="canCreateMasterData" class="quick-create-link" link type="primary" @click="navigateToMasterData('customers')">{{ tr("没有需要的客户？在这里新增客户") }}</el-button>
         </el-form-item>
-        <el-form-item label="代理商">
-          <el-select v-model="form.agentId" clearable filterable placeholder="不选表示直接客户"><el-option v-for="item in agents" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select>
-          <el-button v-if="canCreateMasterData" class="quick-create-link" link type="primary" @click="navigateToMasterData('agents')">没有需要的代理商？在这里新增代理商</el-button>
+        <el-form-item :label='tr("代理商")'>
+          <el-select v-model="form.agentId" clearable filterable :placeholder='tr("不选表示直接客户")'><el-option v-for="item in agents" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select>
+          <el-button v-if="canCreateMasterData" class="quick-create-link" link type="primary" @click="navigateToMasterData('agents')">{{ tr("没有需要的代理商？在这里新增代理商") }}</el-button>
         </el-form-item>
-        <el-form-item label="截止时间"><el-date-picker v-model="form.expiresAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="留空采用系统默认时长" /></el-form-item>
-        <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" maxlength="500" /></el-form-item>
-      </el-form><p class="note">本次 {{ selected.length }} 个 SKU 将一起预锁，允许超过当前库存。达到PI约定定金后优先占库，其他未付款订单库存不足时整单取消并记录原因。转单客户须与锁定客户一致。</p>
-      <template #footer><el-button :disabled="saving" @click="visible = false">返回</el-button><el-button type="primary" :loading="saving" @click="save">确认锁定</el-button></template>
+        <el-form-item :label='tr("截止时间")'><el-date-picker v-model="form.expiresAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" :placeholder='tr("留空采用系统默认时长")' /></el-form-item>
+        <el-form-item :label='tr("备注")'><el-input v-model="form.remark" type="textarea" maxlength="500" /></el-form-item>
+      </el-form><p class="note">{{ trInline("本次") }} {{ selected.length }} {{ trInline("个 SKU 将一起预锁，允许超过当前库存。达到PI约定定金后优先占库，其他未付款订单库存不足时整单取消并记录原因。转单客户须与锁定客户一致。") }}</p>
+      <template #footer><el-button :disabled="saving" @click="visible = false">{{ tr("返回") }}</el-button><el-button type="primary" :loading="saving" @click="save">{{ tr("确认锁定") }}</el-button></template>
     </el-dialog>
   </section>
 </template>

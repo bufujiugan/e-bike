@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/language'
 import { computed, ref, watch } from 'vue'
 import api from '../api'
 import { salesTypeLabel } from '../sales-routing'
@@ -99,68 +100,68 @@ watch([visible, () => props.orderNo, refreshVersion], async ([isVisible, orderNo
 <template>
   <el-drawer
     v-model="visible"
-    title="订单详情"
+    :title='tr("订单详情")'
     size="min(820px, 100vw)"
     append-to-body
   >
     <EmptyState v-if="loading" loading />
-    <EmptyState v-else-if="error" error title="无法打开订单详情" :description="error">
-      <el-button size="small" @click="refreshVersion++">重试</el-button>
+    <EmptyState v-else-if="error" error :title='tr("无法打开订单详情")' :description="tr(error)">
+      <el-button size="small" @click="refreshVersion++">{{ tr("重试") }}</el-button>
     </EmptyState>
     <div v-else-if="order" class="completed-order-detail">
       <div class="detail-summary">
         <h2>{{ order.orderNo }}</h2>
-        <StatusTag :label="statusNames[order.status] ?? order.status" />
+        <StatusTag :label="tr(statusNames[order.status] ?? order.status)" />
       </div>
 
-      <section aria-label="订单基本信息">
-        <h3>基本信息</h3>
+      <section :aria-label='tr("订单基本信息")'>
+        <h3>{{ tr("基本信息") }}</h3>
         <dl class="detail-fields">
-          <div><dt>客户</dt><dd>{{ order.customerName || '—' }}</dd></div>
-          <div><dt>代理商</dt><dd>{{ order.agentName || '—' }}</dd></div>
-          <div><dt>车型</dt><dd>{{ order.modelName || '—' }}</dd></div>
-          <div><dt>销售类型</dt><dd>{{ order.salesType ? salesTypeLabel(order.salesType) : '—' }}</dd></div>
-          <div><dt>订单数量</dt><dd>{{ order.orderQty }} 台</dd></div>
-          <div><dt>已出库</dt><dd>{{ order.shippedQty }} 台</dd></div>
-          <div><dt>计划出库日</dt><dd>{{ order.plannedShipDate || '—' }}</dd></div>
-          <div><dt>最新出库时间</dt><dd>{{ formatTime(order.shippedVehicles[0]?.stockOutTime) }}</dd></div>
-          <div v-if="order.operations"><dt>创建人</dt><dd>{{ createOperation?.operatorName || '未记录' }}</dd></div>
-          <div><dt>创建时间</dt><dd>{{ formatTime(order.createdAt) }}</dd></div>
-          <div v-if="order.operations"><dt>确认人</dt><dd>{{ confirmOperation?.operatorName || '未记录' }}</dd></div>
-          <div v-if="order.operations"><dt>确认时间</dt><dd>{{ formatTime(confirmOperation?.operationTime) }}</dd></div>
-          <div><dt>最近更新时间</dt><dd>{{ formatTime(order.updatedAt) }}</dd></div>
-          <div><dt>来源锁定单号</dt><dd>{{ order.sourceLockNo || '—' }}</dd></div>
-          <div v-if="order.purchaseContractNo"><dt>购销合同号</dt><dd>{{ order.purchaseContractNo }}</dd></div>
-          <div><dt>关联 PI</dt><dd>{{ order.hasLinkedPi ? '已关联' : '未关联' }}</dd></div>
-          <div class="detail-remark"><dt>备注</dt><dd>{{ order.remark || '—' }}</dd></div>
+          <div><dt>{{ tr("客户") }}</dt><dd>{{ order.customerName || '—' }}</dd></div>
+          <div><dt>{{ tr("代理商") }}</dt><dd>{{ order.agentName || '—' }}</dd></div>
+          <div><dt>{{ tr("车型") }}</dt><dd>{{ order.modelName || '—' }}</dd></div>
+          <div><dt>{{ tr("销售类型") }}</dt><dd>{{ order.salesType ? salesTypeLabel(order.salesType) : '—' }}</dd></div>
+          <div><dt>{{ tr("订单数量") }}</dt><dd>{{ order.orderQty }} {{ tr("台") }}</dd></div>
+          <div><dt>{{ tr("已出库") }}</dt><dd>{{ order.shippedQty }} {{ tr("台") }}</dd></div>
+          <div><dt>{{ tr("计划出库日") }}</dt><dd>{{ order.plannedShipDate || '—' }}</dd></div>
+          <div><dt>{{ tr("最新出库时间") }}</dt><dd>{{ formatTime(order.shippedVehicles[0]?.stockOutTime) }}</dd></div>
+          <div v-if="order.operations"><dt>{{ tr("创建人") }}</dt><dd>{{ createOperation?.operatorName || tr('未记录') }}</dd></div>
+          <div><dt>{{ tr("创建时间") }}</dt><dd>{{ formatTime(order.createdAt) }}</dd></div>
+          <div v-if="order.operations"><dt>{{ tr("确认人") }}</dt><dd>{{ confirmOperation?.operatorName || tr('未记录') }}</dd></div>
+          <div v-if="order.operations"><dt>{{ tr("确认时间") }}</dt><dd>{{ formatTime(confirmOperation?.operationTime) }}</dd></div>
+          <div><dt>{{ tr("最近更新时间") }}</dt><dd>{{ formatTime(order.updatedAt) }}</dd></div>
+          <div><dt>{{ tr("来源锁定单号") }}</dt><dd>{{ order.sourceLockNo || '—' }}</dd></div>
+          <div v-if="order.purchaseContractNo"><dt>{{ tr("购销合同号") }}</dt><dd>{{ order.purchaseContractNo }}</dd></div>
+          <div><dt>{{ tr("关联 PI") }}</dt><dd>{{ order.hasLinkedPi ? tr('已关联') : tr('未关联') }}</dd></div>
+          <div class="detail-remark"><dt>{{ tr("备注") }}</dt><dd>{{ order.remark || '—' }}</dd></div>
         </dl>
       </section>
 
-      <section v-if="order.operations" aria-label="订单操作记录">
-        <h3>操作记录</h3>
-        <DataTable :rows="orderOperations" max-height="280" empty-title="暂无订单操作记录" empty-description="">
-          <el-table-column prop="action" label="操作" min-width="145" />
-          <el-table-column label="操作人" min-width="105">
-            <template #default="{ row }">{{ row.operatorName || '未记录' }}</template>
+      <section v-if="order.operations" :aria-label='tr("订单操作记录")'>
+        <h3>{{ tr("操作记录") }}</h3>
+        <DataTable :rows="orderOperations" max-height="280" :empty-title='tr("暂无订单操作记录")' empty-description="">
+          <el-table-column prop="action" :label='tr("操作")' min-width="145" />
+          <el-table-column :label='tr("操作人")' min-width="105">
+            <template #default="{ row }">{{ row.operatorName || tr('未记录') }}</template>
           </el-table-column>
-          <el-table-column label="操作时间" min-width="170">
+          <el-table-column :label='tr("操作时间")' min-width="170">
             <template #default="{ row }">{{ formatTime(row.operationTime) }}</template>
           </el-table-column>
         </DataTable>
       </section>
 
-      <section aria-label="车辆出库明细">
-        <h3>出库明细（{{ order.shippedVehicles.length }} 台）</h3>
-        <DataTable :rows="order.shippedVehicles" row-key="stockOutNo" max-height="360" empty-title="暂无有效出库记录" empty-description="">
-          <el-table-column prop="stockOutNo" label="出库单号" min-width="155" show-overflow-tooltip />
-          <el-table-column v-if="order.operations" label="出库操作人" min-width="100">
-            <template #default="{ row }">{{ shipmentOperators.get(row.stockOutNo) || '未记录' }}</template>
+      <section :aria-label='tr("车辆出库明细")'>
+        <h3>{{ tr("出库明细（") }}{{ order.shippedVehicles.length }} {{ tr("台）") }}</h3>
+        <DataTable :rows="order.shippedVehicles" row-key="stockOutNo" max-height="360" :empty-title='tr("暂无有效出库记录")' empty-description="">
+          <el-table-column prop="stockOutNo" :label='tr("出库单号")' min-width="155" show-overflow-tooltip />
+          <el-table-column v-if="order.operations" :label='tr("出库操作人")' min-width="100">
+            <template #default="{ row }">{{ shipmentOperators.get(row.stockOutNo) || tr('未记录') }}</template>
           </el-table-column>
-          <el-table-column label="出库时间" min-width="165">
+          <el-table-column :label='tr("出库时间")' min-width="165">
             <template #default="{ row }">{{ formatTime(row.stockOutTime) }}</template>
           </el-table-column>
-          <el-table-column prop="vehicleQrCode" label="整车总码" min-width="160" show-overflow-tooltip />
-          <el-table-column prop="frameSn" label="车架码" min-width="140" show-overflow-tooltip />
+          <el-table-column prop="vehicleQrCode" :label='tr("整车总码")' min-width="160" show-overflow-tooltip />
+          <el-table-column prop="frameSn" :label='tr("车架码")' min-width="140" show-overflow-tooltip />
         </DataTable>
       </section>
     </div>

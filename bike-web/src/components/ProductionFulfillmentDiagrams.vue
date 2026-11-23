@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/language'
 import ProductionRoleSequence from './ProductionRoleSequence.vue'
 
 defineProps<{ mode: 'flow' | 'sequence' }>()
@@ -43,26 +44,26 @@ const phases: { title: string; timing: string; outcome: string; nodes: FlowNode[
 <template>
   <div class="fulfillment-diagrams">
     <template v-if="mode === 'flow'">
-      <div class="diagram-caption"><div><h3>先准备 → 再生产入库 → 锁数量 → 按订单出库</h3><p>从上往下看，每行从左到右。点击节点查看具体操作和入口。</p></div><span>蓝色：人工操作 · 绿色：系统自动 · 橙色：条件判断</span></div>
+      <div class="diagram-caption"><div><h3>{{ tr("先准备 → 再生产入库 → 锁数量 → 按订单出库") }}</h3><p>{{ tr("从上往下看，每行从左到右。点击节点查看具体操作和入口。") }}</p></div><span>{{ tr("蓝色：人工操作 · 绿色：系统自动 · 橙色：条件判断") }}</span></div>
       <section v-for="(phase, index) in phases" :key="phase.title" class="flow-phase">
-        <header><span class="phase-number">{{ index + 1 }}</span><div><h4>{{ phase.title }}</h4><p>{{ phase.timing }}</p></div></header>
+        <header><span class="phase-number">{{ index + 1 }}</span><div><h4>{{ tr(phase.title) }}</h4><p>{{ tr(phase.timing) }}</p></div></header>
         <ol class="flow-nodes">
           <li v-for="node in phase.nodes" :key="node.title">
             <button type="button" class="flow-node" :class="{ automatic: node.automatic, conditional: node.conditional }" @click="emit('select', node.step)">
-              <span class="node-tag">{{ node.tag }}</span><strong>{{ node.title }}</strong><span class="node-owner">{{ node.owner }}</span><span class="node-detail">{{ node.detail }}</span><span class="node-link">查看怎么做 ↗</span>
+              <span class="node-tag">{{ tr(node.tag) }}</span><strong>{{ tr(node.title) }}</strong><span class="node-owner">{{ tr(node.owner) }}</span><span class="node-detail">{{ tr(node.detail) }}</span><span class="node-link">{{ tr("查看怎么做 ↗") }}</span>
             </button>
           </li>
         </ol>
-        <p class="phase-outcome">{{ phase.outcome }}</p>
+        <p class="phase-outcome">{{ tr(phase.outcome) }}</p>
         <div v-if="index < phases.length - 1" class="phase-connector" aria-hidden="true">↓</div>
       </section>
-      <div class="pi-branch"><strong>统一履约配置</strong><span>新单必选配置与模板 → 确认 PI → 预付收款或后付款授权 → 按仓保留库存 → 按配置备货 → 放行与实际出库</span><span>后付款修订须重新授权；我方安排运输 / 客户货代提货 → 确认送达 → 按配置完成 CI、RD 回签、收款及 CMR → 结案</span></div>
+      <div class="pi-branch"><strong>{{ tr("统一履约配置") }}</strong><span>{{ tr("新单必选配置与模板 → 确认 PI → 预付收款或后付款授权 → 按仓保留库存 → 按配置备货 → 放行与实际出库") }}</span><span>{{ tr("后付款修订须重新授权；我方安排运输 / 客户货代提货 → 确认送达 → 按配置完成 CI、RD 回签、收款及 CMR → 结案") }}</span></div>
     </template>
     <ProductionRoleSequence v-else @select="emit('select', $event)" />
     <div class="diagram-rules">
-      <article><strong>SKU ≠ 单台车</strong><p>SKU 是一种确定配置；车架号标识具体车辆。新车架在 PDA 选择“车架”，录入实物号码，后台没有单独维护车架号的页面。</p></article>
-      <article><strong>计划 100 台 ≠ 库存 100 台</strong><p>完成组装后还要确认入库。预锁可超过库存；正式保留时核对仓库、SKU、车型余量及已有占用。</p></article>
-      <article><strong>锁 30 台 ≠ 锁住整个 SKU</strong><p>假设可用库存 100 台且无其他限制：A 锁 30 台后，B 仍可锁 30 台，剩余 40 台。</p></article>
+      <article><strong>{{ tr("SKU ≠ 单台车") }}</strong><p>{{ tr("SKU 是一种确定配置；车架号标识具体车辆。新车架在 PDA 选择“车架”，录入实物号码，后台没有单独维护车架号的页面。") }}</p></article>
+      <article><strong>{{ tr("计划 100 台 ≠ 库存 100 台") }}</strong><p>{{ tr("完成组装后还要确认入库。预锁可超过库存；正式保留时核对仓库、SKU、车型余量及已有占用。") }}</p></article>
+      <article><strong>{{ tr("锁 30 台 ≠ 锁住整个 SKU") }}</strong><p>{{ tr("假设可用库存 100 台且无其他限制：A 锁 30 台后，B 仍可锁 30 台，剩余 40 台。") }}</p></article>
     </div>
   </div>
 </template>

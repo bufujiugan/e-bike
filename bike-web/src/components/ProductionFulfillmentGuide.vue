@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/language'
 import { computed, nextTick, ref, watch } from 'vue'
 import { hasAnyPermission, hasPermission, hasRole, type PermissionContext } from '../permissions'
 import AppIcon from './AppIcon.vue'
@@ -138,7 +139,7 @@ const steps: GuideStep[] = [
 const pdaUrl = computed(() => {
   const url = new URL(window.location.href)
   if (!['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) return ''
-  url.port = '5174'
+  url.port = url.port === '15173' ? '15174' : '5174'
   url.pathname = '/'
   url.search = ''
   url.hash = ''
@@ -181,36 +182,36 @@ function close() { emit('update:modelValue', false) }
 </script>
 
 <template>
-  <el-dialog :model-value="modelValue" title="操作说明" width="min(1240px, 96vw)" top="4vh" :append-to-body="true" body-class="production-fulfillment-guide-body" @close="close">
-    <div class="guide-view-switch" role="group" aria-label="操作说明栏目">
-      <el-button :type="activeView === 'flow' ? 'primary' : 'default'" :aria-pressed="activeView === 'flow'" @click="activeView = 'flow'">业务流程图</el-button>
-      <el-button :type="activeView === 'sequence' ? 'primary' : 'default'" :aria-pressed="activeView === 'sequence'" @click="activeView = 'sequence'">角色时序图</el-button>
-      <el-button :type="activeView === 'steps' ? 'primary' : 'default'" :aria-pressed="activeView === 'steps'" @click="selectedStep = null; activeView = 'steps'">逐步操作</el-button>
-      <el-button :type="activeView === 'accounts' ? 'primary' : 'default'" :aria-pressed="activeView === 'accounts'" @click="activeView = 'accounts'">角色与账户</el-button>
-      <el-button :type="activeView === 'europe' ? 'primary' : 'default'" :aria-pressed="activeView === 'europe'" @click="activeView = 'europe'">外销／欧洲销售</el-button>
+  <el-dialog :model-value="modelValue" :title='tr("操作说明")' width="min(1240px, 96vw)" top="4vh" :append-to-body="true" body-class="production-fulfillment-guide-body" @close="close">
+    <div class="guide-view-switch" role="group" :aria-label='tr("操作说明栏目")'>
+      <el-button :type="activeView === 'flow' ? 'primary' : 'default'" :aria-pressed="activeView === 'flow'" @click="activeView = 'flow'">{{ tr("业务流程图") }}</el-button>
+      <el-button :type="activeView === 'sequence' ? 'primary' : 'default'" :aria-pressed="activeView === 'sequence'" @click="activeView = 'sequence'">{{ tr("角色时序图") }}</el-button>
+      <el-button :type="activeView === 'steps' ? 'primary' : 'default'" :aria-pressed="activeView === 'steps'" @click="selectedStep = null; activeView = 'steps'">{{ tr("逐步操作") }}</el-button>
+      <el-button :type="activeView === 'accounts' ? 'primary' : 'default'" :aria-pressed="activeView === 'accounts'" @click="activeView = 'accounts'">{{ tr("角色与账户") }}</el-button>
+      <el-button :type="activeView === 'europe' ? 'primary' : 'default'" :aria-pressed="activeView === 'europe'" @click="activeView = 'europe'">{{ tr("外销／欧洲销售") }}</el-button>
     </div>
     <div ref="guideBody" class="guide-body">
-      <div v-if="activeView === 'flow' || activeView === 'steps'" class="guide-intro"><strong>从车型准备到订单出库，按顺序逐步办理</strong><span>首次开单前由管理员完成文末的统一履约配置；Web 后台负责资料、生产、库存及履约；业务入口在新标签页打开，本说明保留供对照。已有库存可从库存与 PI 环节开始。</span></div>
-      <div v-if="activeView === 'flow' || activeView === 'steps'" class="guide-entry"><span>当前 Web：工作台 → 我的工作台；页面右上角可随时重新打开本说明。正式环境请使用已配置的 PDA/H5 地址；本机联调地址：<a v-if="pdaUrl" :href="pdaUrl" target="_blank" rel="noopener noreferrer">{{ pdaUrl }}</a><span v-else>请联系管理员获取</span></span></div>
+      <div v-if="activeView === 'flow' || activeView === 'steps'" class="guide-intro"><strong>{{ tr("从车型准备到订单出库，按顺序逐步办理") }}</strong><span>{{ tr("首次开单前由管理员完成文末的统一履约配置；Web 后台负责资料、生产、库存及履约；业务入口在新标签页打开，本说明保留供对照。已有库存可从库存与 PI 环节开始。") }}</span></div>
+      <div v-if="activeView === 'flow' || activeView === 'steps'" class="guide-entry"><span>{{ tr("当前 Web：工作台 → 我的工作台；页面右上角可随时重新打开本说明。正式环境请使用已配置的 PDA/H5 地址；本机联调地址：") }} <a v-if="pdaUrl" :href="pdaUrl" target="_blank" rel="noopener noreferrer">{{ pdaUrl }}</a><span v-else>{{ tr("请联系管理员获取") }}</span></span></div>
       <ProductionFulfillmentDiagrams v-if="activeView === 'flow' || activeView === 'sequence'" :mode="activeView" @select="showStep" />
       <ol v-else-if="activeView === 'steps'" class="guide-steps">
         <li v-for="(step, index) in steps" :key="step.title" class="guide-step" :class="{ 'is-selected': selectedStep === index }" :data-guide-step="index" tabindex="-1">
           <div class="step-index" :class="`tone-${index % 4}`">{{ String(index + 1).padStart(2, '0') }}</div>
           <div class="step-content">
-            <div class="step-heading"><div><h3>{{ step.title }}</h3><span class="step-owner">{{ step.owner }}</span></div><div class="step-links"><a v-if="canOpen(step)" :href="destinationUrl(step)" target="_blank" rel="noopener noreferrer" :aria-label="`${step.destination?.label}（新标签页）`">{{ step.destination?.label }} ↗</a><a v-if="step.pdaLink && pdaUrl" :href="pdaUrl" target="_blank" rel="noopener noreferrer">打开本机 PDA/H5 <AppIcon name="arrow" /></a></div></div>
-            <p class="step-menu"><strong>操作位置</strong> {{ step.menu }}</p>
-            <ol class="step-actions"><li v-for="action in step.actions" :key="action">{{ action }}</li></ol>
-            <div class="step-outcomes"><p><strong>完成后：</strong>{{ step.result }}</p><p><strong>下一步：</strong>{{ step.next }}</p></div>
+            <div class="step-heading"><div><h3>{{ tr(step.title) }}</h3><span class="step-owner">{{ tr(step.owner) }}</span></div><div class="step-links"><a v-if="canOpen(step)" :href="destinationUrl(step)" target="_blank" rel="noopener noreferrer" :aria-label="tr('{value0}（新标签页）', { value0: tr(step.destination?.label) })">{{ tr(step.destination?.label) }} ↗</a><a v-if="step.pdaLink && pdaUrl" :href="pdaUrl" target="_blank" rel="noopener noreferrer">{{ tr("打开本机 PDA/H5") }} <AppIcon name="arrow" /></a></div></div>
+            <p class="step-menu"><strong>{{ tr("操作位置") }}</strong> {{ tr(step.menu) }}</p>
+            <ol class="step-actions"><li v-for="action in step.actions" :key="action">{{ tr(action) }}</li></ol>
+            <div class="step-outcomes"><p><strong>{{ tr("完成后：") }}</strong>{{ tr(step.result) }}</p><p><strong>{{ tr("下一步：") }}</strong>{{ tr(step.next) }}</p></div>
           </div>
         </li>
       </ol>
       <EuropeSalesGuide v-else-if="activeView === 'europe'" />
       <RoleAccountGuide v-else />
-      <el-alert v-if="activeView !== 'accounts' && activeView !== 'europe'" title="边界提醒" type="warning" :closable="false" show-icon>
-        建生产单不会逐车建单；Web 或 PDA 的首码会自动建立单车记录。第四码自动生成总码和打印任务，但打印核对、入库、锁定转订单、订单确认和 PDA 出库都必须由对应岗位实际操作。
+      <el-alert v-if="activeView !== 'accounts' && activeView !== 'europe'" :title='tr("边界提醒")' type="warning" :closable="false" show-icon>
+        {{ tr("建生产单不会逐车建单；Web 或 PDA 的首码会自动建立单车记录。第四码自动生成总码和打印任务，但打印核对、入库、锁定转订单、订单确认和 PDA 出库都必须由对应岗位实际操作。") }}
       </el-alert>
     </div>
-    <template #footer><el-button @click="close">关闭说明</el-button></template>
+    <template #footer><el-button @click="close">{{ tr("关闭说明") }}</el-button></template>
   </el-dialog>
 </template>
 

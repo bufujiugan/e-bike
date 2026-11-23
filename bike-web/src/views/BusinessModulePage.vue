@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/language'
 import { computed, defineAsyncComponent, ref, toRef, watch } from 'vue'
 import { peekSalesIntent, salesIntentState } from '../sales-routing'
 import type { ModuleData } from '../config/page-presentation'
@@ -27,19 +28,19 @@ const showExportPi = computed(() => canUseExportPi.value && salesMode.value === 
 const emit = defineEmits<{ 'update:search': [value: string]; 'update:page': [value: number]; 'update:pageSize': [value: number]; refresh: []; reset: []; pageChange: []; sizeChange: [] }>()
 const overview = useOperationalOverview(toRef(props, 'context'), toRef(props, 'moduleKey'))
 const { points, metrics, permitted, error: overviewError, loading: overviewLoading } = overview
-const listTitle = computed(() => ({ assembly: '组装任务列表', vehicles: '整车档案列表', inventory: '库存明细列表', 'stock-in': '入库记录列表', 'stock-out': '出库记录列表', stock: '出入库记录列表', orders: '销售订单列表' }[props.moduleKey] ?? `${props.title}列表`))
+const listTitle = computed(() => ({ assembly: '组装任务列表', vehicles: '整车档案列表', inventory: '库存明细列表', 'stock-in': '入库记录列表', 'stock-out': '出库记录列表', stock: '出入库记录列表', orders: '销售订单列表' }[props.moduleKey] ?? tr('{title}列表', { title: tr(props.title) })))
 function refresh() { emit('refresh'); void overview.refresh() }
 </script>
 <template><div class="sm-page">
-  <el-radio-group v-if="canUseExportPi" v-model="salesMode" aria-label="国内销售类型" class="sales-scenario-tabs">
-    <el-radio-button value="DOMESTIC">内销</el-radio-button>
-    <el-radio-button value="EXPORT">外销</el-radio-button>
+  <el-radio-group v-if="canUseExportPi" v-model="salesMode" :aria-label='tr("国内销售类型")' class="sales-scenario-tabs">
+    <el-radio-button value="DOMESTIC">{{ tr("内销") }}</el-radio-button>
+    <el-radio-button value="EXPORT">{{ tr("外销") }}</el-radio-button>
   </el-radio-group>
   <PiWorkspace v-if="showExportPi" :context="context" sales-scenario="CHINA_EXPORT" :intent="exportIntent" />
   <div v-show="!showExportPi" class="sm-page">
-  <el-alert v-if="moduleKey === 'orders'" title="国内内销办理购销合同" description="列表显示内销订单和尚未选择销售类型的历史订单。进入订单办理：第一步先生成并核对「10.23金轮信德-广州塔威 购销合同」，再确认订单。外销订单请切换到“外销”办理 PI。" type="info" :closable="false" />
-  <AlertCard v-if="error" tone="error" title="业务数据加载失败" :description="error"><template #action><el-button size="small" @click="refresh">重试</el-button></template></AlertCard>
-  <AlertCard v-if="overviewError" tone="error" title="统计数据加载失败" :description="overviewError"><template #action><el-button size="small" @click="overview.refresh">重试统计</el-button></template></AlertCard>
+  <el-alert v-if="moduleKey === 'orders'" :title='tr("国内内销办理购销合同")' :description='tr("列表显示内销订单和尚未选择销售类型的历史订单。进入订单办理：第一步先生成并核对「10.23金轮信德-广州塔威 购销合同」，再确认订单。外销订单请切换到“外销”办理 PI。")' type="info" :closable="false" />
+  <AlertCard v-if="error" tone="error" :title='tr("业务数据加载失败")' :description="tr(error)"><template #action><el-button size="small" @click="refresh">{{ tr("重试") }}</el-button></template></AlertCard>
+  <AlertCard v-if="overviewError" tone="error" :title='tr("统计数据加载失败")' :description="tr(overviewError)"><template #action><el-button size="small" @click="overview.refresh">{{ tr("重试统计") }}</el-button></template></AlertCard>
   <AssemblyProgressPage v-if="moduleKey === 'assembly'" :module="module" :loading="loading" :error="error" :today-assembled="overview.value('今日组装')" />
   <VehicleArchivePage v-else-if="moduleKey === 'vehicles'" :module="module" :loading="loading" :error="error" />
   <InventoryPage v-else-if="moduleKey === 'inventory'" :module="module" :loading="loading" :error="error" :summary="metrics" />

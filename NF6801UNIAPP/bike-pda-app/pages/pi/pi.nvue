@@ -6,39 +6,39 @@
       }}</text>
       <view v-if="attempt" class="card"
         ><text class="text error"
-          >当前批次已发送但尚未确认。保持原车辆和请求编号重试，可找回原批次。</text
+          >{{ tr("当前批次已发送但尚未确认。保持原车辆和请求编号重试，可找回原批次。") }}</text
         ><text class="muted">{{ attempt.requestId }}</text
         ><action-button
-          label="按原批次重试 / 核对结果"
+          :label='tr("按原批次重试 / 核对结果")'
           :disabled="busy || !ready"
           @click="submit"
       /></view>
       <view class="card"
         ><form-field
           v-model="keyword"
-          label="PI 号 / 客户"
+          :label='tr("PI 号 / 客户")'
           :disabled="busy"
         /><action-button
-          label="搜索 PI"
+          :label='tr("搜索 PI")'
           secondary
           :disabled="busy || !ready"
           @click="run(() => loadOptions(1))"
         />
-        <choice-list
+        <choice-list :empty-label="tr('暂无可选记录')"
           :value="detail ? detail.id : ''"
           :options="piOptions"
-          label="可出库 PI"
+          :label='tr("可出库 PI")'
           :disabled="busy || !!attempt"
           @input="selectPi"
         />
-        <text class="muted">第 {{ listPage }} 页，共 {{ total }} 条</text
+        <text class="muted">{{ tr("第") }} {{ listPage }} {{ tr("页，共") }} {{ total }} {{ tr("条") }}</text
         ><action-button
-          label="上一页"
+          :label='tr("上一页")'
           secondary
           :disabled="busy || listPage <= 1"
           @click="run(() => loadOptions(listPage - 1))"
         /><action-button
-          label="下一页"
+          :label='tr("下一页")'
           secondary
           :disabled="busy || listPage * 20 >= total"
           @click="run(() => loadOptions(listPage + 1))"
@@ -48,51 +48,51 @@
         ><text class="subtitle"
           >{{ detail.piNo }} · {{ detail.customerName }}</text
         >
-        <choice-list
+        <choice-list :empty-label="tr('暂无可选记录')"
           v-model="orderId"
           :options="orderOptions"
-          label="本次扫描归属的 SKU 订单"
+          :label='tr("本次扫描归属的 SKU 订单")'
           :disabled="busy || !!attempt"
         />
         <form-field
           v-model="code"
-          label="整车聚合码"
+          :label='tr("整车聚合码")'
           :disabled="busy || !!attempt"
           @confirm="scan"
         />
         <action-button
-          label="启动设备扫码"
+          :label='tr("启动设备扫码")'
           secondary
           :disabled="busy || !orderId || !!attempt || !ready"
           @click="triggerScan"
         /><action-button
-          label="校验并加入批次"
+          :label='tr("校验并加入批次")'
           :disabled="busy || !orderId || !!attempt || !ready"
           @click="scan"
         />
-        <text class="subtitle">本批 {{ queue.length }} / 200 台</text
+        <text class="subtitle">{{ tr("本批") }} {{ queue.length }} {{ tr("/ 200 台") }}</text
         ><view v-for="(row, index) in queue" :key="row.frameSn"
           ><text class="text"
             >{{ orderName(row.orderId) }} · {{ row.frameSn }}</text
           ><action-button
-            label="移除此车辆"
+            :label='tr("移除此车辆")'
             secondary
             :disabled="busy || !!attempt"
             @click="remove(index)"
         /></view>
         <action-button
-          label="确认整批出库"
+          :label='tr("确认整批出库")'
           :disabled="busy || !ready || !queue.length"
           @click="submit"
         />
       </view>
       <view v-if="result" class="card"
-        ><text class="subtitle">已保存批次 {{ result.batchNo }}</text
+        ><text class="subtitle">{{ tr("已保存批次") }} {{ result.batchNo }}</text
         ><text class="text"
-          >{{ result.status }} · 原始 {{ result.originalQty }} 台 · 有效
-          {{ result.activeQty }} 台</text
+          >{{ result.status }} {{ tr("· 原始") }} {{ result.originalQty }} {{ tr("台 · 有效") }}
+          {{ result.activeQty }} {{ tr("台") }}</text
         ><action-button
-          label="刷新此批次状态"
+          :label='tr("刷新此批次状态")'
           secondary
           :disabled="busy || !ready"
           @click="refreshBatch"

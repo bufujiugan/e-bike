@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/language'
 import { ref, watch } from 'vue'
 import api from '../api'
 import CompletedOrderDetails from '../components/CompletedOrderDetails.vue'
@@ -71,46 +72,46 @@ watch([page, keyword, refreshVersion], async (_, __, onCleanup) => {
 </script>
 
 <template>
-  <section class="sm-card sm-module-list" aria-label="已完成订单列表">
-    <form class="completed-orders-filter" role="search" aria-label="查询已完成订单" @submit.prevent="search">
-      <el-input v-model="searchInput" aria-label="订单号或客户名称" placeholder="订单号或客户名称" clearable />
-      <el-button type="primary" native-type="submit" :loading="loading">查询</el-button>
+  <section class="sm-card sm-module-list" :aria-label='tr("已完成订单列表")'>
+    <form class="completed-orders-filter" role="search" :aria-label='tr("查询已完成订单")' @submit.prevent="search">
+      <el-input v-model="searchInput" :aria-label='tr("订单号或客户名称")' :placeholder='tr("订单号或客户名称")' clearable />
+      <el-button type="primary" native-type="submit" :loading="loading">{{ tr("查询") }}</el-button>
     </form>
 
     <DataTable
       :rows="orders"
       :loading="loading"
       :error="error"
-      :empty-title="keyword ? '未找到符合条件的订单' : '暂无已完成订单'"
-      :empty-description="keyword ? '可换一个订单号或客户名称查询。' : ''"
+      :empty-title="keyword ? tr('未找到符合条件的订单') : tr('暂无已完成订单')"
+      :empty-description="keyword ? tr('可换一个订单号或客户名称查询。') : ''"
     >
-      <el-table-column prop="orderNo" label="订单号" min-width="180">
+      <el-table-column prop="orderNo" :label='tr("订单号")' min-width="180">
         <template #default="{ row }">
-          <el-button link type="primary" :aria-label="`查看订单 ${row.orderNo}`" @click="openDetails(row.orderNo)">
+          <el-button link type="primary" :aria-label="tr('查看订单 {value0}', { value0: row.orderNo })" @click="openDetails(row.orderNo)">
             {{ row.orderNo }}
           </el-button>
         </template>
       </el-table-column>
-      <el-table-column prop="customerName" label="客户" min-width="160" show-overflow-tooltip />
-      <el-table-column prop="modelName" label="车型" min-width="140" show-overflow-tooltip />
-      <el-table-column label="销售类型" min-width="125">
+      <el-table-column prop="customerName" :label='tr("客户")' min-width="160" show-overflow-tooltip />
+      <el-table-column prop="modelName" :label='tr("车型")' min-width="140" show-overflow-tooltip />
+      <el-table-column :label='tr("销售类型")' min-width="125">
         <template #default="{ row }">{{ row.salesType ? salesTypeLabel(row.salesType) : '—' }}</template>
       </el-table-column>
-      <el-table-column label="创建时间" min-width="155">
+      <el-table-column :label='tr("创建时间")' min-width="155">
         <template #default="{ row }">{{ row.createdAt?.replace('T', ' ').slice(0, 19) || '—' }}</template>
       </el-table-column>
-      <el-table-column prop="orderQty" label="订单数量" width="100" align="right" />
-      <el-table-column prop="shippedQty" label="已出库" width="100" align="right" />
-      <el-table-column label="状态" width="100">
-        <template #default><StatusTag label="已完成" /></template>
+      <el-table-column prop="orderQty" :label='tr("订单数量")' width="100" align="right" />
+      <el-table-column prop="shippedQty" :label='tr("已出库")' width="100" align="right" />
+      <el-table-column :label='tr("状态")' width="100">
+        <template #default><StatusTag :label='tr("已完成")' /></template>
       </el-table-column>
-      <el-table-column label="操作" width="100">
+      <el-table-column :label='tr("操作")' width="100">
         <template #default="{ row }">
-          <el-button link type="primary" @click="openDetails(row.orderNo)">查看详情</el-button>
+          <el-button link type="primary" @click="openDetails(row.orderNo)">{{ tr("查看详情") }}</el-button>
         </template>
       </el-table-column>
       <template v-if="error" #empty-action>
-        <el-button size="small" @click="refreshVersion++">重试</el-button>
+        <el-button size="small" @click="refreshVersion++">{{ tr("重试") }}</el-button>
       </template>
     </DataTable>
 

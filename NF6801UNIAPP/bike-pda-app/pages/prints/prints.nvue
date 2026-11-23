@@ -6,40 +6,40 @@
       }}</text>
       <view class="card"
         ><text class="subtitle">{{
-          taskId ? "当前车辆的打印任务" : "打印任务列表"
+          taskId ? tr("当前车辆的打印任务") : tr("打印任务列表")
         }}</text
         ><action-button
-          label="刷新任务"
+          :label='tr("刷新任务")'
           secondary
           :disabled="busy || !ready"
           @click="run(loadJobs)"
         />
-        <choice-list
+        <choice-list :empty-label="tr('暂无可选记录')"
           :value="job ? job.id : ''"
           :options="jobOptions"
-          label="请选择任务"
+          :label='tr("请选择任务")'
           :disabled="busy"
           @input="selectJob"
         />
         <view v-if="!taskId"
-          ><text class="muted">第 {{ listPage }} 页，共 {{ total }} 条</text
+          ><text class="muted">{{ tr("第") }} {{ listPage }} {{ tr("页，共") }} {{ total }} {{ tr("条") }}</text
           ><action-button
-            label="上一页"
+            :label='tr("上一页")'
             secondary
             :disabled="busy || listPage <= 1"
             @click="changePage(-1)" /><action-button
-            label="下一页"
+            :label='tr("下一页")'
             secondary
             :disabled="busy || listPage * 50 >= total"
             @click="changePage(1)"
         /></view>
       </view>
       <view v-if="job" class="card"
-        ><text class="subtitle">标签内容预览</text
+        ><text class="subtitle">{{ tr("标签内容预览") }}</text
         ><text class="text"
-          >任务：{{ job.id }} · {{ statusName(job.status) }}</text
+          >{{ tr("任务：") }}{{ job.id }} · {{ tr(statusName(job.status)) }}</text
         ><text class="muted"
-          >领取人：{{ job.claimedBy || "—" }} · {{ job.message || "" }}</text
+          >{{ tr("领取人：") }}{{ job.claimedBy || "—" }} · {{ tr(job.message || "") }}</text
         ><text
           v-for="(line, index) in previewLines"
           :key="index"
@@ -48,52 +48,51 @@
           >{{ line }}</text
         >
         <text class="muted"
-          >打印前检查模板尺寸。SDK
-          发送后请核对实物，未知结果不会自动重打。</text
+          >{{ tr("打印前检查模板尺寸。SDK 发送后请核对实物，未知结果不会自动重打。") }}</text
         >
         <action-button
-          label="领取任务并发送到本机打印"
+          :label='tr("领取任务并发送到本机打印")'
           :disabled="busy || !ready || job.status !== 'PENDING' || attempted"
           @click="print"
         />
         <text v-if="attempted" class="text error"
-          >本机已有此任务的发送记录。请核对实物并回报，禁止重新发送同一任务。</text
+          >{{ tr("本机已有此任务的发送记录。请核对实物并回报，禁止重新发送同一任务。") }}</text
         >
         <view v-if="canReport"
           ><action-button
-            label="已确认提交 / 实物正常"
+            :label='tr("已确认提交 / 实物正常")'
             :disabled="busy || !ready"
             @click="report('SUBMITTED')" /><action-button
-            label="确认未成功出纸"
+            :label='tr("确认未成功出纸")'
             secondary
             :disabled="busy || !ready"
             @click="report('FAILED')" /><action-button
-            label="结果不确定，待核对"
+            :label='tr("结果不确定，待核对")'
             secondary
             :disabled="busy || !ready"
             @click="report('UNKNOWN')"
         /></view>
         <form-field
           v-model="reason"
-          label="补打原因（请先核对实物）"
+          :label='tr("补打原因（请先核对实物）")'
           :disabled="busy"
         /><action-button
-          label="创建补打任务"
+          :label='tr("创建补打任务")'
           secondary
           :disabled="busy || !ready || !canReprint || !!pending"
           @click="reprint"
         />
         <view v-if="pending"
           ><text class="text error"
-            >补打请求结果未确认，请刷新车辆任务列表核对。</text
+            >{{ tr("补打请求结果未确认，请刷新车辆任务列表核对。") }}</text
           ><action-button
-            label="已核对补打任务，解除锁定"
+            :label='tr("已核对补打任务，解除锁定")'
             secondary
             :disabled="busy"
             @click="acknowledgePending"
         /></view> </view
       ><action-button
-        label="纸张与设备设置"
+        :label='tr("纸张与设备设置")'
         secondary
         :disabled="busy"
         @click="go('settings/settings')"

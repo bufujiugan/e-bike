@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr, trInline } from '../i18n/language'
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
@@ -34,13 +35,13 @@ async function save() {
   try {
     rows.value = supplementId.value === null ? await europeSalesApi.record(props.type, props.subjectId, { ...form })
       : await europeSalesApi.supplement(props.type, props.subjectId, supplementId.value, { counterparty:form.counterparty,referenceNo:form.referenceNo,remark:form.remark })
-    visible.value = false; emit('changed'); ElMessage.success(supplementId.value === null ? '实际款项已登记' : '参考信息已补录')
+    visible.value = false; emit('changed'); ElMessage.success(tr(supplementId.value === null ? '实际款项已登记' : '参考信息已补录'))
   }
   catch (e) { error.value = message(e) } finally { saving.value = false }
 }
 async function reverse(row: SettlementEntry) {
   try {
-    const { value } = await ElMessageBox.prompt('请填写更正原因。原记录保留，撤回后可重新登记正确金额。', '撤回错误登记', { inputValidator: value => Boolean(value?.trim()) || '请填写原因' })
+    const { value } = await ElMessageBox.prompt(tr('请填写更正原因。原记录保留，撤回后可重新登记正确金额。'), tr('撤回错误登记'), { inputValidator: value => Boolean(value?.trim()) || tr('请填写原因') })
     saving.value = true; rows.value = await europeSalesApi.reverse(props.type, props.subjectId, row.id, value.trim())
     emit('changed')
   } catch (e) { if (e !== 'cancel' && e !== 'close') error.value = message(e) } finally { saving.value = false }
@@ -49,13 +50,13 @@ watch(() => [props.type, props.subjectId], () => { visible.value = false; void l
 </script>
 <template>
   <section v-loading="busy" class="settlement-panel">
-    <div class="settlement-toolbar"><strong>{{ title }}：{{ currencyCode }} {{ format(total) }}</strong><el-button v-if="canWrite" type="primary" :disabled="saving" @click="open">登记{{ title }}</el-button><el-button @click="load">刷新</el-button></div>
-    <p>{{ type === 'PI' ? '记录王总实际付给 Totem 的款项，与客户向销售侧付款分别记账。PI 修订共用此台账。' : '仅登记客户直接付给工厂的实际款项，不计入我方 PI 收款。流程中的“确认工厂已收款”由经办人另行确认，凭证可后补。' }}</p>
-    <el-alert v-if="error" :title="error" type="error" :closable="false" />
-    <el-table :data="rows" empty-text="尚未登记实际款项"><el-table-column prop="occurredAt" label="实际发生时间" min-width="170" /><el-table-column prop="amount" label="金额" min-width="110" /><el-table-column prop="counterparty" label="收付方" min-width="140" /><el-table-column prop="referenceNo" label="凭证号／参考号" min-width="150" /><el-table-column prop="remark" label="说明" min-width="170" /><el-table-column label="状态" width="100"><template #default="{row}">{{ row.status === 'CONFIRMED' ? '有效' : '已撤回' }}</template></el-table-column><el-table-column v-if="canReverse || canWrite" label="更正" width="140"><template #default="{row}"><el-button v-if="canWrite && row.status === 'CONFIRMED'" link type="primary" :disabled="saving" @click="edit(row)">补录</el-button><el-button v-if="canReverse && row.status === 'CONFIRMED'" link type="danger" :disabled="saving" @click="reverse(row)">撤回</el-button><span v-else :title="row.reversalReason">{{ row.reversalReason }}</span></template></el-table-column></el-table>
-    <el-dialog v-model="visible" :title="supplementId === null ? `登记${title}` : '补录款项参考信息'" width="min(580px,95vw)" append-to-body :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving">
-      <el-form label-position="top" :disabled="saving"><el-form-item label="实际金额" required><el-input v-model="form.amount" :disabled="supplementId !== null" inputmode="decimal"><template #append>{{ currencyCode }}</template></el-input></el-form-item><el-form-item label="实际发生时间" required><el-date-picker v-model="form.occurredAt" :disabled="supplementId !== null" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" /></el-form-item><el-form-item label="收付方"><el-input v-model="form.counterparty" maxlength="200" /></el-form-item><el-form-item label="凭证号／参考号（可后补）"><el-input v-model="form.referenceNo" maxlength="300" /></el-form-item><el-form-item label="说明"><el-input v-model="form.remark" type="textarea" maxlength="2000" /></el-form-item></el-form>
-      <el-alert v-if="error" :title="error" type="error" :closable="false" /><template #footer><el-button :disabled="saving" @click="visible=false">取消</el-button><el-button type="primary" :loading="saving" @click="save">{{ supplementId === null ? '保存实际款项' : '保存参考信息' }}</el-button></template>
+    <div class="settlement-toolbar"><strong>{{ tr(title) }}：{{ currencyCode }} {{ format(total) }}</strong><el-button v-if="canWrite" type="primary" :disabled="saving" @click="open">{{ trInline("登记") }}{{ tr(title) }}</el-button><el-button @click="load">{{ tr("刷新") }}</el-button></div>
+    <p>{{ type === 'PI' ? tr('记录王总实际付给 Totem 的款项，与客户向销售侧付款分别记账。PI 修订共用此台账。') : tr('仅登记客户直接付给工厂的实际款项，不计入我方 PI 收款。流程中的“确认工厂已收款”由经办人另行确认，凭证可后补。') }}</p>
+    <el-alert v-if="error" :title="tr(error)" type="error" :closable="false" />
+    <el-table :data="rows" :empty-text='tr("尚未登记实际款项")'><el-table-column prop="occurredAt" :label='tr("实际发生时间")' min-width="170" /><el-table-column prop="amount" :label='tr("金额")' min-width="110" /><el-table-column prop="counterparty" :label='tr("收付方")' min-width="140" /><el-table-column prop="referenceNo" :label='tr("凭证号／参考号")' min-width="150" /><el-table-column prop="remark" :label='tr("说明")' min-width="170" /><el-table-column :label='tr("状态")' width="100"><template #default="{row}">{{ row.status === 'CONFIRMED' ? tr('有效') : tr('已撤回') }}</template></el-table-column><el-table-column v-if="canReverse || canWrite" :label='tr("更正")' width="140"><template #default="{row}"><el-button v-if="canWrite && row.status === 'CONFIRMED'" link type="primary" :disabled="saving" @click="edit(row)">{{ tr("补录") }}</el-button><el-button v-if="canReverse && row.status === 'CONFIRMED'" link type="danger" :disabled="saving" @click="reverse(row)">{{ tr("撤回") }}</el-button><span v-else :title="row.reversalReason">{{ row.reversalReason }}</span></template></el-table-column></el-table>
+    <el-dialog v-model="visible" :title="tr(supplementId === null ? tr('登记{value0}', { value0: title }) : tr('补录款项参考信息'))" width="min(580px,95vw)" append-to-body :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving">
+      <el-form label-position="top" :disabled="saving"><el-form-item :label='tr("实际金额")' required><el-input v-model="form.amount" :disabled="supplementId !== null" inputmode="decimal"><template #append>{{ currencyCode }}</template></el-input></el-form-item><el-form-item :label='tr("实际发生时间")' required><el-date-picker v-model="form.occurredAt" :disabled="supplementId !== null" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" /></el-form-item><el-form-item :label='tr("收付方")'><el-input v-model="form.counterparty" maxlength="200" /></el-form-item><el-form-item :label='tr("凭证号／参考号（可后补）")'><el-input v-model="form.referenceNo" maxlength="300" /></el-form-item><el-form-item :label='tr("说明")'><el-input v-model="form.remark" type="textarea" maxlength="2000" /></el-form-item></el-form>
+      <el-alert v-if="error" :title="tr(error)" type="error" :closable="false" /><template #footer><el-button :disabled="saving" @click="visible=false">{{ tr("取消") }}</el-button><el-button type="primary" :loading="saving" @click="save">{{ supplementId === null ? tr('保存实际款项') : tr('保存参考信息') }}</el-button></template>
     </el-dialog>
   </section>
 </template>

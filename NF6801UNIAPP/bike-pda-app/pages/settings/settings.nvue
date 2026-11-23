@@ -2,81 +2,80 @@
   <scroll-view class="page" scroll-y
     ><view class="content"
       ><view class="card">
-        <text class="subtitle">API 服务器</text
+        <text class="subtitle">{{ tr("API 服务器") }}</text
         ><form-field
           v-model="server"
-          label="服务器根地址（不带 /api）"
+          :label='tr("服务器根地址（不带 /api）")'
           :disabled="busy"
         /><text class="muted"
-          >更换服务器会退出当前账号，作业草稿按服务器与账号隔离。</text
+          >{{ tr("更换服务器会退出当前账号，作业草稿按服务器与账号隔离。") }}</text
         >
-        <text class="subtitle">NF6801 / 608 扫码与打印</text>
-        <text class="muted">BIKE PDA 1.0.3 · 608-3 串口分帧与扫码修复版</text>
+        <text class="subtitle">{{ tr("NF6801 / 608 扫码与打印") }}</text>
+        <text class="muted">{{ tr("BIKE PDA 1.0.3 · 608-3 串口分帧与扫码修复版") }}</text>
         <action-button
-          label="应用本机 80×100mm 标签参数"
+          :label='tr("应用本机 80×100mm 标签参数")'
           secondary
           :disabled="busy"
           @click="apply608"
         />
         <text class="muted">{{
           labelProfile === "608_80X100"
-            ? "608 专用重新排版；保留全部业务字段，不改服务器模板。"
-            : "按服务器模板尺寸打印。"
+            ? tr("608 专用重新排版；保留全部业务字段，不改服务器模板。")
+            : tr("按服务器模板尺寸打印。")
         }}</text>
         <form-field
           v-model="terminal"
-          label="终端编号，例如 PDA-01"
+          :label='tr("终端编号，例如 PDA-01")'
           :disabled="busy"
           :maxlength="64"
         />
         <form-field
           v-model="paperWidthMm"
-          label="实际纸宽 mm（按设备和纸张填写）"
+          :label='tr("实际纸宽 mm（按设备和纸张填写）")'
           type="digit"
           :disabled="busy"
         />
         <form-field
           v-model="printableDots"
-          label="打印头可打印点数"
+          :label='tr("打印头可打印点数")'
           type="number"
           :disabled="busy"
         />
         <form-field
           v-model="paperHeightMm"
-          label="标签纸高 mm"
+          :label='tr("标签纸高 mm")'
           type="digit"
           :disabled="busy"
         />
         <form-field
           v-model="dpi"
-          label="打印 DPI"
+          :label='tr("打印 DPI")'
           type="number"
           :disabled="busy"
         /><form-field
           v-model="offset"
-          label="黑标起始偏移（厂商默认 52）"
+          :label='tr("黑标起始偏移（厂商默认 52）")'
           type="number"
           :disabled="busy"
         />
-        <choice-list
+        <choice-list :empty-label="tr('暂无可选记录')"
           v-model="blackMark"
-          label="间隙标签 / 黑标纸模式"
+          :label='tr("间隙标签 / 黑标纸模式")'
           :options="blackOptions"
           :disabled="busy"
         />
         <text class="muted"
-          >80mm 纸的有效打印上限为 570
-          点。打印与扫码自检请先保存，并完全退出厂商 Demo，避免争用串口。</text
+          >{{ tr("80mm 纸的有效打印上限为 570 点。打印与扫码自检请先保存，并完全退出厂商 Demo，避免争用串口。") }}</text
         >
-        <action-button label="保存设置" :disabled="busy" @click="save" />
+        <action-button :label='tr("保存设置")' :disabled="busy" @click="save" />
         <action-button
-          label="扫码自检（不提交业务）"
+          :label='tr("扫码自检（不提交业务）")'
           secondary
           :disabled="busy || scanStarting"
           @click="testScan"
         />
         <action-button
-          label="打印自检标签（不领取任务）"
+          :label='tr("打印自检标签（不领取任务）")'
           secondary
           :disabled="busy || scanStarting"
           @click="testPrint"

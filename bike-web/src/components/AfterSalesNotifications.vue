@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr, trInline } from '../i18n/language'
 import RecordIdColumn from './table/RecordIdColumn.vue'
 import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
@@ -20,40 +21,40 @@ async function load() {
 function open(row: CaseNotification) { selected.value = row; form.recipient = row.recipient || ''; form.reason = ''; visible.value = true }
 async function retry() {
   if (!selected.value || saving.value) return
-  if (!form.reason.trim()) { ElMessage.warning('请填写重试或更正原因'); return }
+  if (!form.reason.trim()) { ElMessage.warning(tr('请填写重试或更正原因')); return }
   saving.value = true
-  try { await afterSales.retryNotification(props.caseId,selected.value.id,selected.value.revision,selected.value.audience === 'CUSTOMER' ? form.recipient : undefined,form.reason.trim()); visible.value = false; await load(); ElMessage.success('已重新排队，发送结果请刷新查看') }
-  catch (e) { ElMessage.error(afterSalesError(e)); visible.value = false; await load() }
+  try { await afterSales.retryNotification(props.caseId,selected.value.id,selected.value.revision,selected.value.audience === 'CUSTOMER' ? form.recipient : undefined,form.reason.trim()); visible.value = false; await load(); ElMessage.success(tr('已重新排队，发送结果请刷新查看')) }
+  catch (e) { ElMessage.error(tr(afterSalesError(e))); visible.value = false; await load() }
   finally { saving.value = false }
 }
 watch(() => props.caseId, () => { page.value = 1; visible.value = false; selected.value = null; result.value = null; void load() })
 onMounted(load); onUnmounted(() => { version++ })
 </script>
 <template>
-  <section aria-label="Email通知记录">
-    <p>通知随业务操作自动排队。SMTP接受表示邮件服务器已接收，最终送达仍取决于收件邮箱。</p>
-    <el-alert v-if="result && !result.sendingEnabled" title="邮件发送当前关闭，通知保留在队列中。启用前请核对SMTP和待发收件地址。" type="warning" :closable="false" />
-    <el-alert v-else-if="result && !result.smtpConfigured" title="SMTP配置不完整，请由管理员配置邮件服务后重试。" type="warning" :closable="false" />
-    <el-alert v-if="error" :title="error" type="error" :closable="false" />
-    <el-button :loading="loading" @click="load">刷新通知状态</el-button>
-    <el-table :data="result?.notifications.records || []" v-loading="loading" empty-text="当前案例暂无通知">
+  <section :aria-label='tr("Email通知记录")'>
+    <p>{{ tr("通知随业务操作自动排队。SMTP接受表示邮件服务器已接收，最终送达仍取决于收件邮箱。") }}</p>
+    <el-alert v-if="result && !result.sendingEnabled" :title='tr("邮件发送当前关闭，通知保留在队列中。启用前请核对SMTP和待发收件地址。")' type="warning" :closable="false" />
+    <el-alert v-else-if="result && !result.smtpConfigured" :title='tr("SMTP配置不完整，请由管理员配置邮件服务后重试。")' type="warning" :closable="false" />
+    <el-alert v-if="error" :title="tr(error)" type="error" :closable="false" />
+    <el-button :loading="loading" @click="load">{{ tr("刷新通知状态") }}</el-button>
+    <el-table :data="result?.notifications.records || []" v-loading="loading" :empty-text='tr("当前案例暂无通知")'>
       <RecordIdColumn />
-      <el-table-column label="事件" min-width="150"><template #default="{row}">{{ events[row.eventType] || row.eventType }}</template></el-table-column>
-      <el-table-column label="收件人" min-width="180"><template #default="{row}">{{ row.audience === 'STAFF' ? '售后公共邮箱' : '客户' }} · {{ row.recipient || '待配置' }}<small v-if="row.originalRecipient && row.originalRecipient !== row.recipient">原地址：{{ row.originalRecipient }}</small></template></el-table-column>
-      <el-table-column label="状态 / 最近原因" min-width="200"><template #default="{row}">{{ states[row.status as keyof typeof states] }}<small v-if="row.lastError">{{ errors[row.lastError] || row.lastError }}</small></template></el-table-column>
-      <el-table-column prop="attemptCount" label="本轮尝试" width="90" />
-      <el-table-column label="创建时间" min-width="165"><template #default="{row}">{{ time(row.createdAt) }}</template></el-table-column>
-      <el-table-column label="发送 / 下次重试" min-width="165"><template #default="{row}">{{ row.sentAt ? time(row.sentAt) : row.status === 'RETRY' ? time(row.nextAttemptAt) : '—' }}</template></el-table-column>
-      <el-table-column label="操作" width="105"><template #default="{row}"><el-button v-if="['FAILED','BLOCKED','RETRY'].includes(row.status)" link type="primary" :disabled="saving" @click="open(row)">检查并重试</el-button></template></el-table-column>
+      <el-table-column :label='tr("事件")' min-width="150"><template #default="{row}">{{ events[row.eventType] || row.eventType }}</template></el-table-column>
+      <el-table-column :label='tr("收件人")' min-width="180"><template #default="{row}">{{ row.audience === 'STAFF' ? tr('售后公共邮箱') : tr('客户') }} · {{ row.recipient || tr('待配置') }}<small v-if="row.originalRecipient && row.originalRecipient !== row.recipient">{{ trInline("原地址：") }}{{ row.originalRecipient }}</small></template></el-table-column>
+      <el-table-column :label='tr("状态 / 最近原因")' min-width="200"><template #default="{row}">{{ tr(states[row.status as keyof typeof states]) }}<small v-if="row.lastError">{{ tr(errors[row.lastError] || row.lastError) }}</small></template></el-table-column>
+      <el-table-column prop="attemptCount" :label='tr("本轮尝试")' width="90" />
+      <el-table-column :label='tr("创建时间")' min-width="165"><template #default="{row}">{{ time(row.createdAt) }}</template></el-table-column>
+      <el-table-column :label='tr("发送 / 下次重试")' min-width="165"><template #default="{row}">{{ row.sentAt ? time(row.sentAt) : row.status === 'RETRY' ? time(row.nextAttemptAt) : '—' }}</template></el-table-column>
+      <el-table-column :label='tr("操作")' width="105"><template #default="{row}"><el-button v-if="['FAILED','BLOCKED','RETRY'].includes(row.status)" link type="primary" :disabled="saving" @click="open(row)">{{ tr("检查并重试") }}</el-button></template></el-table-column>
     </el-table>
     <el-pagination v-model:current-page="page" :page-size="20" :total="result?.notifications.total || 0" layout="total,prev,pager,next" @current-change="load" />
-    <el-dialog v-model="visible" title="检查通知并重新排队" width="min(560px,95vw)" append-to-body :close-on-click-modal="false">
+    <el-dialog v-model="visible" :title='tr("检查通知并重新排队")' width="min(560px,95vw)" append-to-body :close-on-click-modal="false">
       <el-alert v-if="selected?.lastError === 'DELIVERY_RESULT_UNKNOWN'" :title="errors.DELIVERY_RESULT_UNKNOWN" type="warning" :closable="false" />
       <el-form label-position="top" @submit.prevent="retry">
-        <el-form-item v-if="selected?.audience === 'CUSTOMER'" label="客户收件Email"><el-input v-model="form.recipient" maxlength="254" placeholder="核对客户确认的收件地址" /></el-form-item>
-        <p v-else>内部通知使用服务器配置的售后公共邮箱；请先确认配置已更正。</p>
-        <el-form-item label="重试或更正原因" required><el-input v-model="form.reason" type="textarea" maxlength="1000" :rows="3" /></el-form-item>
-        <el-button type="primary" native-type="submit" :loading="saving">重新排队</el-button>
+        <el-form-item v-if="selected?.audience === 'CUSTOMER'" :label='tr("客户收件Email")'><el-input v-model="form.recipient" maxlength="254" :placeholder='tr("核对客户确认的收件地址")' /></el-form-item>
+        <p v-else>{{ tr("内部通知使用服务器配置的售后公共邮箱；请先确认配置已更正。") }}</p>
+        <el-form-item :label='tr("重试或更正原因")' required><el-input v-model="form.reason" type="textarea" maxlength="1000" :rows="3" /></el-form-item>
+        <el-button type="primary" native-type="submit" :loading="saving">{{ tr("重新排队") }}</el-button>
       </el-form>
     </el-dialog>
   </section>

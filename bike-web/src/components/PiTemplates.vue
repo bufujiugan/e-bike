@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { language, tr, trInline } from '../i18n/language'
 import RecordIdColumn from './table/RecordIdColumn.vue'
 import { isSelectablePiLayout, piLayoutLabel, piTemplateLayouts } from '../pi-template-layouts'
 import { computed, nextTick, reactive, ref, watch } from 'vue'
@@ -30,6 +31,11 @@ function fieldIssue(key: TemplateField): string {
   if (key === 'sellerEmail' && !/^[^\s@]+@[^\s@]+$/.test(value))
     return '卖方Email：请填写有效的邮箱地址，例如 sales@example.com'
   return ''
+}
+function fieldErrorText(key: TemplateField, label: string) {
+  const error = fieldErrors[key]
+  if (error === '请填写' + label) return tr('请填写{field}', { field: tr(label) })
+  return tr(error)
 }
 function validateField(key: TemplateField) {
   if (fieldErrors[key]) formError.value = ''
@@ -81,9 +87,9 @@ async function publish() {
   if (invalidFields.value.length) { await focusField(invalidFields.value[0]![0]); return }
   saving.value = true; formError.value = ''
   try {
-    await ElMessageBox.confirm('保存后生成可选用的新版本，历史版本和已生成单据保留原资料。请核对卖方、银行信息和版式。', '保存模板', { type: 'warning' })
+    await ElMessageBox.confirm(tr('保存后生成可选用的新版本，历史版本和已生成单据保留原资料。请核对卖方、银行信息和版式。'), tr('保存模板'), { type: 'warning' })
     const result = await piApi.publishTemplate({ ...draft })
-    editing.value = false; page.value = 1; await load(); ElMessage.success('模板已保存为新版本')
+    editing.value = false; page.value = 1; await load(); ElMessage.success(tr('模板已保存为新版本'))
     if (props.selectable && result.tradeType === props.tradeType) emit('select', result)
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') {
@@ -103,35 +109,35 @@ async function publish() {
 </script>
 <template>
   <section v-loading="busy">
-    <p>点击“调整模板”可修改卖方资料、默认收款银行和 PI 版式，保存为新版本。内销和外销均可选择标准明细表或双栏发票，历史单据保留原资料。</p>
-    <el-alert v-if="error" :title="error" type="error" :closable="false" />
-    <el-button @click="load">刷新模板</el-button><el-button v-if="canManage" type="primary" @click="beginAdjustment()">新建模板</el-button>
-    <el-table :data="rows" empty-text="暂无已发布模板，请联系模板管理员">
+    <p>{{ tr("点击“调整模板”可修改卖方资料、默认收款银行和 PI 版式，保存为新版本。内销和外销均可选择标准明细表或双栏发票，历史单据保留原资料。") }}</p>
+    <el-alert v-if="error" :title="tr(error)" type="error" :closable="false" />
+    <el-button @click="load">{{ tr("刷新模板") }}</el-button><el-button v-if="canManage" type="primary" @click="beginAdjustment()">{{ tr("新建模板") }}</el-button>
+    <el-table :data="rows" :empty-text='tr("暂无已发布模板，请联系模板管理员")'>
       <RecordIdColumn />
-      <el-table-column prop="templateCode" label="模板" /><el-table-column prop="templateVersion" label="版本" width="80" />
-      <el-table-column label="类型" width="80"><template #default="s">{{ s.row.tradeType === 'EXPORT' ? '外销' : '内销' }}</template></el-table-column>
-      <el-table-column label="版式" width="170"><template #default="s">{{ piLayoutLabel(s.row.layoutCode) }}</template></el-table-column>
-      <el-table-column prop="sellerName" label="卖方" /><el-table-column prop="bankName" label="银行" /><el-table-column prop="bankAccount" label="账号" />
-      <el-table-column label="创建时间" min-width="175"><template #default="s">{{ formatDateTime(s.row.publishedAt) }}</template></el-table-column>
-      <el-table-column label="修改时间" min-width="175"><template #default="s">{{ formatDateTime(s.row.publishedAt) }}</template></el-table-column>
-      <el-table-column type="expand"><template #default="s"><el-descriptions :column="2" border><el-descriptions-item v-for="key in ['sellerAddress', 'sellerCountry', 'sellerContactName', 'sellerPhone', 'sellerEmail']" :key="key" :label="fields.find(f => f[0] === key)?.[1]">{{ s.row[key] || '历史未记录' }}</el-descriptions-item><el-descriptions-item v-for="[key, label] in optionalFields" :key="key" :label="label">{{ s.row[key] || '未填写' }}</el-descriptions-item></el-descriptions></template></el-table-column>
-      <el-table-column v-if="canManage || selectable" label="操作" :width="canManage && selectable ? 160 : 110" fixed="right"><template #default="s"><el-button v-if="canManage" link type="primary" @click="beginAdjustment(s.row)">调整模板</el-button><el-button v-if="selectable" link type="primary" :disabled="!isSelectablePiLayout(s.row.layoutCode)" @click="emit('select', s.row)">选用</el-button></template></el-table-column>
+      <el-table-column prop="templateCode" :label='tr("模板")' /><el-table-column prop="templateVersion" :label='tr("版本")' width="80" />
+      <el-table-column :label='tr("类型")' width="80"><template #default="s">{{ s.row.tradeType === 'EXPORT' ? tr('外销') : tr('内销') }}</template></el-table-column>
+      <el-table-column :label='tr("版式")' width="170"><template #default="s">{{ tr(piLayoutLabel(s.row.layoutCode)) }}</template></el-table-column>
+      <el-table-column prop="sellerName" :label='tr("卖方")' /><el-table-column prop="bankName" :label='tr("银行")' /><el-table-column prop="bankAccount" :label='tr("账号")' />
+      <el-table-column :label='tr("创建时间")' min-width="175"><template #default="s">{{ formatDateTime(s.row.publishedAt) }}</template></el-table-column>
+      <el-table-column :label='tr("修改时间")' min-width="175"><template #default="s">{{ formatDateTime(s.row.publishedAt) }}</template></el-table-column>
+      <el-table-column type="expand"><template #default="s"><el-descriptions :column="2" border><el-descriptions-item v-for="key in ['sellerAddress', 'sellerCountry', 'sellerContactName', 'sellerPhone', 'sellerEmail']" :key="key" :label="fields.find(f => f[0] === key)?.[1]">{{ s.row[key] || tr('历史未记录') }}</el-descriptions-item><el-descriptions-item v-for="[key, label] in optionalFields" :key="key" :label="tr(label)">{{ s.row[key] || tr('未填写') }}</el-descriptions-item></el-descriptions></template></el-table-column>
+      <el-table-column v-if="canManage || selectable" :label='tr("操作")' :width="canManage && selectable ? 160 : 110" fixed="right"><template #default="s"><el-button v-if="canManage" link type="primary" @click="beginAdjustment(s.row)">{{ tr("调整模板") }}</el-button><el-button v-if="selectable" link type="primary" :disabled="!isSelectablePiLayout(s.row.layoutCode)" @click="emit('select', s.row)">{{ tr("选用") }}</el-button></template></el-table-column>
     </el-table>
     <el-pagination v-model:current-page="page" :page-size="20" :total="total" layout="prev, pager, next, total" @current-change="load" />
-    <el-dialog v-model="editing" :title="sourceTemplate ? '调整模板' : '新建模板'" width="min(780px, 94vw)" append-to-body :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving">
-      <p v-if="sourceTemplate">正在调整 {{ sourceTemplate.templateCode }} · {{ sourceTemplate.templateVersion }}，已带入原资料，并生成可修改的新版本号。</p>
-      <el-alert v-if="invalidFields.length" :title="`有 ${invalidFields.length} 处填写错误，请修改标红字段`" type="error" show-icon :closable="false">
-        <div v-for="[key] in invalidFields" :key="key"><el-button link type="danger" class="template-error-link" @click="focusField(key)">{{ fieldErrors[key] }}</el-button></div>
+    <el-dialog v-model="editing" :title="sourceTemplate ? tr('调整模板') : tr('新建模板')" width="min(780px, 94vw)" append-to-body :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving">
+      <p v-if="sourceTemplate">{{ trInline("正在调整") }} {{ sourceTemplate.templateCode }} · {{ sourceTemplate.templateVersion }}{{ trInline("，已带入原资料，并生成可修改的新版本号。") }}</p>
+      <el-alert v-if="invalidFields.length" :title="tr('有 {value0} 处填写错误，请修改标红字段', { value0: invalidFields.length })" type="error" show-icon :closable="false">
+        <div v-for="[key, label] in invalidFields" :key="key"><el-button link type="danger" class="template-error-link" @click="focusField(key)">{{ fieldErrorText(key, label) }}</el-button></div>
       </el-alert>
-      <el-alert v-else-if="formError" :title="formError" type="error" show-icon :closable="false" />
+      <el-alert v-else-if="formError" :title="tr(formError)" type="error" show-icon :closable="false" />
       <el-form v-if="canManage" ref="templateForm" label-position="top" class="template-form" :disabled="saving" @submit.prevent="publish">
-        <el-form-item label="贸易类型"><el-select v-model="draft.tradeType" aria-label="贸易类型" :disabled="Boolean(sourceTemplate) || Boolean(tradeType)"><el-option value="DOMESTIC" label="内销" /><el-option value="EXPORT" label="外销" /></el-select></el-form-item>
-        <el-form-item label="PI 版式" required><el-select v-model="draft.layoutCode" aria-label="PI 版式"><el-option v-for="layout in layoutOptions" :key="layout.value" :value="layout.value" :label="layout.label" /></el-select></el-form-item>
-        <el-form-item v-for="[key, label] in fields" :key="key" :label="label" required :error="fieldErrors[key]" :data-template-field="key"><el-input v-model="draft[key]" :aria-label="label" :aria-invalid="Boolean(fieldErrors[key])" :disabled="key === 'templateCode' && Boolean(sourceTemplate)" :placeholder="key === 'templateCode' ? '例如 EXPORT_01（大写字母、数字、_、-）' : key === 'templateVersion' ? '例如 V1.0' : undefined" :type="['sellerAddress', 'reason'].includes(key) ? 'textarea' : key === 'sellerEmail' ? 'email' : 'text'" :maxlength="key === 'sellerAddress' ? 1000 : key === 'reason' ? 500 : key === 'sellerEmail' ? 254 : ['sellerCountry', 'sellerContactName'].includes(key) ? 100 : key === 'sellerPhone' || key === 'templateCode' ? 64 : key === 'templateVersion' ? 32 : 200" @blur="validateField(key)" @input="fieldErrors[key] && validateField(key)" /></el-form-item>
-        <el-form-item label="补充联系方式（可选）"><el-input v-model="draft.sellerContact" aria-label="补充联系方式" maxlength="300" /></el-form-item>
-        <el-form-item v-for="[key, label, max] in optionalFields" :key="key" :label="`${label}（选填）`" :data-template-field="key"><el-input v-model="draft[key as OptionalField]" :aria-label="label" :maxlength="max" :type="key === 'bankAddress' ? 'textarea' : 'text'" /></el-form-item>
+        <el-form-item :label='tr("贸易类型")'><el-select v-model="draft.tradeType" :aria-label='tr("贸易类型")' :disabled="Boolean(sourceTemplate) || Boolean(tradeType)"><el-option value="DOMESTIC" :label='tr("内销")' /><el-option value="EXPORT" :label='tr("外销")' /></el-select></el-form-item>
+        <el-form-item :label='tr("PI 版式")' required><el-select v-model="draft.layoutCode" :aria-label='tr("PI 版式")'><el-option v-for="layout in layoutOptions" :key="layout.value" :value="layout.value" :label="tr(layout.label)" /></el-select></el-form-item>
+        <el-form-item v-for="[key, label] in fields" :key="key" :label="tr(label)" required :error="fieldErrorText(key, label)" :data-template-field="key"><el-input v-model="draft[key]" :aria-label="tr(label)" :aria-invalid="Boolean(fieldErrors[key])" :disabled="key === 'templateCode' && Boolean(sourceTemplate)" :placeholder="key === 'templateCode' ? tr('例如 EXPORT_01（大写字母、数字、_、-）') : key === 'templateVersion' ? tr('例如 V1.0') : undefined" :type="['sellerAddress', 'reason'].includes(key) ? 'textarea' : key === 'sellerEmail' ? 'email' : 'text'" :maxlength="key === 'sellerAddress' ? 1000 : key === 'reason' ? 500 : key === 'sellerEmail' ? 254 : ['sellerCountry', 'sellerContactName'].includes(key) ? 100 : key === 'sellerPhone' || key === 'templateCode' ? 64 : key === 'templateVersion' ? 32 : 200" @blur="validateField(key)" @input="fieldErrors[key] && validateField(key)" /></el-form-item>
+        <el-form-item :label='tr("补充联系方式（可选）")'><el-input v-model="draft.sellerContact" :aria-label='tr("补充联系方式")' maxlength="300" /></el-form-item>
+        <el-form-item v-for="[key, label, max] in optionalFields" :key="key" :label="tr('{value0}（选填）', { value0: label })" :data-template-field="key"><el-input v-model="draft[key as OptionalField]" :aria-label="tr(label)" :maxlength="max" :type="key === 'bankAddress' ? 'textarea' : 'text'" /></el-form-item>
       </el-form>
-      <template #footer><div v-if="invalidFields.length" class="template-error-summary" role="alert">请修改：{{ invalidFields.map(([, label]) => label).join('、') }}。<el-button link type="danger" @click="focusField(invalidFields[0]![0])">定位第一处错误</el-button></div><div v-else-if="formError" class="template-error-summary" role="alert">{{ formError }}</div><el-button :disabled="saving" @click="editing = false">取消</el-button><el-button v-if="canManage" type="primary" :loading="saving" @click="publish">保存为新版本</el-button></template>
+      <template #footer><div v-if="invalidFields.length" class="template-error-summary" role="alert">{{ trInline("请修改：") }}{{ invalidFields.map(([, label]) => tr(label)).join(language === 'en' ? ', ' : '、') }}。<el-button link type="danger" @click="focusField(invalidFields[0]![0])">{{ tr("定位第一处错误") }}</el-button></div><div v-else-if="formError" class="template-error-summary" role="alert">{{ tr(formError) }}</div><el-button :disabled="saving" @click="editing = false">{{ tr("取消") }}</el-button><el-button v-if="canManage" type="primary" :loading="saving" @click="publish">{{ tr("保存为新版本") }}</el-button></template>
     </el-dialog>
   </section>
 </template>

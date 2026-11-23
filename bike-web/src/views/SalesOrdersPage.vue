@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/language'
 import { computed } from 'vue'
 import { orderFlow, type ModuleData, type Metric } from '../config/page-presentation'
 import { cell } from '../components/business/module-presentation'
@@ -15,4 +16,4 @@ const metrics = computed<Metric[]>(() => [
   { label: '异常订单', value: null, icon: 'warning', tone: 'red', hint: '暂无异常判定汇总' },
 ])
 </script>
-<template><MetricGrid :items="metrics" :loading="loading" /><section class="sm-card"><SectionHeader title="订单履约流程" description="业务流程说明 · 订单实际状态以列表与详情为准" /><ProcessFlow :steps="orderFlow" illustrated /></section><slot /></template>
+<template><MetricGrid :items="metrics" :loading="loading" /><section class="sm-card"><SectionHeader :title='tr("订单履约流程")' :description='tr("业务流程说明 · 订单实际状态以列表与详情为准")' /><ProcessFlow :steps="orderFlow" illustrated /></section><slot /></template>

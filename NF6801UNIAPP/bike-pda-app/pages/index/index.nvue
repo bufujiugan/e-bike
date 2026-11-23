@@ -1,42 +1,47 @@
 <template>
   <scroll-view class="page" scroll-y
     ><view class="content">
+      <view class="language-row">
+        <view class="language-button" role="button" :aria-label="tr('切换语言')" @click="openLanguageMenu">
+          <text class="language-button-text">{{ language === "en" ? "EN" : "中文" }} ▾</text>
+        </view>
+      </view>
       <view class="card"
-        ><text class="title">作业工作台</text
+        ><text class="title">{{ tr("作业工作台") }}</text
         ><text class="text">{{
-          context ? context.username : "正在校验身份…"
+          context ? context.username : tr("正在校验身份…")
         }}</text
         ><text class="muted">{{
           context ? context.workstations.join(" / ") : ""
         }}</text></view
       >
       <text v-if="message" :class="['feedback', failed ? 'error' : '']">{{
-        message
+        tr(message)
       }}</text>
       <action-button
         v-for="item in entries"
         :key="item.mode"
-        :label="item.label"
+        :label="tr(item.label)"
         :disabled="busy || !ready"
         @click="go(item.mode + '/' + item.mode)"
       />
       <text v-if="ready && !entries.length" class="text"
-        >当前账号没有可用工位，请联系管理员配置。</text
+        >{{ tr("当前账号没有可用工位，请联系管理员配置。") }}</text
       >
       <action-button
-        label="修改密码"
+        :label='tr("修改密码")'
         secondary
         :disabled="busy || !ready"
         @click="go('password/password')"
       />
       <action-button
-        label="服务器与设备设置"
+        :label='tr("服务器与设备设置")'
         secondary
         :disabled="busy"
         @click="go('settings/settings')"
       />
       <action-button
-        label="退出登录"
+        :label='tr("退出登录")'
         secondary
         :disabled="busy"
         @click="signOut"

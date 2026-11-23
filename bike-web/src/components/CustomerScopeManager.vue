@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr, trInline } from '../i18n/language'
 import RecordIdColumn from './table/RecordIdColumn.vue'
 import { onMounted, ref } from 'vue'
 import api from '../api'
@@ -19,19 +20,19 @@ onMounted(() => load())
 </script>
 <template>
   <section class="panel data-panel">
-    <h2>内部客户授权</h2>
-    <p>选择内部账号，分配或撤销其可访问的客户。业务操作仍需对应的功能权限。</p>
-    <el-alert v-if="error" :title="error" type="error" :closable="false" />
-    <el-form inline @submit.prevent="load()"><el-form-item label="账号或姓名"><el-input v-model="keyword" :disabled="busy" /></el-form-item><el-button native-type="submit" :loading="busy">查询</el-button></el-form>
-    <el-table :data="users" v-loading="busy" empty-text="没有匹配的内部账号">
+    <h2>{{ tr("内部客户授权") }}</h2>
+    <p>{{ tr("选择内部账号，分配或撤销其可访问的客户。业务操作仍需对应的功能权限。") }}</p>
+    <el-alert v-if="error" :title="tr(error)" type="error" :closable="false" />
+    <el-form inline @submit.prevent="load()"><el-form-item :label='tr("账号或姓名")'><el-input v-model="keyword" :disabled="busy" /></el-form-item><el-button native-type="submit" :loading="busy">{{ tr("查询") }}</el-button></el-form>
+    <el-table :data="users" v-loading="busy" :empty-text='tr("没有匹配的内部账号")'>
       <RecordIdColumn />
-      <el-table-column prop="username" label="账号" /><el-table-column prop="displayName" label="姓名" /><el-table-column prop="userType" label="账号类型" />
-      <el-table-column label="状态"><template #default="{ row }">{{ row.enabled ? '启用' : '停用' }}</template></el-table-column>
-      <el-table-column label="创建时间" min-width="175"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column>
-      <el-table-column label="修改时间" min-width="175"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column>
-      <el-table-column label="操作"><template #default="{ row }"><CustomerScopeEditor :id="row.id" :username="row.username" /></template></el-table-column>
+      <el-table-column prop="username" :label='tr("账号")' /><el-table-column prop="displayName" :label='tr("姓名")' /><el-table-column prop="userType" :label='tr("账号类型")' />
+      <el-table-column :label='tr("状态")'><template #default="{ row }">{{ row.enabled ? tr('启用') : tr('停用') }}</template></el-table-column>
+      <el-table-column :label='tr("创建时间")' min-width="175"><template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template></el-table-column>
+      <el-table-column :label='tr("修改时间")' min-width="175"><template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template></el-table-column>
+      <el-table-column :label='tr("操作")'><template #default="{ row }"><CustomerScopeEditor :id="row.id" :username="row.username" /></template></el-table-column>
     </el-table>
-    <p>共 {{ total }} 个账号，第 {{ page }} 页</p>
-    <el-button :disabled="busy || page <= 1" @click="load(page - 1)">上一页</el-button><el-button :disabled="busy || page * 20 >= total" @click="load(page + 1)">下一页</el-button>
+    <p>{{ trInline("共") }} {{ total }} {{ trInline("个账号，第") }} {{ page }} {{ trInline("页") }}</p>
+    <el-button :disabled="busy || page <= 1" @click="load(page - 1)">{{ tr("上一页") }}</el-button><el-button :disabled="busy || page * 20 >= total" @click="load(page + 1)">{{ tr("下一页") }}</el-button>
   </section>
 </template>

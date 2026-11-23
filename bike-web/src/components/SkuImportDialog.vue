@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr, trInline } from '../i18n/language'
 import { computed, ref } from 'vue'
 import { ElMessage, type UploadInstance, type UploadProps, type UploadRawFile } from 'element-plus'
 import api from '../api'
@@ -53,7 +54,7 @@ async function downloadTemplate() {
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   } catch (error) {
     errorMessage.value = await messageFrom(error)
-    ElMessage.error(errorMessage.value)
+    ElMessage.error(tr(errorMessage.value))
   } finally { downloading.value = false }
 }
 async function importSkus() {
@@ -68,41 +69,41 @@ async function importSkus() {
     result.value = imported
     const summary = `导入完成：成功 ${imported.successRows} 条，失败 ${imported.failureRows} 条`
     emit('imported')
-    if (imported.failureRows) ElMessage.warning(summary)
-    else { ElMessage.success(summary); visible.value = false }
+    if (imported.failureRows) ElMessage.warning(tr(summary))
+    else { ElMessage.success(tr(summary)); visible.value = false }
   } catch (error) {
     errorMessage.value = await messageFrom(error)
-    ElMessage.error(errorMessage.value)
+    ElMessage.error(tr(errorMessage.value))
   } finally { importing.value = false }
 }
 </script>
 
 <template>
-  <el-dialog v-model="visible" title="导入 SKU" width="640px" align-center class="sku-import-dialog" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy" :before-close="beforeClose" @closed="clearFile">
-    <p class="sku-import-subtitle">请使用标准模板填写 SKU 数据后上传导入</p>
+  <el-dialog v-model="visible" :title='tr("导入 SKU")' width="640px" align-center class="sku-import-dialog" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy" :before-close="beforeClose" @closed="clearFile">
+    <p class="sku-import-subtitle">{{ tr("请使用标准模板填写 SKU 数据后上传导入") }}</p>
     <div class="sku-template-card">
       <span class="sku-template-icon"><AppIcon name="orders" /></span>
-      <div><strong>SKU 导入模板</strong><p>请先下载模板，按模板格式填写商品 SKU 数据。</p></div>
-      <el-button :loading="downloading" :disabled="importing" @click="downloadTemplate"><AppIcon name="download" />下载导入模板</el-button>
+      <div><strong>{{ tr("SKU 导入模板") }}</strong><p>{{ tr("请先下载模板，按模板格式填写商品 SKU 数据。") }}</p></div>
+      <el-button :loading="downloading" :disabled="importing" @click="downloadTemplate"><AppIcon name="download" />{{ tr("下载导入模板") }}</el-button>
     </div>
     <el-upload ref="upload" class="sku-import-upload" drag action="#" accept=".xlsx,.xls" :auto-upload="false" :show-file-list="false" :limit="1" :disabled="busy" :on-change="onChange" :on-exceed="onExceed">
       <AppIcon name="upload" />
-      <strong>点击选择文件或拖拽文件到此处</strong>
-      <span>支持 .xlsx、.xls 文件，单个文件不超过 10MB</span>
+      <strong>{{ tr("点击选择文件或拖拽文件到此处") }}</strong>
+      <span>{{ tr("支持 .xlsx、.xls 文件，单个文件不超过 10MB") }}</span>
     </el-upload>
     <div v-if="selectedFile" class="sku-selected-file">
-      <AppIcon name="orders" /><div><strong :title="selectedFile.name">{{ selectedFile.name }}</strong><span>{{ fileSize }} · 重新选择文件可替换</span></div>
-      <el-button link type="danger" :disabled="busy" @click="clearFile">删除</el-button>
+      <AppIcon name="orders" /><div><strong :title="selectedFile.name">{{ selectedFile.name }}</strong><span>{{ fileSize }} {{ trInline("· 重新选择文件可替换") }}</span></div>
+      <el-button link type="danger" :disabled="busy" @click="clearFile">{{ tr("删除") }}</el-button>
     </div>
-    <p class="sku-import-note"><AppIcon name="info" />每次最多导入 5000 行。选择文件后，点击“开始导入”提交。</p>
-    <el-alert v-if="errorMessage" :title="errorMessage" type="error" show-icon :closable="false" />
+    <p class="sku-import-note"><AppIcon name="info" />{{ tr("每次最多导入 5000 行。选择文件后，点击“开始导入”提交。") }}</p>
+    <el-alert v-if="errorMessage" :title="tr(errorMessage)" type="error" show-icon :closable="false" />
     <div v-if="result" class="sku-import-result" aria-live="polite">
-      <el-alert :title="`导入完成：成功 ${result.successRows} 条，失败 ${result.failureRows} 条`" :type="result.failureRows ? 'warning' : 'success'" :closable="false" show-icon />
+      <el-alert :title="tr('导入完成：成功 {value0} 条，失败 {value1} 条', { value0: result.successRows, value1: result.failureRows })" :type="result.failureRows ? 'warning' : 'success'" :closable="false" show-icon />
       <template v-if="result.failureRows">
-        <p>已成功的记录已保存，请修正失败行后重新选择文件导入。</p>
-        <el-table :data="result.failures" max-height="200" size="small"><el-table-column prop="rowNumber" label="行号" width="75" /><el-table-column prop="reason" label="失败原因" /></el-table>
+        <p>{{ tr("已成功的记录已保存，请修正失败行后重新选择文件导入。") }}</p>
+        <el-table :data="result.failures" max-height="200" size="small"><el-table-column prop="rowNumber" :label='tr("行号")' width="75" /><el-table-column prop="reason" :label='tr("失败原因")' /></el-table>
       </template>
     </div>
-    <template #footer><el-button :disabled="busy" @click="visible = false">取消</el-button><el-button type="primary" :disabled="!selectedFile || downloading" :loading="importing" @click="importSkus">{{ importing ? '正在导入…' : '开始导入' }}</el-button></template>
+    <template #footer><el-button :disabled="busy" @click="visible = false">{{ tr("取消") }}</el-button><el-button type="primary" :disabled="!selectedFile || downloading" :loading="importing" @click="importSkus">{{ importing ? tr('正在导入…') : tr('开始导入') }}</el-button></template>
   </el-dialog>
 </template>

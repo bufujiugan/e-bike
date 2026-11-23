@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/language'
 import { computed } from 'vue'
 import { traceFlow, type ModuleData, type Metric } from '../config/page-presentation'
 import MetricGrid from '../components/dashboard/MetricGrid.vue'
@@ -12,4 +13,4 @@ const metrics = computed<Metric[]>(() => [
   { label: '查询日期', value: props.module.stats.find(stat => stat.label === '查询日期')?.value ?? '—', icon: 'calendar', hint: '后端查询日期' },
 ])
 </script>
-<template><MetricGrid :items="metrics" :loading="loading" /><section class="sm-card sm-trace-chain"><SectionHeader title="整车追溯链路" description="以聚合码为主线，关联整车与核心部件，记录完整生命周期" /><ProcessFlow :steps="traceFlow" illustrated /></section><slot /></template>
+<template><MetricGrid :items="metrics" :loading="loading" /><section class="sm-card sm-trace-chain"><SectionHeader :title='tr("整车追溯链路")' :description='tr("以聚合码为主线，关联整车与核心部件，记录完整生命周期")' /><ProcessFlow :steps="traceFlow" illustrated /></section><slot /></template>

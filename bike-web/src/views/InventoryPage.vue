@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/language'
 import { computed } from 'vue'
 import type { ModuleData, Metric } from '../config/page-presentation'
 import MetricGrid from '../components/dashboard/MetricGrid.vue'
@@ -22,4 +23,4 @@ const models = computed(() => props.error ? null : donutOption(groupedColumn(pro
 const physical = computed(() => sumColumn(props.module, '物理库存'))
 const health = computed(() => ['物理库存', '隔离库存', '临时锁定', '订单占用', '库存缺口'].map(label => ({ label, value: props.error ? null : sumColumn(props.module, label), tone: label.includes('隔离') || label.includes('缺口') ? 'red' : label === '物理库存' ? 'green' : 'blue' })))
 </script>
-<template><MetricGrid :items="metrics" :loading="loading" /><div class="sm-chart-grid"><ChartCard title="仓库库存分布" description="当前页物理库存 · 最多 6 个仓库" :option="warehouses" :loading="loading" /><ChartCard title="车型库存结构" description="当前页物理库存" :option="models" :loading="loading" /><section class="sm-card"><SectionHeader title="库存健康度" description="当前页数量 · 各项并非互斥分类" /><div class="sm-health-list"><div v-for="item in health" :key="item.label" class="sm-health-row"><span>{{ item.label }}</span><strong>{{ item.value ?? '—' }}</strong><ProgressBar :value="item.value === null || !physical ? null : item.value * 100 / physical" :tone="item.tone" :show-label="false" /></div></div></section></div><AlertCard title="库存口径" :description="module.subtitle || '车型级数值不能跨库位累计；具体 SKU 上限请进入 SKU 库存锁定。'" /><slot /></template>
+<template><MetricGrid :items="metrics" :loading="loading" /><div class="sm-chart-grid"><ChartCard :title='tr("仓库库存分布")' :description='tr("当前页物理库存 · 最多 6 个仓库")' :option="warehouses" :loading="loading" /><ChartCard :title='tr("车型库存结构")' :description='tr("当前页物理库存")' :option="models" :loading="loading" /><section class="sm-card"><SectionHeader :title='tr("库存健康度")' :description='tr("当前页数量 · 各项并非互斥分类")' /><div class="sm-health-list"><div v-for="item in health" :key="item.label" class="sm-health-row"><span>{{ tr(item.label) }}</span><strong>{{ item.value ?? '—' }}</strong><ProgressBar :value="item.value === null || !physical ? null : item.value * 100 / physical" :tone="item.tone" :show-label="false" /></div></div></section></div><AlertCard :title='tr("库存口径")' :description="module.subtitle || tr('车型级数值不能跨库位累计；具体 SKU 上限请进入 SKU 库存锁定。')" /><slot /></template>

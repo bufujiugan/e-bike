@@ -5,7 +5,8 @@ import TopHeader from './TopHeader.vue'
 import PageHero from '../common/PageHero.vue'
 import { pagePresentation, type NavGroup } from '../../config/page-presentation'
 import { provideAccountDecoration } from '../../account-decoration'
-const props = defineProps<{ groups: NavGroup[]; active: string; title: string; group: string; username: string; role: string; lastLoaded: string }>()
+import { tr } from '../../i18n/language'
+const props = defineProps<{ groups: NavGroup[]; active: string; title: string; group: string; username: string; role: string; lastLoaded: string; isCustomer: boolean }>()
 provideAccountDecoration(() => props.username)
 const emit = defineEmits<{ navigate: [key: string]; guide: []; settings: []; logout: [] }>()
 const presentation = computed(() => pagePresentation[props.active])
@@ -17,7 +18,25 @@ function updateSidebarCollapsed(collapsed: boolean) {
 }
 </script>
 <template>
-  <main class="admin-app sm-app sm-unified" :class="{ 'cc-app': active === 'dashboard', 'pc-app': isProductionView, 'pc-module-app': isProductionView && active !== 'production', 'is-sidebar-collapsed': sidebarCollapsed }"><div class="admin-shell sm-shell"><Sidebar :groups="groups" :active="active" :username="username" :role="role" :collapsed="sidebarCollapsed" @update:collapsed="updateSidebarCollapsed" @navigate="emit('navigate', $event)" @logout="emit('logout')" /><section class="workspace sm-workspace"><TopHeader :groups="groups" :username="username" :role="role" :last-loaded="lastLoaded" :title="presentation?.title ?? title" :group="group" @navigate="emit('navigate', $event)" @guide="emit('guide')" @settings="emit('settings')" @logout="emit('logout')"><template #notifications><slot name="notifications" /></template></TopHeader><PageHero v-if="active !== 'customer-orders' && active !== 'dashboard' && active !== 'workflow' && active !== 'production-tasks'" :workshop="isProductionView" :title="presentation?.title ?? title" :description="presentation?.description ?? '业务协同 · 数据透明 · 高效运营'" :theme="presentation?.theme ?? 'production'" :motto="presentation?.motto ?? '智能制造生产运营系统'" :group="group" /><slot /></section></div><slot name="dialogs" /></main>
+  <main class="admin-app sm-app sm-unified" :class="{ 'cc-app': active === 'dashboard', 'pc-app': isProductionView, 'pc-module-app': isProductionView && active !== 'production', 'is-sidebar-collapsed': sidebarCollapsed }">
+    <div class="admin-shell sm-shell">
+      <Sidebar :groups="groups" :active="active" :username="username" :role="tr(role)" :collapsed="sidebarCollapsed"
+        @update:collapsed="updateSidebarCollapsed" @navigate="emit('navigate', $event)" @logout="emit('logout')" />
+      <section class="workspace sm-workspace">
+        <TopHeader :groups="groups" :username="username" :role="tr(role)" :is-customer="isCustomer" :last-loaded="lastLoaded"
+          :title="tr(presentation?.title ?? title)" :group="tr(group)"
+          @navigate="emit('navigate', $event)" @guide="emit('guide')" @settings="emit('settings')" @logout="emit('logout')">
+          <template #notifications><slot name="notifications" /></template>
+        </TopHeader>
+        <PageHero v-if="active !== 'customer-orders' && active !== 'dashboard' && active !== 'workflow' && active !== 'production-tasks'"
+          :workshop="isProductionView" :title="tr(presentation?.title ?? title)"
+          :description="tr(presentation?.description ?? '业务协同 · 数据透明 · 高效运营')"
+          :theme="presentation?.theme ?? 'production'" :motto="tr(presentation?.motto ?? '智能制造生产运营系统')" :group="tr(group)" />
+        <slot />
+      </section>
+    </div>
+    <slot name="dialogs" />
+  </main>
 </template>
 
 <style scoped>

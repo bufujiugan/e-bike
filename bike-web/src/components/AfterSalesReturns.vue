@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/language'
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { afterSales, afterSalesError, type CaseReturn, type CaseStatus, type ReturnAction, type ReturnRequest, type ReturnStatus } from '../after-sales-api'
@@ -41,10 +42,10 @@ function open(row: CaseReturn, action: ReturnAction) {
 async function save() {
   if (!selected.value || saving.value) return
   const required = form.action === 'REQUEST' ? [form.warehouseName,form.recipient,form.phone,form.addressLine,form.postalCode] : form.action === 'SEND' ? [form.carrier,form.trackingNo] : form.action === 'INSPECT' ? [form.inspectionResult] : needsReason.value ? [form.reason] : []
-  if (required.some(v => !v.trim())) { ElMessage.warning('请填写完整的旧件处理资料'); return }
+  if (required.some(v => !v.trim())) { ElMessage.warning(tr('请填写完整的旧件处理资料')); return }
   saving.value = true
-  try { await afterSales.returnAction(props.caseId,selected.value.shipmentId,{ ...form }); visible.value = false; await load(); emit('changed'); ElMessage.success('旧件处理记录已保存') }
-  catch (e) { ElMessage.error(afterSalesError(e)); visible.value = false; await load() }
+  try { await afterSales.returnAction(props.caseId,selected.value.shipmentId,{ ...form }); visible.value = false; await load(); emit('changed'); ElMessage.success(tr('旧件处理记录已保存')) }
+  catch (e) { ElMessage.error(tr(afterSalesError(e))); visible.value = false; await load() }
   finally { saving.value = false }
 }
 watch(() => props.caseId, () => { visible.value = false; selected.value = null; rows.value = []; void load() })
@@ -53,25 +54,25 @@ onUnmounted(() => { version++ })
 </script>
 
 <template>
-  <section class="returns" aria-label="旧件处理">
-    <div class="heading"><p>每项要求退回的补发配件单独记录物流、收件和检测。完成处理或由审核人员记录豁免后，案例才能归档。</p><el-button :loading="loading" @click="load">刷新旧件</el-button></div>
-    <el-alert v-if="error" :title="error" type="error" :closable="false" />
-    <el-empty v-if="!loading && !error && !rows.length" description="当前没有需要退回的旧件" />
+  <section class="returns" :aria-label='tr("旧件处理")'>
+    <div class="heading"><p>{{ tr("每项要求退回的补发配件单独记录物流、收件和检测。完成处理或由审核人员记录豁免后，案例才能归档。") }}</p><el-button :loading="loading" @click="load">{{ tr("刷新旧件") }}</el-button></div>
+    <el-alert v-if="error" :title="tr(error)" type="error" :closable="false" />
+    <el-empty v-if="!loading && !error && !rows.length" :description='tr("当前没有需要退回的旧件")' />
     <div v-loading="loading" class="return-list">
       <article v-for="row in rows" :key="row.shipmentId" class="return-card">
-        <header><h3>{{ row.partName }} × {{ row.quantity }}</h3><el-tag>{{ names[row.status] }}</el-tag></header>
+        <header><h3>{{ row.partName }} × {{ row.quantity }}</h3><el-tag>{{ tr(names[row.status]) }}</el-tag></header>
         <dl>
-        <div><dt>补发记录 ID</dt><dd>{{ row.shipmentId }}</dd></div>
-          <div><dt>退回仓库 / 收件人</dt><dd>{{ row.warehouseName || '待提供' }} / {{ row.recipient || '—' }}</dd></div>
-          <div><dt>联系电话 / 邮编</dt><dd>{{ row.phone || '—' }} / {{ row.postalCode || '—' }}</dd></div>
-          <div class="wide"><dt>退回地址</dt><dd>{{ row.addressLine || '请等待售后人员提供退回地址后再寄出' }}</dd></div>
-          <div><dt>寄回承运商 / 运单</dt><dd>{{ row.carrier || '—' }} / {{ row.trackingNo || '—' }}</dd></div>
-          <div><dt>客户登记寄回时间</dt><dd>{{ time(row.sentAt) }}</dd></div>
-          <div><dt>公司收件时间</dt><dd>{{ time(row.receivedAt) }}</dd></div>
-          <div><dt>检测时间</dt><dd>{{ time(row.inspectedAt) }}</dd></div>
-          <div class="wide"><dt>检测结果</dt><dd>{{ row.inspectionResult || '—' }}</dd></div>
-          <div class="wide"><dt>处置 / 豁免说明</dt><dd>{{ row.dispositionNote || '—' }}</dd></div>
-          <div><dt>完成时间</dt><dd>{{ time(row.completedAt) }}</dd></div>
+        <div><dt>{{ tr("补发记录 ID") }}</dt><dd>{{ row.shipmentId }}</dd></div>
+          <div><dt>{{ tr("退回仓库 / 收件人") }}</dt><dd>{{ row.warehouseName || tr('待提供') }} / {{ row.recipient || '—' }}</dd></div>
+          <div><dt>{{ tr("联系电话 / 邮编") }}</dt><dd>{{ row.phone || '—' }} / {{ row.postalCode || '—' }}</dd></div>
+          <div class="wide"><dt>{{ tr("退回地址") }}</dt><dd>{{ row.addressLine || tr('请等待售后人员提供退回地址后再寄出') }}</dd></div>
+          <div><dt>{{ tr("寄回承运商 / 运单") }}</dt><dd>{{ row.carrier || '—' }} / {{ row.trackingNo || '—' }}</dd></div>
+          <div><dt>{{ tr("客户登记寄回时间") }}</dt><dd>{{ time(row.sentAt) }}</dd></div>
+          <div><dt>{{ tr("公司收件时间") }}</dt><dd>{{ time(row.receivedAt) }}</dd></div>
+          <div><dt>{{ tr("检测时间") }}</dt><dd>{{ time(row.inspectedAt) }}</dd></div>
+          <div class="wide"><dt>{{ tr("检测结果") }}</dt><dd>{{ row.inspectionResult || '—' }}</dd></div>
+          <div class="wide"><dt>{{ tr("处置 / 豁免说明") }}</dt><dd>{{ row.dispositionNote || '—' }}</dd></div>
+          <div><dt>{{ tr("完成时间") }}</dt><dd>{{ time(row.completedAt) }}</dd></div>
         </dl>
         <div class="actions"><el-button v-for="action in available(row)" :key="action" :disabled="saving" @click="open(row,action)">{{ actions[action] }}</el-button></div>
       </article>
@@ -79,22 +80,22 @@ onUnmounted(() => { version++ })
     <el-dialog v-model="visible" :title="actions[form.action]" width="min(600px,95vw)" :close-on-click-modal="false" append-to-body>
       <el-form label-position="top" @submit.prevent="save">
         <template v-if="form.action === 'REQUEST'">
-          <el-form-item label="退回仓库" required><el-input v-model="form.warehouseName" maxlength="128" /></el-form-item>
-          <el-form-item label="收件人" required><el-input v-model="form.recipient" maxlength="100" /></el-form-item>
-          <el-form-item label="联系电话" required><el-input v-model="form.phone" maxlength="64" /></el-form-item>
-          <el-form-item label="完整退回地址" required><el-input v-model="form.addressLine" type="textarea" maxlength="500" /></el-form-item>
-          <el-form-item label="邮政编码" required><el-input v-model="form.postalCode" maxlength="32" /></el-form-item>
+          <el-form-item :label='tr("退回仓库")' required><el-input v-model="form.warehouseName" maxlength="128" /></el-form-item>
+          <el-form-item :label='tr("收件人")' required><el-input v-model="form.recipient" maxlength="100" /></el-form-item>
+          <el-form-item :label='tr("联系电话")' required><el-input v-model="form.phone" maxlength="64" /></el-form-item>
+          <el-form-item :label='tr("完整退回地址")' required><el-input v-model="form.addressLine" type="textarea" maxlength="500" /></el-form-item>
+          <el-form-item :label='tr("邮政编码")' required><el-input v-model="form.postalCode" maxlength="32" /></el-form-item>
         </template>
         <template v-else-if="form.action === 'SEND'">
           <p>{{ selected?.warehouseName }} · {{ selected?.recipient }} · {{ selected?.addressLine }}</p>
-          <el-form-item label="寄回承运商" required><el-input v-model="form.carrier" maxlength="128" /></el-form-item>
-          <el-form-item label="寄回运单号" required><el-input v-model="form.trackingNo" maxlength="128" /></el-form-item>
+          <el-form-item :label='tr("寄回承运商")' required><el-input v-model="form.carrier" maxlength="128" /></el-form-item>
+          <el-form-item :label='tr("寄回运单号")' required><el-input v-model="form.trackingNo" maxlength="128" /></el-form-item>
         </template>
-        <el-form-item v-else-if="form.action === 'INSPECT'" label="检测结果（客户可见）" required><el-input v-model="form.inspectionResult" type="textarea" :rows="5" maxlength="2000" show-word-limit /></el-form-item>
-        <el-form-item v-else-if="needsReason" label="处置原因 / 说明（客户可见）" required><el-input v-model="form.reason" type="textarea" :rows="4" maxlength="1000" show-word-limit /></el-form-item>
-        <el-alert v-else title="请核实旧件实物与运单后确认收件。" type="info" :closable="false" />
+        <el-form-item v-else-if="form.action === 'INSPECT'" :label='tr("检测结果（客户可见）")' required><el-input v-model="form.inspectionResult" type="textarea" :rows="5" maxlength="2000" show-word-limit /></el-form-item>
+        <el-form-item v-else-if="needsReason" :label='tr("处置原因 / 说明（客户可见）")' required><el-input v-model="form.reason" type="textarea" :rows="4" maxlength="1000" show-word-limit /></el-form-item>
+        <el-alert v-else :title='tr("请核实旧件实物与运单后确认收件。")' type="info" :closable="false" />
       </el-form>
-      <template #footer><el-button :disabled="saving" @click="visible = false">取消</el-button><el-button type="primary" :loading="saving" @click="save">确认保存</el-button></template>
+      <template #footer><el-button :disabled="saving" @click="visible = false">{{ tr("取消") }}</el-button><el-button type="primary" :loading="saving" @click="save">{{ tr("确认保存") }}</el-button></template>
     </el-dialog>
   </section>
 </template>

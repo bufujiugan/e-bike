@@ -2,8 +2,10 @@
 import { computed } from 'vue'
 import AppIcon from '../AppIcon.vue'
 import AccountMenu from './AccountMenu.vue'
+import LanguageMenu from './LanguageMenu.vue'
+import { tr } from '../../i18n/language'
 import type { NavGroup, NavItem } from '../../config/page-presentation'
-const props = defineProps<{ groups: NavGroup[]; username: string; role: string; lastLoaded: string; title: string; group: string }>()
+const props = defineProps<{ groups: NavGroup[]; username: string; role: string; lastLoaded: string; title: string; group: string; isCustomer: boolean }>()
 const emit = defineEmits<{ navigate: [key: string]; guide: []; settings: []; logout: [] }>()
 function flatten(items: NavItem[]): NavItem[] { return items.flatMap(item => [...(item.path ? [item] : []), ...flatten(item.children ?? [])]) }
 const searchGroups = computed(() => props.groups.map(group => ({ ...group, items: flatten(group.items) })))
@@ -12,14 +14,15 @@ function refreshPage() { window.location.reload() }
 <template>
   <header class="sm-top-header workspace-header">
     <div class="workspace-header-context">
-      <nav class="workspace-breadcrumb" aria-label="当前位置"><span>工作空间</span><i>/</i><span>{{ group }}</span></nav>
-      <strong class="workspace-page-title" :title="title">{{ title }}</strong>
+      <nav class="workspace-breadcrumb" :aria-label='tr("当前位置")'><span>{{ tr("工作空间") }}</span><i>/</i><span>{{ group }}</span></nav>
+      <strong class="workspace-page-title" :title="tr(title)">{{ tr(title) }}</strong>
     </div>
-    <el-select model-value="" filterable placeholder="搜索功能页面…" aria-label="搜索功能页面" class="workspace-global-search" @change="emit('navigate', $event)"><template #prefix><AppIcon name="search" /></template><el-option-group v-for="group in searchGroups" :key="group.label" :label="group.label"><el-option v-for="item in group.items" :key="item.key" :label="item.label" :value="item.key" /></el-option-group></el-select>
+    <el-select model-value="" filterable :placeholder="tr('搜索功能页面…')" :aria-label="tr('搜索功能页面')" class="workspace-global-search" @change="emit('navigate', $event)"><template #prefix><AppIcon name="search" /></template><el-option-group v-for="group in searchGroups" :key="group.label" :label="tr(group.label)"><el-option v-for="item in group.items" :key="item.key" :label="tr(item.label)" :value="item.key" /></el-option-group></el-select>
     <div class="workspace-header-tools">
-      <button v-if="role !== '客户'" type="button" class="workspace-tool-button" title="操作说明" aria-label="操作说明" @click="emit('guide')"><AppIcon name="layers" /></button>
-      <button type="button" class="workspace-tool-button" aria-label="刷新当前页面" :title="`刷新当前页面 · 最近加载 ${lastLoaded}`" @click="refreshPage"><AppIcon name="refresh" /></button>
+      <button v-if="!isCustomer" type="button" class="workspace-tool-button" :title='tr("操作说明")' :aria-label='tr("操作说明")' @click="emit('guide')"><AppIcon name="layers" /></button>
+      <button type="button" class="workspace-tool-button" :aria-label='tr("刷新当前页面")' :title="`${tr('刷新当前页面')} · ${tr('最近加载')} ${tr(lastLoaded)}`" @click="refreshPage"><AppIcon name="refresh" /></button>
       <slot name="notifications" />
+      <LanguageMenu />
       <span class="workspace-tools-divider" aria-hidden="true"></span>
       <AccountMenu :username="username" :role="role" @settings="emit('settings')" @logout="emit('logout')" />
     </div>

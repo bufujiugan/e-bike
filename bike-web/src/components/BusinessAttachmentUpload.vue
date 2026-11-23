@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/language'
 import { createUuid } from '../utils/uuid'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import api from '../api'
@@ -66,15 +67,15 @@ defineExpose({
 
 <template>
   <section class="attachment-queue">
-    <p><template v-if="autoUpload">选择文件后自动上传；每批最多20个文件。</template><template v-else>每批最多20个文件；JPG / PNG / WebP 图片最大20MB<span v-if="!imagesOnly">，PDF / XLSX 文档最大50MB</span>。</template></p>
-    <input ref="input" type="file" multiple :accept="accept" :disabled="working || disabled" aria-label="选择上传附件" @change="select" />
-    <div class="queue-actions"><el-button v-if="!autoUpload" type="primary" :loading="working" :disabled="!pending || disabled" @click="start()">上传待处理文件</el-button><el-button :disabled="working || !entries.length" @click="clear">清空当前批次</el-button></div>
-    <el-alert v-if="error" :title="error" type="error" :closable="false" />
+    <p><template v-if="autoUpload">{{ tr("选择文件后自动上传；每批最多20个文件。") }}</template><template v-else>{{ tr("每批最多20个文件；JPG / PNG / WebP 图片最大20MB") }}<span v-if="!imagesOnly">{{ tr("，PDF / XLSX 文档最大50MB") }}</span>。</template></p>
+    <input ref="input" type="file" multiple :accept="accept" :disabled="working || disabled" :aria-label='tr("选择上传附件")' @change="select" />
+    <div class="queue-actions"><el-button v-if="!autoUpload" type="primary" :loading="working" :disabled="!pending || disabled" @click="start()">{{ tr("上传待处理文件") }}</el-button><el-button :disabled="working || !entries.length" @click="clear">{{ tr("清空当前批次") }}</el-button></div>
+    <el-alert v-if="error" :title="tr(error)" type="error" :closable="false" />
     <div v-for="row in entries" :key="row.id" class="queue-item">
       <span>{{ row.file.name }} · {{ Math.ceil(row.file.size / 1024) }} KB</span>
       <el-progress :percentage="row.progress" :status="row.state === 'failed' ? 'exception' : row.state === 'saved' ? 'success' : undefined" />
-      <span role="status">{{ row.message || (row.state === 'uploading' ? '上传并校验中' : autoUpload ? '等待自动上传' : '等待上传') }}</span>
-      <el-button v-if="row.state === 'failed'" link type="primary" :disabled="working || disabled" @click="start(row)">重试此文件</el-button>
+      <span role="status">{{ tr(row.message || (row.state === 'uploading' ? '上传并校验中' : autoUpload ? '等待自动上传' : '等待上传')) }}</span>
+      <el-button v-if="row.state === 'failed'" link type="primary" :disabled="working || disabled" @click="start(row)">{{ tr("重试此文件") }}</el-button>
     </div>
   </section>
 </template>

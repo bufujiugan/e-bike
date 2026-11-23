@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../../i18n/language'
 import { onBeforeUnmount, onMounted, ref, watch, nextTick } from 'vue'
 import * as echarts from 'echarts/core'
 import { BarChart, LineChart, PieChart } from 'echarts/charts'
@@ -22,4 +23,4 @@ watch(() => props.option, render, { deep: true })
 onMounted(() => { observer = new ResizeObserver(() => chart?.resize()); if (target.value) observer.observe(target.value); void render() })
 onBeforeUnmount(() => { observer?.disconnect(); chart?.dispose() })
 </script>
-<template><section class="sm-card sm-chart-card"><SectionHeader :title="title" :description="description"><slot name="action" /></SectionHeader><div ref="target" class="sm-chart" :style="{ display: option && !loading ? 'block' : 'none' }" role="img" :aria-label="`${title}，${description ?? ''}`" /><EmptyState v-if="!option || loading" compact :title="emptyTitle" :description="emptyDescription" :loading="loading" /><slot /></section></template>
+<template><section class="sm-card sm-chart-card"><SectionHeader :title="tr(title)" :description="tr(description)"><slot name="action" /></SectionHeader><div ref="target" class="sm-chart" :style="{ display: option && !loading ? 'block' : 'none' }" role="img" :aria-label="`${title}，${description ?? ''}`" /><EmptyState v-if="!option || loading" compact :title="emptyTitle" :description="emptyDescription" :loading="loading" /><slot /></section></template>

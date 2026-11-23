@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/language'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { hasAnyPermission, hasPermission, hasRole, type PermissionContext } from '../permissions'
 import ProductionManager from './ProductionManager.vue'
@@ -103,38 +104,38 @@ onUnmounted(() => window.removeEventListener('popstate',syncStage))
     <template v-if="stage === 'home'">
       <section class="workbench-welcome">
         <div class="workbench-companion"><MascotCompanion /></div>
-        <div class="welcome-copy"><span class="workflow-eyebrow">BIKE / 工作空间</span><h1>把手上的事，接着办好。</h1><p>{{ username }}，欢迎回来。从当前业务出发，找到下一步。</p><button class="welcome-guide" @click="emit('guide')"><AppIcon name="layers" />查看操作说明<AppIcon name="arrow" /></button></div>
-        <div class="resume-card"><span class="resume-label"><AppIcon name="clock" />{{ recentStep ? '最近办理 · 当前会话' : '开始今天的工作' }}</span><strong>{{ recentStep?.title || '选择一个业务开始' }}</strong><p>{{ recentStep?.detail || '下方按业务整理了常用入口，办理后可从这里快速返回。' }}</p><button v-if="recentStep" class="resume-button" @click="choose(recentStep.key)">继续办理<AppIcon name="arrow" /></button><span v-else class="resume-empty">你的最近办理入口将保留在这里</span><span v-if="!recentStep" class="resume-decoration" aria-hidden="true"><AppIcon name="arrow" /></span></div>
+        <div class="welcome-copy"><span class="workflow-eyebrow">{{ tr("BIKE / 工作空间") }}</span><h1>{{ tr("把手上的事，接着办好。") }}</h1><p>{{ tr('{username}，欢迎回来。从当前业务出发，找到下一步。', { username }) }}</p><button class="welcome-guide" @click="emit('guide')"><AppIcon name="layers" />{{ tr("查看操作说明") }}<AppIcon name="arrow" /></button></div>
+        <div class="resume-card"><span class="resume-label"><AppIcon name="clock" />{{ tr(recentStep ? '最近办理 · 当前会话' : '开始今天的工作') }}</span><strong>{{ tr(recentStep?.title || '选择一个业务开始') }}</strong><p>{{ tr(recentStep?.detail || '下方按业务整理了常用入口，办理后可从这里快速返回。') }}</p><button v-if="recentStep" class="resume-button" @click="choose(recentStep.key)">{{ tr("继续办理") }}<AppIcon name="arrow" /></button><span v-else class="resume-empty">{{ tr("你的最近办理入口将保留在这里") }}</span><span v-if="!recentStep" class="resume-decoration" aria-hidden="true"><AppIcon name="arrow" /></span></div>
       </section>
-      <div v-if="selectedSku" class="workflow-context"><span><AppIcon name="inventory" />当前商品 <strong>{{ selectedSku.skuCode }}</strong><small>进入生产或库存时继续使用</small></span><el-button link @click="clearSku">清除商品范围</el-button></div>
-      <section class="workbench-business" aria-label="业务办理入口">
-        <div class="workbench-section-title"><div><h2>今天要办什么？</h2><p>选择业务，再围绕具体记录继续办理。</p></div><span>按当前账号权限展示</span></div>
+      <div v-if="selectedSku" class="workflow-context"><span><AppIcon name="inventory" />{{ tr("当前商品") }} <strong>{{ selectedSku.skuCode }}</strong><small>{{ tr("进入生产或库存时继续使用") }}</small></span><el-button link @click="clearSku">{{ tr("清除商品范围") }}</el-button></div>
+      <section class="workbench-business" :aria-label='tr("业务办理入口")'>
+        <div class="workbench-section-title"><div><h2>{{ tr("今天要办什么？") }}</h2><p>{{ tr("选择业务，再围绕具体记录继续办理。") }}</p></div><span>{{ tr("按当前账号权限展示") }}</span></div>
         <div class="workbench-areas">
           <article v-for="area in areas" :key="area.key" class="workbench-area" :class="`area-${area.key}`">
             <div class="area-heading">
               <span class="area-icon"><AppIcon :name="area.icon" /></span>
-              <div class="area-heading-copy"><h3>{{ area.title }}</h3><p class="area-description">{{ area.description }}</p></div>
+              <div class="area-heading-copy"><h3>{{ tr(area.title) }}</h3><p class="area-description">{{ tr(area.description) }}</p></div>
               <AppIcon class="area-watermark" :name="areaWatermarks[area.key]" />
             </div>
             <div class="area-steps">
               <button v-for="step in area.steps" :key="step.key" @click="choose(step.key)">
                 <span class="step-icon"><AppIcon :name="stepIcons[step.key]" /></span>
-                <span class="step-copy"><strong>{{ step.title }}</strong><small>{{ step.detail }}</small></span>
+                <span class="step-copy"><strong>{{ tr(step.title) }}</strong><small>{{ tr(step.detail) }}</small></span>
                 <AppIcon class="step-chevron" name="chevron" />
               </button>
             </div>
-            <p class="area-hint"><span>{{ area.hint }}</span><AppIcon name="arrow" /></p>
+            <p class="area-hint"><span>{{ tr(area.hint) }}</span><AppIcon name="arrow" /></p>
           </article>
         </div>
-        <el-empty v-if="!areas.length" description="当前账号暂无可办理业务，请从左侧进入已授权页面。" />
+        <el-empty v-if="!areas.length" :description='tr("当前账号暂无可办理业务，请从左侧进入已授权页面。")' />
       </section>
-      <section v-if="shortcuts.length" class="workbench-shortcuts" aria-label="查询与跟进"><div class="workbench-section-title"><div><h2>查询与跟进</h2><p>需要了解进度或处理问题时，从这里进入。</p></div></div><div class="shortcut-grid"><button v-for="shortcut in shortcuts" :key="shortcut.key" @click="emit('navigate', shortcut.key)"><span class="shortcut-icon"><AppIcon :name="shortcut.icon" /></span><span class="shortcut-copy"><strong>{{ shortcut.title }}</strong><small>{{ shortcut.detail }}</small></span><AppIcon name="arrow" /></button></div></section>
+      <section v-if="shortcuts.length" class="workbench-shortcuts" :aria-label='tr("查询与跟进")'><div class="workbench-section-title"><div><h2>{{ tr("查询与跟进") }}</h2><p>{{ tr("需要了解进度或处理问题时，从这里进入。") }}</p></div></div><div class="shortcut-grid"><button v-for="shortcut in shortcuts" :key="shortcut.key" @click="emit('navigate', shortcut.key)"><span class="shortcut-icon"><AppIcon :name="shortcut.icon" /></span><span class="shortcut-copy"><strong>{{ tr(shortcut.title) }}</strong><small>{{ tr(shortcut.detail) }}</small></span><AppIcon name="arrow" /></button></div></section>
     </template>
     <section v-else class="workflow-header">
-      <div class="workflow-heading"><div class="workflow-location"><button class="workflow-back" @click="choose('home')"><AppIcon name="home" />工作台首页</button><span>/</span><h2>{{ currentArea?.title }}</h2></div><el-button text @click="emit('guide')">操作指南</el-button></div>
-      <nav class="workflow-areas" aria-label="业务分区"><button v-for="area in areas" :key="area.key" :class="{ active: currentArea?.key === area.key }" :aria-pressed="currentArea?.key === area.key" @click="choose(area.steps[0]!.key)"><AppIcon :name="area.icon" />{{ area.title }}</button></nav>
-      <nav class="workflow-stages" aria-label="业务办理环节"><button v-for="step in currentArea?.steps" :key="step.key" :class="{ active: stage === step.key }" :aria-current="stage === step.key ? 'page' : undefined" @click="choose(step.key)">{{ step.title }}</button><span class="workflow-stage-hint">{{ currentStep?.detail }}</span></nav>
-      <div v-if="selectedSku" class="workflow-context"><span><AppIcon name="inventory" />当前商品 <strong>{{ selectedSku.skuCode }}</strong><small>用于商品、生产和库存查询；订单与 PI 仍展示全部记录</small></span><el-button link @click="clearSku">清除商品范围</el-button></div>
+      <div class="workflow-heading"><div class="workflow-location"><button class="workflow-back" @click="choose('home')"><AppIcon name="home" />{{ tr("工作台首页") }}</button><span>/</span><h2>{{ tr(currentArea?.title ?? '') }}</h2></div><el-button text @click="emit('guide')">{{ tr("操作指南") }}</el-button></div>
+      <nav class="workflow-areas" :aria-label='tr("业务分区")'><button v-for="area in areas" :key="area.key" :class="{ active: currentArea?.key === area.key }" :aria-pressed="currentArea?.key === area.key" @click="choose(area.steps[0]!.key)"><AppIcon :name="area.icon" />{{ tr(area.title) }}</button></nav>
+      <nav class="workflow-stages" :aria-label='tr("业务办理环节")'><button v-for="step in currentArea?.steps" :key="step.key" :class="{ active: stage === step.key }" :aria-current="stage === step.key ? 'page' : undefined" @click="choose(step.key)">{{ tr(step.title) }}</button><span class="workflow-stage-hint">{{ tr(currentStep?.detail ?? '') }}</span></nav>
+      <div v-if="selectedSku" class="workflow-context"><span><AppIcon name="inventory" />{{ tr("当前商品") }} <strong>{{ selectedSku.skuCode }}</strong><small>{{ tr("用于商品、生产和库存查询；订单与 PI 仍展示全部记录") }}</small></span><el-button link @click="clearSku">{{ tr("清除商品范围") }}</el-button></div>
     </section>
     <template v-if="currentStep">
     <ProductionManager v-if="['skus','tasks','prints'].includes(stage) && productionRead" :key="stage + ':' + (selectedSku?.id ?? '')" :view="stage" :username="username" :context="context" :initial-sku-id="selectedSku?.id" :initial-keyword="stage === 'skus' ? selectedSku?.skuCode : undefined" :can-manage="internal && hasPermission(context,'PRODUCTION_MANAGE')" :can-operate="hasPermission(context,'ASSEMBLY_OPERATE')" :can-report-issue="hasAnyPermission(context,['ASSEMBLY_OPERATE','REWORK_OPERATE'])" @navigate="navigate" @order="emit('order',$event)" @continue="nextStage" />

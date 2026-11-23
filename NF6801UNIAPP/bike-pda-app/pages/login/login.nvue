@@ -1,32 +1,37 @@
 <template>
   <scroll-view class="page" scroll-y
     ><view class="content">
+      <view class="language-row">
+        <view class="language-button" role="button" :aria-label="tr('切换语言')" @click="openLanguageMenu">
+          <text class="language-button-text">{{ language === "en" ? "EN" : "中文" }} ▾</text>
+        </view>
+      </view>
       <view class="card"
-        ><text class="title">BIKE · PDA 作业终端</text
-        ><text class="muted">登录后按账号权限进入工位</text>
+        ><text class="title">{{ tr("BIKE · PDA 作业终端") }}</text
+        ><text class="muted">{{ tr("登录后按账号权限进入工位") }}</text>
         <form-field
           v-model="username"
-          label="账号"
+          :label='tr("账号")'
           :disabled="busy"
           :maxlength="100"
         />
         <form-field
           v-model="password"
-          label="密码"
+          :label='tr("密码")'
           password
           :disabled="busy"
           :maxlength="100"
           @confirm="submit"
         />
         <action-button
-          :label="busy ? '登录中…' : '登录'"
+          :label="tr(busy ? '登录中…' : '登录')"
           :disabled="busy"
           @click="submit"
         />
-        <text v-if="message" class="feedback error">{{ message }}</text> </view
+        <text v-if="message" class="feedback error">{{ tr(message) }}</text> </view
       ><text class="muted">{{ server }}</text
       ><action-button
-        label="服务器与设备设置"
+        :label='tr("服务器与设备设置")'
         secondary
         :disabled="busy"
         @click="go('settings/settings')"

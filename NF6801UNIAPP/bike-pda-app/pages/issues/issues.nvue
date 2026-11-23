@@ -6,9 +6,9 @@
       }}</text>
       <view v-if="pending" class="card"
         ><text class="text error"
-          >上次异常登记结果未确认，请先在下方搜索异常记录。</text
+          >{{ tr("上次异常登记结果未确认，请先在下方搜索异常记录。") }}</text
         ><action-button
-          label="已核对，解除锁定"
+          :label='tr("已核对，解除锁定")'
           secondary
           :disabled="busy"
           @click="acknowledgePending"
@@ -16,45 +16,44 @@
       <view class="card"
         ><form-field
           v-model="code"
-          label="车辆或部件编码"
+          :label='tr("车辆或部件编码")'
           :disabled="busy || !!issueId"
         /><form-field
           v-model="reason"
-          label="异常原因"
+          :label='tr("异常原因")'
           :disabled="busy || !!issueId"
         />
         <action-button
-          label="启动设备扫码"
+          :label='tr("启动设备扫码")'
           secondary
           :disabled="busy || !ready || !!issueId"
           @click="triggerScan"
         /><action-button
-          label="登记异常并隔离"
+          :label='tr("登记异常并隔离")'
           :disabled="busy || !ready || !!issueId || !!pending"
           @click="submit"
         />
-        <text v-if="issueId" class="text">已登记异常：{{ issueId }}</text
+        <text v-if="issueId" class="text">{{ tr("已登记异常：") }}{{ issueId }}</text
         ><action-button
           v-if="issueId"
-          label="新建另一条异常"
+          :label='tr("新建另一条异常")'
           secondary
           :disabled="busy"
           @click="newIssue"
         />
       </view>
       <view v-if="issueId" class="card"
-        ><text class="subtitle">异常图片</text
+        ><text class="subtitle">{{ tr("异常图片") }}</text
         ><text class="muted"
-          >每批最多 20 张 JPG / PNG / WebP，每张最大
-          20MB。失败图片可单独重试。</text
+          >{{ tr("每批最多 20 张 JPG / PNG / WebP，每张最大 20MB。失败图片可单独重试。") }}</text
         >
         <action-button
-          label="拍照 / 从相册选择"
+          :label='tr("拍照 / 从相册选择")'
           secondary
           :disabled="busy || entries.length >= 20"
           @click="chooseImages"
         /><action-button
-          label="上传待处理图片"
+          :label='tr("上传待处理图片")'
           :disabled="busy || !ready || !entries.length"
           @click="uploadAll"
         />
@@ -64,23 +63,23 @@
             :src="entry.path"
             mode="aspectFit"
             @click="preview(entry.path)" /><text class="text"
-            >{{ entry.progress }}% · {{ entry.message || entry.state }}</text
+            >{{ entry.progress }}% · {{ tr(entry.message || entry.state) }}</text
           ><action-button
             v-if="entry.state === 'failed'"
-            label="重试此图片"
+            :label='tr("重试此图片")'
             secondary
             :disabled="busy || !ready"
             @click="uploadOne(entry)"
         /></view>
       </view>
       <view class="card"
-        ><text class="subtitle">查找已登记异常</text
+        ><text class="subtitle">{{ tr("查找已登记异常") }}</text
         ><form-field
           v-model="keyword"
-          label="编码 / 原因 / 异常 ID"
+          :label='tr("编码 / 原因 / 异常 ID")'
           :disabled="busy"
         /><action-button
-          label="搜索异常"
+          :label='tr("搜索异常")'
           secondary
           :disabled="busy || !ready"
           @click="findIssues"

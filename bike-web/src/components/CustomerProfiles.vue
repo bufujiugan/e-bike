@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr, trInline } from '../i18n/language'
 import { ref, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '../api'
@@ -34,22 +35,22 @@ async function save() {
   if (!id || busy.value) return
   if (!draft.reason.trim()) { error.value = '请填写修改原因'; return }
   busy.value = true; error.value = ''
-  try { await customerProfileApi.update(id, { ...draft }); await load(); ElMessage.success('客户商务资料已保存，历史 PI 保持原快照') }
+  try { await customerProfileApi.update(id, { ...draft }); await load(); ElMessage.success(tr('客户商务资料已保存，历史 PI 保持原快照')) }
   catch (e) { error.value = message(e) }
   finally { busy.value = false }
 }
 </script>
 <template>
-  <el-button @click="open">客户商务资料</el-button>
-  <el-dialog v-model="visible" title="客户商务资料" width="min(700px, 95vw)" :close-on-click-modal="false">
+  <el-button @click="open">{{ tr("客户商务资料") }}</el-button>
+  <el-dialog v-model="visible" :title='tr("客户商务资料")' width="min(700px, 95vw)" :close-on-click-modal="false">
     <el-form v-loading="busy" label-position="top" @submit.prevent="save">
-      <el-alert v-if="error" :title="error" type="error" :closable="false" />
-      <el-form-item label="客户"><el-select v-model="customerId" filterable :disabled="busy" @change="load"><el-option v-for="item in options" :key="item.id" :value="item.id" :label="`${item.code} · ${item.name}`" /></el-select><el-button :disabled="!customerId || busy" @click="load">重新读取</el-button></el-form-item>
+      <el-alert v-if="error" :title="tr(error)" type="error" :closable="false" />
+      <el-form-item :label='tr("客户")'><el-select v-model="customerId" filterable :disabled="busy" @change="load"><el-option v-for="item in options" :key="item.id" :value="item.id" :label="`${item.code} · ${item.name}`" /></el-select><el-button :disabled="!customerId || busy" @click="load">{{ tr("重新读取") }}</el-button></el-form-item>
       <template v-if="selected">
-        <p>{{ selected.contactName || '未记录联系人' }} · {{ selected.contactPhone || '未记录电话' }} · {{ selected.status === 'ENABLED' ? '启用' : '停用' }} · 资料版本 {{ selected.revision }}</p>
-        <el-form-item v-for="[key, label, max] in fields" :key="key" :label="label"><el-input v-model="draft[key]" :maxlength="max" :type="key === 'address' ? 'textarea' : 'text'" :readonly="!canWrite" /></el-form-item>
-        <p>新建 PI 时带入这些资料；历史单据保留当时快照。业务归属填写部门或负责人，不改变账号访问权限。</p>
-        <template v-if="canWrite"><el-form-item label="修改原因" required><el-input v-model="draft.reason" maxlength="500" /></el-form-item><el-button type="primary" native-type="submit" :loading="busy">保存商务资料</el-button></template>
+        <p>{{ selected.contactName || tr('未记录联系人') }} · {{ selected.contactPhone || tr('未记录电话') }} · {{ selected.status === 'ENABLED' ? tr('启用') : tr('停用') }} {{ trInline("· 资料版本") }} {{ selected.revision }}</p>
+        <el-form-item v-for="[key, label, max] in fields" :key="key" :label="tr(label)"><el-input v-model="draft[key]" :maxlength="max" :type="key === 'address' ? 'textarea' : 'text'" :readonly="!canWrite" /></el-form-item>
+        <p>{{ tr("新建 PI 时带入这些资料；历史单据保留当时快照。业务归属填写部门或负责人，不改变账号访问权限。") }}</p>
+        <template v-if="canWrite"><el-form-item :label='tr("修改原因")' required><el-input v-model="draft.reason" maxlength="500" /></el-form-item><el-button type="primary" native-type="submit" :loading="busy">{{ tr("保存商务资料") }}</el-button></template>
       </template>
     </el-form>
   </el-dialog>

@@ -79,9 +79,9 @@ test('历史发货金额不禁用放行入口，后付款仍需授权', () => {
 });
 
 test('发货放行门槛显示为选填且没有必填标记', () => {
-  const field = descriptor.template.content.match(/<el-form-item\b[^>]*label="发货放行门槛"[^>]*>([\s\S]*?)<\/el-form-item>/);
+  const field = descriptor.template.content.match(/<el-form-item\b[^>]*:label='tr\("发货放行门槛"\)'[^>]*>([\s\S]*?)<\/el-form-item>/);
   assert.ok(field);
   assert.doesNotMatch(field[0].split('>')[0], /\brequired\b/);
-  assert.match(field[1], /placeholder="选填"/);
+  assert.match(field[1], /:placeholder='tr\("选填"\)'/);
   assert.match(field[1], /仅作记录，不限制发货放行/);
 });
