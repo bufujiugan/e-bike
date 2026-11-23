@@ -10,6 +10,10 @@ import org.springframework.web.bind.annotation.*;
 public class StockController {
     private final StockService stockService;
     public StockController(StockService stockService) { this.stockService = stockService; }
+    @GetMapping("/api/inventory/vehicle-location")
+    public ApiResponse<VehicleStockLocation> findVehicleStockLocation(@RequestParam String code) {
+        return ApiResponse.success("查询成功", stockService.findVehicleStockLocation(code));
+    }
     @GetMapping("/api/stock-in/by-no/{stockNo}") public ApiResponse<StockRecordView> getIn(@PathVariable String stockNo) { return ApiResponse.success("查询成功", stockService.getByNo("IN", stockNo)); }
     @GetMapping("/api/stock-out/by-no/{stockNo}") public ApiResponse<StockRecordView> getOut(@PathVariable String stockNo) { return ApiResponse.success("查询成功", stockService.getByNo("OUT", stockNo)); }
     @PostMapping("/api/stock-in/validate") public ApiResponse<StockValidationResult> validateIn(@Valid @RequestBody StockValidationRequest request) { return ApiResponse.success("校验完成", stockService.validateStockIn(request)); }

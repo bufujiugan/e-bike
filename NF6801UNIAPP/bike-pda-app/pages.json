@@ -29,6 +29,10 @@
       "style": { "navigationBarTitleText": "PI 整批出库" }
     },
     {
+      "path": "pages/stock-lookup/stock-lookup",
+      "style": { "navigationBarTitleText": "库存查询" }
+    },
+    {
       "path": "pages/rework/rework",
       "style": { "navigationBarTitleText": "返工换件" }
     },

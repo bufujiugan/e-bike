@@ -187,7 +187,7 @@ async function handleProfilePublished(profile: FulfillmentProfile) {
   }
 }
 const reportRefresh = ref(0), exportBusy = ref(false)
-const showFinance = computed(() => canPay.value || canRelease.value || canReversePayment.value)
+const showFinance = computed(() => allowed('PI_FINANCE_READ') || canPay.value || canRelease.value || canReversePayment.value)
 const rows = ref<PiView[]>([]), total = ref(0), page = ref(1), pageSize = ref(20)
 const keyword = ref(props.initialKeyword ?? ''), status = ref(''), busy = ref(false), loadError = ref('')
 const detail = ref<PiView | null>(null), detailVisible = ref(false), detailBusy = ref(false), detailTab = ref('items')

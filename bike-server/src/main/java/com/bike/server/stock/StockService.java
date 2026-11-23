@@ -15,4 +15,5 @@ public interface StockService {
     PageResponse<StockRecordView> list(String type, long page, long pageSize);
     PageResponse<InventoryRow> inventory(Long modelId, Long warehouseId, long page, long pageSize);
     Map<String, Long> inventorySummary();
+    VehicleStockLocation findVehicleStockLocation(String code);
 }

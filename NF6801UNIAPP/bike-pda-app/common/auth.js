@@ -15,6 +15,7 @@ const requirements = {
   ],
   "stock-in": ["STOCK_IN_OPERATE", ["STOCK_IN"]],
   "stock-out": ["STOCK_OUT_OPERATE", ["STOCK_OUT"]],
+  "stock-lookup": ["PDA_STOCK_LOOKUP", ["STOCK_LOOKUP"]],
   pi: ["STOCK_OUT_OPERATE", ["STOCK_OUT"]],
   rework: ["REWORK_OPERATE", ["REWORK"]],
 };

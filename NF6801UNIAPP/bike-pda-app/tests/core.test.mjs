@@ -271,7 +271,7 @@ test("全部已注册页面为 nvue，业务源码不使用网页容器或 HTML 
       .renderer,
     "native",
   );
-  assert.equal(routes.pages.length, 12);
+  assert.ok(routes.pages.some(({ path }) => path === "pages/stock-lookup/stock-lookup"));
   for (const route of routes.pages) {
     const source = readFileSync(new URL(route.path + ".nvue", root), "utf8");
     assert.doesNotMatch(

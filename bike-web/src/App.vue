@@ -194,6 +194,19 @@ const navPermissionMap: Record<string, string[]> = {
 }
 const agentOnlyViews = new Set(['agent-dashboard', 'agent-inventory', 'agent-locks', 'purchase-intents'])
 const agentExcludedViews = new Set(['inventory', 'inventory-locks'])
+const pdaJobWorkstations: Record<string, string> = {
+  PDA_RECEIVING: 'STOCK_IN',
+  PDA_PICKING: 'STOCK_OUT',
+  PDA_INVENTORY_VIEWER: 'STOCK_LOOKUP',
+}
+const pdaRoleCodes = new Set(['PDA_OPERATOR', 'PDA_STOCKTAKE', 'PDA_RELOCATION', ...Object.keys(pdaJobWorkstations)])
+const webRoleCodes = new Set([
+  'SUPER_ADMIN', 'WEB_OPERATOR', 'CUSTOMER_ALL',
+  'BUSINESS_MANAGER', 'BUSINESS_STAFF', 'MANAGEMENT_VIEWER', 'WAREHOUSE_SUPERVISOR', 'DOCUMENT_CLERK', 'FINANCE_VIEWER',
+  'AFTER_SALES_STAFF', 'AFTER_SALES_TECH', 'AFTER_SALES_WAREHOUSE', 'AFTER_SALES_SALES',
+])
+const isPdaJobAccount = computed(() => authContext.value?.userType === 'PDA_OPERATOR' &&
+  authContext.value.roles.some(role => role in pdaJobWorkstations) && !isSuperAdmin(authContext.value))
 function filterVisibleNavItems(items: NavItem[], context: AuthContext): NavItem[] {
   const permissions = new Set(context.permissions)
   const isAgent = hasRole(context, 'WEB_AGENT')
@@ -211,6 +224,7 @@ const visibleNavGroups = computed(() => {
   if (!context) return []
   if (isCustomerAccount.value) return navGroups.filter(group => group.label === '客户工作台')
   if (isSuperAdmin(context)) return navGroups.filter(group => group.label !== '客户工作台')
+  if (isPdaJobAccount.value) return []
   return navGroups.map(group => ({
     ...group,
     items: filterVisibleNavItems(group.items, context),
@@ -249,6 +263,7 @@ function defaultViewForContext(context: AuthContext) {
 function applyAuthorizedLandingView() {
   const context = authContext.value
   if (!context) return
+  if (isPdaJobAccount.value) return
   const requestedKey = routeKeyMap.get(window.location.pathname)
   const nextView = requestedKey && visibleNavItems.value.some(item => item.key === requestedKey)
     ? requestedKey
@@ -317,7 +332,7 @@ const selectedPermissionIds = ref<number[]>([])
 const permissionTreeRef = ref<{ setCheckedKeys: (keys: number[], leafOnly: boolean) => void; getCheckedKeys: (leafOnly: boolean) => (string | number)[] } | null>(null)
 const permissionTreeData = computed(() => {
   const groupNames: Record<string, string> = {
-    ASSEMBLY: '生产与库存', PRODUCTION: '生产与库存', INVENTORY: '生产与库存', STOCK: '生产与库存', VEHICLE: '生产与库存',
+    ASSEMBLY: '生产与库存', PRODUCTION: '生产与库存', INVENTORY: '生产与库存', STOCK: '生产与库存', VEHICLE: '生产与库存', PDA: '生产与库存',
     ORDER: '订单与履约', PI: '订单与履约', AFTER: '售后服务', CUSTOMER: '基础资料', MASTER: '基础资料',
     USER: '系统管理', ROLE: '系统管理', WORKSTATION: '系统管理', SYSTEM: '系统管理', FILE: '系统管理',
     AGENT: '代理商业务', DATA: '数据与导出', TRACE: '数据与导出', DASHBOARD: '数据与导出', PART: '基础资料', REWORK: '生产与库存', PURCHASE: '代理商业务',
@@ -514,8 +529,33 @@ const rowActionLabel = computed(() => {
 
 type MasterOption = { id: number; code: string; name: string; contactName?: string | null }
 const masterOptions = reactive<{ customers: MasterOption[]; agents: MasterOption[]; models: MasterOption[]; suppliers: MasterOption[]; warehouses: MasterOption[] }>({ customers: [], agents: [], models: [], suppliers: [], warehouses: [] })
-const roleOptions = ref<Array<{ id: number; roleCode: string; roleName: string }>>([])
-const workstationOptions = ref<Array<{ id: number; workstationCode: string; workstationName: string; workstationType: string }>>([])
+const roleOptions = ref<Array<{ id: number; roleCode: string; roleName: string; enabled: boolean }>>([])
+const workstationOptions = ref<Array<{ id: number; workstationCode: string; workstationName: string; workstationType: string; enabled: boolean }>>([])
+function roleMatchesAccountType(roleCode: string) {
+  if (roleCode === 'WEB_CUSTOMER') return false
+  if (roleCode === 'WEB_AGENT') return actionForm.userType === 'AGENT'
+  if (pdaRoleCodes.has(roleCode)) return actionForm.userType === 'PDA_OPERATOR'
+  if (webRoleCodes.has(roleCode)) return ['WEB_ADMIN', 'WEB_OPERATOR'].includes(String(actionForm.userType))
+  return true
+}
+const userRoleOptions = computed(() => roleOptions.value.filter(role =>
+  (role.enabled && roleMatchesAccountType(role.roleCode)) || selectedRoleIds.value.includes(role.id),
+))
+const selectedJobTypes = computed(() => new Set(roleOptions.value
+  .filter(role => selectedRoleIds.value.includes(role.id))
+  .map(role => pdaJobWorkstations[role.roleCode])
+  .filter(Boolean)))
+const userWorkstationOptions = computed(() => workstationOptions.value.filter(station =>
+  station.id === actionForm.workstationId || (station.enabled &&
+    (selectedJobTypes.value.size === 0 || selectedJobTypes.value.has(station.workstationType))),
+))
+function changeUserAccountType() {
+  if (actionForm.userType !== 'AGENT') actionForm.agentId = null
+  if (actionForm.userType === 'AGENT') actionForm.workstationId = null
+  selectedRoleIds.value = selectedRoleIds.value.filter(id =>
+    roleOptions.value.some(role => role.id === id && roleMatchesAccountType(role.roleCode)),
+  )
+}
 const detailDialogVisible = ref(false)
 const detailLoading = ref(false)
 const detailTitle = ref('详情')
@@ -581,7 +621,7 @@ let moduleRequestVersion = 0
 async function loadModule(module: string) {
   const requestVersion = ++moduleRequestVersion
   dataLoading.value = false
-  if (!authContext.value || authContext.value.mustChangePassword || isCustomerAccount.value || module === 'customer-orders') return
+  if (!authContext.value || authContext.value.mustChangePassword || isCustomerAccount.value || isPdaJobAccount.value || module === 'customer-orders') return
   if (module.startsWith('production') || ['workflow', 'trace', 'pis', 'completed-orders', 'europe-orders', 'after-sales', 'sku-inventory', 'customer-scopes', 'file-reviews'].includes(module)) return
   if (module === 'dashboard') return loadDashboard(requestVersion)
   dataLoading.value = true
@@ -1106,6 +1146,13 @@ async function regenerateVehicleQr() {
 }
 
 async function submitPrimaryAction() {
+  if (actionKind.value === 'user' && actionForm.userType === 'PDA_OPERATOR' && selectedJobTypes.value.size > 0) {
+    const workstation = workstationOptions.value.find(station => station.id === actionForm.workstationId)
+    if (selectedJobTypes.value.size !== 1 || !workstation || !selectedJobTypes.value.has(workstation.workstationType)) {
+      ElMessage.warning('请选择同一工位的岗位角色，并绑定对应工位')
+      return
+    }
+  }
   actionSubmitting.value = true
   try {
     let endpoint = ''
@@ -1162,6 +1209,7 @@ async function submitPrimaryAction() {
     const response = await axios({ method: actionMethod, url: endpoint, data: payload, ...authConfig() })
     const savedId = response.data.data?.id ?? editingId.value
     if (actionKind.value === 'user' && savedId !== null && (rolesLoaded.value || selectedRoleIds.value.length > 0)) {
+      editingId.value = savedId
       await axios.put(`/api/users/${savedId}/roles`, { roleIds: selectedRoleIds.value }, authConfig())
     }
     if (actionKind.value === 'role' && savedId !== null) {
@@ -1205,6 +1253,7 @@ async function submitPrimaryAction() {
     <el-empty v-if="!authContext" description="正在加载账号信息…" />
     <el-empty v-else-if="passwordChangeVisible" description="请先修改初始密码" />
     <CustomerWorkspace v-else-if="isCustomerAccount" :key="username" />
+    <el-empty v-else-if="isPdaJobAccount" description="请在 PDA 端使用此岗位账号" />
       <BusinessWorkspace v-else-if="activeView === 'workflow' && !passwordChangeVisible" :context="authContext" :username="username" :refresh-key="workflowRefreshKey" @navigate="navigate" @guide="operationGuideVisible = true" @convert="changeInventoryLock([$event], 'convert')" @order="journeyOrderNo = $event" />
 
       <DashboardPage v-else-if="activeView === 'dashboard'" :metrics="metrics" :status-rows="statusRows" :points="trendRows" :operations="recentOperations" :actions="quickActions" :allowed-views="visibleNavItems.map(item => item.key)" :context="authContext" :loading="dataLoading" :error="dataError" @refresh="loadModule('dashboard')" @navigate="navigate" />
@@ -1252,10 +1301,25 @@ async function submitPrimaryAction() {
         <el-form-item label="用户名"><el-input v-model="actionForm.code" autocomplete="username" :disabled="editingId !== null" /></el-form-item>
         <el-form-item v-if="editingId === null" label="初始密码"><el-input v-model="actionForm.password" type="password" show-password autocomplete="new-password" /></el-form-item>
         <el-form-item label="姓名"><el-input v-model="actionForm.displayName" /></el-form-item>
-        <el-form-item label="账号类型"><el-select v-model="actionForm.userType"><el-option label="Web业务员" value="WEB_OPERATOR" /><el-option label="PDA操作员" value="PDA_OPERATOR" /><el-option label="代理商" value="AGENT" /></el-select></el-form-item>
-        <el-form-item label="代理商"><el-select v-model="actionForm.agentId" clearable filterable><el-option v-for="item in masterOptions.agents" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
-        <el-form-item label="工位"><el-select v-model="actionForm.workstationId" clearable filterable><el-option v-for="item in workstationOptions" :key="item.id" :label="`${item.workstationName}（${item.workstationCode}）`" :value="item.id" /></el-select></el-form-item>
-        <el-form-item label="角色"><el-select v-model="selectedRoleIds" multiple clearable filterable><el-option v-for="item in roleOptions" :key="item.id" :label="`${item.roleName}（${item.roleCode}）`" :value="item.id" /></el-select></el-form-item>
+        <el-form-item label="账号类型">
+          <el-select v-model="actionForm.userType" @change="changeUserAccountType">
+            <el-option label="后台账号" value="WEB_OPERATOR" />
+            <el-option label="后台账号（管理员类型）" value="WEB_ADMIN" />
+            <el-option label="PDA操作员" value="PDA_OPERATOR" />
+            <el-option label="代理商" value="AGENT" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="actionForm.userType === 'AGENT'" label="代理商"><el-select v-model="actionForm.agentId" clearable filterable><el-option v-for="item in masterOptions.agents" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
+        <el-form-item label="角色">
+          <el-select v-model="selectedRoleIds" multiple clearable filterable placeholder="选择岗位角色">
+            <el-option v-for="item in userRoleOptions" :key="item.id" :label="`${item.roleName}（${item.roleCode}）`" :value="item.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="actionForm.userType !== 'AGENT'" label="工位">
+          <el-select v-model="actionForm.workstationId" clearable filterable placeholder="选择岗位对应的工位">
+            <el-option v-for="item in userWorkstationOptions" :key="item.id" :label="`${item.workstationName}（${item.workstationCode}）`" :value="item.id" />
+          </el-select>
+        </el-form-item>
       </el-form>
       <el-form v-else-if="actionKind === 'role'" label-width="100px">
         <el-form-item label="角色编码"><el-input v-model="actionForm.roleCode" /></el-form-item>
@@ -1265,7 +1329,7 @@ async function submitPrimaryAction() {
       <el-form v-else-if="actionKind === 'workstation'" label-width="100px">
         <el-form-item label="工位编码"><el-input v-model="actionForm.workstationCode" /></el-form-item>
         <el-form-item label="工位名称"><el-input v-model="actionForm.workstationName" /></el-form-item>
-        <el-form-item label="工位类型"><el-select v-model="actionForm.workstationType"><el-option label="车架工位" value="FRAME" /><el-option label="电机工位" value="MOTOR" /><el-option label="电池工位" value="BATTERY" /><el-option label="仪表工位" value="DISPLAY" /><el-option label="车灯工位" value="LIGHT" /><el-option label="总装工位" value="ASSEMBLY" /><el-option label="入库" value="STOCK_IN" /><el-option label="出库" value="STOCK_OUT" /><el-option label="返工" value="REWORK" /></el-select></el-form-item>
+        <el-form-item label="工位类型"><el-select v-model="actionForm.workstationType"><el-option label="车架工位" value="FRAME" /><el-option label="电机工位" value="MOTOR" /><el-option label="电池工位" value="BATTERY" /><el-option label="仪表工位" value="DISPLAY" /><el-option label="车灯工位" value="LIGHT" /><el-option label="总装工位" value="ASSEMBLY" /><el-option label="入库" value="STOCK_IN" /><el-option label="出库" value="STOCK_OUT" /><el-option label="库存查询" value="STOCK_LOOKUP" /><el-option label="返工" value="REWORK" /></el-select></el-form-item>
       </el-form>
       <el-form v-else-if="actionKind === 'config'" label-width="100px">
         <el-form-item label="配置键"><el-input v-model="actionForm.configKey" /></el-form-item>

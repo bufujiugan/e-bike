@@ -6,6 +6,7 @@ import { showFailToast, showSuccessToast } from 'vant'
 import { hasPermission, isSuperAdmin } from './permissions'
 import ProductionStation from './components/ProductionStation.vue'
 import PiDispatchPanel from './components/PiDispatchPanel.vue'
+import VehicleStockLookup from './components/VehicleStockLookup.vue'
 import { useAutoVehicleScan } from './composables/useAutoVehicleScan'
 
 const username = ref('admin')
@@ -14,12 +15,12 @@ const passwordVisible = ref(false)
 const loading = ref(false)
 const loggedIn = ref(Boolean(localStorage.getItem('bike_access_token')))
 const dispatchMode = ref('order')
-const pathMode: Record<string, 'assembly' | 'stockIn' | 'stockOut' | 'rework' | 'trace'> = {
-  '/pda/home': 'assembly', '/pda/assembly': 'assembly', '/pda/stock-in': 'stockIn', '/pda/stock-out': 'stockOut', '/pda/rework': 'rework', '/pda/trace': 'trace'
+type PdaMode = 'assembly' | 'stockIn' | 'stockOut' | 'stockLookup' | 'rework' | 'trace'
+const pathMode: Record<string, PdaMode> = {
+  '/pda/home': 'assembly', '/pda/assembly': 'assembly', '/pda/stock-in': 'stockIn', '/pda/stock-out': 'stockOut', '/pda/stock-lookup': 'stockLookup', '/pda/rework': 'rework', '/pda/trace': 'trace'
 }
 const stockOutRemark = ref('')
-const mode = ref<'assembly' | 'stockIn' | 'stockOut' | 'rework' | 'trace'>(pathMode[window.location.pathname] ?? 'assembly')
-type PdaMode = 'assembly' | 'stockIn' | 'stockOut' | 'rework' | 'trace'
+const mode = ref<PdaMode>(pathMode[window.location.pathname] ?? 'assembly')
 type AuthContext = { username: string; userType: string; agentId: number | null; roles: string[]; permissions: string[]; workstations: string[]; mustChangePassword: boolean }
 const authContext = ref<AuthContext | null>(null)
 const passwordChangeVisible = ref(false)
@@ -27,14 +28,24 @@ const currentPassword = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
 const passwordChanging = ref(false)
-const allModes: PdaMode[] = ['assembly', 'stockIn', 'stockOut', 'rework', 'trace']
+const modeRequirements = {
+  assembly: { permission: 'ASSEMBLY_OPERATE', stations: ['ASSEMBLY', 'FRAME', 'MOTOR', 'BATTERY', 'DISPLAY'] },
+  stockIn: { permission: 'STOCK_IN_OPERATE', stations: ['STOCK_IN'] },
+  stockOut: { permission: 'STOCK_OUT_OPERATE', stations: ['STOCK_OUT'] },
+  stockLookup: { permission: 'PDA_STOCK_LOOKUP', stations: ['STOCK_LOOKUP'] },
+  rework: { permission: 'REWORK_OPERATE', stations: ['REWORK'] },
+} satisfies Record<Exclude<PdaMode, 'trace'>, { permission: string; stations: string[] }>
 const allowedModes = computed<PdaMode[]>(() => {
   const context = authContext.value
-  if (!context || isSuperAdmin(context) || context.workstations.includes('*')) return allModes
-  const modeByWorkstation: Record<string, PdaMode> = { ASSEMBLY: 'assembly', FRAME: 'assembly', MOTOR: 'assembly', BATTERY: 'assembly', DISPLAY: 'assembly', STOCK_IN: 'stockIn', STOCK_OUT: 'stockOut', REWORK: 'rework' }
-  const modes = context.workstations.map(workstation => modeByWorkstation[workstation]).filter((value): value is PdaMode => Boolean(value))
-  if (hasPermission(context, 'TRACE_READ') && modes.length > 0) modes.push('trace')
-  return [...new Set(modes)]
+  if (!context || context.mustChangePassword || passwordChangeVisible.value) return []
+  const modes: PdaMode[] = (Object.keys(modeRequirements) as Array<keyof typeof modeRequirements>)
+    .filter(key => {
+      const { permission, stations } = modeRequirements[key]
+      return hasPermission(context, permission) && (isSuperAdmin(context) ||
+        stations.some(station => context.workstations.includes(station)))
+    })
+  if (hasPermission(context, 'TRACE_READ') && (isSuperAdmin(context) || context.workstations.length > 0)) modes.push('trace')
+  return modes
 })
 type ScanFieldRef = { focus: () => void }
 const vehicleQrField = ref<ScanFieldRef | null>(null)
@@ -517,10 +528,12 @@ if (loggedIn.value) {
         <van-tab v-if="allowedModes.includes('assembly')" name="assembly" title="组装" />
         <van-tab v-if="allowedModes.includes('stockIn')" name="stockIn" title="入库" />
         <van-tab v-if="allowedModes.includes('stockOut')" name="stockOut" title="出库" />
+        <van-tab v-if="allowedModes.includes('stockLookup')" name="stockLookup" title="库存查询" />
         <van-tab v-if="allowedModes.includes('rework')" name="rework" title="返工" />
         <van-tab v-if="allowedModes.includes('trace')" name="trace" title="追溯" />
       </van-tabs>
-      <van-empty v-if="allowedModes.length === 0" description="当前账号未配置 PDA 工位" />
+      <van-empty v-if="passwordChangeVisible" description="请先修改初始密码" />
+      <van-empty v-else-if="!allowedModes.includes(mode)" description="当前账号没有可用的 PDA 作业" />
       <section v-else-if="mode === 'assembly'" class="form-section">
         <ProductionStation v-if="authContext && !passwordChangeVisible" :key="authContext.username" :username="authContext.username" />
       </section>
@@ -629,6 +642,7 @@ if (loggedIn.value) {
           <van-button class="operation-primary-button" block type="primary" :loading="busy" @click="submitRework"><van-icon name="exchange" />确认换件</van-button>
         </section>
       </section>
+      <VehicleStockLookup v-else-if="mode === 'stockLookup'" />
       <section v-else class="form-section operation-section trace-section">
         <section class="operation-guide is-info" aria-label="追溯查询提示">
           <span><van-icon name="records-o" /></span>

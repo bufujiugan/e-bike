@@ -580,8 +580,7 @@ public class PiServiceImpl implements PiService {
     }
 
     private static boolean canReadFinance() {
-        return !CurrentOperator.hasRole("WEB_AGENT") && (CurrentOperator.hasRole("SUPER_ADMIN")
-                || CurrentOperator.hasPermission("PI_PAYMENT_CONFIRM") || CurrentOperator.hasPermission("PI_RELEASE") || CurrentOperator.hasPermission("PI_PAYMENT_REVERSE"));
+        return com.bike.server.common.FinancialAuditAccess.allowed();
     }
 
     private void redactFinance(PiView pi) {

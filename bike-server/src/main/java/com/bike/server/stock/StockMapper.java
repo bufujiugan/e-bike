@@ -10,6 +10,7 @@ import java.util.List;
 public interface StockMapper {
     java.util.Map<String,Object> selectInventorySummary();
     VehicleView selectVehicleByQrForUpdate(@Param("qrCode") String qrCode);
+    VehicleStockLocation selectVehicleStockLocation(@Param("code") String code);
     int updateVehicleStockIn(@Param("vehicleId") long vehicleId, @Param("warehouseId") long warehouseId, @Param("locationId") long locationId);
     int updateVehicleStockOut(@Param("vehicleId") long vehicleId, @Param("customerId") long customerId, @Param("orderId") long orderId);
     int updateVehicleStockInCancel(@Param("vehicleId") long vehicleId);

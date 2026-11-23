@@ -30,6 +30,20 @@ public class StockServiceImpl implements StockService {
     @org.springframework.beans.factory.annotation.Autowired private DispatchNotificationService dispatchNotifications;
     public StockServiceImpl(StockMapper stockMapper, OrderMapper orderMapper) { this.stockMapper = stockMapper; this.orderMapper = orderMapper; }
 
+    @Override
+    public VehicleStockLocation findVehicleStockLocation(String code) {
+        CurrentOperator.requirePermission("PDA_STOCK_LOOKUP");
+        CurrentOperator.requireWorkstation("STOCK_LOOKUP");
+        if (code == null || code.isBlank() || code.length() > 512) {
+            throw new BusinessException("INVALID_PARAMETER", "请输入有效的整车聚合码或车架 SN");
+        }
+        VehicleStockLocation location = stockMapper.selectVehicleStockLocation(code.trim());
+        if (location == null) {
+            throw new BusinessException("STOCK_VEHICLE_NOT_FOUND", "未查到该编码对应的在库整车");
+        }
+        return location;
+    }
+
     @Override public StockValidationResult validateStockIn(StockValidationRequest request) {
         CurrentOperator.requirePermission("STOCK_IN_OPERATE");
         CurrentOperator.requireWorkstation("STOCK_IN");

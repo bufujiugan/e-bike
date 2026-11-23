@@ -1,0 +1,50 @@
+<template>
+  <scroll-view class="page" scroll-y>
+    <view class="content">
+      <view class="card">
+        <form-field v-model="code" label="整车聚合码或车架 SN"
+          :disabled="busy || !ready" @confirm="query" />
+        <action-button label="启动设备扫码" secondary :disabled="busy || !ready" @click="triggerScan" />
+        <action-button label="查询库存" :disabled="busy || !ready" @click="query" />
+      </view>
+      <text v-if="message" :class="['feedback', failed ? 'error' : '']">{{ message }}</text>
+      <view v-if="location && ready" class="card">
+        <text class="subtitle">在库整车</text>
+        <text class="text" selectable>车架 SN：{{ location.frameSn }}</text>
+        <text class="text" selectable>车型：{{ location.modelName }}</text>
+        <text class="text" selectable>仓库：{{ location.warehouseName }}</text>
+        <text class="text" selectable>库位：{{ location.locationName }}</text>
+      </view>
+    </view>
+  </scroll-view>
+</template>
+
+<script>
+import page from "../../common/page.js";
+import { get } from "../../common/api.js";
+
+export default {
+  mixins: [page],
+  data: () => ({ mode: "stock-lookup", code: "", location: null }),
+  watch: {
+    code() {
+      this.location = null;
+    },
+  },
+  methods: {
+    async onScan(code) {
+      this.code = code.trim();
+      this.location = null;
+      if (!this.code) throw new Error("请输入整车聚合码或车架 SN");
+      this.location = await get(
+        `/api/inventory/vehicle-location?code=${encodeURIComponent(this.code)}`,
+      );
+    },
+    query() {
+      this.run(() => this.onScan(this.code));
+    },
+  },
+};
+</script>
+
+<style src="../../common/page.css"></style>

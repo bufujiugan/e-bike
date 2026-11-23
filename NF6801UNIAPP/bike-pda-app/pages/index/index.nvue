@@ -51,6 +51,7 @@ const entries = [
   ["stock-in", "扫码入库"],
   ["stock-out", "订单出库"],
   ["pi", "PI 多车型整批出库"],
+  ["stock-lookup", "库存查询"],
   ["rework", "返工换件"],
   ["trace", "全链路追溯"],
   ["issues", "生产异常与图片"],

@@ -14,7 +14,7 @@ import java.util.Set;
 public class WorkstationServiceImpl implements WorkstationService {
     private static final Set<String> SUPPORTED_TYPES = Set.of(
             "FRAME", "MOTOR", "BATTERY", "DISPLAY", "LIGHT",
-            "ASSEMBLY", "STOCK_IN", "STOCK_OUT", "REWORK");
+            "ASSEMBLY", "STOCK_IN", "STOCK_OUT", "STOCK_LOOKUP", "REWORK");
     private final WorkstationMapper mapper;
     private final OperationLogMapper operationLogMapper;
 

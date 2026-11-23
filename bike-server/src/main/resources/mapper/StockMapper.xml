@@ -1,6 +1,17 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.bike.server.stock.StockMapper">
+    <select id="selectVehicleStockLocation" resultType="com.bike.server.stock.VehicleStockLocation">
+        SELECT v.frame_sn, m.model_name, w.warehouse_name, l.location_name
+        FROM bike_vehicle v
+        JOIN bike_product_model m ON m.id = v.model_id
+        JOIN bike_warehouse w ON w.id = v.current_warehouse_id
+        JOIN bike_warehouse_location l ON l.id = v.current_location_id AND l.warehouse_id = w.id
+        WHERE v.status = 2
+          AND (v.vehicle_qr_code = #{code} OR v.vehicle_qr_token = #{code} OR v.frame_sn = #{code})
+        ORDER BY CASE WHEN v.vehicle_qr_code = #{code} OR v.vehicle_qr_token = #{code} THEN 0 ELSE 1 END, v.id
+        LIMIT 1
+    </select>
     <select id="selectVehicleByQrForUpdate" resultType="com.bike.server.vehicle.VehicleView"><include refid="com.bike.server.vehicle.VehicleMapper.vehicleSelect"/> WHERE (v.vehicle_qr_code = #{qrCode} OR v.vehicle_qr_token = #{qrCode}) GROUP BY v.id FOR UPDATE</select>
     <update id="updateVehicleStockIn">UPDATE bike_vehicle SET status=2, current_warehouse_id=#{warehouseId}, current_location_id=#{locationId}, stock_in_time=NOW(3) WHERE id=#{vehicleId} AND status=1</update>
     <update id="updateVehicleStockOut">UPDATE bike_vehicle v JOIN bike_sales_order o ON o.id=#{orderId} AND o.customer_id=#{customerId} JOIN bike_sales_order_item i ON i.order_id=o.id AND i.product_model_id=v.model_id SET v.status=3, v.stock_out_time=NOW(3), v.current_customer_id=#{customerId}, v.current_order_no=o.order_no WHERE v.id=#{vehicleId} AND v.status=2</update>
