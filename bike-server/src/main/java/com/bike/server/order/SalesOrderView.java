@@ -1,5 +1,7 @@
 package com.bike.server.order;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -53,6 +55,7 @@ public class SalesOrderView {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private List<OrderVehicleView> shippedVehicles = List.of();
+    private List<OrderOperationView> operations;
     public Long getId(){return id;} public void setId(Long v){id=v;}
     public String getOrderNo(){return orderNo;} public void setOrderNo(String v){orderNo=v;}
     public Long getCustomerId(){return customerId;} public void setCustomerId(Long v){customerId=v;}
@@ -70,4 +73,7 @@ public class SalesOrderView {
     public LocalDateTime getUpdatedAt(){return updatedAt;} public void setUpdatedAt(LocalDateTime v){updatedAt=v;}
     public List<OrderVehicleView> getShippedVehicles(){return shippedVehicles;}
     public void setShippedVehicles(List<OrderVehicleView> v){shippedVehicles=v == null ? List.of() : List.copyOf(v);}
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public List<OrderOperationView> getOperations() { return operations; }
+    public void setOperations(List<OrderOperationView> operations) { this.operations = List.copyOf(operations); }
 }

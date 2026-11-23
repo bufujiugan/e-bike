@@ -92,6 +92,32 @@ class OrderServiceTest {
     }
 
     @Test
+    void completedOrderOperationsAreReturnedOnlyToInternalOrderReaders() {
+        var mapper = Mockito.mock(OrderMapper.class);
+        var service = com.bike.server.common.CustomerScopeTestSupport.isolated(new OrderServiceImpl(mapper));
+        var operations = java.util.List.of(new OrderOperationView("ORDER_CREATE", "创建订单", "业务员",
+                java.time.LocalDateTime.of(2026, 11, 23, 9, 0), null));
+        Mockito.when(mapper.selectByNo("SO-7")).thenAnswer(ignored -> order(7L, "SO-7", "SHIPPED", 2, 2));
+        Mockito.when(mapper.selectOrderOperations(7L, "SO-7")).thenReturn(operations);
+
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                "reader", "N/A", java.util.List.of(new SimpleGrantedAuthority("PERM_ORDER_READ"))));
+        assertThat(service.getByNo("SO-7").getOperations()).containsExactlyElementsOf(operations);
+
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                "agent", "N/A", java.util.List.of(new SimpleGrantedAuthority("ROLE_WEB_AGENT"),
+                        new SimpleGrantedAuthority("PERM_ORDER_READ"))));
+        assertThat(service.getByNo("SO-7").getOperations()).isNull();
+
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                "warehouse", "N/A", java.util.List.of(new SimpleGrantedAuthority("ROLE_PDA_OPERATOR"),
+                        new SimpleGrantedAuthority("PERM_STOCK_OUT_OPERATE"),
+                        new SimpleGrantedAuthority("WORKSTATION_STOCK_OUT"))));
+        assertThat(service.getByNo("SO-7").getOperations()).isNull();
+        Mockito.verify(mapper, Mockito.times(1)).selectOrderOperations(7L, "SO-7");
+    }
+
+    @Test
     void cancelRejectsShippedOrderWithoutChangingStatus() {
         OrderMapper mapper = Mockito.mock(OrderMapper.class);
         Mockito.when(mapper.selectById(7L)).thenReturn(order(7L, "SO-7", "PARTIAL_SHIPPED", 1, 2));

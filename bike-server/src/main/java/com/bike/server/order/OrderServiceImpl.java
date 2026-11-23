@@ -9,6 +9,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -40,6 +41,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public SalesOrderView get(long id) {
         requireOrderRead();
         SalesOrderView order = orderMapper.selectById(id);
@@ -49,6 +51,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public SalesOrderView getByNo(String orderNo) {
         requireOrderRead();
         if (orderNo == null || orderNo.isBlank()) throw new BusinessException("ORDER_INVALID", "订单号不能为空");
@@ -198,6 +201,9 @@ public class OrderServiceImpl implements OrderService {
     private SalesOrderView enrichDetails(SalesOrderView order) {
         if (contractLinks != null) order.setHasLinkedPi(contractLinks.existsPiForOrder(order.getId()));
         order.setShippedVehicles(orderMapper.selectShippedVehicles(order.getId()));
+        if ("SHIPPED".equals(order.getStatus()) && canReadOrderOperations()) {
+            order.setOperations(orderMapper.selectOrderOperations(order.getId(), order.getOrderNo()));
+        }
         if (!CurrentOperator.hasRole("WEB_AGENT") && purchaseContracts != null) {
             var contract = purchaseContracts.findForOrder(order.getId());
             if (contract != null) {
@@ -207,5 +213,12 @@ public class OrderServiceImpl implements OrderService {
         }
         redactReservationForAgent(order);
         return order;
+    }
+
+    private static boolean canReadOrderOperations() {
+        return (CurrentOperator.hasPermission("ORDER_READ") || CurrentOperator.hasRole("SUPER_ADMIN"))
+                && !CurrentOperator.hasRole("WEB_AGENT")
+                && !CurrentOperator.hasRole("WEB_CUSTOMER")
+                && !CurrentOperator.hasRole("PDA_OPERATOR");
     }
 }

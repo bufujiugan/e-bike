@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import api from '../api'
+import CompletedOrderDetails from '../components/CompletedOrderDetails.vue'
 import StatusTag from '../components/business/StatusTag.vue'
 import DataTable from '../components/table/DataTable.vue'
 import Pagination from '../components/table/Pagination.vue'
+import { salesTypeLabel } from '../sales-routing'
 
 type CompletedOrder = {
   orderNo: string
@@ -11,6 +13,8 @@ type CompletedOrder = {
   modelName: string
   orderQty: number
   shippedQty: number
+  salesType: string | null
+  createdAt: string
 }
 
 const pageSize = 20
@@ -22,6 +26,13 @@ const orders = ref<CompletedOrder[]>([])
 const total = ref(0)
 const loading = ref(false)
 const error = ref('')
+const detailOrderNo = ref('')
+const detailVisible = ref(false)
+
+function openDetails(orderNo: string) {
+  detailOrderNo.value = orderNo
+  detailVisible.value = true
+}
 
 function search() {
   keyword.value = searchInput.value.trim()
@@ -73,13 +84,30 @@ watch([page, keyword, refreshVersion], async (_, __, onCleanup) => {
       :empty-title="keyword ? '未找到符合条件的订单' : '暂无已完成订单'"
       :empty-description="keyword ? '可换一个订单号或客户名称查询。' : ''"
     >
-      <el-table-column prop="orderNo" label="订单号" min-width="170" show-overflow-tooltip />
+      <el-table-column prop="orderNo" label="订单号" min-width="180">
+        <template #default="{ row }">
+          <el-button link type="primary" :aria-label="`查看订单 ${row.orderNo}`" @click="openDetails(row.orderNo)">
+            {{ row.orderNo }}
+          </el-button>
+        </template>
+      </el-table-column>
       <el-table-column prop="customerName" label="客户" min-width="160" show-overflow-tooltip />
       <el-table-column prop="modelName" label="车型" min-width="140" show-overflow-tooltip />
+      <el-table-column label="销售类型" min-width="125">
+        <template #default="{ row }">{{ row.salesType ? salesTypeLabel(row.salesType) : '—' }}</template>
+      </el-table-column>
+      <el-table-column label="创建时间" min-width="155">
+        <template #default="{ row }">{{ row.createdAt?.replace('T', ' ').slice(0, 19) || '—' }}</template>
+      </el-table-column>
       <el-table-column prop="orderQty" label="订单数量" width="100" align="right" />
       <el-table-column prop="shippedQty" label="已出库" width="100" align="right" />
       <el-table-column label="状态" width="100">
         <template #default><StatusTag label="已完成" /></template>
+      </el-table-column>
+      <el-table-column label="操作" width="100">
+        <template #default="{ row }">
+          <el-button link type="primary" @click="openDetails(row.orderNo)">查看详情</el-button>
+        </template>
       </el-table-column>
       <template v-if="error" #empty-action>
         <el-button size="small" @click="refreshVersion++">重试</el-button>
@@ -88,6 +116,7 @@ watch([page, keyword, refreshVersion], async (_, __, onCleanup) => {
 
     <Pagination v-if="!error" v-model:page="page" :total="total" :page-size="pageSize" :disabled="loading" />
   </section>
+  <CompletedOrderDetails v-model="detailVisible" :order-no="detailOrderNo" />
 </template>
 
 <style scoped>
@@ -96,5 +125,10 @@ watch([page, keyword, refreshVersion], async (_, __, onCleanup) => {
   gap: 8px;
   max-width: 360px;
   margin-bottom: 16px;
+}
+
+.sm-module-list :deep(.el-button.is-link:focus-visible) {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 3px;
 }
 </style>
