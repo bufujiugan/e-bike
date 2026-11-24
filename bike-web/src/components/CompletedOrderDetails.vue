@@ -120,7 +120,7 @@ watch([visible, () => props.orderNo, refreshVersion], async ([isVisible, orderNo
           <div><dt>{{ tr("客户") }}</dt><dd>{{ order.customerName || '—' }}</dd></div>
           <div><dt>{{ tr("代理商") }}</dt><dd>{{ order.agentName || '—' }}</dd></div>
           <div><dt>{{ tr("车型") }}</dt><dd>{{ order.modelName || '—' }}</dd></div>
-          <div><dt>{{ tr("销售类型") }}</dt><dd>{{ order.salesType ? salesTypeLabel(order.salesType) : '—' }}</dd></div>
+          <div><dt>{{ tr("销售类型") }}</dt><dd>{{ order.salesType ? tr(salesTypeLabel(order.salesType)) : '—' }}</dd></div>
           <div><dt>{{ tr("订单数量") }}</dt><dd>{{ order.orderQty }} {{ tr("台") }}</dd></div>
           <div><dt>{{ tr("已出库") }}</dt><dd>{{ order.shippedQty }} {{ tr("台") }}</dd></div>
           <div><dt>{{ tr("计划出库日") }}</dt><dd>{{ order.plannedShipDate || '—' }}</dd></div>
@@ -140,7 +140,9 @@ watch([visible, () => props.orderNo, refreshVersion], async ([isVisible, orderNo
       <section v-if="order.operations" :aria-label='tr("订单操作记录")'>
         <h3>{{ tr("操作记录") }}</h3>
         <DataTable :rows="orderOperations" max-height="280" :empty-title='tr("暂无订单操作记录")' empty-description="">
-          <el-table-column prop="action" :label='tr("操作")' min-width="145" />
+          <el-table-column :label='tr("操作")' min-width="145">
+            <template #default="{ row }">{{ tr(row.action) }}</template>
+          </el-table-column>
           <el-table-column :label='tr("操作人")' min-width="105">
             <template #default="{ row }">{{ row.operatorName || tr('未记录') }}</template>
           </el-table-column>

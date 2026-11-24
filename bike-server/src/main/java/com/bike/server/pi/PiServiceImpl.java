@@ -11,6 +11,8 @@ import jakarta.validation.Validator;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
+import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import org.springframework.stereotype.Service;
@@ -24,6 +26,8 @@ public class PiServiceImpl implements PiService {
     private static final BigDecimal ZERO = new BigDecimal("0.00");
     private static final BigDecimal MAX_MONEY = new BigDecimal("9999999999999999.99");
     private static final Set<String> PUBLISHED = Set.of("CONFIRMED", "RELEASED");
+    private static final Set<String> PI_STATUSES = Set.of("DRAFT", "CONFIRMED", "RELEASED", "CANCELLED", "SUPERSEDED");
+    private static final Set<String> PAYMENT_STATUSES = Set.of("UNPAID", "PARTIAL", "DEPOSIT_MET", "PAID");
     @org.springframework.beans.factory.annotation.Autowired private PiBusinessService business;
     private final PiMapper mapper;
     private final PiDocumentService documents;
@@ -97,6 +101,67 @@ public class PiServiceImpl implements PiService {
     }
 
     @Override
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
+    public PageResponse<PiView> search(String keyword, String status, Long warehouseId, String tradeType,
+            String salesChannel, PiListFilters filters, YearMonth referenceMonth, long page, long pageSize) {
+        if (!filters.isActive())
+            return listBySalesScenario(keyword, status, warehouseId, tradeType, salesChannel, page, pageSize);
+        requireRead();
+        String trade = upper(tradeType), channel = upper(salesChannel);
+        validateSalesScenario(warehouseId, trade, channel);
+        PiListCriteria criteria = listCriteria(filters, referenceMonth);
+        customerScope.lockForBusiness();
+        Long agent = CurrentOperator.hasRole("WEB_AGENT") ? agentId() : null;
+        long currentPage = Math.min(10_000_000, Math.max(1, page));
+        long size = Math.min(100, Math.max(1, pageSize));
+        String query = normalize(keyword), state = upper(status);
+        boolean includeLegacy = "CZECH_PI".equals(channel);
+        var records = mapper.selectFilteredPage(query, state, agent, warehouseId, trade, channel, includeLegacy,
+                criteria, (currentPage - 1) * size, size);
+        records.forEach(pi -> { enrichFulfillment(pi); redactFinance(pi); });
+        long total = mapper.countFiltered(query, state, agent, warehouseId, trade, channel, includeLegacy, criteria);
+        return new PageResponse<>(records, currentPage, size, total);
+    }
+
+    private PiListCriteria listCriteria(PiListFilters filters, YearMonth referenceMonth) {
+        var statuses = parseStatuses(filters.statuses(), PI_STATUSES, "PI 状态筛选无效");
+        var paymentStatuses = parseStatuses(filters.paymentStatuses(), PAYMENT_STATUSES, "收款状态筛选无效");
+        if (!paymentStatuses.isEmpty() && !canReadFinance())
+            fail("PERMISSION_DENIED", "当前账号无权按收款状态筛选");
+        YearMonth month = parseCreatedMonth(filters.createdMonth(), referenceMonth);
+        boolean daily = Boolean.TRUE.equals(filters.dailyFollowUp());
+        return new PiListCriteria(monthStart(month), month == null ? null : monthStart(month.plusMonths(1)),
+                statuses, paymentStatuses, daily ? monthStart(referenceMonth) : null,
+                daily ? monthStart(referenceMonth.plusMonths(1)) : null, filters.fulfillmentCompleted());
+    }
+
+    private static List<String> parseStatuses(String value, Set<String> allowed, String error) {
+        if (value == null || value.isBlank()) return List.of();
+        var statuses = Arrays.stream(value.split(",", -1)).map(PiServiceImpl::upper).distinct().toList();
+        if (statuses.stream().anyMatch(status -> status == null || !allowed.contains(status)))
+            fail("INVALID_PARAMETER", error);
+        return statuses;
+    }
+
+    private static YearMonth parseCreatedMonth(String value, YearMonth referenceMonth) {
+        String normalized = upper(value);
+        if (normalized == null) return null;
+        if ("CURRENT".equals(normalized)) return referenceMonth;
+        if ("PREVIOUS".equals(normalized)) return referenceMonth.minusMonths(1);
+        try {
+            YearMonth month = YearMonth.parse(normalized);
+            if (month.getYear() >= 1000 && month.getYear() < 9999) return month;
+        } catch (DateTimeParseException error) {
+            throw new BusinessException("INVALID_PARAMETER", "创建月份须为有效年月（YYYY-MM）");
+        }
+        throw new BusinessException("INVALID_PARAMETER", "创建月份须为有效年月（YYYY-MM）");
+    }
+
+    private static LocalDateTime monthStart(YearMonth month) {
+        return month == null ? null : month.atDay(1).atStartOfDay();
+    }
+
+    @Override
     public PiView get(long id) {
         requireRead();
         PiView pi = require(id);
@@ -109,13 +174,9 @@ public class PiServiceImpl implements PiService {
             String tradeType, String salesChannel, long page, long pageSize) {
         requireRead();
         String trade = upper(tradeType), channel = upper(salesChannel);
-        if (channel != null && !Set.of("CHINA_SALES", "CZECH_PI").contains(channel))
-            fail("INVALID_PARAMETER", "销售入口类型无效");
-        if (trade != null && !Set.of("DOMESTIC", "EXPORT").contains(trade))
-            fail("INVALID_PARAMETER", "贸易类型须为内销或外销");
+        validateSalesScenario(warehouseId, trade, channel);
         if (trade == null && channel == null)
             return listByWarehouse(keyword, status, warehouseId, page, pageSize);
-        if (warehouseId != null && warehouseId <= 0) fail("INVALID_PARAMETER", "请选择有效的出库仓库");
         customerScope.lockForBusiness();
         long currentPage = Math.min(10_000_000, Math.max(1, page));
         long size = Math.min(100, Math.max(1, pageSize));
@@ -126,6 +187,14 @@ public class PiServiceImpl implements PiService {
         records.forEach(pi -> { enrichFulfillment(pi); redactFinance(pi); });
         return new PageResponse<>(records, currentPage, size,
                 mapper.countBySalesScenario(query, state, agent, warehouseId, trade, channel, "CZECH_PI".equals(channel)));
+    }
+
+    private static void validateSalesScenario(Long warehouseId, String trade, String channel) {
+        if (channel != null && !Set.of("CHINA_SALES", "CZECH_PI").contains(channel))
+            fail("INVALID_PARAMETER", "销售入口类型无效");
+        if (trade != null && !Set.of("DOMESTIC", "EXPORT").contains(trade))
+            fail("INVALID_PARAMETER", "贸易类型须为内销或外销");
+        if (warehouseId != null && warehouseId <= 0) fail("INVALID_PARAMETER", "请选择有效的出库仓库");
     }
 
     @Override

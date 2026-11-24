@@ -17,7 +17,7 @@ public class FileUploadJournal {
     public void begin(String key, Context context, long size, String type) {
         if(!TransactionSynchronizationManager.isActualTransactionActive() || !TransactionSynchronizationManager.isSynchronizationActive())
             throw new IllegalStateException("Tracked upload requires a binding transaction");
-        if(context==null || !Set.of("PRODUCTION_ISSUE","SKU_IMAGE","PI_CONFIRMATION","PI_RECEIPT","PI_LOGISTICS","AFTER_SALES","PI_EXPORT").contains(context.purpose())
+        if(context==null || !Set.of("PRODUCTION_ISSUE","SKU_IMAGE","PI_CONFIRMATION","PI_RECEIPT","PI_LOGISTICS","AFTER_SALES","PI_EXPORT","PART_PHOTO").contains(context.purpose())
                 || context.businessId()==null || context.businessId().isBlank() || context.businessId().length()>64
                 || context.fileName()==null || context.fileName().length()>255 || context.sha256()==null || !context.sha256().matches("[0-9a-fA-F]{64}")
                 || key==null || !key.matches("(?:local:|cos:production/)[A-Za-z0-9-]+\\.[a-z0-9]+") || size<=0)

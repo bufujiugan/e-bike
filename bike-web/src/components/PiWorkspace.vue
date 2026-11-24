@@ -8,7 +8,7 @@ import { createPiLocalDraftStore, type DraftItem, type PiDraftForm, type PiLocal
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
 import { hasPermission, hasRole, type PermissionContext } from '../permissions'
-import { piApi, reservationLabel, type Money, type PiCreate, type PiDocument, type PiOptions, type PiPayment, type PiView, type PiLockOption, type PiLockSummary, type PiLogistics, type PiWorkflow, type PiWorkflowComplete } from '../pi-api'
+import { piApi, reservationLabel, type Money, type PiCreate, type PiDocument, type PiOptions, type PiPayment, type PiView, type PiLockOption, type PiLockSummary, type PiLogistics, type PiWorkflow, type PiWorkflowComplete, type PiListQuery } from '../pi-api'
 import PiReceiptAttachments from './PiReceiptAttachments.vue'
 import PiTemplates from './PiTemplates.vue'
 import PiFulfillmentProfiles from './PiFulfillmentProfiles.vue'
@@ -191,6 +191,24 @@ const reportRefresh = ref(0), exportBusy = ref(false)
 const showFinance = computed(() => allowed('PI_FINANCE_READ') || canPay.value || canRelease.value || canReversePayment.value)
 const rows = ref<PiView[]>([]), total = ref(0), page = ref(1), pageSize = ref(20)
 const keyword = ref(props.initialKeyword ?? ''), status = ref(''), busy = ref(false), loadError = ref('')
+const hasCombinedFilters = computed(() => props.genericEntry && internal.value && !props.europe && !props.salesScenario)
+const appliedKeyword = ref(keyword.value.trim())
+const listScope = ref<'daily' | 'custom'>(appliedKeyword.value ? 'custom' : 'daily')
+const monthShortcut = ref('')
+const chosenMonth = ref<string | null>(null)
+const selectedPiStatuses = ref<string[]>([])
+const selectedPaymentStatuses = ref<string[]>([])
+const fulfillmentCompleted = ref<boolean>()
+const monthShortcuts = [
+  { value: '', label: '不限' },
+  { value: 'CURRENT', label: '本月' },
+  { value: 'PREVIOUS', label: '上月' },
+]
+const fulfillmentOptions = [
+  { value: undefined, label: '不限' },
+  { value: false, label: '未完成' },
+  { value: true, label: '已完成' },
+]
 const detail = ref<PiView | null>(null), detailVisible = ref(false), detailBusy = ref(false), detailTab = ref('items')
 const workflow = ref<PiWorkflow | null>(null), workflowBusy = ref(false), workflowError = ref(''), workflowActionBusy = ref(false)
 const batchVisible = ref(false), batchBusy = ref(false), batchError = ref(''), batchVehicles = ref<Awaited<ReturnType<typeof piApi.batch>>['vehicles']>([])
@@ -645,20 +663,78 @@ const preview = computed(() => {
 })
 function message(error: unknown, fallback: string) { return api.isAxiosError(error) ? error.response?.data?.message ?? fallback : error instanceof Error ? error.message : fallback }
 let listVersion = 0, detailVersion = 0
+function listQuery(): PiListQuery {
+  const scope = {
+    ...salesScenarioFilters(props.salesScenario),
+    warehouseId: props.europe ? europeWarehouseId.value : undefined,
+  }
+  if (!hasCombinedFilters.value) {
+    return { ...scope, keyword: keyword.value.trim() || undefined, status: status.value || undefined }
+  }
+  const query = { ...scope, keyword: appliedKeyword.value || undefined }
+  if (listScope.value === 'daily') return { ...query, dailyFollowUp: true }
+  return {
+    ...query,
+    createdMonth: chosenMonth.value || monthShortcut.value || undefined,
+    statuses: selectedPiStatuses.value.join(',') || undefined,
+    paymentStatuses: showFinance.value ? selectedPaymentStatuses.value.join(',') || undefined : undefined,
+    fulfillmentCompleted: fulfillmentCompleted.value,
+  }
+}
+
 async function load() {
   if (!canRead.value) return
   if (!europeScopeReady.value) { ++listVersion; rows.value = []; total.value = 0; busy.value = false; return }
   const version = ++listVersion; busy.value = true; loadError.value = ''
-  try { const result = await piApi.list({ ...salesScenarioFilters(props.salesScenario), keyword: keyword.value.trim() || undefined, status: status.value || undefined, warehouseId: props.europe ? europeWarehouseId.value : undefined, page: page.value, pageSize: pageSize.value }); if (version === listVersion) { rows.value = result.records; total.value = result.total; reportRefresh.value++ } }
+  try { const result = await piApi.list({ ...listQuery(), page: page.value, pageSize: pageSize.value }); if (version === listVersion) { rows.value = result.records; total.value = result.total; reportRefresh.value++ } }
   catch (error) { if (version === listVersion) { rows.value = []; total.value = 0; loadError.value = message(error, 'PI 列表加载失败') } }
   finally { if (version === listVersion) busy.value = false }
 }
-function search() { page.value = 1; void load() }
+function search() {
+  appliedKeyword.value = keyword.value.trim()
+  page.value = 1
+  void load()
+}
+function resetList() {
+  keyword.value = ''
+  status.value = ''
+  listScope.value = 'daily'
+  monthShortcut.value = ''
+  chosenMonth.value = null
+  selectedPiStatuses.value = []
+  selectedPaymentStatuses.value = []
+  fulfillmentCompleted.value = undefined
+  search()
+}
+function applyCustomFilters() {
+  listScope.value = 'custom'
+  search()
+}
+function selectMonth(shortcut: string) {
+  chosenMonth.value = null
+  monthShortcut.value = shortcut
+  applyCustomFilters()
+}
+function selectChosenMonth() {
+  monthShortcut.value = ''
+  applyCustomFilters()
+}
+function selectStatuses(category: 'pi' | 'payment', value?: string) {
+  const selection = category === 'pi' ? selectedPiStatuses : selectedPaymentStatuses
+  selection.value = value === undefined ? []
+    : selection.value.includes(value) ? selection.value.filter(status => status !== value)
+      : [...selection.value, value]
+  applyCustomFilters()
+}
+function selectFulfillment(value?: boolean) {
+  fulfillmentCompleted.value = value
+  applyCustomFilters()
+}
 async function exportList() {
   if (exportBusy.value || !europeScopeReady.value) return
   exportBusy.value = true; loadError.value = ''
   try {
-    const blob = await piApi.exportList({ ...salesScenarioFilters(props.salesScenario), keyword: keyword.value.trim() || undefined, status: status.value || undefined, warehouseId: props.europe ? europeWarehouseId.value : undefined })
+    const blob = await piApi.exportList(listQuery())
     const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = props.europe ? '欧洲订单.xlsx' : 'PI列表.xlsx'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
   } catch (e) {
     if (api.isAxiosError(e) && e.response?.data instanceof Blob) { try { loadError.value = JSON.parse(await e.response.data.text()).message || 'PI列表导出失败' } catch { loadError.value = 'PI列表导出失败' } }
@@ -1135,7 +1211,69 @@ onBeforeUnmount(() => {
         <el-alert v-if="europeWarehouse && !canCreateInScope" :title='tr("该仓库已停用，仅可查看历史订单；新建 PI 请选用启用仓库。")' type="warning" :closable="false" />
       </section>
       <PiBusinessDashboard v-if="internal && !europe && !salesScenario" :refresh="reportRefresh" @open-pi="id => openDetail({ id })" />
-      <form class="pi-filters list-toolbar" @submit.prevent="search"><el-input v-model="keyword" :aria-label='tr("搜索PI、客户、SKU、订单、出库单或物流单号")' :placeholder='tr("PI / 客户 / SKU / 订单 / 出库单 / 物流单号")' clearable /><el-select v-model="status" :aria-label='tr("PI 状态")' clearable :placeholder='tr("全部状态")'><el-option v-for="s in states" :key="s" :value="s" :label="tr(stateNames[s])" /></el-select><el-button native-type="submit" type="primary" :loading="busy" :disabled="!europeScopeReady">{{ tr("查询") }}</el-button><el-button @click="keyword = ''; status = ''; search()">{{ tr("重置") }}</el-button><el-button v-if="canExport" :loading="exportBusy" :disabled="!europeScopeReady" @click="exportList">{{ tr("导出当前查询全部 PI") }}</el-button><el-button v-if="internal" @click="openProfiles">{{ tr("履约配置") }}</el-button><el-button v-if="canManageTemplates" @click="openTemplates()">{{ tr("模板与银行资料") }}</el-button><el-button v-if="canWrite && canManageReservation && allowCreate !== false" :disabled="!canCreateInScope" @click="openConversion">{{ tr("从 SKU 锁定生成 PI") }}</el-button><el-button v-if="canWrite && allowCreate !== false" type="primary" :disabled="!canCreateInScope" @click="openCreate()">{{ tr("新建 PI") }}</el-button></form>
+      <section v-if="hasCombinedFilters" class="pi-list-facets" :aria-label="tr('PI 列表筛选')">
+        <div class="pi-filter-row" role="group" :aria-label="tr('列表范围')">
+          <span class="pi-filter-label" aria-hidden="true">{{ tr('列表范围') }}</span>
+          <div class="pi-filter-choices">
+            <button type="button" :aria-pressed="listScope === 'daily'" @click="resetList">{{ tr('日常跟进') }}</button>
+            <button type="button" :aria-pressed="listScope === 'custom'" @click="applyCustomFilters">{{ tr('自定义筛选') }}</button>
+            <span v-if="listScope === 'daily'" class="pi-filter-hint">{{ tr('本月全部 PI + 往月未完成 PI') }}</span>
+          </div>
+        </div>
+        <div class="pi-filter-row" role="group" :aria-label="tr('创建月份')">
+          <span class="pi-filter-label" aria-hidden="true">{{ tr('创建月份') }}</span>
+          <div class="pi-filter-choices">
+            <button v-for="option in monthShortcuts" :key="option.label" type="button"
+              :aria-pressed="listScope === 'custom' && !chosenMonth && monthShortcut === option.value"
+              @click="selectMonth(option.value)">{{ tr(option.label) }}</button>
+            <el-date-picker v-model="chosenMonth" type="month" size="small" format="YYYY-MM" value-format="YYYY-MM"
+              :aria-label="tr('选择年月')" :placeholder="tr('选择年月')" @change="selectChosenMonth" />
+          </div>
+        </div>
+        <div class="pi-filter-row" role="group" :aria-label="tr('PI 状态')">
+          <span class="pi-filter-label" aria-hidden="true">{{ tr('PI 状态') }}</span>
+          <div class="pi-filter-choices">
+            <button type="button" :aria-pressed="listScope === 'custom' && !selectedPiStatuses.length"
+              @click="selectStatuses('pi')">{{ tr('不限') }}</button>
+            <button v-for="state in states" :key="state" type="button" :aria-pressed="selectedPiStatuses.includes(state)"
+              @click="selectStatuses('pi', state)">{{ tr(stateNames[state]) }}</button>
+          </div>
+        </div>
+        <div v-if="showFinance" class="pi-filter-row" role="group" :aria-label="tr('收款状态')">
+          <span class="pi-filter-label" aria-hidden="true">{{ tr('收款状态') }}</span>
+          <div class="pi-filter-choices">
+            <button type="button" :aria-pressed="listScope === 'custom' && !selectedPaymentStatuses.length"
+              @click="selectStatuses('payment')">{{ tr('不限') }}</button>
+            <button v-for="(label, state) in paymentNames" :key="state" type="button"
+              :aria-pressed="selectedPaymentStatuses.includes(state)" @click="selectStatuses('payment', state)">{{ tr(label) }}</button>
+          </div>
+        </div>
+        <div class="pi-filter-row" role="group" :aria-label="tr('履约进度')">
+          <span class="pi-filter-label" aria-hidden="true">{{ tr('履约进度') }}</span>
+          <div class="pi-filter-choices">
+            <button v-for="option in fulfillmentOptions" :key="option.label" type="button"
+              :aria-pressed="listScope === 'custom' && fulfillmentCompleted === option.value"
+              @click="selectFulfillment(option.value)">{{ tr(option.label) }}</button>
+          </div>
+        </div>
+      </section>
+      <form class="pi-filters list-toolbar" @submit.prevent="search">
+        <el-input v-model="keyword" :aria-label="tr('搜索PI、客户、SKU、订单、出库单或物流单号')"
+          :placeholder="tr('PI / 客户 / SKU / 订单 / 出库单 / 物流单号')" clearable />
+        <el-select v-if="!hasCombinedFilters" v-model="status" :aria-label="tr('PI 状态')" clearable :placeholder="tr('全部状态')">
+          <el-option v-for="state in states" :key="state" :value="state" :label="tr(stateNames[state])" />
+        </el-select>
+        <el-button native-type="submit" type="primary" :loading="busy" :disabled="!europeScopeReady">{{ tr('查询') }}</el-button>
+        <el-button @click="resetList">{{ tr('重置') }}</el-button>
+        <el-button v-if="canExport" :loading="exportBusy" :disabled="!europeScopeReady || (hasCombinedFilters && busy)"
+          @click="exportList">{{ tr('导出当前查询全部 PI') }}</el-button>
+        <el-button v-if="internal" @click="openProfiles">{{ tr('履约配置') }}</el-button>
+        <el-button v-if="canManageTemplates" @click="openTemplates()">{{ tr('模板与银行资料') }}</el-button>
+        <el-button v-if="canWrite && canManageReservation && allowCreate !== false" :disabled="!canCreateInScope"
+          @click="openConversion">{{ tr('从 SKU 锁定生成 PI') }}</el-button>
+        <el-button v-if="canWrite && allowCreate !== false" type="primary" :disabled="!canCreateInScope"
+          @click="openCreate()">{{ tr('新建 PI') }}</el-button>
+      </form>
 <el-alert v-if="internal && profilesError" :title="tr(profilesError)" type="error" :closable="false"><el-button text @click="loadProfiles">{{ tr("重试加载履约配置") }}</el-button></el-alert>
       <el-alert v-if="canWrite && localDraftError" :title="tr(localDraftError)" type="error" :closable="false"><el-button text @click="refreshLocalDrafts">{{ tr("重新读取") }}</el-button></el-alert>
       <section v-if="canWrite && localDrafts.length" class="pi-local-drafts" :aria-label='tr("本机草稿")'>
@@ -1409,6 +1547,48 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.pi-list-facets {
+  margin-bottom: 14px;
+  padding: 4px 14px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 10px;
+  background: var(--el-bg-color);
+}
+.pi-filter-row {
+  display: grid;
+  grid-template-columns: minmax(96px, max-content) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+}
+.pi-filter-row + .pi-filter-row { border-top: 1px solid var(--el-border-color-extra-light); }
+.pi-filter-label { font-size: 13px; font-weight: 600; color: var(--el-text-color-regular); }
+.pi-filter-choices { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.pi-filter-choices button {
+  min-height: 32px;
+  padding: 3px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--el-text-color-regular);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.pi-filter-choices button:hover { background: var(--el-fill-color-light); }
+.pi-filter-choices button:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 1px; }
+.pi-filter-choices button[aria-pressed="true"] {
+  border-color: var(--el-color-primary-light-5);
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+  font-weight: 600;
+}
+.pi-filter-choices :deep(.el-date-editor) { width: 140px; max-width: 100%; }
+.pi-filter-hint { font-size: 12px; color: var(--el-text-color-secondary); }
+@media (max-width: 580px) {
+  .pi-filter-row { grid-template-columns: minmax(0, 1fr); gap: 2px; padding: 6px 0; }
+  .pi-filter-choices button { min-height: 44px; }
+}
 .europe-order-scope{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:16px 18px;margin-bottom:18px;border:1px solid #dbe4ee;border-radius:10px;background:#f6f9fc}.europe-order-scope label{font-weight:600;white-space:nowrap}.europe-order-scope .el-select{width:320px;max-width:100%}.europe-order-scope p{flex-basis:100%;margin:0;color:#65758a;font-size:13px;line-height:1.7}.europe-order-scope .el-alert{width:100%;margin:0}
 .pi-workspace{padding:28px 32px;min-width:0;max-width:1500px;margin:auto}.pi-heading{display:flex;justify-content:space-between;gap:20px;align-items:center;margin-bottom:24px}.pi-heading h2{margin:0 0 7px;font-size:24px}.pi-heading p,.pi-hint{color:#65758a;font-size:13px;line-height:1.7}.pi-heading p{margin:0}.pi-filters{display:flex;gap:12px;align-items:center;margin-bottom:18px}.pi-filters>.el-input{max-width:340px}.pi-filters>.el-select{width:160px}.el-pagination{margin-top:20px;justify-content:flex-end;flex-wrap:wrap}.el-alert{margin:12px 0}.pi-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 18px}.pi-form .el-select,.pi-form .el-date-editor,.el-form-item .el-date-editor{width:100%}.pi-form h3{font-size:16px;margin:22px 0 14px}.pi-items-scroll{overflow-x:auto;margin-bottom:12px}.pi-draft-items{min-width:1020px}.pi-draft-items th,.pi-draft-items td{padding:10px 6px}.pi-draft-items th:first-child{width:340px}.pi-draft-items .el-input-number{width:108px}.pi-draft-items .el-input{min-width:98px}.pi-draft-items .el-select{min-width:320px}.pi-amounts{margin-top:24px}.pi-preview{background:#f1f7fc;border-radius:8px;padding:14px 18px;display:flex;flex-direction:column;gap:7px;align-self:start}.pi-preview span{font-size:12px;color:#52687d}.pi-preview strong{font-size:23px;color:#1677c8}.pi-preview small{font-size:11px;line-height:1.6;color:#748196}.pi-detail{min-height:140px}.pi-detail-heading{display:flex;justify-content:space-between;align-items:center;gap:20px;margin:8px 0 18px}.pi-detail-heading>div{display:flex;gap:12px;flex-wrap:wrap;align-items:center}.pi-detail-heading span{font-size:13px;color:#65758a}.pi-grand-total{font-size:24px;color:#1677c8}.pi-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}.pi-actions .el-button+.el-button{margin-left:0}.pi-tab-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.pi-totals{display:flex;justify-content:flex-end;gap:22px;flex-wrap:wrap;background:#f6f9fc;padding:18px;margin-top:16px}.pi-totals span{display:flex;flex-direction:column;gap:8px;color:#65758a;font-size:12px}.pi-totals b{font-size:15px;color:#23364d}.pi-prewrap{white-space:pre-wrap;overflow-wrap:anywhere}.el-tabs{margin-top:18px}@media(max-width:900px){.pi-workspace{padding:22px 18px}.pi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.pi-filters{flex-wrap:wrap}}@media(max-width:580px){.pi-grid{grid-template-columns:1fr}.pi-heading{align-items:flex-start;flex-direction:column}.pi-detail-heading{align-items:flex-start;flex-direction:column}.pi-filters>.el-input{max-width:none;width:100%}.pi-grand-total{font-size:21px}}
 .release-receipts{margin:16px 0 20px}.release-receipts-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}.release-receipts .el-alert{margin:10px 0 0}

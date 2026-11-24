@@ -3,6 +3,7 @@ package com.bike.server.pi;
 import com.bike.server.common.*;
 import java.io.*;
 import java.math.BigDecimal;
+import java.time.YearMonth;
 import java.util.*;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.streaming.SXSSFWorkbook;
@@ -49,9 +50,15 @@ public class PiReportService {
     }
     @Transactional(isolation=Isolation.REPEATABLE_READ)
     public byte[] export(String keyword, String status, Long warehouseId, String tradeType, String salesChannel) {
+        return export(keyword, status, warehouseId, tradeType, salesChannel, PiListFilters.EMPTY);
+    }
+    @Transactional(isolation=Isolation.REPEATABLE_READ)
+    public byte[] export(String keyword, String status, Long warehouseId, String tradeType, String salesChannel,
+            PiListFilters filters) {
         CurrentOperator.requireWebAccess();CurrentOperator.requirePermission("PI_READ");CurrentOperator.requirePermission("PI_EXPORT");
         scope.lockForBusiness();String query=keyword(keyword);
-        var page=listExportPage(query,status,warehouseId,tradeType,salesChannel,1);long expected=page.total();
+        YearMonth referenceMonth = PiListFilters.currentMonth();
+        var page=listExportPage(query,status,warehouseId,tradeType,salesChannel,filters,referenceMonth,1);long expected=page.total();
         if(expected>1_048_575)throw new BusinessException("EXPORT_LIMIT","PI列表超过Excel容量，请缩小查询范围");
         boolean finance=FinancialAuditAccess.allowed();
         try(var workbook=new SXSSFWorkbook(100);var output=new ByteArrayOutputStream()) {
@@ -75,7 +82,7 @@ public class PiReportService {
                     if(finance){text(row,col++,pi.getPaymentStatus());money(row,col,pi.getPaidAmount(),amount);}
                 }
                 if(written>=expected)break;
-                page=listExportPage(query,status,warehouseId,tradeType,salesChannel,++pageNumber);
+                page=listExportPage(query,status,warehouseId,tradeType,salesChannel,filters,referenceMonth,++pageNumber);
                 if(page.records().isEmpty())throw new BusinessException("EXPORT_INCOMPLETE","PI导出不完整，请重新查询");
             }
             if(written!=expected)throw new BusinessException("EXPORT_INCOMPLETE","PI导出记录数不一致");
@@ -87,7 +94,9 @@ public class PiReportService {
         }catch(IOException error){throw new BusinessException("EXPORT_FAILED","PI列表导出失败");}
     }
     private PageResponse<PiView> listExportPage(String keyword, String status, Long warehouseId,
-            String tradeType, String salesChannel, long page) {
+            String tradeType, String salesChannel, PiListFilters filters, YearMonth referenceMonth, long page) {
+        if (filters.isActive())
+            return pis.search(keyword, status, warehouseId, tradeType, salesChannel, filters, referenceMonth, page, 100);
         if (tradeType != null || salesChannel != null)
             return pis.listBySalesScenario(keyword, status, warehouseId, tradeType, salesChannel, page, 100);
         return warehouseId == null ? pis.list(keyword, status, page, 100)

@@ -2,6 +2,7 @@
 import { tr } from '../i18n/language'
 import { computed } from 'vue'
 import PurchaseContractNumber from './PurchaseContractNumber.vue'
+import PartPhoto from './PartPhoto.vue'
 import { reservationLabel, type ReservationStatus } from '../pi-api'
 const props = defineProps<{ value: unknown }>()
 const labels: Record<string, string> = {
@@ -21,6 +22,7 @@ const labels: Record<string, string> = {
   orderQty: '订单数量', orderedQty: '订购数量', shippedQty: '已出库数量', plannedShipDate: '计划发货日期',
   createdAt: '创建时间', updatedAt: '修改时间', inboundTime: '来料时间', operationTime: '操作时间',
   supplierId: '供应商编号', supplierName: '供应商', remark: '备注', reason: '原因', cancelReason: '取消原因',
+  hasPhoto: '图片',
   createdBy: '创建人', updatedBy: '修改人', operatorName: '操作人', operatorId: '操作人员编号',
   items: '商品明细', vehicles: '车辆明细', shippedVehicles: '已出库车辆', reservation: '库存占用',
   sourceLockId: '来源锁定编号', sourceLockNo: '来源锁定单号', lockNo: '锁定单号', requestId: '业务请求编号',
@@ -71,7 +73,7 @@ const tableArray = computed(() => arrayRows.value.length > 0 && arrayRows.value.
     </template>
     <dl v-else-if="record(value)" class="record-facts">
       <div v-for="entry in entries" :key="entry.key" :class="{ 'record-wide': nested(entry.value) || /QrCode|qrCode/.test(entry.key), 'record-aggregate': /QrCode|qrCode/.test(entry.key) }">
-        <dt>{{ tr(label(entry.key)) }}</dt><dd><RecordDetails v-if="nested(entry.value)" :value="entry.value" /><PurchaseContractNumber v-else-if="entry.key === 'purchaseContractNo'" :value="entry.value == null ? null : String(entry.value)" /><span v-else>{{ display(entry.value, entry.key) }}</span></dd>
+        <dt>{{ tr(label(entry.key)) }}</dt><dd><PartPhoto v-if="entry.key === 'hasPhoto' && entry.value && value.id && value.partSn" :part-id="String(value.id)" :part-sn="String(value.partSn)" /><RecordDetails v-else-if="nested(entry.value)" :value="entry.value" /><PurchaseContractNumber v-else-if="entry.key === 'purchaseContractNo'" :value="entry.value == null ? null : String(entry.value)" /><span v-else>{{ entry.key === 'hasPhoto' ? '—' : display(entry.value, entry.key) }}</span></dd>
       </div>
     </dl>
     <span v-else>{{ display(value) }}</span>

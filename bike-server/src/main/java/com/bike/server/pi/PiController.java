@@ -57,9 +57,10 @@ public class PiController {
     public ApiResponse<PageResponse<PiView>> list(@RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status, @RequestParam(defaultValue = "1") long page,
             @RequestParam(defaultValue = "20") long pageSize, @RequestParam(required = false) Long warehouseId,
-            @RequestParam(required = false) String tradeType, @RequestParam(required = false) String salesChannel) {
-        return ApiResponse.success("查询成功", service.listBySalesScenario(keyword, status, warehouseId,
-                tradeType, salesChannel, page, pageSize));
+            @RequestParam(required = false) String tradeType, @RequestParam(required = false) String salesChannel,
+            @ModelAttribute PiListFilters filters) {
+        return ApiResponse.success("查询成功", service.search(keyword, status, warehouseId, tradeType,
+                salesChannel, filters, PiListFilters.currentMonth(), page, pageSize));
     }
 
     @GetMapping("/warehouse-options")

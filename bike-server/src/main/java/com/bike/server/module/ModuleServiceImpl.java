@@ -73,6 +73,7 @@ public class ModuleServiceImpl implements ModuleService {
                 ? moduleMapper.selectRowsPage(normalize(module), agentId, definition.columns(), normalizedKeyword, sortColumn, offset, normalizedSize, financialAudit)
                 : moduleMapper.selectRowsPage(normalize(module), agentId, definition.columns(), normalizedKeyword, sortColumn, offset, normalizedSize, financialAudit, salesTypeFilter);
         var columns = new java.util.ArrayList<>(definition.columns());
+        if ("parts".equals(module)) columns.add("图片");
         if ("stock-out".equals(module)) {
             columns.addAll(List.of("购销合同方", "购销合同号"));
             records = enrichStockContracts(records);

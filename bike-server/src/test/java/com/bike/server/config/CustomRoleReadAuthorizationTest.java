@@ -24,6 +24,7 @@ class CustomRoleReadAuthorizationTest {
   @MockitoBean com.bike.server.common.CustomerScopeAccess customerScope;
     @Autowired MockMvc mvc;
   @MockitoBean PartMapper parts;
+  @MockitoBean PartPhotoStore partPhotos;
   @MockitoBean VehicleMapper vehicles;
   @MockitoBean SnRuleService snRules;
   @MockitoBean ProductionGuard guard;

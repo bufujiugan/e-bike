@@ -6,6 +6,7 @@ import com.bike.server.module.ModulePageResponse;
 import com.bike.server.module.ModuleService;
 import com.bike.server.order.OrderService;
 import com.bike.server.part.PartService;
+import com.bike.server.part.PartPhotoUpload;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -68,6 +69,37 @@ class ExcelTransferServiceTest {
         assertThat(result.failures().get(0).rowNumber()).isEqualTo(3);
         assertThat(result.failures().get(0).reason()).contains("SN 已存在");
         Mockito.verify(auditMapper).insert("DATA_IMPORT", "2", null, "test-admin", null, null, "{\"total\":2,\"success\":1,\"failed\":1}");
+    }
+
+    @Test
+    void floatingPhotoUsesItsAnchorRowAndInvalidPhotoOnlyFailsThatRow() throws Exception {
+        PartService parts = Mockito.mock(PartService.class);
+        var png = new ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(2, 2, java.awt.image.BufferedImage.TYPE_INT_RGB), "png", png);
+        var file = workbookFile("parts.xlsx", workbook -> {
+            var sheet = workbook.getSheetAt(0);
+            sheet.createRow(0).createCell(6).setCellValue("Photo");
+            for (int i = 1; i <= 3; i++) {
+                var row = sheet.createRow(i);
+                row.createCell(0).setCellValue("PART-" + i);
+                row.createCell(1).setCellValue("MOTOR");
+            }
+            sheet.getRow(3).createCell(6).setCellValue("https://example.invalid/photo.png");
+            var drawing = sheet.createDrawingPatriarch();
+            var anchor = drawing.createAnchor(0, 0, 0, 0, 6, 2, 7, 3);
+            drawing.createPicture(anchor, workbook.addPicture(png.toByteArray(), Workbook.PICTURE_TYPE_PNG));
+        });
+        var result = new ExcelTransferService(parts, Mockito.mock(MasterService.class), Mockito.mock(OrderService.class),
+                Mockito.mock(ModuleService.class), Mockito.mock(TransferAuditMapper.class), validator).importParts(file);
+        assertThat(result.successRows()).isEqualTo(2);
+        assertThat(result.failures()).singleElement().satisfies(failure -> assertThat(failure.rowNumber()).isEqualTo(4));
+        Mockito.verify(parts).create(Mockito.argThat(request -> "PART-1".equals(request.partSn())));
+        var photo = org.mockito.ArgumentCaptor.forClass(PartPhotoUpload.class);
+        Mockito.verify(parts).createWithPhoto(Mockito.argThat(request -> "PART-2".equals(request.partSn())), photo.capture());
+        try (var input = photo.getValue().source().getInputStream()) {
+            assertThat(input.readAllBytes()).isEqualTo(png.toByteArray());
+        }
+        Mockito.verifyNoMoreInteractions(parts);
     }
 
     @Test

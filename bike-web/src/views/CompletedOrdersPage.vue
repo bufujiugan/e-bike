@@ -94,8 +94,8 @@ watch([page, keyword, refreshVersion], async (_, __, onCleanup) => {
       </el-table-column>
       <el-table-column prop="customerName" :label='tr("客户")' min-width="160" show-overflow-tooltip />
       <el-table-column prop="modelName" :label='tr("车型")' min-width="140" show-overflow-tooltip />
-      <el-table-column :label='tr("销售类型")' min-width="125">
-        <template #default="{ row }">{{ row.salesType ? salesTypeLabel(row.salesType) : '—' }}</template>
+      <el-table-column :label='tr("销售类型")' min-width="165">
+        <template #default="{ row }">{{ row.salesType ? tr(salesTypeLabel(row.salesType)) : '—' }}</template>
       </el-table-column>
       <el-table-column :label='tr("创建时间")' min-width="155">
         <template #default="{ row }">{{ row.createdAt?.replace('T', ' ').slice(0, 19) || '—' }}</template>

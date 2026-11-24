@@ -47,16 +47,18 @@ const time = (value?: string) => value ? value.replace('T', ' ').slice(0, 19) : 
 const nextStep = computed(() => {
   const current = order.value
   if (!current) return ''
-  if (active.value && !salesType.value) return '下一步：先选择本订单的销售类型。系统不会根据客户或币种判断内外销。'
-  if (needsPi.value) return `下一步：本订单为「${salesTypeLabel(salesType.value)}」，请到对应菜单生成 PI 并关联本订单；PI 确认后订单随之确认。`
+  if (active.value && !salesType.value) return tr('下一步：先选择本订单的销售类型。系统不会根据客户或币种判断内外销。')
+  if (needsPi.value) return tr('下一步：本订单为「{value0}」，请到对应菜单生成 PI 并关联本订单；PI 确认后订单随之确认。', {
+    value0: tr(salesTypeLabel(salesType.value)),
+  })
   if (beforeConfirm.value) return salesType.value === 'DOMESTIC'
-    ? '下一步：先生成并核对购销合同，再核对客户、数量与库存占用，确认销售订单。'
-    : '下一步：核对已关联 PI 的确认状态；PI 确认后订单随之确认。'
+    ? tr('下一步：先生成并核对购销合同，再核对客户、数量与库存占用，确认销售订单。')
+    : tr('下一步：核对已关联 PI 的确认状态；PI 确认后订单随之确认。')
   if (['CONFIRMED', 'PARTIAL_SHIPPED'].includes(current.status)) return hasLinkedPi.value
-    ? '下一步：核对库存占用和已关联 PI 的发货放行，再由 PDA 按本订单扫码出库。'
-    : '下一步：核对库存占用与出库条件，再由 PDA 按本订单扫码出库。'
-  if (current.status === 'SHIPPED') return '本订单已完成出库，可以在下方核对每台车及出库单。'
-  return '该订单已停止履约，请核对订单状态及历史记录。'
+    ? tr('下一步：核对库存占用和已关联 PI 的发货放行，再由 PDA 按本订单扫码出库。')
+    : tr('下一步：核对库存占用与出库条件，再由 PDA 按本订单扫码出库。')
+  if (current.status === 'SHIPPED') return tr('本订单已完成出库，可以在下方核对每台车及出库单。')
+  return tr('该订单已停止履约，请核对订单状态及历史记录。')
 })
 async function load() {
   const current = ++version
@@ -86,7 +88,7 @@ async function load() {
 }
 async function confirm() {
   if (!canConfirm.value || saving.value) return
-  const reminder = contractDownloaded.value ? '' : '本窗口尚未生成购销合同，建议先生成并核对合同。'
+  const reminder = contractDownloaded.value ? '' : trInline('本窗口尚未生成购销合同，建议先生成并核对合同。')
   try { await ElMessageBox.confirm(tr("{value0}确认订单 {value1}，共 {value2} 台？确认后进入出库环节，不再显示购销合同填写页，请先下载保存合同。", { value0: reminder, value1: order.value.orderNo, value2: order.value.orderQty }), tr('确认销售订单'), { type: 'warning' }) }
   catch { return }
   saving.value = true
@@ -99,12 +101,12 @@ async function confirm() {
 async function chooseSalesType() {
   const selected = typeChoice.value
   if (!canChooseType.value || !selected || typeSaving.value) return
-  try { await ElMessageBox.confirm(tr("将订单 {value0} 确定为「{value1}」？选定后不可修改。", { value0: order.value.orderNo, value1: salesTypeLabel(selected) }), tr('确定销售类型'), { type: 'warning' }) }
+  try { await ElMessageBox.confirm(tr("将订单 {value0} 确定为「{value1}」？选定后不可修改。", { value0: order.value.orderNo, value1: tr(salesTypeLabel(selected)) }), tr('确定销售类型'), { type: 'warning' }) }
   catch { return }
   typeSaving.value = true
   try {
     await api.post(`/api/orders/${order.value.id}/sales-type`, { salesType: selected })
-    ElMessage.success(tr("已确定为「{value0}」", { value0: salesTypeLabel(selected) })); emit('changed'); await load()
+    ElMessage.success(tr("已确定为「{value0}」", { value0: tr(salesTypeLabel(selected)) })); emit('changed'); await load()
   } catch (cause) { ElMessage.error(tr(api.isAxiosError(cause) ? cause.response?.data?.message ?? '销售类型保存失败，请刷新核对' : '销售类型保存失败，请刷新核对')) }
   finally { typeSaving.value = false }
 }
@@ -131,7 +133,7 @@ watch(() => props.orderNo, () => { showPi.value = false; showContract.value = fa
           <h3>{{ tr("选择销售类型") }}</h3>
           <p>{{ tr("本订单尚未确定内销或外销。请按实际业务选择，选定后不可修改；内销生成购销合同，外销与欧洲在对应菜单办理 PI。") }}</p>
           <div class="lock-sales-types" role="radiogroup" :aria-label='tr("销售类型")'>
-            <button v-for="option in salesTypeOptions" :key="option.value" type="button" role="radio" :aria-checked="typeChoice === option.value" :class="{ active: typeChoice === option.value }" :disabled="!canChooseType" @click="typeChoice = option.value"><strong>{{ tr(option.title) }}</strong><small>{{ option.menu }} {{ trInline("· 模板：") }}{{ option.template }}</small><span>{{ option.value === 'DOMESTIC' ? tr('在本窗口生成并核对购销合同，再确认订单。') : tr('确定后前往对应菜单生成 PI 并关联本订单。') }}</span></button>
+            <button v-for="option in salesTypeOptions" :key="option.value" type="button" role="radio" :aria-checked="typeChoice === option.value" :class="{ active: typeChoice === option.value }" :disabled="!canChooseType" @click="typeChoice = option.value"><strong>{{ tr(option.title) }}</strong><small>{{ tr(option.menu) }} {{ trInline("· 模板：") }}{{ option.template }}</small><span>{{ option.value === 'DOMESTIC' ? tr('在本窗口生成并核对购销合同，再确认订单。') : tr('确定后前往对应菜单生成 PI 并关联本订单。') }}</span></button>
           </div>
           <el-button v-if="canChooseType" type="primary" :loading="typeSaving" :disabled="!typeChoice" @click="chooseSalesType">{{ tr("确定销售类型") }}</el-button>
           <el-alert v-else :title='tr("请联系有订单维护权限的业务员选择销售类型。")' type="warning" :closable="false" />

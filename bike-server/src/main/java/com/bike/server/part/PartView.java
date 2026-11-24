@@ -17,6 +17,7 @@ public class PartView {
     private String status;
     private LocalDateTime inboundTime;
     private String remark;
+    private boolean hasPhoto;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -48,6 +49,8 @@ public class PartView {
     public void setInboundTime(LocalDateTime inboundTime) { this.inboundTime = inboundTime; }
     public String getRemark() { return remark; }
     public void setRemark(String remark) { this.remark = remark; }
+    public boolean isHasPhoto() { return hasPhoto; }
+    public void setHasPhoto(boolean hasPhoto) { this.hasPhoto = hasPhoto; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

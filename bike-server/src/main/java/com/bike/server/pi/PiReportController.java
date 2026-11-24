@@ -16,8 +16,9 @@ public class PiReportController {
     @GetMapping(value="/export.xlsx",produces="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     public ResponseEntity<byte[]> export(@RequestParam(required=false) String keyword,@RequestParam(required=false) String status,
             @RequestParam(required=false) Long warehouseId, @RequestParam(required=false) String tradeType,
-            @RequestParam(required=false) String salesChannel) {
+            @RequestParam(required=false) String salesChannel, @ModelAttribute PiListFilters filters) {
         return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=pi-list.xlsx")
-                .header(HttpHeaders.CACHE_CONTROL,"no-store").header("X-Content-Type-Options","nosniff").body(service.export(keyword,status,warehouseId,tradeType,salesChannel));
+                .header(HttpHeaders.CACHE_CONTROL,"no-store").header("X-Content-Type-Options","nosniff")
+                .body(service.export(keyword,status,warehouseId,tradeType,salesChannel,filters));
     }
 }

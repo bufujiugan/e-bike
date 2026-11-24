@@ -13,6 +13,7 @@ import org.apache.poi.openxml4j.opc.OPCPackage;
 import org.apache.poi.openxml4j.opc.PackageAccess;
 import org.apache.poi.xssf.eventusermodel.XSSFReader;
 import org.springframework.core.io.Resource;
+import org.springframework.core.io.InputStreamSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -29,7 +30,15 @@ public class BusinessUploadValidator {
     public PreparedUpload prepareImage(MultipartFile file) throws IOException { return prepare(file, true); }
 
     private PreparedUpload prepare(MultipartFile file, boolean imagesOnly) throws IOException {
-        String name = file == null ? null : file.getOriginalFilename();
+        return prepare(file == null ? null : file.getOriginalFilename(), file == null ? null : file.getContentType(),
+                file == null ? 0 : file.getSize(), file, imagesOnly);
+    }
+
+    public PreparedUpload prepareImage(String name, String declaredType, long size, InputStreamSource source) throws IOException {
+        return prepare(name, declaredType, size, source, true);
+    }
+
+    private PreparedUpload prepare(String name, String declaredType, long size, InputStreamSource source, boolean imagesOnly) throws IOException {
         if (name == null || name.isBlank() || name.length() > 200 || !name.equals(name.trim())
                 || name.chars().anyMatch(c -> Character.isISOControl(c) || "\\/:<>|?*\"".indexOf(c) >= 0))
             throw new BusinessException("ATTACHMENT_NAME_INVALID", "附件名称不合法，请使用普通文件名");
@@ -38,12 +47,12 @@ public class BusinessUploadValidator {
         if (!IMAGES.contains(extension) && (imagesOnly || !DOCUMENTS.contains(extension)))
             throw new BusinessException("ATTACHMENT_TYPE_UNSUPPORTED", imagesOnly ? "图片支持JPG、PNG、WebP" : "附件支持JPG、PNG、WebP、PDF、XLSX");
         long limit = IMAGES.contains(extension) ? IMAGE_LIMIT : DOCUMENT_LIMIT;
-        if (file.isEmpty() || file.getSize() <= 0 || file.getSize() > limit) throw sizeError();
+        if (source == null || size <= 0 || size > limit) throw sizeError();
         Path temporary = Files.createTempFile("bike-business-", ".upload");
         try {
             MessageDigest digest = sha256();
             long actual = 0;
-            try (var input = new DigestInputStream(file.getInputStream(), digest); var output = Files.newOutputStream(temporary)) {
+            try (var input = new DigestInputStream(source.getInputStream(), digest); var output = Files.newOutputStream(temporary)) {
                 byte[] buffer = new byte[64 * 1024];
                 for (int count; (count = input.read(buffer)) != -1;) {
                     actual += count;
@@ -51,13 +60,13 @@ public class BusinessUploadValidator {
                     output.write(buffer, 0, count);
                 }
             }
-            if (actual != file.getSize() || actual == 0) throw invalid("附件长度与内容不一致");
+            if (actual != size || actual == 0) throw invalid("附件长度与内容不一致");
             String type = switch (extension) {
                 case "pdf" -> { validatePdf(temporary); yield "application/pdf"; }
                 case "xlsx" -> { validateXlsx(temporary); yield XLSX_TYPE; }
                 default -> validateImage(temporary, extension);
             };
-            String declared = file.getContentType();
+            String declared = declaredType;
             if (declared != null && !declared.isBlank()) {
                 declared = declared.split(";", 2)[0].trim().toLowerCase(Locale.ROOT);
                 if (!declared.equals(type) && !declared.equals("application/octet-stream")) throw invalid("附件声明类型与实际内容不一致");

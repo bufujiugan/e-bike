@@ -496,6 +496,34 @@ async function saveAgentAccess() {
 }
 const rolesLoaded = ref(false)
 const actionForm = reactive<Record<string, string | number | null>>({ code: '', name: '', contactName: '', contactPhone: '', partSn: '', partType: 'MOTOR', supplierId: null, batchNo: '', qcStatus: 'PASSED', customerId: null, agentId: null, modelId: null, warehouseId: null, orderQty: 1, plannedShipDate: '', remark: '', password: '', displayName: '', userType: 'WEB_OPERATOR', workstationId: null, roleCode: '', roleName: '', workstationCode: '', workstationName: '', workstationType: 'ASSEMBLY', configKey: '', configValue: '', lockQty: 1, expireTime: '', newPartSn: '', reason: '' })
+const partPhotoFile = ref<File>()
+const partPhotoPreview = ref('')
+const partPhotoError = ref('')
+watch(partPhotoFile, (file, _previous, onCleanup) => {
+  const url = file ? URL.createObjectURL(file) : ''
+  partPhotoPreview.value = url
+  if (url) onCleanup(() => URL.revokeObjectURL(url))
+})
+
+function choosePartPhoto(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  partPhotoError.value = ''
+  if (!/\.(jpe?g|png|webp)$/i.test(file.name) || file.size === 0) {
+    partPhotoError.value = '请选择有效的 JPG、PNG 或 WebP 图片'
+  } else if (file.size > 20 * 1024 * 1024) {
+    partPhotoError.value = '图片不能超过 20 MB'
+  } else {
+    partPhotoFile.value = file
+  }
+}
+
+function clearPartPhoto() {
+  partPhotoFile.value = undefined
+  partPhotoError.value = ''
+}
 const actionTitle = computed(() => {
   const editing = editingId.value !== null
   const titles: Record<string, [string, string]> = {
@@ -827,6 +855,7 @@ async function submitPasswordChange() {
 }
 
 function resetActionForm() {
+  clearPartPhoto()
   editingId.value = null
   selectedPermissionIds.value = []
   selectedRoleIds.value = []
@@ -1223,7 +1252,13 @@ async function submitPrimaryAction() {
       endpoint = `/api/master/${activeView.value}`
       payload = { code: actionForm.code, name: actionForm.name, contactName: actionForm.contactName || null, contactPhone: actionForm.contactPhone || null }
     }
-    const response = await axios({ method: actionMethod, url: endpoint, data: payload, ...authConfig() })
+    let requestData: Record<string, unknown> | FormData = payload
+    if (actionKind.value === 'part' && editingId.value === null && partPhotoFile.value) {
+      requestData = new FormData()
+      requestData.append('part', new Blob([JSON.stringify(payload)], { type: 'application/json' }))
+      requestData.append('photo', partPhotoFile.value)
+    }
+    const response = await axios({ method: actionMethod, url: endpoint, data: requestData, ...authConfig() })
     const savedId = response.data.data?.id ?? editingId.value
     if (actionKind.value === 'user' && savedId !== null && (rolesLoaded.value || selectedRoleIds.value.length > 0)) {
       editingId.value = savedId
@@ -1302,12 +1337,23 @@ async function submitPrimaryAction() {
         <el-table :data="importDetails.failures"><el-table-column prop="rowNumber" :label='tr("Excel 行号")' width="120" /><el-table-column prop="reason" :label='tr("错误原因")' /></el-table>
       </template>
     </el-dialog>
-    <el-dialog v-model="actionDialogVisible" :title="actionTitle" :width="actionKind === 'role' ? '680px' : '520px'">
+    <el-dialog v-model="actionDialogVisible" :title="actionTitle" :width="actionKind === 'role' ? '680px' : actionKind === 'part' ? 'min(520px, 94vw)' : '520px'" @closed="clearPartPhoto">
       <el-form v-if="actionKind === 'part'" label-width="100px">
         <el-form-item :label='tr("零部件 SN")'><el-input v-model="actionForm.partSn" :disabled="editingId !== null" /></el-form-item>
         <el-form-item :label='tr("零部件类型")'><el-select v-model="actionForm.partType" :disabled="editingId !== null"><el-option :label='tr("电机")' value="MOTOR" /><el-option :label='tr("电池")' value="BATTERY" /><el-option :label='tr("仪表")' value="DISPLAY" /></el-select></el-form-item>
         <el-form-item :label='tr("供应商")'><el-select v-model="actionForm.supplierId" clearable filterable :placeholder='tr("请选择供应商")'><el-option v-for="item in masterOptions.suppliers" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
         <el-form-item :label='tr("批次号")'><el-input v-model="actionForm.batchNo" /></el-form-item>
+        <el-form-item v-if="editingId === null" :label="tr('图片（选填）')" for="part-photo-file" :error="partPhotoError ? tr(partPhotoError) : ''">
+          <div class="part-photo-field">
+            <input id="part-photo-file" type="file" :aria-label="tr('选择零部件图片')"
+              accept=".jpg,.jpeg,.png,.webp" :disabled="actionSubmitting" @change="choosePartPhoto" />
+            <div v-if="partPhotoFile" class="part-photo-selection">
+              <img v-if="partPhotoPreview" :src="partPhotoPreview" :alt="tr('零部件图片预览')" />
+              <span>{{ partPhotoFile.name }}</span>
+              <el-button text :disabled="actionSubmitting" @click="clearPartPhoto">{{ tr('移除') }}</el-button>
+            </div>
+          </div>
+        </el-form-item>
         <el-form-item :label='tr("备注")'><el-input v-model="actionForm.remark" type="textarea" /></el-form-item>
       </el-form>
       <el-form v-else-if="actionKind === 'order'" label-width="100px">
@@ -1394,7 +1440,7 @@ async function submitPrimaryAction() {
       <p>{{ trInline("来源：") }}{{ lockOrderForm.lockNo }}<template v-if="lockOrderForm.skuCode"> {{ trInline("· 固定 SKU") }} {{ lockOrderForm.skuCode }}</template>{{ trInline("。系统不会根据客户或币种判断内外销，请先选择本次转单去向，选定后对应单据不可更改。") }}</p>
       <div class="lock-sales-types" role="radiogroup" :aria-label='tr("转单去向")'>
         <button v-for="option in salesTypeOptions" :key="option.value" type="button" role="radio" :aria-checked="lockOrderForm.salesType === option.value" :class="{ active: lockOrderForm.salesType === option.value }" @click="lockOrderForm.salesType = option.value">
-          <strong>{{ tr(option.title) }}</strong><small>{{ option.menu }} {{ trInline("· 模板：") }}{{ option.template }}</small><span>{{ tr(option.description) }}</span>
+          <strong>{{ tr(option.title) }}</strong><small>{{ tr(option.menu) }} {{ trInline("· 模板：") }}{{ option.template }}</small><span>{{ tr(option.description) }}</span>
         </button>
       </div>
       <el-form v-if="lockOrderForm.salesType === 'DOMESTIC'" label-width="100px">
@@ -1459,4 +1505,9 @@ async function submitPrimaryAction() {
 
 <style scoped>
 .login-language { position: absolute; z-index: 3; top: max(.7rem, env(safe-area-inset-top)); right: max(1rem, env(safe-area-inset-right)); }
+.part-photo-field { width: 100%; min-width: 0; }
+.part-photo-field input { max-width: 100%; }
+.part-photo-selection { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.part-photo-selection img { width: 56px; height: 44px; object-fit: contain; flex-shrink: 0; }
+.part-photo-selection span { min-width: 0; overflow-wrap: anywhere; line-height: 1.4; }
 </style>

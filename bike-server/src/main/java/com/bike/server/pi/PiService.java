@@ -1,12 +1,15 @@
 package com.bike.server.pi;
 
 import com.bike.server.common.PageResponse;
+import java.time.YearMonth;
 import java.util.List;
 
 public interface PiService {
     PiOptionsView options(String keyword);
     PageResponse<PiView> list(String keyword,String status,long page,long pageSize);
     PageResponse<PiView> listByWarehouse(String keyword, String status, Long warehouseId, long page, long pageSize);
+    PageResponse<PiView> search(String keyword, String status, Long warehouseId, String tradeType, String salesChannel,
+            PiListFilters filters, YearMonth referenceMonth, long page, long pageSize);
     PageResponse<PiView> listBySalesScenario(String keyword, String status, Long warehouseId,
             String tradeType, String salesChannel, long page, long pageSize);
     List<java.util.Map<String, Object>> listWarehouseOptions();

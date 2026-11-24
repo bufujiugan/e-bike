@@ -12,6 +12,8 @@ public interface PartMapper {
     long count(@Param("keyword") String keyword, @Param("partType") String partType, @Param("status") String status, @Param("supplierId") Long supplierId);
     PartView selectById(@Param("id") long id);
     PartView selectBySn(@Param("partSn") String partSn);
+    PartPhotoStore.StoredPhoto selectPhoto(@Param("id") long id);
+    int updatePhoto(@Param("id") long id, @Param("key") String key);
     int countEnabledSupplier(@Param("supplierId") long supplierId);
     int insert(PartCreateRequest request);
     int update(@Param("id") long id, @Param("request") PartUpdateRequest request);

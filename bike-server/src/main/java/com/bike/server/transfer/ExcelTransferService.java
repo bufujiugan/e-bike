@@ -12,6 +12,8 @@ import com.bike.server.part.PartCreateRequest;
 import com.bike.server.part.PartService;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -25,6 +27,7 @@ import java.util.Locale;
 
 @Service
 public class ExcelTransferService {
+    private static final Logger LOG = LoggerFactory.getLogger(ExcelTransferService.class);
     private static final long MAX_FILE_BYTES = 10 * 1024 * 1024;
     private final PartService partService;
     private final MasterService masterService;
@@ -43,14 +46,35 @@ public class ExcelTransferService {
         this.validator = validator;
     }
 
-    public ImportResult importParts(MultipartFile file) { CurrentOperator.requirePermission("DATA_IMPORT"); CurrentOperator.requirePermission("PART_WRITE"); return importWorkbook(file, (values, row) -> partService.create(validated(new PartCreateRequest(required(values, 0), required(values, 1), longOrNull(values, 2), text(values, 3), blankToNull(text(values, 4)), blankToNull(text(values, 5)) )))); }
+    public ImportResult importParts(MultipartFile file) {
+        CurrentOperator.requireInternalWebAccess();
+        CurrentOperator.requirePermission("DATA_IMPORT");
+        CurrentOperator.requirePermission("PART_WRITE");
+        return importWorkbook(file, sheet -> {
+            int photoColumn = ExcelPartPhotos.findColumn(sheet.getRow(0));
+            Row catalogHeader = sheet.getRow(1);
+            if (photoColumn < 0 && catalogHeader != null
+                    && "Schematic".equalsIgnoreCase(new DataFormatter().formatCellValue(catalogHeader.getCell(1)).trim())) {
+                throw new BusinessException("IMPORT_PART_TEMPLATE_REQUIRED", "请使用零部件导入模板填写 SN 和类型，并将图片放入 Photo 列");
+            }
+            ExcelPartPhotos photos = new ExcelPartPhotos(sheet, photoColumn);
+            return (values, row) -> {
+                if (photoColumn >= 0 && photoColumn < values.size()) values.remove(photoColumn);
+                var request = validated(new PartCreateRequest(required(values, 0), required(values, 1),
+                        longOrNull(values, 2), text(values, 3), blankToNull(text(values, 4)), blankToNull(text(values, 5))));
+                var photo = photos.photoAt(row);
+                if (photo == null) partService.create(request);
+                else partService.createWithPhoto(request, photo);
+            };
+        });
+    }
 
     public byte[] partsTemplate() {
         CurrentOperator.requirePermission("DATA_IMPORT");
         CurrentOperator.requirePermission("PART_WRITE");
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet("零部件导入");
-            String[] headers = {"零部件SN（必填）", "类型（MOTOR/BATTERY/DISPLAY）", "供应商ID（可空）", "批次（可空）", "质检状态（PASSED/FAILED）", "备注（可空）"};
+            String[] headers = {"零部件SN（必填）", "类型（MOTOR/BATTERY/DISPLAY）", "供应商ID（可空）", "批次（可空）", "质检状态（PASSED/FAILED）", "备注（可空）", "Photo"};
             Row row = sheet.createRow(0);
             CellStyle textStyle = workbook.createCellStyle();
             textStyle.setDataFormat(workbook.createDataFormat().getFormat("@"));
@@ -64,13 +88,13 @@ public class ExcelTransferService {
         CurrentOperator.requirePermission("DATA_IMPORT");
         CurrentOperator.requireRole("SUPER_ADMIN");
         if (!List.of("customers", "agents").contains(type)) throw new BusinessException("IMPORT_TYPE_UNSUPPORTED", "仅支持客户和代理商导入");
-        return importWorkbook(file, (values, row) -> masterService.create(type, validated(new MasterCreateRequest(required(values, 0), required(values, 1), blankToNull(text(values, 2)), blankToNull(text(values, 3))))));
+        return importWorkbook(file, sheet -> (values, row) -> masterService.create(type, validated(new MasterCreateRequest(required(values, 0), required(values, 1), blankToNull(text(values, 2)), blankToNull(text(values, 3))))));
     }
 
     public ImportResult importOrders(MultipartFile file) {
         CurrentOperator.requirePermission("DATA_IMPORT");
         CurrentOperator.requirePermission("ORDER_WRITE");
-        return importWorkbook(file, (values, row) -> orderService.create(validated(new SalesOrderCreateRequest(
+        return importWorkbook(file, sheet -> (values, row) -> orderService.create(validated(new SalesOrderCreateRequest(
                 requiredLong(values, 0), longOrNull(values, 1), requiredLong(values, 2), requiredInt(values, 3), dateOrNull(values, 4), blankToNull(text(values, 5))))));
     }
 
@@ -92,8 +116,11 @@ public class ExcelTransferService {
             workbook.setCompressTempFiles(true);
             Sheet sheet = workbook.createSheet(module);
             Row header = sheet.createRow(0);
-            int[] widths = new int[page.columns().size()];
-            for (int i = 0; i < page.columns().size(); i++) {
+            // 零部件列表尾列用于请求受权限保护的图片，导出沿用原有字段。
+            int columnCount = page.columns().size();
+            if ("parts".equals(module) && !page.columns().isEmpty() && "图片".equals(page.columns().getLast())) columnCount--;
+            int[] widths = new int[columnCount];
+            for (int i = 0; i < columnCount; i++) {
                 header.createCell(i).setCellValue(page.columns().get(i));
                 widths[i] = Math.min(80, Math.max(16, page.columns().get(i).length() * 2 + 2));
             }
@@ -102,7 +129,7 @@ public class ExcelTransferService {
             while (true) {
                 for (List<String> values : page.rows()) {
                     Row row = sheet.createRow(++written);
-                    for (int c = 0; c < values.size(); c++) {
+                    for (int c = 0; c < columnCount; c++) {
                         row.createCell(c).setCellValue(values.get(c));
                         widths[c] = Math.min(80, Math.max(widths[c], values.get(c).length() * 2 + 2));
                     }
@@ -120,25 +147,30 @@ public class ExcelTransferService {
         }
     }
 
-    private ImportResult importWorkbook(MultipartFile file, RowImporter importer) {
+    private ImportResult importWorkbook(MultipartFile file, SheetImporter sheetImporter) {
         validateFile(file);
         List<ImportResult.ImportFailure> failures = new ArrayList<>();
         int total = 0;
         int success = 0;
         try (Workbook workbook = WorkbookFactory.create(file.getInputStream())) {
             Sheet sheet = workbook.getSheetAt(0);
+            RowImporter importer = sheetImporter.prepare(sheet);
             for (int i = 1; i <= sheet.getLastRowNum(); i++) {
                 Row row = sheet.getRow(i);
                 if (row == null || isBlank(row)) continue;
                 total++;
                 try {
-                    importer.importRow(values(row), i + 1);
+                    importer.importRow(values(row), row);
                     success++;
                 } catch (RuntimeException exception) {
+                    if (!(exception instanceof BusinessException)) LOG.warn("Excel 导入行失败 rowNumber={}", i + 1, exception);
                     failures.add(new ImportResult.ImportFailure(i + 1, readableReason(exception)));
                 }
             }
+        } catch (BusinessException exception) {
+            throw exception;
         } catch (Exception exception) {
+            LOG.warn("Excel 工作簿读取失败", exception);
             throw new BusinessException("IMPORT_FORMAT_INVALID", "Excel 文件格式无法读取");
         }
         auditMapper.insert("DATA_IMPORT", String.valueOf(total), CurrentOperator.id(), CurrentOperator.username(), CurrentOperator.clientIp(), null, "{\"total\":" + total + ",\"success\":" + success + ",\"failed\":" + failures.size() + "}");
@@ -163,5 +195,6 @@ public class ExcelTransferService {
     private static String blankToNull(String value) { return value == null || value.isBlank() ? null : value; }
     private static String readableReason(RuntimeException exception) { return exception instanceof BusinessException ? exception.getMessage() : "数据校验失败"; }
 
-    @FunctionalInterface private interface RowImporter { void importRow(List<String> values, int rowNumber); }
+    @FunctionalInterface private interface SheetImporter { RowImporter prepare(Sheet sheet) throws Exception; }
+    @FunctionalInterface private interface RowImporter { void importRow(List<String> values, Row row); }
 }

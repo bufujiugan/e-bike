@@ -14,6 +14,7 @@ public class PartServiceImpl implements PartService {
     private final PartMapper partMapper;
     private final SnRuleService snRuleService;
     @Autowired private com.bike.server.production.ProductionGuard productionGuard;
+    @Autowired private PartPhotoStore photoStore;
 
     public PartServiceImpl(PartMapper partMapper) {
         this(partMapper, new com.bike.server.validation.SnRuleServiceImpl(null));
@@ -55,6 +56,25 @@ public class PartServiceImpl implements PartService {
     @Override
     @Transactional
     public PartView create(PartCreateRequest request) {
+        return createPart(request, null);
+    }
+
+    @Override
+    @Transactional
+    public PartView createWithPhoto(PartCreateRequest request, PartPhotoUpload photo) {
+        return createPart(request, photo);
+    }
+
+    @Override
+    public PhotoContent getPhoto(long id) {
+        com.bike.server.common.CurrentOperator.requireInternalWebAccess();
+        com.bike.server.common.CurrentOperator.requirePermission("PART_READ");
+        var photo = partMapper.selectPhoto(id);
+        if (photo == null) throw new BusinessException("PART_PHOTO_NOT_FOUND", "零部件图片不存在");
+        return new PhotoContent(photoStore.read(photo), photo.contentType(), photo.fileSize());
+    }
+
+    private PartView createPart(PartCreateRequest request, PartPhotoUpload photo) {
         com.bike.server.common.CurrentOperator.requireInternalWebAccess(); com.bike.server.common.CurrentOperator.requirePermission("PART_WRITE");
         String partType = request.partType().trim().toUpperCase(Locale.ROOT);
         String partSn = snRuleService.normalizePartSn(request.partSn(), partType);
@@ -66,7 +86,13 @@ public class PartServiceImpl implements PartService {
                 request.batchNo(), request.qcStatus() == null ? "PASSED" : request.qcStatus(), request.remark());
         if (partMapper.insert(normalized) != 1) throw new BusinessException("PART_CREATE_FAILED", "零部件创建失败");
         PartView created = partMapper.selectBySn(partSn);
-        partMapper.insertOperationLog(String.valueOf(created.getId()), "创建零部件", com.bike.server.common.CurrentOperator.id(), com.bike.server.common.CurrentOperator.username(), null, "partSn=" + partSn + ",partType=" + normalized.partType(), com.bike.server.common.CurrentOperator.clientIp());
+        if (photo != null) {
+            String key = photoStore.save(created.getId(), photo);
+            if (partMapper.updatePhoto(created.getId(), key) != 1)
+                throw new BusinessException("PART_PHOTO_SAVE_FAILED", "零部件图片关联失败，请重试");
+            created.setHasPhoto(true);
+        }
+        partMapper.insertOperationLog(String.valueOf(created.getId()), "创建零部件", com.bike.server.common.CurrentOperator.id(), com.bike.server.common.CurrentOperator.username(), null, "partSn=" + partSn + ",partType=" + normalized.partType() + ",hasPhoto=" + created.isHasPhoto(), com.bike.server.common.CurrentOperator.clientIp());
         return created;
     }
 

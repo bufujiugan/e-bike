@@ -15,6 +15,7 @@
       + EXISTS(SELECT 1 FROM bike_after_sales_attachment WHERE object_key=#{key})
       + EXISTS(SELECT 1 FROM bike_pi_export WHERE pdf_key=#{key} OR xlsx_key=#{key})
       + EXISTS(SELECT 1 FROM bike_pi_payment WHERE voucher_object_key=#{key})
+      + EXISTS(SELECT 1 FROM bike_part WHERE photo_object_key=#{key})
   </select>
   <update id="bound">UPDATE bike_file_upload SET state='BOUND',object_state='PRESENT',version=version+1,updated_at=NOW(3),error_code=NULL WHERE object_key=#{key} AND state='PENDING'</update>
   <update id="failed">UPDATE bike_file_upload SET state='REVIEW',version=version+1,updated_at=NOW(3),error_code='UPLOAD_OR_BIND_FAILED' WHERE object_key=#{key} AND state='PENDING'</update>

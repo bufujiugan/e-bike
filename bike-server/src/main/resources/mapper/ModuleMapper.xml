@@ -86,7 +86,9 @@
                 WHERE 1=1 <include refid="com.bike.server.common.AuditPolicyMapper.financialVisibility"/> ORDER BY l.operation_time DESC
             </when>
             <when test="module == 'parts'">
-                SELECT p.part_sn AS `零部件 SN`, p.part_type AS `类型`, COALESCE(s.supplier_name, '-') AS `供应商`, COALESCE(p.batch_no, '-') AS `批次`, CASE p.bind_status WHEN 'BOUND' THEN '已绑定' ELSE '未绑定' END AS `绑定状态`, COALESCE(p.current_frame_sn, '-') AS `当前车架`, p.status AS `状态`, COALESCE(v.vehicle_qr_code,'未关联') AS `聚合码`,p.created_at AS `创建时间`,p.id AS _sort_id,p.id AS `ID`,p.updated_at AS `修改时间` FROM bike_part p LEFT JOIN bike_vehicle v ON v.frame_sn=p.current_frame_sn LEFT JOIN bike_supplier s ON s.id = p.supplier_id ORDER BY p.created_at DESC,p.id DESC
+                SELECT p.part_sn AS `零部件 SN`, p.part_type AS `类型`, COALESCE(s.supplier_name, '-') AS `供应商`, COALESCE(p.batch_no, '-') AS `批次`, CASE p.bind_status WHEN 'BOUND' THEN '已绑定' ELSE '未绑定' END AS `绑定状态`, COALESCE(p.current_frame_sn, '-') AS `当前车架`, p.status AS `状态`, COALESCE(v.vehicle_qr_code,'未关联') AS `聚合码`,p.created_at AS `创建时间`,p.id AS _sort_id,p.id AS `ID`,p.updated_at AS `修改时间`,
+                       CASE WHEN p.photo_object_key IS NOT NULL THEN p.id END AS `图片`
+                FROM bike_part p LEFT JOIN bike_vehicle v ON v.frame_sn=p.current_frame_sn LEFT JOIN bike_supplier s ON s.id = p.supplier_id ORDER BY p.created_at DESC,p.id DESC
             </when>
             <when test="module == 'customers'">
                 SELECT customer_code AS `客户编号`, customer_name AS `客户名称`, COALESCE(contact_name, '-') AS `联系人`, COALESCE(contact_phone, '-') AS `联系电话`, CASE status WHEN 'ENABLED' THEN '启用' ELSE status END AS `状态`, created_at AS `创建时间`,id AS _sort_id,id AS `ID`,updated_at AS `修改时间` FROM bike_customer WHERE 1=1 <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=bike_customer.id)</if> ORDER BY created_at DESC,id DESC

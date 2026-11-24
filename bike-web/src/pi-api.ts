@@ -92,11 +92,23 @@ export type PiCreate = {
 }
 export type PiPaymentCreate = { requestId: string; amount: string; currencyCode: string; receivedAt?: string | null; remark?: string; paymentMethod?: string; paymentMethodNote?: string }
 export type PiLogisticsCreate = { batchNo: string; carrier?: string; trackingNo?: string; status: string; remark?: string; stockOutBatchId?: number | null; requestId: string; expectedRevision?: number }
+export type PiListQuery = {
+  keyword?: string
+  status?: string
+  warehouseId?: number
+  tradeType?: string
+  salesChannel?: 'CHINA_SALES' | 'CZECH_PI'
+  createdMonth?: string
+  statuses?: string
+  paymentStatuses?: string
+  dailyFollowUp?: true
+  fulfillmentCompleted?: boolean
+}
 
 export const piApi = {
   async dashboard() { return (await api.get<{ data: Record<string, number | null> }>('/api/pis/dashboard')).data.data },
   async queue(queue: string, params: { keyword?: string; page: number; pageSize: number }) { return (await api.get<{ data: { total: number; records: PiQueueRow[] } }>(`/api/pis/dashboard/${queue}`, { params })).data.data },
-  async exportList(params: { keyword?: string; status?: string; warehouseId?: number; tradeType?: string; salesChannel?: 'CHINA_SALES' | 'CZECH_PI' }) { return (await api.get<Blob>('/api/pis/export.xlsx', { params, responseType: 'blob' })).data },
+  async exportList(params: PiListQuery) { return (await api.get<Blob>('/api/pis/export.xlsx', { params, responseType: 'blob' })).data },
   async warehouseOptions() { return (await api.get<{ data: (PiMasterOption & { status: string })[] }>('/api/pis/warehouse-options')).data.data },
   async revisions(id: number) { return (await api.get<{ data: PiView[] }>(`/api/pis/${id}/revisions`)).data.data },
   async createRevision(id: number, body: { requestId: string; expectedRevision: number; reason: string }) { return (await api.post<{ data: PiView }>(`/api/pis/${id}/revisions`, body)).data.data },
@@ -114,7 +126,7 @@ export const piApi = {
   async retryExport(id: number, revision: number, reason: string) { return (await api.post<{ data: PiExportJob }>(`/api/pis/${id}/export-task/retry`, { revision, reason })).data.data },
   async templates(tradeType: string | undefined, page: number) { return (await api.get<{ data: { records: PiTemplate[]; total: number } }>('/api/pi-templates', { params: { tradeType, page, pageSize: 20 } })).data.data },
   async publishTemplate(body: PiTemplatePublish) { return (await api.post<{ data: PiTemplate }>('/api/pi-templates', body)).data.data },
-  async list(params: { keyword?: string; status?: string; warehouseId?: number; tradeType?: string; salesChannel?: 'CHINA_SALES' | 'CZECH_PI'; page: number; pageSize: number }) {
+  async list(params: PiListQuery & { page: number; pageSize: number }) {
     return (await api.get<{ data: { records: PiView[]; total: number } }>('/api/pis', { params })).data.data
   },
   async get(id: number) { return (await api.get<{ data: PiView }>(`/api/pis/${id}`)).data.data },
