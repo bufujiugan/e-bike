@@ -99,7 +99,19 @@ public class PartServiceImpl implements PartService {
     @Override
     @Transactional
     public PartView update(long id, PartUpdateRequest request) {
+        return updatePart(id, request, null, false);
+    }
+
+    @Override
+    @Transactional
+    public PartView updateWithPhoto(long id, PartUpdateRequest request, PartPhotoUpload photo, boolean removePhoto) {
+        return updatePart(id, request, photo, removePhoto);
+    }
+
+    private PartView updatePart(long id, PartUpdateRequest request, PartPhotoUpload photo, boolean removePhoto) {
         com.bike.server.common.CurrentOperator.requireInternalWebAccess(); com.bike.server.common.CurrentOperator.requirePermission("PART_WRITE");
+        if (photo != null && removePhoto)
+            throw new BusinessException("PART_PHOTO_CHANGE_INVALID", "更换图片和移除图片不能同时提交");
         if(productionGuard!=null)productionGuard.lock();
         PartView before = getById(id);
         validateSupplier(request.supplierId());
@@ -107,9 +119,27 @@ public class PartServiceImpl implements PartService {
             throw new BusinessException("PART_STATUS_MANAGED", "零部件状态只能由组装、返工等业务流程变更");
         }
         if (partMapper.update(id, request) != 1) throw new BusinessException("PART_UPDATE_FAILED", "零部件更新失败");
+        String photoAction = "更新零部件";
+        if (photo != null || removePhoto) {
+            String previousKey = partMapper.selectPhotoKeyForUpdate(id);
+            if (photo != null || previousKey != null) {
+                String newKey = photo == null ? null : photoStore.save(id, photo);
+                if (partMapper.updatePhoto(id, newKey) != 1)
+                    throw new BusinessException("PART_PHOTO_SAVE_FAILED", "零部件图片关联失败，请重试");
+                // 旧图片在关联变更提交后才可被后台清理，回滚时仍可访问。
+                if (previousKey != null) photoStore.queueCleanup(previousKey);
+                photoAction = photo == null ? "移除零部件图片" : previousKey == null ? "添加零部件图片" : "更换零部件图片";
+            }
+        }
         PartView updated = getById(id);
-        partMapper.insertOperationLog(String.valueOf(id), "更新零部件", com.bike.server.common.CurrentOperator.id(), com.bike.server.common.CurrentOperator.username(), "batchNo=" + before.getBatchNo() + ",qcStatus=" + before.getQcStatus(), "batchNo=" + updated.getBatchNo() + ",qcStatus=" + updated.getQcStatus(), com.bike.server.common.CurrentOperator.clientIp());
+        partMapper.insertOperationLog(String.valueOf(id), photoAction, com.bike.server.common.CurrentOperator.id(),
+                com.bike.server.common.CurrentOperator.username(), photoAudit(before), photoAudit(updated),
+                com.bike.server.common.CurrentOperator.clientIp());
         return updated;
+    }
+
+    private static String photoAudit(PartView part) {
+        return "batchNo=" + part.getBatchNo() + ",qcStatus=" + part.getQcStatus() + ",hasPhoto=" + part.isHasPhoto();
     }
 
     private static String clean(String value) {

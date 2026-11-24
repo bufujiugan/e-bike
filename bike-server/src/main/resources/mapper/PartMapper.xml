@@ -34,8 +34,11 @@
         FROM bike_part p JOIN bike_file_upload f ON f.object_key = p.photo_object_key
         WHERE p.id = #{id} AND f.state = 'BOUND'
     </select>
+    <select id="selectPhotoKeyForUpdate" resultType="string">
+        SELECT photo_object_key FROM bike_part WHERE id = #{id} FOR UPDATE
+    </select>
     <update id="updatePhoto">
-        UPDATE bike_part SET photo_object_key = #{key} WHERE id = #{id} AND photo_object_key IS NULL
+        UPDATE bike_part SET photo_object_key = #{key,jdbcType=VARCHAR} WHERE id = #{id}
     </update>
     <insert id="insert">
         INSERT INTO bike_part(part_sn, part_type, supplier_id, batch_no, qc_status, bind_status, status, inbound_time, remark)

@@ -59,6 +59,14 @@ public class PartController {
                 .contentLength(photo.fileSize()).body(photo.resource());
     }
 
-    @PutMapping("/{id}")
+    @PutMapping(value = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ApiResponse<PartView> update(@PathVariable long id, @Valid @RequestBody PartUpdateRequest request) { return ApiResponse.success("更新成功", partService.update(id, request)); }
+
+    @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<PartView> updateWithPhoto(@PathVariable long id,
+                                                @Valid @RequestPart("part") PartUpdateRequest request,
+                                                @RequestPart(value = "photo", required = false) MultipartFile photo,
+                                                @RequestParam(defaultValue = "false") boolean removePhoto) {
+        return ApiResponse.success("更新成功", partService.updateWithPhoto(id, request, PartPhotoUpload.from(photo), removePhoto));
+    }
 }

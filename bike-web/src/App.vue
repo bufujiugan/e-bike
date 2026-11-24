@@ -14,6 +14,7 @@ import BusinessModulePage from './views/BusinessModulePage.vue'
 import { salesTypeOptions, salesTypeNavKey, setSalesIntent, type SalesIntent, type SalesType } from './sales-routing'
 import DashboardPage from './views/DashboardPage.vue'
 import RecordDetails from './components/RecordDetails.vue'
+import PartPhotoEditor from './components/PartPhotoEditor.vue'
 import ProductionManager from './components/ProductionManager.vue'
 import TraceQuery from './components/TraceQuery.vue'
 import { hasAnyPermission, hasPermission, hasRole, isSuperAdmin } from './permissions'
@@ -496,32 +497,14 @@ async function saveAgentAccess() {
 }
 const rolesLoaded = ref(false)
 const actionForm = reactive<Record<string, string | number | null>>({ code: '', name: '', contactName: '', contactPhone: '', partSn: '', partType: 'MOTOR', supplierId: null, batchNo: '', qcStatus: 'PASSED', customerId: null, agentId: null, modelId: null, warehouseId: null, orderQty: 1, plannedShipDate: '', remark: '', password: '', displayName: '', userType: 'WEB_OPERATOR', workstationId: null, roleCode: '', roleName: '', workstationCode: '', workstationName: '', workstationType: 'ASSEMBLY', configKey: '', configValue: '', lockQty: 1, expireTime: '', newPartSn: '', reason: '' })
-const partPhotoFile = ref<File>()
-const partPhotoPreview = ref('')
+const partPhotoChange = ref<File | 'remove' | null>(null)
+const partHasPhoto = ref(false)
 const partPhotoError = ref('')
-watch(partPhotoFile, (file, _previous, onCleanup) => {
-  const url = file ? URL.createObjectURL(file) : ''
-  partPhotoPreview.value = url
-  if (url) onCleanup(() => URL.revokeObjectURL(url))
-})
-
-function choosePartPhoto(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file) return
-  partPhotoError.value = ''
-  if (!/\.(jpe?g|png|webp)$/i.test(file.name) || file.size === 0) {
-    partPhotoError.value = '请选择有效的 JPG、PNG 或 WebP 图片'
-  } else if (file.size > 20 * 1024 * 1024) {
-    partPhotoError.value = '图片不能超过 20 MB'
-  } else {
-    partPhotoFile.value = file
-  }
-}
+watch(partPhotoChange, () => { partPhotoError.value = '' })
 
 function clearPartPhoto() {
-  partPhotoFile.value = undefined
+  partPhotoChange.value = null
+  partHasPhoto.value = false
   partPhotoError.value = ''
 }
 const actionTitle = computed(() => {
@@ -874,6 +857,7 @@ async function openRowAction(row: string[]) {
       const response = await axios.get(`/api/parts/by-sn/${encodeURIComponent(row[0])}`, authConfig())
       const part = response.data.data
       editingId.value = part.id
+      partHasPhoto.value = part.hasPhoto === true
       Object.assign(actionForm, { partSn: part.partSn, partType: part.partType, supplierId: part.supplierId, batchNo: part.batchNo ?? '', qcStatus: part.qcStatus ?? '', remark: part.remark ?? '' })
       await loadMasterOptions()
     } else if (module === 'orders') {
@@ -1253,10 +1237,11 @@ async function submitPrimaryAction() {
       payload = { code: actionForm.code, name: actionForm.name, contactName: actionForm.contactName || null, contactPhone: actionForm.contactPhone || null }
     }
     let requestData: Record<string, unknown> | FormData = payload
-    if (actionKind.value === 'part' && editingId.value === null && partPhotoFile.value) {
+    if (actionKind.value === 'part' && partPhotoChange.value) {
       requestData = new FormData()
       requestData.append('part', new Blob([JSON.stringify(payload)], { type: 'application/json' }))
-      requestData.append('photo', partPhotoFile.value)
+      if (partPhotoChange.value === 'remove') requestData.append('removePhoto', 'true')
+      else requestData.append('photo', partPhotoChange.value)
     }
     const response = await axios({ method: actionMethod, url: endpoint, data: requestData, ...authConfig() })
     const savedId = response.data.data?.id ?? editingId.value
@@ -1271,7 +1256,12 @@ async function submitPrimaryAction() {
     ElMessage.success(tr('保存成功'))
     await loadModule(activeView.value)
   } catch (error) {
-    ElMessage.error(tr(axios.isAxiosError(error) ? error.response?.data?.message ?? '保存失败' : '保存失败'))
+    const failure = axios.isAxiosError(error) ? error.response?.data : undefined
+    if (actionKind.value === 'part' && partPhotoChange.value && /^(PART_PHOTO_|ATTACHMENT_)/.test(failure?.code ?? '')) {
+      partPhotoError.value = failure.message
+    } else {
+      ElMessage.error(tr(failure?.message ?? '保存失败'))
+    }
   } finally {
     actionSubmitting.value = false
   }
@@ -1337,22 +1327,19 @@ async function submitPrimaryAction() {
         <el-table :data="importDetails.failures"><el-table-column prop="rowNumber" :label='tr("Excel 行号")' width="120" /><el-table-column prop="reason" :label='tr("错误原因")' /></el-table>
       </template>
     </el-dialog>
-    <el-dialog v-model="actionDialogVisible" :title="actionTitle" :width="actionKind === 'role' ? '680px' : actionKind === 'part' ? 'min(520px, 94vw)' : '520px'" @closed="clearPartPhoto">
+    <el-dialog v-model="actionDialogVisible" :title="actionTitle"
+      :width="actionKind === 'role' ? '680px' : actionKind === 'part' ? 'min(560px, 94vw)' : '520px'"
+      :close-on-click-modal="actionKind !== 'part' || !actionSubmitting"
+      :close-on-press-escape="actionKind !== 'part' || !actionSubmitting"
+      :show-close="actionKind !== 'part' || !actionSubmitting" @closed="clearPartPhoto">
       <el-form v-if="actionKind === 'part'" label-width="100px">
         <el-form-item :label='tr("零部件 SN")'><el-input v-model="actionForm.partSn" :disabled="editingId !== null" /></el-form-item>
         <el-form-item :label='tr("零部件类型")'><el-select v-model="actionForm.partType" :disabled="editingId !== null"><el-option :label='tr("电机")' value="MOTOR" /><el-option :label='tr("电池")' value="BATTERY" /><el-option :label='tr("仪表")' value="DISPLAY" /></el-select></el-form-item>
         <el-form-item :label='tr("供应商")'><el-select v-model="actionForm.supplierId" clearable filterable :placeholder='tr("请选择供应商")'><el-option v-for="item in masterOptions.suppliers" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
         <el-form-item :label='tr("批次号")'><el-input v-model="actionForm.batchNo" /></el-form-item>
-        <el-form-item v-if="editingId === null" :label="tr('图片（选填）')" for="part-photo-file" :error="partPhotoError ? tr(partPhotoError) : ''">
-          <div class="part-photo-field">
-            <input id="part-photo-file" type="file" :aria-label="tr('选择零部件图片')"
-              accept=".jpg,.jpeg,.png,.webp" :disabled="actionSubmitting" @change="choosePartPhoto" />
-            <div v-if="partPhotoFile" class="part-photo-selection">
-              <img v-if="partPhotoPreview" :src="partPhotoPreview" :alt="tr('零部件图片预览')" />
-              <span>{{ partPhotoFile.name }}</span>
-              <el-button text :disabled="actionSubmitting" @click="clearPartPhoto">{{ tr('移除') }}</el-button>
-            </div>
-          </div>
+        <el-form-item :label="tr('图片（选填）')">
+          <PartPhotoEditor v-if="actionDialogVisible" v-model="partPhotoChange" :part-id="partHasPhoto ? editingId ?? undefined : undefined"
+            :part-sn="String(actionForm.partSn || '')" :disabled="actionSubmitting" :server-error="partPhotoError" />
         </el-form-item>
         <el-form-item :label='tr("备注")'><el-input v-model="actionForm.remark" type="textarea" /></el-form-item>
       </el-form>
@@ -1434,7 +1421,7 @@ async function submitPrimaryAction() {
         <el-form-item :label='tr("联系人")'><el-input v-model="actionForm.contactName" /></el-form-item>
         <el-form-item :label='tr("联系电话")'><el-input v-model="actionForm.contactPhone" /></el-form-item>
       </el-form>
-      <template #footer><el-button @click="actionDialogVisible = false">{{ tr("取消") }}</el-button><el-button type="primary" :loading="actionSubmitting" @click="submitPrimaryAction">{{ tr("保存") }}</el-button></template>
+      <template #footer><el-button :disabled="actionKind === 'part' && actionSubmitting" @click="actionDialogVisible = false">{{ tr("取消") }}</el-button><el-button type="primary" :loading="actionSubmitting" @click="submitPrimaryAction">{{ tr("保存") }}</el-button></template>
     </el-dialog>
     <el-dialog v-model="lockOrderVisible" :title='tr("锁定转单 · 选择销售去向")' width="min(720px, 96vw)" :close-on-click-modal="false">
       <p>{{ trInline("来源：") }}{{ lockOrderForm.lockNo }}<template v-if="lockOrderForm.skuCode"> {{ trInline("· 固定 SKU") }} {{ lockOrderForm.skuCode }}</template>{{ trInline("。系统不会根据客户或币种判断内外销，请先选择本次转单去向，选定后对应单据不可更改。") }}</p>
@@ -1505,9 +1492,4 @@ async function submitPrimaryAction() {
 
 <style scoped>
 .login-language { position: absolute; z-index: 3; top: max(.7rem, env(safe-area-inset-top)); right: max(1rem, env(safe-area-inset-right)); }
-.part-photo-field { width: 100%; min-width: 0; }
-.part-photo-field input { max-width: 100%; }
-.part-photo-selection { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
-.part-photo-selection img { width: 56px; height: 44px; object-fit: contain; flex-shrink: 0; }
-.part-photo-selection span { min-width: 0; overflow-wrap: anywhere; line-height: 1.4; }
 </style>

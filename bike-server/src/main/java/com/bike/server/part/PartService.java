@@ -14,6 +14,7 @@ public interface PartService {
     PartView createWithPhoto(PartCreateRequest request, PartPhotoUpload photo);
     PhotoContent getPhoto(long id);
     PartView update(long id, PartUpdateRequest request);
+    PartView updateWithPhoto(long id, PartUpdateRequest request, PartPhotoUpload photo, boolean removePhoto);
 
     record PhotoContent(Resource resource, String contentType, long fileSize) {}
 }

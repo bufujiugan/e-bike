@@ -11,6 +11,7 @@ public interface FileUploadMapper {
     FileUploadRecord lock(@Param("key") String key);
     int references(@Param("key") String key);
     int bound(@Param("key") String key);
+    int queueBoundPartPhotoCleanup(@Param("key") String key);
     int failed(@Param("key") String key);
     int checked(@Param("key") String key, @Param("state") String state, @Param("objectState") String objectState,
             @Param("error") String error);

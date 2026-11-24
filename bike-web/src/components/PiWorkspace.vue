@@ -1226,7 +1226,7 @@ onBeforeUnmount(() => {
             <button v-for="option in monthShortcuts" :key="option.label" type="button"
               :aria-pressed="listScope === 'custom' && !chosenMonth && monthShortcut === option.value"
               @click="selectMonth(option.value)">{{ tr(option.label) }}</button>
-            <el-date-picker v-model="chosenMonth" type="month" size="small" format="YYYY-MM" value-format="YYYY-MM"
+            <el-date-picker v-model="chosenMonth" class="pi-filter-month" type="month" size="small" format="YYYY-MM" value-format="YYYY-MM"
               :aria-label="tr('选择年月')" :placeholder="tr('选择年月')" @change="selectChosenMonth" />
           </div>
         </div>
@@ -1548,6 +1548,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .pi-list-facets {
+  --pi-filter-control-height: 32px;
   margin-bottom: 14px;
   padding: 4px 14px;
   border: 1px solid var(--el-border-color-light);
@@ -1565,7 +1566,7 @@ onBeforeUnmount(() => {
 .pi-filter-label { font-size: 13px; font-weight: 600; color: var(--el-text-color-regular); }
 .pi-filter-choices { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .pi-filter-choices button {
-  min-height: 32px;
+  min-height: var(--pi-filter-control-height);
   padding: 3px 10px;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -1583,11 +1584,19 @@ onBeforeUnmount(() => {
   color: var(--el-color-primary);
   font-weight: 600;
 }
-.pi-filter-choices :deep(.el-date-editor) { width: 140px; max-width: 100%; }
+.pi-filter-choices :deep(.pi-filter-month) {
+  width: 140px;
+  max-width: 100%;
+  height: var(--pi-filter-control-height);
+}
+.pi-filter-choices :deep(.pi-filter-month .el-input__wrapper) {
+  box-sizing: border-box;
+  min-height: 100%;
+}
 .pi-filter-hint { font-size: 12px; color: var(--el-text-color-secondary); }
 @media (max-width: 580px) {
+  .pi-list-facets { --pi-filter-control-height: 44px; }
   .pi-filter-row { grid-template-columns: minmax(0, 1fr); gap: 2px; padding: 6px 0; }
-  .pi-filter-choices button { min-height: 44px; }
 }
 .europe-order-scope{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:16px 18px;margin-bottom:18px;border:1px solid #dbe4ee;border-radius:10px;background:#f6f9fc}.europe-order-scope label{font-weight:600;white-space:nowrap}.europe-order-scope .el-select{width:320px;max-width:100%}.europe-order-scope p{flex-basis:100%;margin:0;color:#65758a;font-size:13px;line-height:1.7}.europe-order-scope .el-alert{width:100%;margin:0}
 .pi-workspace{padding:28px 32px;min-width:0;max-width:1500px;margin:auto}.pi-heading{display:flex;justify-content:space-between;gap:20px;align-items:center;margin-bottom:24px}.pi-heading h2{margin:0 0 7px;font-size:24px}.pi-heading p,.pi-hint{color:#65758a;font-size:13px;line-height:1.7}.pi-heading p{margin:0}.pi-filters{display:flex;gap:12px;align-items:center;margin-bottom:18px}.pi-filters>.el-input{max-width:340px}.pi-filters>.el-select{width:160px}.el-pagination{margin-top:20px;justify-content:flex-end;flex-wrap:wrap}.el-alert{margin:12px 0}.pi-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 18px}.pi-form .el-select,.pi-form .el-date-editor,.el-form-item .el-date-editor{width:100%}.pi-form h3{font-size:16px;margin:22px 0 14px}.pi-items-scroll{overflow-x:auto;margin-bottom:12px}.pi-draft-items{min-width:1020px}.pi-draft-items th,.pi-draft-items td{padding:10px 6px}.pi-draft-items th:first-child{width:340px}.pi-draft-items .el-input-number{width:108px}.pi-draft-items .el-input{min-width:98px}.pi-draft-items .el-select{min-width:320px}.pi-amounts{margin-top:24px}.pi-preview{background:#f1f7fc;border-radius:8px;padding:14px 18px;display:flex;flex-direction:column;gap:7px;align-self:start}.pi-preview span{font-size:12px;color:#52687d}.pi-preview strong{font-size:23px;color:#1677c8}.pi-preview small{font-size:11px;line-height:1.6;color:#748196}.pi-detail{min-height:140px}.pi-detail-heading{display:flex;justify-content:space-between;align-items:center;gap:20px;margin:8px 0 18px}.pi-detail-heading>div{display:flex;gap:12px;flex-wrap:wrap;align-items:center}.pi-detail-heading span{font-size:13px;color:#65758a}.pi-grand-total{font-size:24px;color:#1677c8}.pi-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}.pi-actions .el-button+.el-button{margin-left:0}.pi-tab-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.pi-totals{display:flex;justify-content:flex-end;gap:22px;flex-wrap:wrap;background:#f6f9fc;padding:18px;margin-top:16px}.pi-totals span{display:flex;flex-direction:column;gap:8px;color:#65758a;font-size:12px}.pi-totals b{font-size:15px;color:#23364d}.pi-prewrap{white-space:pre-wrap;overflow-wrap:anywhere}.el-tabs{margin-top:18px}@media(max-width:900px){.pi-workspace{padding:22px 18px}.pi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.pi-filters{flex-wrap:wrap}}@media(max-width:580px){.pi-grid{grid-template-columns:1fr}.pi-heading{align-items:flex-start;flex-direction:column}.pi-detail-heading{align-items:flex-start;flex-direction:column}.pi-filters>.el-input{max-width:none;width:100%}.pi-grand-total{font-size:21px}}

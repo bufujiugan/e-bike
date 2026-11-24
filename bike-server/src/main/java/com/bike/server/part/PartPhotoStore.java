@@ -3,6 +3,7 @@ package com.bike.server.part;
 import com.bike.server.common.BusinessException;
 import com.bike.server.common.BusinessUploadValidator;
 import com.bike.server.files.FileUploadJournal;
+import com.bike.server.files.FileUploadMapper;
 import com.bike.server.production.ProductionFileStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,10 +20,12 @@ public class PartPhotoStore {
     private static final Logger LOG = LoggerFactory.getLogger(PartPhotoStore.class);
     private final ProductionFileStore files;
     private final BusinessUploadValidator validator;
+    private final FileUploadMapper uploadMapper;
 
-    public PartPhotoStore(ProductionFileStore files, BusinessUploadValidator validator) {
+    public PartPhotoStore(ProductionFileStore files, BusinessUploadValidator validator, FileUploadMapper uploadMapper) {
         this.files = files;
         this.validator = validator;
+        this.uploadMapper = uploadMapper;
     }
 
     public String save(long partId, PartPhotoUpload photo) {
@@ -45,6 +48,11 @@ public class PartPhotoStore {
     public Resource read(StoredPhoto photo) {
         return new ByteArrayResource(BusinessUploadValidator.verifiedBytes(
                 files.read(photo.objectKey()), photo.fileSize(), photo.sha256(), photo.contentType()));
+    }
+
+    public void queueCleanup(String key) {
+        if (uploadMapper.queueBoundPartPhotoCleanup(key) != 1)
+            throw new BusinessException("PART_PHOTO_CLEANUP_FAILED", "原图片清理任务登记失败，请重试");
     }
 
     public record StoredPhoto(String objectKey, String contentType, long fileSize, String sha256) {}

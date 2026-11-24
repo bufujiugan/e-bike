@@ -29,6 +29,7 @@ const paths: Record<string, string> = {
   plus: 'M12 5v14 M5 12h14',
   download: 'M12 3v12 M7 10l5 5 5-5 M4 15v6h16v-6',
   upload: 'M12 16V4 M7 9l5-5 5 5 M4 15v6h16v-6',
+  image: 'M3 4h18v16H3z M3 17l5-5 4 4 4-5 5 6 M8 8h.01',
   refresh: 'M20 7v5h-5 M4 17v-5h5 M5 8a8 8 0 0 1 13-3l2 3 M4 16l2 3a8 8 0 0 0 13-3',
   bell: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9 M10 21h4',
   layers: 'M3 7l9-5 9 5-9 5z M3 12l9 5 9-5 M3 17l9 5 9-5',

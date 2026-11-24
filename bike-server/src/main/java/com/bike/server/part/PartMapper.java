@@ -13,6 +13,7 @@ public interface PartMapper {
     PartView selectById(@Param("id") long id);
     PartView selectBySn(@Param("partSn") String partSn);
     PartPhotoStore.StoredPhoto selectPhoto(@Param("id") long id);
+    String selectPhotoKeyForUpdate(@Param("id") long id);
     int updatePhoto(@Param("id") long id, @Param("key") String key);
     int countEnabledSupplier(@Param("supplierId") long supplierId);
     int insert(PartCreateRequest request);
