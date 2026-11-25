@@ -26,7 +26,7 @@ class PiConversionMysqlTest {
                     .digest(legacy.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
             f.exec("UPDATE @pi_conversion_request SET payload_hash='"+legacyHash+"'");
             assertThat(f.tx(()->f.piConversion.convert(request)).getId()).isEqualTo(draft.getId());
-            assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(2);
+            assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(1);
         }
     }
     @Test void differentModelsConvertAndPayTogetherButRemainExactSkuOrders() throws Exception {
@@ -35,12 +35,13 @@ class PiConversionMysqlTest {
             PiView draft=f.tx(()->f.piConversion.convert(request));
             assertThat(draft.getSourceOrderId()).isNull();assertThat(draft.getSeriesId()).isNotNull();
             assertThat(draft.getFulfillment()).hasSize(2).allSatisfy(line->{assertThat(line.status()).isEqualTo("DRAFT");assertThat(line.remainingQty()).isEqualTo(1);});
-            assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(2);
+            assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(1);
             assertThat(f.tx(()->f.piConversion.convert(request)).getId()).isEqualTo(draft.getId());
             long red=order(draft,10),green=order(draft,12);
+            assertThat(red).isEqualTo(green);
             code(()->f.tx(()->f.stock.stockOut(new StockOutRequest(1L,red,List.of("QR100")))),"INVALID_STATUS_TRANSITION");
             f.tx(()->f.pis.confirm(draft.getId()));
-            code(()->f.tx(()->f.stock.stockOut(new StockOutRequest(1L,red,List.of("QR100")))),"ORDER_RESERVATION_EXPIRED");
+            code(()->f.tx(()->f.stock.stockOut(new StockOutRequest(1L,red,List.of("QR100")))),"PI_SHIPMENT_NOT_RELEASED");
             var paid=f.tx(()->f.pis.recordPayment(draft.getId(),new PiPaymentRequest("receipt-one",new BigDecimal("200"),"CNY",null,null,null)));
             assertThat(paid.getPaidAmount()).isEqualByComparingTo("200");
             assertThat(paid.getFulfillment()).allSatisfy(line->assertThat(line.reservationStatus()).isEqualTo("PAID_HELD"));
@@ -73,7 +74,7 @@ class PiConversionMysqlTest {
             var one=pool.submit(work);var two=pool.submit(work);start.countDown();
             assertThat(one.get(15,TimeUnit.SECONDS).getId()).isEqualTo(two.get(15,TimeUnit.SECONDS).getId());
             assertThat(f.scalar("SELECT COUNT(*) FROM @pi_conversion_request")).isEqualTo(1);
-            assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(2);
+            assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(1);
             code(()->f.tx(()->f.piConversion.convert(new PiConversionRequest("different-request",request.sources(),request.pi()))),"INVENTORY_LOCK_CONFLICT");
             var changed=new PiConversionRequest(request.requestId(),List.of(new PiConversionRequest.Source(request.sources().getFirst().lockId(),2)),request.pi());
             code(()->f.tx(()->f.piConversion.convert(changed)),"PI_CONVERSION_CONFLICT");

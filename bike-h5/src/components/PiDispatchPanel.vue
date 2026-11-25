@@ -19,7 +19,18 @@ let scanVersion = 0
 const autoScan = useAutoVehicleScan(qr, () => props.active !== false && !busy.value && !!detail.value && !!orderId.value, scan)
 watch([orderId, () => props.active], () => { ++scanVersion; autoScan.cancel(); qr.value = '' }, { flush: 'sync' })
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / 20)))
-const orderOptions = computed(() => (detail.value?.orders || []).filter(order => ['CONFIRMED', 'PARTIAL_SHIPPED'].includes(order.status) && order.remainingQty > 0).map(order => ({ text: `${order.skuCode || '历史车型单'} · 待发${order.remainingQty} · ${order.orderNo}`, value: order.orderId })))
+const pendingOrders = computed(() => {
+  const grouped = new Map<number, { orderId: number; orderNo: string; remainingQty: number }>()
+  for (const line of detail.value?.orders || []) {
+    if (!['CONFIRMED', 'PARTIAL_SHIPPED'].includes(line.status) || line.remainingQty <= 0) continue
+    const order = grouped.get(line.orderId)
+    if (order) order.remainingQty += line.remainingQty
+    else grouped.set(line.orderId, { orderId: line.orderId, orderNo: line.orderNo, remainingQty: line.remainingQty })
+  }
+  return grouped
+})
+const orderOptions = computed(() => [...pendingOrders.value.values()].map(order =>
+  ({ text: `${order.orderNo} · ${tr('待发')}${order.remainingQty}`, value: order.orderId })))
 let listVersion = 0, detailVersion = 0, disposed = false, requestId = '', fingerprint = ''
 const storageKey = `bike_pi_dispatch:${props.username}`
 function message(cause: unknown) { return api.isAxiosError(cause) ? cause.response?.data?.message || '请求失败，请重试' : cause instanceof Error ? cause.message : '操作失败' }
@@ -51,7 +62,7 @@ async function scan() {
   autoScan.cancel()
   if (busy.value || props.active === false || !detail.value || !orderId.value || !qr.value.trim()) return
   const version = scanVersion
-  const code = qr.value.trim(), order = detail.value.orders.find(item => item.orderId === orderId.value)
+  const code = qr.value.trim(), order = pendingOrders.value.get(orderId.value)
   if (!order) return
   if (queue.value.some(item => item.vehicleQrCode === code)) { showFailToast(tr('同一整车不能重复扫码')); return }
   if (queue.value.length >= 200 || queue.value.filter(item => item.orderId === order.orderId).length >= order.remainingQty) { showFailToast(tr('已达到本单剩余数量或批次200台上限')); return }
@@ -111,11 +122,11 @@ onUnmounted(() => { disposed = true; ++listVersion; ++detailVersion })
     <van-cell :title="tr('共 {value0} 份 · 第 {value1}/{value2} 页', { value0: total, value1: page, value2: pageCount })"><template #label><van-button size="mini" :disabled="loading || busy || page <= 1" @click="load(page-1)">{{ tr("上一页") }}</van-button> <van-button size="mini" :disabled="loading || busy || page >= pageCount" @click="load(page+1)">{{ tr("下一页") }}</van-button></template></van-cell>
     <template v-if="detail">
       <van-cell :title="detail.piNo" :label="detail.customerName" />
-      <van-cell v-for="order in detail.orders" :key="order.orderId" :title="order.skuCode || order.orderNo" :label="order.orderNo" :value="`已发${order.shippedQty} / 关闭${order.closedQty} / 待发${order.remainingQty}`" />
-      <van-dropdown-menu :overlay="false"><van-dropdown-item v-model="orderId" :title="orderId ? undefined : tr('选择本次扫描SKU订单')" :options="orderOptions" :disabled="busy" /></van-dropdown-menu>
+      <van-cell v-for="order in detail.orders" :key="`${order.orderId}:${order.skuId ?? ''}`" :title="order.skuCode || order.orderNo" :label="order.orderNo" :value="`已发${order.shippedQty} / 关闭${order.closedQty} / 待发${order.remainingQty}`" />
+      <van-dropdown-menu :overlay="false"><van-dropdown-item v-model="orderId" :title="orderId ? undefined : tr('选择本次扫描的订单')" :options="orderOptions" :disabled="busy" /></van-dropdown-menu>
       <van-field ref="qrField" v-model="qr" :label='tr("整车总码")' :placeholder='tr("扫码或粘贴总码，自动加入")' :disabled="busy || !orderId" @keyup.enter="scan"><template #button><van-button size="small" :loading="busy" :disabled="!orderId || !qr.trim()" @click="scan">{{ tr("加入") }}</van-button></template></van-field>
       <p>{{ tr("完整总码扫码后自动校验加入，无需回车；核对清单后再确认出库。") }}</p>
-      <van-cell :title="tr('本批次已扫 {value0} 台', { value0: queue.length })" :label='tr("可以切换上方SKU订单继续加入另一车型，提交时一起出库。")' />
+      <van-cell :title="tr('本批次已扫 {value0} 台', { value0: queue.length })" />
       <van-cell v-for="(item,index) in queue" :key="item.vehicleQrCode" :title="item.vehicleQrCode" :label="detail.orders.find(order => order.orderId === item.orderId)?.orderNo"><template #right-icon><van-button size="mini" :disabled="busy" @click="remove(index)">{{ tr("移除") }}</van-button></template></van-cell>
       <van-button block type="primary" :disabled="!queue.length || !!qr.trim()" :loading="busy" @click="submit">{{ tr("确认 PI 整批出库（") }}{{ queue.length }} {{ tr("台）") }}</van-button>
     </template>

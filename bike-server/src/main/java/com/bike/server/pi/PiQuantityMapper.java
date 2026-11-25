@@ -12,5 +12,8 @@ public interface PiQuantityMapper {
     int resizeOrder(@Param("orderId") long orderId, @Param("quantity") int quantity);
     int resizeReservation(@Param("orderId") long orderId, @Param("quantity") int quantity);
     int closeSku(@Param("orderId") long orderId);
+    int closeSkuLine(@Param("orderId") long orderId, @Param("skuId") long skuId);
+    int reopenSkuLine(@Param("orderId") long orderId, @Param("skuId") long skuId, @Param("quantity") int quantity);
+    int extendReservationExpiry(@Param("orderId") long orderId, @Param("expiresAt") java.time.LocalDateTime expiresAt);
     int closeReservation(@Param("orderId") long orderId);
 }

@@ -14,8 +14,8 @@ import DataTable from './table/DataTable.vue'
 import Pagination from './table/Pagination.vue'
 import AppIcon from './AppIcon.vue'
 
-const props = defineProps<{ context: PermissionContext | null; initialSkuId?: number; initialModelId?: number; domesticSkuCreationEnabled: boolean }>()
-const emit = defineEmits<{ navigate: [view: string]; convert: [lockNo: string, batchLockNos?: string[]] }>()
+const props = defineProps<{ context: PermissionContext | null; initialSkuId?: number; initialModelId?: number }>()
+const emit = defineEmits<{ navigate: [view: string]; convert: [lockNo: string] }>()
 type Row = { skuId: number; modelId: number; skuCode: string; productName: string; specification: string; modelName: string; physicalQty: number; quarantinedQty: number; temporaryLockedQty: number; orderReservedQty: number; availableQty: number; shortageQty: number; legacyModelCommittedQty: number; modelAvailableQty: number; maxNewLockQty: number }
 type Option = { id: number; name: string; code: string; status: string }
 type Lock = { id: number; lockNo: string; skuCode: string; lockQty: number }
@@ -34,7 +34,7 @@ const visible = ref(false), saving = ref(false), saveError = ref(''), result = r
 const dialogStep = ref<'confirm' | 'result'>('confirm')
 const doneButton = ref<ButtonInstance>()
 const resultQuantity = computed(() => result.value.reduce((total, lock) => total + lock.lockQty, 0))
-const resultTitle = computed(() => tr('预锁已登记 · {count} 张锁定单，共 {quantity} 件', {
+const resultTitle = computed(() => tr('预锁已登记 · 1 批，{count} 个 SKU，共 {quantity} 台', {
   count: result.value.length,
   quantity: resultQuantity.value,
 }))
@@ -101,10 +101,6 @@ function showResult() {
   dialogStep.value = 'result'
   visible.value = true
 }
-function convertLock(lockNo: string) {
-  visible.value = false
-  emit('convert', lockNo)
-}
 watch(modelId, () => { focusedSkuId.value = undefined; page.value = 1; void load() })
 onMounted(async () => {
   await load()
@@ -148,7 +144,7 @@ onMounted(async () => {
       <h3>{{ trInline("待锁定商品（") }}{{ selected.length }} {{ trInline("个 SKU）") }}</h3>
       <div v-for="item in selected" :key="item.skuId" class="selected-row">
         <strong>{{ item.skuCode }}</strong>
-        <el-input-number v-model="item.quantity" :min="1" :max="1000000" :precision="0" />
+        <el-input-number v-model="item.quantity" :aria-label="item.skuCode + ' ' + tr('预锁数量')" :min="1" :max="1000000" :precision="0" />
         <el-button link type="danger" @click="selected = selected.filter(row => row.skuId !== item.skuId)">{{ tr("移除") }}</el-button>
       </div>
       <p v-if="!hasValidQuantities" class="note">{{ tr("每个 SKU 的预锁数量须为 1 至 1000000 的整数。") }}</p>
@@ -168,7 +164,6 @@ onMounted(async () => {
               <td>{{ lock.skuCode }}</td>
               <td>
                 {{ lock.lockNo }}
-                <el-button v-if="canConvert" class="lock-result-action" link type="primary" @click="convertLock(lock.lockNo)">{{ tr("转订单 / PI") }}</el-button>
               </td>
               <td>{{ lock.lockQty }}</td>
             </tr>
@@ -176,7 +171,7 @@ onMounted(async () => {
         </table>
       </div>
       <template v-else>
-      <p class="lock-preview">{{ tr("本次预锁 {count} 个 SKU，共 {quantity} 件，将为每个 SKU 生成一张锁定单（共 {count} 张）。", { count: selected.length, quantity: selectedQuantity }) }}</p>
+      <p class="lock-preview">{{ tr("本次预锁 {count} 个 SKU，共 {quantity} 台。转单时整批生成一个订单号。", { count: selected.length, quantity: selectedQuantity }) }}</p>
       <el-alert v-if="saveError" type="error" :title="tr(saveError)" :closable="false" />
       <el-form label-width="100px" :disabled="saving">
         <el-form-item :label='tr("客户")' required>
@@ -194,9 +189,9 @@ onMounted(async () => {
       </template>
       <template #footer>
         <div v-if="dialogStep === 'result'" class="lock-result-footer">
-          <el-button v-if="canConvert && domesticSkuCreationEnabled && result.length > 1" type="primary"
-            @click="visible = false; emit('convert', result[0].lockNo, result.map(lock => lock.lockNo))">
-            {{ tr("合并转内销订单") }}
+          <el-button v-if="canConvert && result.length" type="primary"
+            @click="visible = false; emit('convert', result[0].lockNo)">
+            {{ tr("整批转订单 / PI") }}
           </el-button>
           <el-button v-if="canSeeLocks" @click="emit('navigate', 'inventory-locks')">{{ tr("查看全部锁定与关联订单") }}</el-button>
           <el-button ref="doneButton" type="primary" @click="visible = false">{{ tr("关闭") }}</el-button>
@@ -219,7 +214,6 @@ onMounted(async () => {
 .lock-result-table th, .lock-result-table td { padding: 10px 8px; border-bottom: 1px solid var(--el-border-color-lighter); overflow-wrap: anywhere; }
 .lock-result-table th { background: var(--el-fill-color-light); text-align: start; }
 .lock-result-table th:last-child, .lock-result-table td:last-child { text-align: end; }
-.lock-result-action { display: block; margin-top: 4px; text-align: start; }
 .lock-result-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .lock-result-footer .el-button { margin: 0; }
 .reopen-result { align-self: flex-start; }

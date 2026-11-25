@@ -604,7 +604,7 @@ function syncLockItems() {
   for (const lock of selectedLocks.value) grouped.set(lock.skuId, (grouped.get(lock.skuId) || 0) + lock.quantity)
   draft.items = [...grouped].map(([skuId, quantity]) => ({ ...(draft.items.find(item => item.skuId === skuId) || newItem()), skuId, quantity }))
 }
-function addLock(lock: PiLockOption) {
+function addLock(lock: PiLockOption, quantity = lock.remainingQty) {
   if (selectedLocks.value.some(item => item.id === lock.id)) return
   if (fromLocks.value && !revisionFulfillment.value) {
     const lockAgent = lock.agentId ?? undefined
@@ -616,15 +616,45 @@ function addLock(lock: PiLockOption) {
       agentFromLock = true; draft.agentId = lockAgent
     }
   }
-  selectedLocks.value.push({ ...lock, quantity: lock.remainingQty })
+  selectedLocks.value.push({ ...lock, quantity })
   if (!options.value.skus.some(item => item.id === lock.skuId)) options.value.skus.push({ id: lock.skuId, skuCode: lock.skuCode, productName: lock.productName, modelId: lock.modelId })
   if (revisionFulfillment.value && !draft.items.some(item => item.skuId === lock.skuId)) draft.items.push({ ...newItem(), skuId: lock.skuId, quantity: lock.remainingQty })
   syncLockItems()
 }
-function removeLock(id: number) { selectedLocks.value = selectedLocks.value.filter(item => item.id !== id); syncLockItems() }
+async function loadLockBatch(lockId: number): Promise<PiLockOption[]> {
+  type LockSource = PiLockOption & { productModelId: number; lockQty: number }
+  const response = await api.get<{ data: LockSource[] }>(`/api/inventory-locks/${lockId}/domestic-order-sources`)
+  return response.data.data.map(source => ({ ...source, modelId: source.productModelId, remainingQty: source.lockQty }))
+}
+async function selectLock(lock: PiLockOption) {
+  if (lockBusy.value) return
+  if (fromLocks.value && selectedLocks.value.some(item =>
+    (item.lockRequestId != null || lock.lockRequestId != null) && item.lockRequestId !== lock.lockRequestId)) {
+    ElMessage.warning(tr('请按同一次预锁提交分别转单'))
+    return
+  }
+  if (lock.lockRequestId == null) { addLock(lock); return }
+  const version = ++lockVersion
+  lockBusy.value = true
+  try {
+    const batch = await loadLockBatch(lock.id)
+    if (version !== lockVersion || !createVisible.value) return
+    for (const source of batch) addLock(source)
+  } catch (cause) {
+    if (version === lockVersion) ElMessage.error(tr(message(cause, '锁定来源加载失败')))
+  } finally {
+    if (version === lockVersion) lockBusy.value = false
+  }
+}
+function removeLock(id: number) {
+  const batchId = selectedLocks.value.find(item => item.id === id)?.lockRequestId
+  selectedLocks.value = selectedLocks.value.filter(item => batchId == null ? item.id !== id : item.lockRequestId !== batchId)
+  syncLockItems()
+}
 function removeItem(index: number) {
   const skuId = draft.items[index]?.skuId
-  selectedLocks.value = selectedLocks.value.filter(lock => lock.skuId !== skuId)
+  const sources = selectedLocks.value.filter(lock => lock.skuId === skuId)
+  for (const source of sources) removeLock(source.id)
   draft.items.splice(index, 1)
 }
 
@@ -1140,16 +1170,32 @@ async function applyIntent() {
   appliedIntent = intent; clearSalesIntent(intent)
   try {
     if (intent.kind === 'lock') {
+      const customerId = intent.customerId
+      const firstSource = intent.sources[0]
+      const batch = intent.wholeBatch && firstSource ? await loadLockBatch(firstSource.lockId) : undefined
+      const sources = batch ? batch.map(lock => ({ lock, quantity: lock.remainingQty, lockNo: lock.lockNo }))
+        : customerId ? await Promise.all(intent.sources.map(async source => {
+        const result = await piApi.lockOptions({ customerId, keyword: source.lockNo, page: 1, anyAgent: true })
+        const lock = result.records.find(row => row.id === source.lockId)
+        return { lock, quantity: source.quantity, lockNo: source.lockNo }
+      })) : []
+      if (createVisible.value || restoringDraft.value) return
       await openCreate('locks')
-      if (!createVisible.value || !intent.customerId) { ElMessage.info(tr("请选择客户后加入来源锁定 {value0}", { value0: intent.lockNo })); return }
-      if (!options.value.customers.some(item => item.id === intent.customerId)) options.value.customers.push({ id: intent.customerId, code: '', name: intent.customerName || '锁定客户' })
-      lockKeyword.value = intent.lockNo
-      draft.customerId = intent.customerId
-      await nextTick(); void chooseCustomer(intent.customerId)
+      if (!createVisible.value || !customerId) return
+      if (!options.value.customers.some(item => item.id === customerId)) options.value.customers.push({ id: customerId, code: '', name: intent.customerName || '锁定客户' })
+      lockKeyword.value = ''
+      draft.customerId = customerId
+      await nextTick()
+      void chooseCustomer(customerId)
+      const unavailable = sources.find(source => !source.lock || (source.quantity ?? 1) > source.lock.remainingQty)
+      if (unavailable) {
+        ElMessage.warning(tr("锁定 {value0} 的可转数量已变化，请重新选择来源和数量", { value0: unavailable.lockNo }))
+        return
+      }
+      for (const { lock, quantity } of sources) {
+        if (lock) addLock(lock, quantity)
+      }
       await loadLocks()
-      const lock = lockRows.value.find(row => row.id === intent.lockId)
-      if (lock) addLock(lock)
-      else ElMessage.warning(tr("未找到可转换的锁定 {value0}，可能已到期或已被转换，请刷新核对", { value0: intent.lockNo }))
     } else {
       await openCreate('new')
       if (!createVisible.value || !draft.document.business) return
@@ -1348,7 +1394,7 @@ onBeforeUnmount(() => {
                   <el-form-item v-if="!fromLocks && !hasBoundOrders && draft.document.business" :label='tr("订单来源")' required data-draft-field="orderSource" :error="fieldError('orderSource')">
                     <el-radio-group v-model="draft.document.business.orderSource" :aria-label='tr("订单来源")' @change="changeOrderSource"><el-radio value="EXISTING_ORDER">{{ tr("关联已有订单") }}</el-radio><el-radio value="NEW_BUSINESS">{{ tr("无原订单的新业务") }}</el-radio></el-radio-group>
                   </el-form-item>
-                  <el-alert v-if="fromLocks" :title='tr("将从所选锁单生成并关联履约订单，沿用原锁单的客户、代理商与数量。")' type="info" :closable="false" />
+                  <el-alert v-if="fromLocks" :title='tr(selectedLocks.some(lock => lock.lockRequestId) ? "商品数量沿用本批各 SKU 的预锁数量。" : "商品数量按所选锁定的本次转出数量汇总，可在来源锁定表中调整。")' type="info" :closable="false" />
                   <el-alert v-else-if="!hasBoundOrders && draft.document.business?.orderSource === 'NEW_BUSINESS'" :title='tr("仅用于没有原订单的新业务。发出 PI 后付款达到收款门槛，或客户收到货后付款获批后，按所选仓库保留库存并生成关联订单；已有锁单或订单请使用对应入口。")' type="warning" :closable="false" />
                   <div class="pi-draft-grid">
                     <el-form-item v-if="!fromLocks && (draft.sourceOrderId || !hasBoundOrders && draft.document.business?.orderSource === 'EXISTING_ORDER')" :label='tr("来源销售订单")' required data-draft-field="sourceOrder" :error="fieldError('sourceOrder')"><el-select v-model="draft.sourceOrderId" :aria-label='tr("来源销售订单")' clearable filterable :disabled="!draft.customerId || hasBoundOrders || editingRevision" :placeholder='tr("先选择客户，再选择原订单")' @change="chooseSourceOrder"><el-option v-for="order in filteredOrders" :key="order.id" :value="order.id" :label="order.orderNo" /></el-select><p class="pi-field-help">{{ tr("自动带入原订单的代理商、SKU 和数量，复用原库存占用。") }}<template v-if="scenarioSalesType">{{ trInline("仅显示已确定为「") }}{{ tr(salesTypeLabel(scenarioSalesType)) }}{{ trInline("」的订单") }}<template v-if="hiddenTypeOrders">{{ trInline("，该客户另有") }} {{ hiddenTypeOrders }} {{ trInline("笔其他类型或待选类型订单未显示（请先在订单办理中选择类型）") }}</template>。</template></p></el-form-item>
@@ -1360,8 +1406,8 @@ onBeforeUnmount(() => {
                 <div class="pi-section-heading"><div><h3>{{ tr("商品明细") }} <span class="pi-count-badge">{{ draft.items.length }}</span></h3><p>{{ fromLocks ? tr('从下方锁定中选择商品，再填写单价。') : tr('选择 SKU 后填写数量与单价，图片在保存时带入。') }}</p></div><el-button :disabled="fixedItems || draft.items.length >= 100" @click="draft.items.push(newItem())">{{ tr("＋ 添加商品") }}</el-button></div>
                 <el-alert v-if="editingRevision && fixedItems" :title='tr("数量和移除商品在确认修订时生效，不能少于已发数量；新增 SKU 须选择来源锁定。")' type="info" :closable="false" />
       <section data-draft-field="locks" class="pi-lock-selection" v-if="fromLocks || revisionFulfillment && canManageReservation">
-        <p v-if="fromLocks" class="pi-hint">{{ tr("先选择客户，再选择来源锁定；代理商可不选，加入锁定时自动带入（同一份 PI 只能合并同一代理商的锁定）。只显示未到期、仍有剩余可转数量的 SKU 锁定。本次会同时生成各SKU的履约订单和一份PI草稿；确认PI时一起确认履约订单，保留每笔锁定原截止。") }}</p>
-        <p v-if="revisionFulfillment" class="pi-hint">{{ tr("新增SKU或新增独立履约子单时选择同客户来源锁定，数量计入下方商品总数量；草稿不转换，确认修订才生效并沿用原截止时间。删除来源选择不会自动删除商品行。") }}</p>
+        <p v-if="fromLocks" class="pi-hint">{{ tr("选择同一次预锁中的任意 SKU 即可带入整批，保存后生成一个订单号和一份 PI 草稿。") }}</p>
+        <p v-if="revisionFulfillment" class="pi-hint">{{ tr("修订新增 SKU 时选择同客户的预锁批次，并将这些数量计入下方商品明细。确认修订后转入履约订单。") }}</p>
         <div class="pi-filters"><el-input v-model="lockKeyword" :placeholder='tr("按锁定单号或 SKU 搜索")' /><el-button :disabled="!draft.customerId" :loading="lockBusy" @click="lockPage = 1; loadLocks()">{{ tr("查找来源锁定") }}</el-button></div>
         <el-alert v-if="lockError" :title="tr(lockError)" type="error" :closable="false" />
         <el-table :data="lockRows" v-loading="lockBusy">
@@ -1377,11 +1423,25 @@ onBeforeUnmount(() => {
           </template>
       <RecordIdColumn />
           <el-table-column prop="lockNo" :label='tr("来源锁定")' min-width="180" /><el-table-column prop="skuCode" label="SKU" /><el-table-column :label='tr("代理商")' min-width="120"><template #default="{ row }">{{ row.agentName || tr('无代理商') }}</template></el-table-column><el-table-column prop="remainingQty" :label='tr("剩余可转")' width="100" /><el-table-column prop="expireTime" :label='tr("原截止")' min-width="170" />
-          <el-table-column :label='tr("选择")' width="90"><template #default="{ row }"><el-button link :disabled="selectedLocks.some(item => item.id === row.id)" @click="addLock(row)">{{ tr("加入") }}</el-button></template></el-table-column>
+          <el-table-column :label='tr("选择")' width="110"><template #default="{ row }"><el-button link :disabled="lockBusy || selectedLocks.some(item => item.id === row.id)" @click="selectLock(row)">{{ tr(row.lockRequestId ? "加入整批" : "加入") }}</el-button></template></el-table-column>
         </el-table>
         <el-pagination v-model:current-page="lockPage" :total="lockTotal" :page-size="20" layout="total, prev, pager, next" @current-change="loadLocks" />
         <el-table v-if="selectedLocks.length" :data="selectedLocks">
-      <RecordIdColumn /><el-table-column prop="lockNo" :label='tr("已选来源")' /><el-table-column prop="skuCode" label="SKU" /><el-table-column :label='tr("本次转换数量")' width="180"><template #default="{ row }"><el-input-number v-model="row.quantity" :min="1" :max="row.remainingQty" :precision="0" @change="syncLockItems" /></template></el-table-column><el-table-column :label='tr("操作")' width="80"><template #default="{ row }"><el-button link type="danger" @click="removeLock(row.id)">{{ tr("移除") }}</el-button></template></el-table-column></el-table>
+          <RecordIdColumn />
+          <el-table-column prop="lockNo" :label='tr("已选来源")' min-width="180" />
+          <el-table-column prop="skuCode" label="SKU" min-width="120" />
+          <el-table-column prop="remainingQty" :label='tr("剩余可转")' width="100" />
+          <el-table-column :label='tr("本次转出")' width="180">
+            <template #default="{ row }">
+              <span v-if="row.lockRequestId || row.remainingQty === 1">{{ row.quantity }}</span>
+              <el-input-number v-else v-model="row.quantity" :aria-label="row.lockNo + ' ' + tr('本次转出')"
+                :min="1" :max="row.remainingQty" :precision="0" @change="syncLockItems" />
+            </template>
+          </el-table-column>
+          <el-table-column :label='tr("操作")' width="80">
+            <template #default="{ row }"><el-button link type="danger" @click="removeLock(row.id)">{{ tr(row.lockRequestId ? "移除整批" : "移除") }}</el-button></template>
+          </el-table-column>
+        </el-table>
       </section>
                 <div v-if="!draft.items.length" class="pi-inline-empty">{{ tr("还没有商品，请先选择来源锁定。") }}</div>
                 <article v-for="(item, index) in draft.items" :key="item.key" class="pi-item-card">
@@ -1481,9 +1541,9 @@ onBeforeUnmount(() => {
       <RecordIdColumn /><el-table-column prop="skuCode" label="SKU" min-width="140" /><el-table-column :label='tr("图片")' width="100"><template #default="scope"><PiItemImage v-if="scope.row.imageAttachmentId" :key="`${detail.id}-${scope.row.id}`" :pi-id="detail.id" :item-id="scope.row.id" /><span v-else>{{ tr("未记录") }}</span></template></el-table-column><el-table-column prop="productName" :label='tr("商品")' min-width="140" /><el-table-column prop="specification" :label='tr("规格")' min-width="140" /><el-table-column prop="quantity" :label='tr("数量")' width="80" /><el-table-column prop="unit" :label='tr("单位")' width="80" /><el-table-column :label='tr("单价")' min-width="110"><template #default="scope">{{ money(scope.row.unitPrice) }}</template></el-table-column><el-table-column :label='tr("折扣")' min-width="100"><template #default="scope">{{ money(scope.row.discountAmount) }}</template></el-table-column><el-table-column :label='tr("税费")' min-width="100"><template #default="scope">{{ money(scope.row.taxAmount) }}</template></el-table-column><el-table-column :label='tr("金额")' min-width="120"><template #default="scope">{{ money(scope.row.lineTotal) }}</template></el-table-column></el-table><div class="pi-totals"><span>{{ tr("商品金额") }} <b>{{ money(detail.subtotal) }}</b></span><span>{{ tr("折扣合计") }} <b>− {{ money(detail.discountAmount) }}</b></span><span>{{ tr("税费合计") }} <b>{{ money(detail.taxAmount) }}</b></span><span>{{ tr("运费") }} <b>{{ money(detail.freightAmount) }}</b></span><span>{{ tr("其他费用") }} <b>{{ money(detail.otherFeeAmount ?? '0.00') }}</b></span><span>{{ tr("总金额") }} <b>{{ detail.currencyCode }} {{ money(detail.totalAmount) }}</b></span></div></el-tab-pane>
             <el-tab-pane v-if="detail.fulfillment?.length" :label='tr("履约订单")' name="fulfillment">
               <template v-if="internal && detail.revisionSources?.length">
-                <h3>{{ tr("本次修订新增来源") }}</h3><p class="pi-hint">{{ tr("草稿保存的是待转换选择；确认修订后显示关联子单。来源截止和数量保留供追溯。") }}</p>
+                <h3>{{ tr("本次修订新增来源") }}</h3><p class="pi-hint">{{ tr("确认修订后显示关联订单。来源截止时间和数量可供核对。") }}</p>
                 <el-table :data="detail.revisionSources">
-      <RecordIdColumn prop="lockId" :label='tr("来源锁定 ID")' /><el-table-column prop="lockNo" :label='tr("来源锁定")' min-width="180" /><el-table-column prop="skuCode" label="SKU" min-width="120" /><el-table-column prop="quantity" :label='tr("转换数量")' width="100" /><el-table-column prop="expiresAt" :label='tr("来源截止")' min-width="180" /><el-table-column :label='tr("关联子单")' min-width="180"><template #default="{ row }">{{ row.orderId ? detail.fulfillment.find(line => line.orderId === row.orderId)?.orderNo || row.orderId : tr('待确认转换') }}</template></el-table-column></el-table>
+      <RecordIdColumn prop="lockId" :label='tr("来源锁定 ID")' /><el-table-column prop="lockNo" :label='tr("来源锁定")' min-width="180" /><el-table-column prop="skuCode" label="SKU" min-width="120" /><el-table-column prop="quantity" :label='tr("转换数量")' width="100" /><el-table-column prop="expiresAt" :label='tr("来源截止")' min-width="180" /><el-table-column :label='tr("关联订单")' min-width="180"><template #default="{ row }">{{ row.orderId ? detail.fulfillment.find(line => line.orderId === row.orderId)?.orderNo || row.orderId : tr('待确认转换') }}</template></el-table-column></el-table>
               </template>
               <el-table :data="detail.fulfillment">
       <RecordIdColumn prop="orderId" :label='tr("订单 ID")' /><el-table-column prop="orderNo" :label='tr("订单")' min-width="200" /><el-table-column prop="skuCode" label="SKU" min-width="120" /><el-table-column prop="orderedQty" :label='tr("约定")' width="70" /><el-table-column prop="shippedQty" :label='tr("已发")' width="70" /><el-table-column prop="closedQty" :label='tr("关闭")' width="70" /><el-table-column prop="remainingQty" :label='tr("待发")' width="70" /><el-table-column :label='tr("库存占用")' min-width="180"><template #default="{ row }">{{ tr(reservationLabel(row.reservationStatus, isAgent)) }}</template></el-table-column><el-table-column v-if="canManageReservation" :label='tr("操作")' width="130"><template #default="{ row }"><el-button v-if="['TIMED_ACTIVE', 'EXPIRED_REQUIRES_REACQUIRE'].includes(row.reservationStatus)" link :disabled="actionBusy" @click="openReservation(row.orderId)">{{ tr("核对并重新占用") }}</el-button></template></el-table-column></el-table>

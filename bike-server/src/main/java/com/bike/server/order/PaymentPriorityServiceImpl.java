@@ -91,7 +91,7 @@ public class PaymentPriorityServiceImpl implements PaymentPriorityService {
             }
             case "ORDER" -> {
                 var order = orders.selectForUpdate(candidate.id());
-                if (order.isDomesticSkuOrder()) {
+                if (order.isSkuDetailOrder()) {
                     yield mapper.selectOrderDemand(candidate.id()).stream()
                             .map(line -> new Demand(line.skuId(), line.modelId(), null, line.quantity())).toList();
                 }

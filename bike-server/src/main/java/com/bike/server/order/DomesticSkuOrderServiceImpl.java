@@ -5,6 +5,7 @@ import com.bike.server.common.CurrentOperator;
 import com.bike.server.common.CustomerScopeAccess;
 import com.bike.server.lock.InventoryLockMapper;
 import com.bike.server.lock.InventoryLockView;
+import com.bike.server.lock.SkuLockBatchService;
 import com.bike.server.lock.SkuLockMapper;
 import com.bike.server.production.ProductionGuard;
 import com.bike.server.stock.SkuInventoryMapper;
@@ -18,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Objects;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -38,6 +40,8 @@ public class DomesticSkuOrderServiceImpl implements DomesticSkuOrderService {
     private final SystemConfigMapper config;
     private final ObjectMapper json;
     private final boolean creationEnabled;
+    @org.springframework.beans.factory.annotation.Autowired
+    private SkuLockBatchService lockBatches;
 
     public DomesticSkuOrderServiceImpl(DomesticSkuOrderMapper domesticOrders, OrderMapper orders,
             OrderReservationMapper reservations, InventoryLockMapper locks, SkuInventoryMapper inventory,
@@ -114,7 +118,27 @@ public class DomesticSkuOrderServiceImpl implements DomesticSkuOrderService {
                 }
             }
         }
-        return save(request, now, quantities, models.firstKey(), selectedLocks, operatorId, hash);
+        return save(request, now, quantities, models.firstKey(), selectedLocks, operatorId, hash, SalesType.DOMESTIC);
+    }
+
+    @Override
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+    public SalesOrderView createForPi(DomesticSkuOrderRequest request, String salesType) {
+        guard.lock();
+        customerScope.requireCustomer(request.customerId());
+        var now = skuLocks.now();
+        var quantities = new TreeMap<Long, Integer>();
+        var sources = selectSources(request, now, quantities);
+        // 无原锁定的 PI 已由收款或信用流程校验 SKU 和仓库容量。
+        for (var item : request.items()) quantities.merge(item.skuId(), item.quantity(), Integer::sum);
+        if (quantities.isEmpty()) throw new BusinessException("INVALID_PARAMETER", "PI 履约订单须有 SKU 明细");
+        long summaryModelId = Long.MAX_VALUE;
+        for (long skuId : quantities.keySet()) {
+            Long modelId = inventory.lockSkuModel(skuId);
+            if (modelId == null) throw new BusinessException("SKU_NOT_FOUND", "SKU 或车型不存在或已停用");
+            summaryModelId = Math.min(summaryModelId, modelId);
+        }
+        return save(request, now, quantities, summaryModelId, sources, CurrentOperator.id(), hash(request), salesType);
     }
 
     @Override
@@ -141,18 +165,20 @@ public class DomesticSkuOrderServiceImpl implements DomesticSkuOrderService {
             throw new BusinessException("INVENTORY_LOCK_NOT_FOUND", "SKU 锁定不存在");
         }
         customerScope.requireCustomer(origin.getCustomerId());
-        return locks.selectConvertibleSources(id, keyword);
+        var available = locks.selectConvertibleSources(id, origin.getLockRequestId() == null ? keyword : null);
+        lockBatches.requireConvertibleBatch(origin, available);
+        return available;
     }
 
     private List<DomesticOrderLockSource> selectSources(DomesticSkuOrderRequest request, LocalDateTime now,
             TreeMap<Long, Integer> quantities) {
         var selected = new ArrayList<DomesticOrderLockSource>();
-        long previousLockId = 0;
+        var selectedLocks = new ArrayList<InventoryLockView>();
+        var sourceQuantities = new LinkedHashMap<Long, Integer>();
         for (var source : request.sources()) {
-            if (source.lockId() == previousLockId) {
+            if (sourceQuantities.putIfAbsent(source.lockId(), source.quantity()) != null) {
                 throw new BusinessException("INVALID_PARAMETER", "同一锁定单只能选择一次");
             }
-            previousLockId = source.lockId();
             InventoryLockView lock = locks.selectById(source.lockId());
             if (lock == null || lock.getSkuId() == null) {
                 throw new BusinessException("INVENTORY_LOCK_NOT_FOUND", "有效的 SKU 锁定不存在");
@@ -166,20 +192,22 @@ public class DomesticSkuOrderServiceImpl implements DomesticSkuOrderService {
             }
             selected.add(new DomesticOrderLockSource(source.lockId(), lock.getLockNo(), lock.getSkuId(),
                     source.quantity(), lock.getExpireTime()));
+            selectedLocks.add(lock);
             quantities.merge(lock.getSkuId(), source.quantity(), Integer::sum);
         }
+        if (!selectedLocks.isEmpty()) lockBatches.requireWholeBatch(selectedLocks, sourceQuantities);
         return selected;
     }
 
     private SalesOrderView save(DomesticSkuOrderRequest request, LocalDateTime now, TreeMap<Long, Integer> quantities,
-            long summaryModelId, List<DomesticOrderLockSource> sources, long operatorId, String hash) {
+            long summaryModelId, List<DomesticOrderLockSource> sources, long operatorId, String hash, String salesType) {
         String no = "SO" + UUID.randomUUID().toString().replace("-", "").substring(0, 18).toUpperCase(java.util.Locale.ROOT);
         int total = quantities.values().stream().mapToInt(Integer::intValue).sum();
         var summary = new SalesOrderCreateRequest(request.customerId(), request.agentId(), summaryModelId, total,
-                request.plannedShipDate(), request.remark(), SalesType.DOMESTIC, request.transportArrangement(),
+                request.plannedShipDate(), request.remark(), salesType, request.transportArrangement(),
                 request.transportRemark());
         if (orders.insertOrder(no, summary, operatorId) != 1 || orders.insertItem(no, summary) != 1) {
-            throw new BusinessException("ORDER_CREATE_FAILED", "内销订单创建失败");
+            throw new BusinessException("ORDER_CREATE_FAILED", "SKU 订单创建失败");
         }
         // 订单头记录最后一笔截止，库存占用及出库按每笔来源的有效截止计算。
         var expiresAt = sources.stream().map(DomesticOrderLockSource::expiresAt).max(Comparator.naturalOrder())
@@ -204,7 +232,7 @@ public class DomesticSkuOrderServiceImpl implements DomesticSkuOrderService {
                 throw new BusinessException("ORDER_AUDIT_FAILED", "来源锁定审计保存失败");
             }
         }
-        if (orders.insertOperationLog("ORDER_CREATE", no, "创建内销 SKU 订单", operatorId, CurrentOperator.username(),
+        if (orders.insertOperationLog("ORDER_CREATE", no, "创建 SKU 订单", operatorId, CurrentOperator.username(),
                 null, "DRAFT", CurrentOperator.clientIp(), request.remark()) != 1) {
             throw new BusinessException("ORDER_AUDIT_FAILED", "订单审计保存失败");
         }

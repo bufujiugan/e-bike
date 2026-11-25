@@ -58,7 +58,12 @@ public class SkuInventoryGuard {
         if (sku == null || mapper.countLockSources(orderId, sku) == 0) return;
         // 同 SKU 优先消耗最早到期的有效来源，撤销时恢复到原来使用的来源。
         Long lockId = mapper.selectShipmentSource(orderId, sku);
-        if (lockId == null) throw new BusinessException("ORDER_RESERVATION_EXPIRED", "该 SKU 的有效占用不足，请重新占用后出库");
+        // 已收款或授信后直接修订的增量由仓库库存覆盖，没有可分配的原预锁记录。
+        if (lockId == null) {
+            String holdMode = mapper.selectReservationHoldMode(orderId);
+            if ("PAID".equals(holdMode) || "CREDIT".equals(holdMode)) return;
+            throw new BusinessException("ORDER_RESERVATION_EXPIRED", "该 SKU 的有效占用不足，请重新占用后出库");
+        }
         if (mapper.increaseSourceShipped(orderId, lockId) != 1 || mapper.insertShipmentSource(stockNo, orderId, lockId) != 1)
             throw new BusinessException("ORDER_SKU_QTY_CONFLICT", "订单来源出库数量更新失败");
     }

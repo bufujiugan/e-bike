@@ -3,6 +3,12 @@ package com.bike.server.lock;
 import java.time.LocalDateTime;
 
 public class InventoryLockView {
+    private Long lockRequestId;
+    private String productName;
+    public Long getLockRequestId() { return lockRequestId; }
+    public void setLockRequestId(Long lockRequestId) { this.lockRequestId = lockRequestId; }
+    public String getProductName() { return productName; }
+    public void setProductName(String productName) { this.productName = productName; }
     private Long customerId; private Long skuId; private String skuCode; private String scopeType;
     public Long getCustomerId(){return customerId;} public void setCustomerId(Long v){customerId=v;}
     public Long getSkuId(){return skuId;} public void setSkuId(Long v){skuId=v;}

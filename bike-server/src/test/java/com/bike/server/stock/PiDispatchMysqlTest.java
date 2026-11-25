@@ -18,7 +18,7 @@ class PiDispatchMysqlTest {
         try(var f=new SkuCommitmentMysqlTest.Fixture(true)) {
             var pi=ready(f);var request=request(pi,"QR101");
             long audits=f.scalar("SELECT COUNT(*) FROM @operation_log");
-            code(()->f.tx(()->f.dispatch.dispatch(pi.getId(),request)),"ORDER_MODEL_MISMATCH");
+            code(()->f.tx(()->f.dispatch.dispatch(pi.getId(),request)),"PI_SKU_MISMATCH");
             assertThat(f.scalar("SELECT COUNT(*) FROM @stock_out_batch")).isZero();
             assertThat(f.scalar("SELECT COUNT(*) FROM @stock_out_batch_item")).isZero();
             assertThat(f.scalar("SELECT COUNT(*) FROM @stock_out_record")).isZero();

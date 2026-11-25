@@ -34,21 +34,23 @@ class PiSkuRevisionMysqlTest {
             var draft=revision(f,original,"replace-green");
             var saved=f.tx(()->f.pis.update(draft.getId(),edit(draft,replacement(),source(lock))));
             assertThat(saved.getRevisionSources()).singleElement().satisfies(s->{assertThat(s.orderId()).isNull();assertThat(s.expiresAt()).isEqualTo(lock.getExpireTime());});
-            assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(2);
+            assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(1);
             assertThat(f.inventory.snapshot(12,0).committedQty()).isEqualTo(1);
             assertThat(f.lockMapper.selectById(lock.getId()).getConvertedQty()).isZero();
             var published=f.tx(()->f.pis.confirm(saved.getId()));
             assertThat(published.getRevisionSources()).singleElement().satisfies(s->assertThat(s.orderId()).isPositive());
             var blue=published.getFulfillment().stream().filter(l->l.skuId()==11).findFirst().orElseThrow();
             var removed=published.getFulfillment().stream().filter(l->l.skuId()==12).findFirst().orElseThrow();
-            assertThat(removed.status()).isEqualTo("CANCELLED");assertThat(removed.closedQty()).isEqualTo(1);
+            assertThat(removed.orderId()).isEqualTo(blue.orderId());assertThat(removed.closedQty()).isEqualTo(1);
             assertThat(f.inventory.snapshot(12,0).committedQty()).isZero();
             assertThat(f.inventory.snapshot(11,0).committedQty()).isEqualTo(1);
-            assertThat(f.reservations.selectForUpdate(blue.orderId()).expiresAt()).isEqualTo(lock.getExpireTime());
+            assertThat(f.scalar("SELECT COUNT(*) FROM @domestic_order_lock_source WHERE order_id="+blue.orderId()+" AND lock_id="+lock.getId())).isEqualTo(1);
             assertThat(f.lockMapper.selectById(lock.getId()).getConvertedQty()).isEqualTo(1);
             assertThat(f.tx(()->f.pis.get(original.getId())).getItems()).extracting(PiItemView::getSkuId).containsExactly(10L,12L);
             f.tx(()->f.pis.release(saved.getId(),new PiReleaseRequest("核对替换后数量")));
             f.tx(()->f.stock.stockOut(new StockOutRequest(1L,blue.orderId(),List.of("QR101"))));
+            assertThat(f.orders.selectById(blue.orderId()).getStatus()).isEqualTo("PARTIAL_SHIPPED");
+            f.tx(()->f.stock.stockOut(new StockOutRequest(1L,blue.orderId(),List.of("QR100"))));
             assertThat(f.orders.selectById(blue.orderId()).getStatus()).isEqualTo("SHIPPED");
             assertThat(f.scalar("SELECT COUNT(*) FROM @pi_payment")).isEqualTo(1);
         }
@@ -67,7 +69,7 @@ class PiSkuRevisionMysqlTest {
             assertThatThrownBy(()->f.tx(()->f.pis.confirm(draft.getId()))).hasMessageContaining("已到期");
             assertThat(f.scalar("SELECT current_pi_id FROM @pi_series")).isEqualTo(original.getId());
             assertThat(f.inventory.snapshot(12,0).committedQty()).isEqualTo(1);
-            assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(2);
+            assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(1);
             assertThat(f.scalar("SELECT COUNT(*) FROM @pi_revision_source WHERE order_id IS NOT NULL")).isZero();
         }
     }
@@ -80,11 +82,13 @@ class PiSkuRevisionMysqlTest {
             var originalLog=(OperationLogMapper)ReflectionTestUtils.getField(quantity,"logs");
             var broken=mock(OperationLogMapper.class);
             when(broken.insert(anyString(),anyString(),anyString(),any(),anyString(),anyString(),anyString(),any(),anyString()))
-                    .thenAnswer(call->"确认PI新增SKU来源".equals(call.getArgument(2)) ? 0 : originalLog.insert(call.getArgument(0),call.getArgument(1),call.getArgument(2),call.getArgument(3),call.getArgument(4),call.getArgument(5),call.getArgument(6),call.getArgument(7),call.getArgument(8)));
+                    .thenAnswer(call->"确认 PI 订单 SKU 数量修订".equals(call.getArgument(2))
+                            && call.getArgument(6, String.class).contains("\"skuId\":11") ? 0
+                            : originalLog.insert(call.getArgument(0),call.getArgument(1),call.getArgument(2),call.getArgument(3),call.getArgument(4),call.getArgument(5),call.getArgument(6),call.getArgument(7),call.getArgument(8)));
             ReflectionTestUtils.setField(quantity,"logs",broken);
-            assertThatThrownBy(()->f.tx(()->f.pis.confirm(draft.getId()))).hasMessageContaining("新增SKU审计");
-            assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(2);
-            assertThat(f.scalar("SELECT COUNT(*) FROM @pi_order_link")).isEqualTo(2);
+            assertThatThrownBy(()->f.tx(()->f.pis.confirm(draft.getId()))).hasMessageContaining("审计");
+            assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(1);
+            assertThat(f.scalar("SELECT COUNT(*) FROM @pi_order_link")).isEqualTo(1);
             assertThat(f.inventory.snapshot(12,0).committedQty()).isEqualTo(1);
             assertThat(f.lockMapper.selectById(lock.getId()).getConvertedQty()).isZero();
             assertThat(f.scalar("SELECT COUNT(*) FROM @pi_revision_source WHERE order_id IS NOT NULL")).isZero();
@@ -105,12 +109,12 @@ class PiSkuRevisionMysqlTest {
             var a=pool.submit(confirm);var b=pool.submit(confirm);start.countDown();
             assertThat(a.get(15,TimeUnit.SECONDS)^b.get(15,TimeUnit.SECONDS)).isTrue();
             assertThat(f.lockMapper.selectById(lock.getId()).getConvertedQty()).isEqualTo(1);
-            assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(3);
+            assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(1);
             assertThat(f.scalar("SELECT COUNT(*) FROM @pi_revision_source WHERE order_id IS NOT NULL")).isEqualTo(1);
         }
     }
 
-    @Test void removedSkuCanReturnThroughNewSourceWithoutReopeningClosedOrderAndShippedSkuCannotDisappear()throws Exception {
+    @Test void removedSkuCanReturnToTheSameOrderAndShippedSkuCannotDisappear()throws Exception {
         try(var f=new SkuCommitmentMysqlTest.Fixture(true)) {
             var original=PiPaymentCorrectionMysqlTest.paid(f);var remove=revision(f,original,"remove-red");
             f.tx(()->f.pis.update(remove.getId(),edit(remove,List.of(item(12)),List.of())));
@@ -119,8 +123,8 @@ class PiSkuRevisionMysqlTest {
             var lock=f.tx(()->f.locks.create(new SkuLockRequest("return-red",1L,null,null,null,List.of(new SkuLockRequest.Item(10,1))))).getFirst();
             var restore=revision(f,removed,"restore-red");f.tx(()->f.pis.update(restore.getId(),edit(restore,List.of(item(10),item(12)),source(lock))));
             var restored=f.tx(()->f.pis.confirm(restore.getId()));
-            assertThat(f.orders.selectById(oldRed).getStatus()).isEqualTo("CANCELLED");
-            long newRed=restored.getRevisionSources().getFirst().orderId();assertThat(newRed).isNotEqualTo(oldRed);
+            assertThat(f.orders.selectById(oldRed).getStatus()).isEqualTo("CONFIRMED");
+            long newRed=restored.getRevisionSources().getFirst().orderId();assertThat(newRed).isEqualTo(oldRed);
             f.tx(()->f.pis.release(restore.getId(),new PiReleaseRequest("重新核对")));
             f.tx(()->f.stock.stockOut(new StockOutRequest(1L,newRed,List.of("QR100"))));
             var afterShipping=revision(f,f.tx(()->f.pis.get(restore.getId())),"remove-shipped");
@@ -135,13 +139,13 @@ class PiSkuRevisionMysqlTest {
             f.exec("UPDATE @inventory_lock SET expire_time=DATE_ADD(expire_time,INTERVAL 1 HOUR) WHERE id="+lock.getId());
             assertThatThrownBy(()->f.tx(()->f.pis.confirm(draft.getId()))).isInstanceOfSatisfying(BusinessException.class,
                     e->assertThat(e.getCode()).isEqualTo("PI_REVISION_SOURCE_CHANGED"));
-            assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(2);
+            assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(1);
             var acknowledged=f.tx(()->f.pis.update(draft.getId(),edit(draft,replacement(),source(lock))));
             assertThat(acknowledged.getRevisionSources().getFirst().expiresAt()).isEqualTo(lock.getExpireTime().plusHours(1));
             f.tx(()->f.conversion.convert(lock.getId(),new LockOrderRequest(1L,1,"competing-conversion",null,"DOMESTIC")));
             assertThatThrownBy(()->f.tx(()->f.pis.confirm(draft.getId()))).isInstanceOfSatisfying(BusinessException.class,
                     e->assertThat(e.getCode()).isEqualTo("PI_REVISION_SOURCE_UNAVAILABLE"));
-            assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(3);
+            assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(2);
             assertThat(f.inventory.snapshot(12,0).committedQty()).isEqualTo(1);
             assertThat(f.scalar("SELECT current_pi_id FROM @pi_series")).isEqualTo(original.getId());
         }
@@ -161,12 +165,14 @@ class PiSkuRevisionMysqlTest {
             f.tx(()->f.pis.update(draft.getId(),edit(draft,lines,source(lock))));
             var published=f.tx(()->f.pis.confirm(draft.getId()));
             var red=published.getFulfillment().stream().filter(l->l.skuId()==10).toList();
-            assertThat(red).hasSize(2);assertThat(red.stream().mapToInt(PiFulfillmentLine::shippedQty).sum()).isEqualTo(1);
+            assertThat(red).hasSize(1);assertThat(red.stream().mapToInt(PiFulfillmentLine::shippedQty).sum()).isEqualTo(1);
             assertThat(red.stream().mapToInt(PiFulfillmentLine::remainingQty).sum()).isEqualTo(1);
-            assertThat(f.orders.selectById(oldRed).getStatus()).isEqualTo("SHIPPED");
+            assertThat(f.orders.selectById(oldRed).getStatus()).isEqualTo("PARTIAL_SHIPPED");
             long newRed=published.getRevisionSources().getFirst().orderId();
+            assertThat(newRed).isEqualTo(oldRed);
             f.tx(()->f.pis.release(published.getId(),new PiReleaseRequest("核对追加红车")));
             f.tx(()->f.stock.stockOut(new StockOutRequest(1L,newRed,List.of("QR130"))));
+            f.tx(()->f.stock.stockOut(new StockOutRequest(1L,newRed,List.of("QR120"))));
             assertThat(f.orders.selectById(newRed).getStatus()).isEqualTo("SHIPPED");
         }
     }
@@ -176,23 +182,25 @@ class PiSkuRevisionMysqlTest {
             var original=PiPaymentCorrectionMysqlTest.paid(f);f.addVehicle(131,11);
             var lock=f.tx(()->f.locks.create(new SkuLockRequest("source-with-two",1L,null,null,null,List.of(new SkuLockRequest.Item(11,2))))).getFirst();
             var draft=revision(f,original,"preclaimed-request");
-            f.tx(()->f.pis.update(draft.getId(),edit(draft,replacement(),source(lock))));
-            var separate=f.tx(()->f.conversion.convert(lock.getId(),new LockOrderRequest(1L,1,"PI_REV_"+draft.getId()+"_"+lock.getId(),null,"DOMESTIC")));
+            var blueTwice = List.of(item(10), new PiItemRequest(11L,2,new BigDecimal("100"),null,null));
+            f.tx(()->f.pis.update(draft.getId(),edit(draft,blueTwice,List.of(new PiConversionRequest.Source(lock.getId(),2)))));
+            assertThatThrownBy(()->f.tx(()->f.conversion.convert(lock.getId(),new LockOrderRequest(
+                    1L,1,"PI_REV_"+draft.getId()+"_"+lock.getId(),null,"DOMESTIC"))))
+                    .isInstanceOfSatisfying(BusinessException.class, error->assertThat(error.getCode()).isEqualTo("LOCK_BATCH_INCOMPLETE"));
             var archives=mock(PiExportArchive.class);
             doThrow(new IllegalStateException("archive queue unavailable")).when(archives).enqueue(any(),eq("CONFIRMATION"));
             ReflectionTestUtils.setField(f.pis,"archives",archives);
             assertThatThrownBy(()->f.tx(()->f.pis.confirm(draft.getId()))).hasMessage("archive queue unavailable");
-            assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(3);
-            assertThat(f.scalar("SELECT COUNT(*) FROM @pi_order_link")).isEqualTo(2);
+            assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(1);
+            assertThat(f.scalar("SELECT COUNT(*) FROM @pi_order_link")).isEqualTo(1);
             assertThat(f.scalar("SELECT current_pi_id FROM @pi_series")).isEqualTo(original.getId());
-            assertThat(f.lockMapper.selectById(lock.getId()).getConvertedQty()).isEqualTo(1);
+            assertThat(f.lockMapper.selectById(lock.getId()).getConvertedQty()).isZero();
             assertThat(f.inventory.snapshot(12,0).committedQty()).isEqualTo(1);
             assertThat(f.tx(()->f.pis.get(original.getId())).getStatus()).isEqualTo("RELEASED");
             doNothing().when(archives).enqueue(any(),eq("CONFIRMATION"));
             var published=f.tx(()->f.pis.confirm(draft.getId()));
-            assertThat(published.getRevisionSources().getFirst().orderId()).isNotEqualTo(separate.getId());
-            assertThat(f.orders.selectById(separate.getId()).getStatus()).isEqualTo("DRAFT");
-            assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(4);
+            assertThat(published.getRevisionSources().getFirst().orderId()).isEqualTo(original.getFulfillment().getFirst().orderId());
+            assertThat(f.scalar("SELECT COUNT(*) FROM @sales_order")).isEqualTo(1);
             assertThat(f.lockMapper.selectById(lock.getId()).getConvertedQty()).isEqualTo(2);
         }
     }

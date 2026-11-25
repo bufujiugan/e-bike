@@ -80,12 +80,12 @@ public class StockServiceImpl implements StockService {
         if (order.getOrderQty() - order.getShippedQty() <= 0) {
             return new StockValidationResult(false, vehicle.getFrameSn(), vehicle.getStatus(), "订单剩余数量不足");
         }
-        if (!order.isDomesticSkuOrder() && !java.util.Objects.equals(order.getModelId(), vehicle.getModelId())) {
+        if (!order.isSkuDetailOrder() && !java.util.Objects.equals(order.getModelId(), vehicle.getModelId())) {
             return new StockValidationResult(false, vehicle.getFrameSn(), vehicle.getStatus(), "整车车型与订单车型不匹配");
         }
         if(inventoryGuard!=null)inventoryGuard.requireVehicle(order,vehicle.getId());
-        if(inventoryGuard!=null && order.isDomesticSkuOrder()) inventoryGuard.requireShipment(order,vehicle.getModelId(),1);
-        if(inventoryGuard!=null && !order.isDomesticSkuOrder()) inventoryGuard.requireShipment(order,1);
+        if(inventoryGuard!=null && order.isSkuDetailOrder()) inventoryGuard.requireShipment(order,vehicle.getModelId(),1);
+        if(inventoryGuard!=null && !order.isSkuDetailOrder()) inventoryGuard.requireShipment(order,1);
             if(piBusiness!=null)piBusiness.requireWarehouseCapacity(vehicle.getId(),order.getId());
         if (piShipmentGuard != null) {
             var pi = piShipmentGuard.requireReleased(order);
@@ -139,7 +139,7 @@ public class StockServiceImpl implements StockService {
         if (!request.customerId().equals(order.getCustomerId())) throw new BusinessException("ORDER_CUSTOMER_MISMATCH", "客户与订单不匹配");
         if (!"CONFIRMED".equals(order.getStatus()) && !"PARTIAL_SHIPPED".equals(order.getStatus())) throw new BusinessException("INVALID_STATUS_TRANSITION", "订单当前不允许出库");
         if (order.getOrderQty() - order.getShippedQty() < request.vehicleQrCodes().size()) throw new BusinessException("ORDER_QTY_NOT_ENOUGH", "订单剩余数量不足");
-        if(inventoryGuard!=null && !order.isDomesticSkuOrder())inventoryGuard.requireShipment(order,request.vehicleQrCodes().size());
+        if(inventoryGuard!=null && !order.isSkuDetailOrder())inventoryGuard.requireShipment(order,request.vehicleQrCodes().size());
         var pi = piShipmentGuard == null ? null : piShipmentGuard.requireReleased(order);
         if(batchId!=null) {
             if(pi==null||dispatchRecorder==null)throw new BusinessException("PI_BATCH_MISMATCH","出库批次必须关联有效PI");
@@ -155,15 +155,15 @@ public class StockServiceImpl implements StockService {
             if (vehicle.getStatus() == 3) throw new BusinessException("VEHICLE_ALREADY_STOCKED_OUT", "整车已经出库: " + vehicle.getFrameSn());
             if (vehicle.getStatus() == null || vehicle.getStatus() != 2) throw new BusinessException("VEHICLE_NOT_IN_STOCK", "整车未入库: " + vehicle.getFrameSn());
             if (!vehicleIds.add(vehicle.getId())) throw new BusinessException("INVALID_QR_CODE", "同一整车不能重复扫码");
-            if (!order.isDomesticSkuOrder() && !java.util.Objects.equals(order.getModelId(), vehicle.getModelId())) throw new BusinessException("ORDER_MODEL_MISMATCH", "整车车型与订单车型不匹配: " + vehicle.getFrameSn());
+            if (!order.isSkuDetailOrder() && !java.util.Objects.equals(order.getModelId(), vehicle.getModelId())) throw new BusinessException("ORDER_MODEL_MISMATCH", "整车车型与订单车型不匹配: " + vehicle.getFrameSn());
             if (piShipmentGuard != null) piShipmentGuard.requireVehicle(pi, order.getId(), vehicle.getId());
             if(inventoryGuard!=null)inventoryGuard.requireVehicle(order,vehicle.getId());
-            if(inventoryGuard!=null && order.isDomesticSkuOrder()) inventoryGuard.requireShipment(order,vehicle.getModelId(),1);
+            if(inventoryGuard!=null && order.isSkuDetailOrder()) inventoryGuard.requireShipment(order,vehicle.getModelId(),1);
             if(piBusiness!=null)piBusiness.requireWarehouseCapacity(vehicle.getId(),order.getId());
             String stockNo = "OUT" + UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase();
             if (stockMapper.updateVehicleStockOut(vehicle.getId(), request.customerId(), request.orderId()) != 1) throw new BusinessException("INVALID_STATUS_TRANSITION", "整车出库状态更新失败");
             stockMapper.insertStockOut(stockNo, vehicle.getId(), request.customerId(), request.orderId(), CurrentOperator.id());
-            if (inventoryGuard != null && order.isDomesticSkuOrder())
+            if (inventoryGuard != null && order.isSkuDetailOrder())
                 inventoryGuard.allocateShipmentSource(order.getId(), vehicle.getId(), stockNo);
             if(batchId!=null)dispatchRecorder.attach(batchId,stockNo);
             stockMapper.insertOrderVehicle(request.orderId(), vehicle.getId(), stockNo);
@@ -208,7 +208,7 @@ public class StockServiceImpl implements StockService {
         if(restoreOrder!=null && java.util.Set.of("CANCELLED","CLOSED").contains(restoreOrder.getStatus()))
             throw new BusinessException("INVALID_STATUS_TRANSITION","订单已关闭，不能撤销出库重新打开订单");
         if(inventoryGuard!=null)inventoryGuard.requireRestore(record.getOrderId());
-        if (inventoryGuard != null && restoreOrder != null && restoreOrder.isDomesticSkuOrder())
+        if (inventoryGuard != null && restoreOrder != null && restoreOrder.isSkuDetailOrder())
             inventoryGuard.restoreShipmentSource(record.getOrderId(), id);
         if (stockMapper.updateVehicleStockOutCancel(record.getVehicleId(), record.getCustomerId(), record.getOrderNo(), id) != 1 || stockMapper.cancelStockOut(id, reason, CurrentOperator.id()) != 1) throw new BusinessException("INVALID_STATUS_TRANSITION", "撤销出库失败");
         if (orderMapper.decreaseShipped(record.getOrderId(), 1) != 1) {

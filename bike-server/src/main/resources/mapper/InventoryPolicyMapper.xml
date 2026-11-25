@@ -84,15 +84,16 @@
         SUM(CASE WHEN kind='ORDER' THEN qty ELSE 0 END) order_qty
       FROM (<include refid="com.bike.server.stock.InventoryPolicyMapper.commitments"/>) c GROUP BY model_id
     ), warehouse_paid AS (
-      SELECT r.model_id,CAST(JSON_UNQUOTE(JSON_EXTRACT(p.document_snapshot,'$.business.warehouseId')) AS UNSIGNED) warehouse_id,
+      SELECT sku.model_id,CAST(JSON_UNQUOTE(JSON_EXTRACT(p.document_snapshot,'$.business.warehouseId')) AS UNSIGNED) warehouse_id,
         SUM(GREATEST(ri.ordered_qty-ri.shipped_qty-ri.closed_qty,0)) qty
       FROM bike_order_reservation r JOIN bike_order_reservation_item ri ON ri.order_id=r.order_id
+      JOIN bike_production_sku sku ON sku.id=ri.sku_id
       JOIN bike_sales_order o ON o.id=r.order_id JOIN bike_pi_order_link link ON link.order_id=o.id
       JOIN bike_pi_series series ON series.id=link.series_id JOIN bike_pi p ON p.id=series.current_pi_id
       WHERE r.hold_mode IN ('PAID','CREDIT') AND o.status IN ('CONFIRMED','PARTIAL_SHIPPED')
         AND JSON_EXTRACT(p.document_snapshot,'$.business.warehouseId') IS NOT NULL
         AND JSON_TYPE(JSON_EXTRACT(p.document_snapshot,'$.business.warehouseId'))!='NULL'
-      GROUP BY r.model_id,warehouse_id
+      GROUP BY sku.model_id,warehouse_id
     ), warehouse_paid_totals AS (
       SELECT model_id,SUM(qty) qty FROM warehouse_paid GROUP BY model_id
     ), physical_rows AS (

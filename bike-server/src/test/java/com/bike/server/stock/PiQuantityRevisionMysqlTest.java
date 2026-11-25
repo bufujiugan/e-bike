@@ -50,11 +50,13 @@ class PiQuantityRevisionMysqlTest {
             assertThat(f.inventory.snapshot(10,0).committedQty()).isEqualTo(1);
             f.tx(()->f.pis.confirm(draft.getId()));
             assertThat(f.inventory.reservationItems(order).getFirst().orderedQty()).isEqualTo(2);
-            assertThat(f.orders.selectById(order).getOrderQty()).isEqualTo(2);
+            assertThat(f.orders.selectById(order).getOrderQty()).isEqualTo(3);
             assertThat(f.inventory.snapshot(10,0).committedQty()).isEqualTo(2);
             assertThat(f.scalar("SELECT converted_qty FROM @inventory_lock WHERE sku_id=10")).isEqualTo(1);
             f.tx(()->f.pis.release(draft.getId(),new PiReleaseRequest("新数量重新核对")));
             f.tx(()->f.stock.stockOut(new StockOutRequest(1L,order,List.of("QR100","QR103"))));
+            assertThat(f.orders.selectById(order).getStatus()).isEqualTo("PARTIAL_SHIPPED");
+            f.tx(()->f.stock.stockOut(new StockOutRequest(1L,order,List.of("QR120"))));
             assertThat(f.orders.selectById(order).getStatus()).isEqualTo("SHIPPED");
             assertThat(f.tx(()->f.pis.get(original.getId())).getItems().stream().filter(i->i.getSkuId()==10).findFirst().orElseThrow().getQuantity()).isEqualTo(1);
             var next=f.tx(()->PiRevisionLifecycleMysqlTest.revisions(f).create(draft.getId(),new PiRevisionRequest("below-shipped",2,"测试下限")));
@@ -82,9 +84,11 @@ class PiQuantityRevisionMysqlTest {
     @Test void insufficientSkuOrLegacyModelCapacityAndExpiredReservationsCannotPublish()throws Exception {
         try(var f=new SkuCommitmentMysqlTest.Fixture(true)) {
             var original=PiPaymentCorrectionMysqlTest.paid(f);var draft=revise(f,original,"insufficient",2);
-            assertThatThrownBy(()->f.tx(()->f.pis.confirm(draft.getId()))).hasMessageContaining("SKU当前可用库存");
+            assertThatThrownBy(()->f.tx(()->f.pis.confirm(draft.getId()))).isInstanceOfSatisfying(BusinessException.class,
+                    error -> assertThat(error.getCode()).isEqualTo("SKU_INVENTORY_NOT_ENOUGH"));
             f.addVehicle(103,10);f.legacyLock(3);
-            assertThatThrownBy(()->f.tx(()->f.pis.confirm(draft.getId()))).hasMessageContaining("车型锁定");
+            assertThatThrownBy(()->f.tx(()->f.pis.confirm(draft.getId()))).isInstanceOfSatisfying(BusinessException.class,
+                    error -> assertThat(error.getCode()).isEqualTo("INVENTORY_NOT_ENOUGH"));
             f.exec("UPDATE @inventory_lock SET status='RELEASED' WHERE lock_no='LEGACY'");
             f.exec("UPDATE @order_reservation SET hold_mode='TIMED',expires_at=DATE_SUB(NOW(3),INTERVAL 1 DAY)");
             assertThatThrownBy(()->f.tx(()->f.pis.confirm(draft.getId()))).hasMessageContaining("有效未关闭子单");
@@ -103,7 +107,7 @@ class PiQuantityRevisionMysqlTest {
             assertThat(f.orders.selectById(second.getId()).getStatus()).isEqualTo("CANCELLED");
             assertThat(f.inventory.reservationItems(second.getId()).getFirst().closedQty()).isEqualTo(1);
             assertThat(f.orders.selectById(second.getId()).getOrderQty()).isEqualTo(1);
-            assertThat(f.scalar("SELECT COUNT(*) FROM @pi_order_link")).isEqualTo(3);
+            assertThat(f.scalar("SELECT COUNT(*) FROM @pi_order_link")).isEqualTo(2);
         }
     }
 }

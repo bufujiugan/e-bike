@@ -231,7 +231,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private SalesOrderView enrichDetails(SalesOrderView order) {
-        if (order.isDomesticSkuOrder()) {
+        if (order.isSkuDetailOrder()) {
             order.setSkuLines(domesticSkuOrders.selectLines(order.getId()));
             if (canReadOrderOperations()
                     && (CurrentOperator.hasPermission("AGENT_INVENTORY_READ") || CurrentOperator.hasPermission("AGENT_LOCK_WRITE"))) {

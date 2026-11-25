@@ -68,7 +68,9 @@ public class SalesOrderView {
     private List<DomesticOrderLine> skuLines = List.of();
     private List<DomesticOrderLockSource> lockSources = List.of();
 
-    public boolean isDomesticSkuOrder() { return domesticSkuOrder; }
+    public boolean isDomesticSkuOrder() { return domesticSkuOrder && SalesType.DOMESTIC.equals(salesType); }
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    public boolean isSkuDetailOrder() { return domesticSkuOrder; }
     public void setDomesticSkuOrder(boolean value) { domesticSkuOrder = value; }
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     public List<DomesticOrderLine> getSkuLines() { return skuLines; }

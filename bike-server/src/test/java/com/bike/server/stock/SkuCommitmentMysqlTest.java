@@ -303,7 +303,7 @@ class SkuCommitmentMysqlTest {
         Fixture(boolean withPi) throws Exception {
             var config=new Configuration(new Environment("sku-commitment",new SpringManagedTransactionFactory(),source));
             config.setMapUnderscoreToCamelCase(true);
-            for(String name:List.of("InventoryPolicyMapper","AuditPolicyMapper","AgentModelAccessMapper","InventoryLockMapper","SkuLockMapper","SkuInventoryMapper","OrderMapper","OrderReservationMapper","ProductionMapper","VehicleMapper","StockMapper","OperationLogMapper","ModuleMapper","DashboardMapper","PiMapper","PiSeriesMapper","PiShipmentMapper","PiDispatchMapper","PiLogisticsMapper","PiQuantityMapper","PiWarehouseProjectionFixtureMapper","PiBusinessMapper","PaymentPriorityMapper","PaymentPrioritySqlFixture","DispatchNotificationMapper","DispatchNotificationSchemaMapper","CustomerScopeMapper"))
+            for(String name:List.of("InventoryPolicyMapper","AuditPolicyMapper","AgentModelAccessMapper","InventoryLockMapper","SkuLockMapper","SkuInventoryMapper","OrderMapper","OrderReservationMapper","DomesticSkuOrderMapper","ProductionMapper","VehicleMapper","StockMapper","OperationLogMapper","ModuleMapper","DashboardMapper","PiMapper","PiSeriesMapper","PiShipmentMapper","PiDispatchMapper","PiLogisticsMapper","PiQuantityMapper","PiWarehouseProjectionFixtureMapper","PiBusinessMapper","PaymentPriorityMapper","PaymentPrioritySqlFixture","DispatchNotificationMapper","DispatchNotificationSchemaMapper","CustomerScopeMapper"))
                 try(var input=Resources.getResourceAsStream("mapper/"+name+".xml")) {
                     var xml=new String(input.readAllBytes(),StandardCharsets.UTF_8).replace("bike_",prefix)
                             .replace("CONSTRAINT fk_dispatch_notice_", "CONSTRAINT " + prefix + "fk_dispatch_notice_");
@@ -319,6 +319,13 @@ class SkuCommitmentMysqlTest {
             locks=com.bike.server.common.CustomerScopeTestSupport.isolated(new SkuLockService(session.getMapper(SkuLockMapper.class),lockMapper,inventory,reservations,orders,guard,mock(SystemConfigMapper.class),json,validation.getValidator()));
             conversion=com.bike.server.common.CustomerScopeTestSupport.isolated(new LockOrderService(lockMapper,orders,reservations,guard));
             ReflectionTestUtils.setField(conversion,"skuInventory",inventory);
+            var lockBatchService = new SkuLockBatchService(session.getMapper(SkuLockMapper.class));
+            ReflectionTestUtils.setField(conversion,"lockBatches",lockBatchService);
+            var skuOrderMapper = session.getMapper(DomesticSkuOrderMapper.class);
+            var skuOrderService = new DomesticSkuOrderServiceImpl(
+                    skuOrderMapper,orders,reservations,lockMapper,inventory,session.getMapper(SkuLockMapper.class),guard,
+                    mock(CustomerScopeAccess.class),mock(SystemConfigMapper.class),json,true);
+            ReflectionTestUtils.setField(skuOrderService,"lockBatches",lockBatchService);
             var skuGuard=new SkuInventoryGuard(inventory);
             var inventoryGuard=new OrderInventoryGuard(reservations);
             ReflectionTestUtils.setField(inventoryGuard,"skuInventoryGuard",skuGuard);
@@ -345,8 +352,9 @@ class SkuCommitmentMysqlTest {
                     "production_mutex(id INT PRIMARY KEY)",
                     "factory_sales_order_link(factory_order_id BIGINT,order_id BIGINT)",
                     "inventory_lock(id BIGINT AUTO_INCREMENT PRIMARY KEY,lock_no VARCHAR(64),agent_id BIGINT NOT NULL,product_model_id BIGINT,lock_qty INT,released_qty INT DEFAULT 0,converted_qty INT DEFAULT 0,status VARCHAR(32),expire_time DATETIME(3),created_by BIGINT,created_at DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),released_at DATETIME(3),remark VARCHAR(500))",
-                    "domestic_sku_order(order_id BIGINT PRIMARY KEY)",
-                    "domestic_order_lock_source(order_id BIGINT,lock_id BIGINT,sku_id BIGINT,quantity INT,shipped_qty INT,expires_at DATETIME(3),renewed_expires_at DATETIME(3),expiry_audited_at DATETIME(3))",
+                    "domestic_sku_order(order_id BIGINT PRIMARY KEY,operator_id BIGINT,request_id VARCHAR(64),payload_hash CHAR(64),UNIQUE KEY(operator_id,request_id))",
+                    "domestic_order_lock_source(order_id BIGINT,lock_id BIGINT,sku_id BIGINT,quantity INT,shipped_qty INT DEFAULT 0,expires_at DATETIME(3),renewed_expires_at DATETIME(3),expiry_audited_at DATETIME(3),PRIMARY KEY(order_id,lock_id))",
+                    "domestic_stock_out_source(stock_out_id BIGINT PRIMARY KEY,order_id BIGINT,lock_id BIGINT)",
                     "inventory_lock_detail(id BIGINT AUTO_INCREMENT PRIMARY KEY,lock_id BIGINT,product_model_id BIGINT,lock_qty INT)",
                     "order_reservation(order_id BIGINT PRIMARY KEY,source_lock_id BIGINT,request_id VARCHAR(64),model_id BIGINT,reserved_qty INT,expires_at DATETIME(3),expiry_audited_at DATETIME(3),hold_mode VARCHAR(16) DEFAULT 'TIMED',payment_hold_pi_id BIGINT,payment_held_at DATETIME(3),payment_held_by BIGINT,payment_held_amount DECIMAL(18,2),released_at DATETIME(3))",
                     "vehicle(id BIGINT PRIMARY KEY,model_id BIGINT,status INT,frame_sn VARCHAR(64),vehicle_qr_code VARCHAR(100),vehicle_qr_token VARCHAR(100),qr_generated_at DATETIME(3),qr_version INT,assemble_operator_id BIGINT,assemble_time DATETIME(3),current_warehouse_id BIGINT,current_location_id BIGINT,stock_in_time DATETIME(3),stock_out_time DATETIME(3),current_customer_id BIGINT,current_order_no VARCHAR(64),created_at DATETIME(3),updated_at DATETIME(3))",
@@ -411,9 +419,11 @@ class SkuCommitmentMysqlTest {
                     var quantity=com.bike.server.common.CustomerScopeTestSupport.isolated(new com.bike.server.pi.PiQuantityService(piSeries,
                             session.getMapper(com.bike.server.pi.PiQuantityMapper.class),inventory,reservations,orders,session.getMapper(OperationLogMapper.class),json,mapper));
                     ReflectionTestUtils.setField(quantity,"locks",lockMapper);ReflectionTestUtils.setField(quantity,"converter",conversion);
+                    ReflectionTestUtils.setField(quantity,"skuOrders",skuOrderMapper);
+                    ReflectionTestUtils.setField(quantity,"lockBatches",lockBatchService);
                     ReflectionTestUtils.setField(pis,"quantityRevisions",quantity);
                     ReflectionTestUtils.setField(pis,"fulfillmentOrders",orders);ReflectionTestUtils.setField(pis,"orderInventoryGuard",inventoryGuard);
-                    piConversion=com.bike.server.common.CustomerScopeTestSupport.isolated(new com.bike.server.pi.PiConversionService(lockMapper,conversion,pis,piSeries,guard,json,validation.getValidator()));
+                    piConversion=com.bike.server.common.CustomerScopeTestSupport.isolated(new com.bike.server.pi.PiConversionService(lockMapper,skuOrderService,pis,piSeries,guard,json,validation.getValidator()));
                     var gate=new com.bike.server.pi.PiShipmentGuard(session.getMapper(com.bike.server.pi.PiShipmentMapper.class));
                     ReflectionTestUtils.setField(gate,"series",piSeries);ReflectionTestUtils.setField(stock,"piShipmentGuard",gate);
                     dispatchMapper=session.getMapper(com.bike.server.pi.PiDispatchMapper.class);

@@ -16,6 +16,7 @@ public class LockOrderService {
     private final OrderReservationMapper reservations;
     private final ProductionGuard guard;
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.stock.SkuInventoryMapper skuInventory;
+    @org.springframework.beans.factory.annotation.Autowired private SkuLockBatchService lockBatches;
     public LockOrderService(InventoryLockMapper locks,OrderMapper orders,OrderReservationMapper reservations,ProductionGuard guard){this.locks=locks;this.orders=orders;this.reservations=reservations;this.guard=guard;}
     public PageResponse<SalesOrderView> list(long id,long page,long pageSize) {
         CurrentOperator.requireWebAccess();
@@ -64,6 +65,8 @@ public class LockOrderService {
         if(lock.getExpireTime()==null||!lock.getExpireTime().isAfter(LocalDateTime.now()))throw new BusinessException("INVENTORY_LOCK_EXPIRED","锁定已到期");
         if(lock.getCustomerId()!=null&&!lock.getCustomerId().equals(request.customerId()))
             throw new BusinessException("LOCK_CUSTOMER_MISMATCH","SKU锁定必须转入原客户的订单");
+        if(lock.getLockRequestId()!=null)
+            lockBatches.requireWholeBatch(java.util.List.of(lock),java.util.Map.of(id,request.quantity()));
         if(orders.countEnabledCustomer(request.customerId())!=1||(lock.getAgentId()!=null&&orders.countEnabledAgent(lock.getAgentId())!=1)||orders.countEnabledModel(lock.getProductModelId())!=1)
             throw new BusinessException("INVALID_PARAMETER","客户、代理商或车型不存在或已停用");
         if(lock.getSkuId()!=null && skuInventory.lockSkuModel(lock.getSkuId())==null)

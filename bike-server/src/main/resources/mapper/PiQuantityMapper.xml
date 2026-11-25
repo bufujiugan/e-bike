@@ -20,6 +20,12 @@
     WHERE order_id=#{orderId} AND scope_type='SKU'
     AND (hold_mode IN ('PAID','CREDIT') OR (hold_mode='TIMED' AND expires_at&gt;NOW(3)))</update>
   <update id="closeSku">UPDATE bike_order_reservation_item SET closed_qty=ordered_qty-shipped_qty WHERE order_id=#{orderId} AND closed_qty=0</update>
+  <update id="closeSkuLine">UPDATE bike_order_reservation_item SET closed_qty=ordered_qty-shipped_qty
+    WHERE order_id=#{orderId} AND sku_id=#{skuId} AND shipped_qty=0 AND closed_qty=0</update>
+  <update id="reopenSkuLine">UPDATE bike_order_reservation_item SET ordered_qty=shipped_qty+#{quantity},closed_qty=0
+    WHERE order_id=#{orderId} AND sku_id=#{skuId} AND closed_qty&gt;0 AND ordered_qty=shipped_qty+closed_qty</update>
+  <update id="extendReservationExpiry">UPDATE bike_order_reservation SET expires_at=GREATEST(expires_at,#{expiresAt})
+    WHERE order_id=#{orderId}</update>
   <update id="closeReservation">UPDATE bike_order_reservation SET reserved_qty=0,hold_mode='RELEASED',released_at=NOW(3)
     WHERE order_id=#{orderId} AND scope_type='SKU'
     AND (hold_mode IN ('PAID','CREDIT') OR (hold_mode='TIMED' AND expires_at&gt;NOW(3)))</update>

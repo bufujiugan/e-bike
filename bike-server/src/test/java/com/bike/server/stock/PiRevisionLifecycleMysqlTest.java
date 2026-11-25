@@ -43,7 +43,7 @@ class PiRevisionLifecycleMysqlTest {
             assertThat(f.tx(()->f.pis.get(original.getId())).getStatus()).isEqualTo("SUPERSEDED");
             assertThat(f.tx(()->f.pis.get(original.getId())).getTotalAmount()).isEqualByComparingTo("200");
             assertThat(f.scalar("SELECT COUNT(*) FROM @stock_out_record WHERE status='COMPLETED'")).isEqualTo(1);
-            assertThat(f.orders.selectById(order).getStatus()).isEqualTo("SHIPPED");
+            assertThat(f.orders.selectById(order).getStatus()).isEqualTo("PARTIAL_SHIPPED");
             assertThat(f.tx(()->svc.create(original.getId(),request("commercial"))).getId()).isEqualTo(draft.getId());
             assertThatThrownBy(()->f.tx(()->f.pis.cancel(draft.getId(),new PiCancelRequest("不能抹旧收款")))).hasMessageContaining("收款记录");
             f.tx(()->f.pis.release(draft.getId(),new PiReleaseRequest("重新核对修订")));

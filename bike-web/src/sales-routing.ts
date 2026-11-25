@@ -18,7 +18,7 @@ export function salesTypeLabel(value?: string | null) {
  * 订单办理选择外销 / 欧洲后，跳转并自动打开“关联已有订单”的新建 PI。只在当前页面内存中保留，消费后清除。
  */
 export type SalesIntent =
-  | { kind: 'lock'; salesType: 'EXPORT' | 'EUROPE'; europeTradeType?: 'DOMESTIC' | 'EXPORT'; lockId: number; lockNo: string; customerId: number | null; customerName?: string }
+  | { kind: 'lock'; salesType: 'EXPORT' | 'EUROPE'; europeTradeType?: 'DOMESTIC' | 'EXPORT'; wholeBatch?: boolean; sources: Array<{ lockId: number; lockNo: string; quantity?: number }>; customerId: number | null; customerName?: string }
   | { kind: 'order'; salesType: 'EXPORT' | 'EUROPE'; europeTradeType?: 'DOMESTIC' | 'EXPORT'; orderId: number; orderNo: string; customerId: number; customerName?: string }
 
 const state = reactive<{ intent: SalesIntent | null }>({ intent: null })

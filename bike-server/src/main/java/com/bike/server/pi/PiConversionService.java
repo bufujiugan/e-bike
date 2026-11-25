@@ -2,6 +2,8 @@ package com.bike.server.pi;
 
 import com.bike.server.common.*;
 import com.bike.server.lock.*;
+import com.bike.server.order.DomesticSkuOrderRequest;
+import com.bike.server.order.DomesticSkuOrderService;
 import com.bike.server.production.ProductionGuard;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Validator;
@@ -14,15 +16,15 @@ import org.springframework.transaction.annotation.Transactional;
 public class PiConversionService {
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.common.CustomerScopeAccess customerScope;
     private final InventoryLockMapper locks;
-    private final LockOrderService converter;
+    private final DomesticSkuOrderService skuOrders;
     private final PiService pis;
     private final PiSeriesMapper series;
     private final ProductionGuard guard;
     private final ObjectMapper json;
     private final Validator validator;
-    public PiConversionService(InventoryLockMapper locks, LockOrderService converter, PiService pis,
+    public PiConversionService(InventoryLockMapper locks, DomesticSkuOrderService skuOrders, PiService pis,
             PiSeriesMapper series, ProductionGuard guard, ObjectMapper json, Validator validator) {
-        this.locks=locks; this.converter=converter; this.pis=pis; this.series=series;
+        this.locks=locks; this.skuOrders=skuOrders; this.pis=pis; this.series=series;
         this.guard=guard; this.json=json; this.validator=validator;
     }
     @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
@@ -83,14 +85,14 @@ public class PiConversionService {
         var actual=new TreeMap<Long,Long>();
         for(var item:request.pi().items()) actual.merge(item.skuId(),(long)item.quantity(),Long::sum);
         if(!expected.equals(actual)) fail("ORDER_SKU_MISMATCH","PI各SKU数量必须等于本次来源锁定转换量");
-        var orders=new ArrayList<Long>();
         var business=request.pi().document()==null?null:request.pi().document().business();
         String salesType=com.bike.server.order.SalesType.ofPi(request.pi().tradeType(),business==null?null:business.salesChannel(),business==null?null:business.domesticShipment());
-        for(var source:sources) orders.add(converter.convertForPi(source.lockId(),new LockOrderRequest(request.pi().customerId(),source.quantity(),
-                "PI_"+UUID.randomUUID(),request.pi().plannedShipDate(),salesType),salesType).getId());
-        // Service proxy calls join this transaction: a PI validation/audit failure rolls every order back.
+        var orderSources = sources.stream().map(source -> new DomesticSkuOrderRequest.Source(source.lockId(), source.quantity())).toList();
+        var order = skuOrders.createForPi(new DomesticSkuOrderRequest("PI_" + UUID.randomUUID(), request.pi().customerId(),
+                request.pi().agentId(), request.pi().plannedShipDate(), "PI 锁定转单", null, null, List.of(), orderSources), salesType);
+        // PI 校验、来源扣减、履约订单和关联在同一事务内完成。
         PiView pi=pis.create(request.pi());
-        for(long orderId:orders) if(series.link(pi.getId(),orderId,"SKU_CONVERSION")!=1) fail("PI_CONVERSION_FAILED","履约订单关联失败");
+        if(series.link(pi.getId(),order.getId(),"SKU_CONVERSION")!=1) fail("PI_CONVERSION_FAILED","履约订单关联失败");
         if(series.saveConversion(CurrentOperator.id(),request.requestId(),hash,pi.getId())!=1) fail("PI_CONVERSION_FAILED","转换幂等记录保存失败");
         return pis.get(pi.getId());
     }

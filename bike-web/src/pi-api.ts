@@ -75,7 +75,7 @@ export type PiView = {
 }
 export type PiFulfillment = { orderId: number; orderNo: string; status: string; skuId?: number | null; skuCode?: string | null; orderedQty: number; shippedQty: number; closedQty: number; remainingQty: number; reservationStatus: ReservationStatus }
 export type PiDispatchBatch = { id: number; batchNo: string; sourceType: string; executionPiId?: number | null; status: string; originalQty: number; activeQty: number; createdAt: string }
-export type PiLockOption = { id: number; lockNo: string; skuId: number; skuCode: string; productName: string; modelId: number; remainingQty: number; expireTime: string; agentId?: number | null; agentName?: string | null }
+export type PiLockOption = { id: number; lockNo: string; skuId: number; skuCode: string; productName: string; modelId: number; remainingQty: number; expireTime: string; agentId?: number | null; agentName?: string | null; lockRequestId?: number | null }
 /** 可转锁定为空时的原因统计：该客户全部 SKU 锁定 / 其他代理商 / 已到期 / 已转完或释放。 */
 export type PiLockSummary = { totalCount: number; otherAgentCount: number; expiredCount: number; finishedCount: number; lastExpiredAt?: string | null }
 export type PiMasterOption = { id: number; code: string; name: string }

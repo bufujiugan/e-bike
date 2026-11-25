@@ -59,7 +59,7 @@ public class OrderReservationService {
         }
         // A paid hold remains paid; a legacy renewal request must not turn it back into a timed hold.
         if (java.util.Set.of("PAID","CREDIT").contains(reservation.holdMode())) return order;
-        if (order.isDomesticSkuOrder()) {
+        if (order.isSkuDetailOrder()) {
             var remainingByModel = new java.util.HashMap<Long, Integer>();
             for (var line : domesticSkuOrders.selectLines(id)) {
                 remainingByModel.merge(line.modelId(), line.orderedQty() - line.shippedQty() - line.closedQty(), Integer::sum);
@@ -74,7 +74,7 @@ public class OrderReservationService {
         }
         if(skuInventoryGuard!=null)skuInventoryGuard.requireReacquire(id);
         if (reservations.renew(id, hours) != 1) throw new BusinessException("ORDER_UPDATE_FAILED", "占用更新失败");
-        if (order.isDomesticSkuOrder()) domesticSkuOrders.renewSources(id);
+        if (order.isSkuDetailOrder()) domesticSkuOrders.renewSources(id);
         if (pi != null && java.util.Set.of("CONFIRMED", "RELEASED").contains(pi.getStatus())) {
             coordinator.retainOrderAfterPayment(pi, id, pis.paymentTotal(pi.getId()));
         }

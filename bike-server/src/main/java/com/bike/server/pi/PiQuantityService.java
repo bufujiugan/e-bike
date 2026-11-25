@@ -3,6 +3,7 @@ package com.bike.server.pi;
 import com.bike.server.common.*;
 import com.bike.server.order.*;
 import com.bike.server.stock.SkuInventoryMapper;
+import com.bike.server.stock.SkuReservationItem;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.*;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,8 @@ public class PiQuantityService {
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.lock.InventoryLockMapper locks;
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.lock.LockOrderService converter;
     @org.springframework.beans.factory.annotation.Autowired private CustomerScopeAccess customerScope;
+    @org.springframework.beans.factory.annotation.Autowired private DomesticSkuOrderMapper skuOrders;
+    @org.springframework.beans.factory.annotation.Autowired private com.bike.server.lock.SkuLockBatchService lockBatches;
 
     public PiQuantityService(PiSeriesMapper series, PiQuantityMapper quantities, SkuInventoryMapper inventory,
             OrderReservationMapper reservations, OrderMapper orders, OperationLogMapper logs, ObjectMapper json, PiMapper pis) {
@@ -61,6 +64,14 @@ public class PiQuantityService {
             }
         }
         var changes=plan(piId,withoutSources(requested,selected));
+        var orderIds = series.orderIds(piId);
+        if (orderIds.size() == 1 && (!changes.isEmpty() || !selected.isEmpty())) {
+            var order = orders.selectForUpdate(orderIds.getFirst());
+            if (order.isSkuDetailOrder()) {
+                applySkuOrder(piId, order, changes, selected);
+                return;
+            }
+        }
         // Reductions release their exact commitments first; increases then check both SKU and legacy model capacity.
         changes.sort(Comparator.comparingInt((Change c)->c.quantity()-c.before().orderedQty()).thenComparingLong(c->c.before().orderId()));
         for(var change:changes) {
@@ -121,6 +132,8 @@ public class PiQuantityService {
         if(series.fulfillment(piId).isEmpty())fail("PI_REVISION_SOURCE_INVALID","须先建立完整履约关系后选择增量来源");
         if(sources.size()>100)fail("INVALID_PARAMETER","新增来源最多100条");
         var seen=new HashSet<Long>();var result=new ArrayList<PiRevisionSourceView>();
+        var selectedBatches = new HashMap<Long, List<com.bike.server.lock.InventoryLockView>>();
+        var requestedQuantities = new HashMap<Long, Integer>();
         for(var source:sources.stream().sorted(Comparator.comparingLong(PiConversionRequest.Source::lockId)).toList()) {
             if(source.lockId()<=0 || source.quantity()<1 || source.quantity()>1000000 || !seen.add(source.lockId()))
                 fail("INVALID_PARAMETER","新增来源或数量无效，不能重复选择同一锁定");
@@ -139,8 +152,78 @@ public class PiQuantityService {
             if(sku==null)fail("SKU_NOT_FOUND","新增SKU或所属车型不存在或已停用");
             result.add(new PiRevisionSourceView(lock.getId(),lock.getSkuId(),source.quantity(),lock.getLockNo(),sku.skuCode(),
                     sku.productName(),lock.getExpireTime(),null));
+            if (lock.getLockRequestId() != null) {
+                selectedBatches.computeIfAbsent(lock.getLockRequestId(), ignored -> new ArrayList<>()).add(lock);
+                requestedQuantities.put(lock.getId(), source.quantity());
+            }
         }
+        for (var batch : selectedBatches.values()) lockBatches.requireWholeBatch(batch, requestedQuantities);
         return result;
+    }
+
+    private void applySkuOrder(long piId, SalesOrderView order, List<Change> changes, List<PiRevisionSourceView> sources) {
+        long orderId = order.getId();
+        var held = reservations.selectForUpdate(orderId);
+        if (held == null || reservations.expiredForOrder(orderId) > 0)
+            fail("ORDER_RESERVATION_EXPIRED", "订单占用已到期或已释放，请先重新占用");
+        boolean timed = "TIMED".equals(held.holdMode());
+        changes.sort(Comparator.comparingInt(change -> change.quantity() - change.before().orderedQty()));
+        for (var change : changes) {
+            long skuId = change.before().skuId();
+            int target = change.quantity();
+            int increase = target - change.before().orderedQty();
+            if (increase > 0) {
+                if (timed && inventory.countLockSources(orderId, skuId) > 0)
+                    fail("PI_REVISION_SOURCE_REQUIRED", "限时占用的 SKU 增量须选择足额有效来源锁定");
+                requireSkuIncrease(orderId, skuId, target - change.before().shippedQty(), increase, timed);
+            }
+            int updated = target == 0 ? quantities.closeSkuLine(orderId, skuId) : quantities.resizeSku(orderId, skuId, target);
+            if (updated != 1) fail("PI_QUANTITY_CONFLICT", "订单 SKU 数量已变化，请刷新重试");
+            auditSkuRevision(piId, orderId, skuId, target, change.before());
+        }
+        for (var source : sources) {
+            var line = inventory.reservationItems(orderId).stream().filter(item -> item.skuId() == source.skuId())
+                    .findFirst().orElse(null);
+            if (!timed) requireSkuIncrease(orderId, source.skuId(),
+                    source.quantity() + (line == null ? 0 : line.remainingQty()), source.quantity(), false);
+            int updated = line == null ? inventory.insertDomesticReservationItem(orderId, source.skuId(), source.quantity())
+                    : line.closedQty() > 0 ? quantities.reopenSkuLine(orderId, source.skuId(), source.quantity())
+                    : quantities.resizeSku(orderId, source.skuId(), line.orderedQty() + source.quantity());
+            if (updated != 1 || locks.convert(source.lockId(), source.quantity()) != 1
+                    || skuOrders.insertSource(orderId, new DomesticOrderLockSource(source.lockId(), source.lockNo(),
+                            source.skuId(), source.quantity(), source.expiresAt())) != 1
+                    || quantities.convertedSource(piId, source.lockId(), orderId) != 1)
+                fail("PI_REVISION_FAILED", "新增 SKU 锁定来源转入原订单失败");
+            quantities.extendReservationExpiry(orderId, source.expiresAt());
+            auditSkuRevision(piId, orderId, source.skuId(), source.quantity(), source);
+        }
+        var items = inventory.reservationItems(orderId);
+        int total = items.stream().mapToInt(item -> item.orderedQty() - item.closedQty()).sum();
+        int shipped = items.stream().mapToInt(SkuReservationItem::shippedQty).sum();
+        if (total <= 0 || quantities.resizeOrder(orderId, total) != 1
+                || quantities.resizeReservation(orderId, total) != 1
+                || orders.updateStatus(orderId, total == shipped ? "SHIPPED" : shipped > 0 ? "PARTIAL_SHIPPED" : "CONFIRMED") != 1)
+            fail("PI_QUANTITY_CONFLICT", "履约订单数量或状态更新失败");
+    }
+
+    private void requireSkuIncrease(long orderId, long skuId, int remaining, int increase, boolean timed) {
+        Long modelId = inventory.lockSkuModel(skuId);
+        if (modelId == null) fail("SKU_NOT_FOUND", "SKU 或车型不存在或已停用");
+        var sku = timed ? inventory.snapshot(skuId, orderId) : inventory.selectFulfillmentSnapshot(skuId, orderId);
+        if (sku.availableForOrder() < remaining) fail("SKU_INVENTORY_NOT_ENOUGH", "修订增加数量超过该 SKU 当前可用库存");
+        var model = timed ? reservations.snapshot(modelId, 0) : reservations.selectFulfillmentSnapshot(modelId, 0);
+        if (model.availableForOrder() < increase) fail("INVENTORY_NOT_ENOUGH", "修订增加数量超过该车型当前可用库存");
+    }
+
+    private void auditSkuRevision(long piId, long orderId, long skuId, int quantity, Object previous) {
+        try {
+            if (logs.insert("PI_QUANTITY_REVISION", "PI:" + piId, "确认 PI 订单 SKU 数量修订",
+                    CurrentOperator.id(), CurrentOperator.username(), json.writeValueAsString(previous),
+                    json.writeValueAsString(Map.of("orderId", orderId, "skuId", skuId, "quantity", quantity)),
+                    CurrentOperator.clientIp(), "审核库存占用及锁定来源") != 1) fail("PI_AUDIT_FAILED", "PI 数量修订审计失败");
+        } catch (com.fasterxml.jackson.core.JsonProcessingException error) {
+            throw new IllegalStateException("PI 数量修订审计序列化失败，piId=" + piId, error);
+        }
     }
 
     private Map<Long,Integer> withoutSources(Map<Long,Integer> requested,List<PiRevisionSourceView> sources) {
@@ -176,12 +259,6 @@ public class PiQuantityService {
             long current=existing.stream().mapToLong(l->(long)l.orderedQty()-l.closedQty()).sum();
             long delta=target-current;
             if(delta==0)continue;
-            // Child orders are currently single-SKU; explicitly reject ambiguous historical multi-line layouts.
-            for(var line:existing) {
-                if(lines.stream().filter(l->l.orderId()==line.orderId()).count()!=1
-                        || inventory.reservationItems(line.orderId()).size()!=1)
-                    fail("PI_QUANTITY_LEGACY_ORDER","履约子单不是单SKU，须先核对数量分配");
-            }
             if(delta>0) {
                 var chosen=existing.stream().filter(this::active).reduce((a,b)->b).orElseThrow(
                         ()->new BusinessException("ORDER_RESERVATION_EXPIRED","没有有效未关闭子单可增加数量，请先核对库存占用"));
