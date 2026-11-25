@@ -109,8 +109,13 @@ public class ExcelTransferService {
 
     @org.springframework.transaction.annotation.Transactional(isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public byte[] export(String module, String keyword) {
+        return export(module, keyword, null, null);
+    }
+
+    @org.springframework.transaction.annotation.Transactional(isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
+    public byte[] export(String module, String keyword, String salesType, String transportArrangement) {
         CurrentOperator.requirePermission("DATA_EXPORT");
-        ModulePageResponse page = moduleService.list(module, keyword, 1, 100);
+        ModulePageResponse page = exportPage(module, keyword, salesType, transportArrangement, 1);
         if (page.total() > 1_048_575) throw new BusinessException("EXPORT_LIMIT", "结果超出单个Excel工作表容量，请缩小查询范围");
         try (var workbook = new org.apache.poi.xssf.streaming.SXSSFWorkbook(100); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             workbook.setCompressTempFiles(true);
@@ -135,7 +140,7 @@ public class ExcelTransferService {
                     }
                 }
                 if (written >= expected) break;
-                page = moduleService.list(module, keyword, ++pageNumber, 100);
+                page = exportPage(module, keyword, salesType, transportArrangement, ++pageNumber);
                 if (page.rows().isEmpty()) throw new BusinessException("EXPORT_INCOMPLETE", "导出数据不完整，请重新查询后重试");
             }
             for (int i = 0; i < widths.length; i++) sheet.setColumnWidth(i, widths[i] * 256);
@@ -145,6 +150,12 @@ public class ExcelTransferService {
         } catch (IOException exception) {
             throw new BusinessException("EXPORT_FAILED", "Excel 导出失败");
         }
+    }
+
+    private ModulePageResponse exportPage(String module, String keyword, String salesType, String transportArrangement,
+                                          long pageNumber) {
+        if (salesType == null && transportArrangement == null) return moduleService.list(module, keyword, pageNumber, 100);
+        return moduleService.list(module, keyword, salesType, transportArrangement, pageNumber, 100);
     }
 
     private ImportResult importWorkbook(MultipartFile file, SheetImporter sheetImporter) {

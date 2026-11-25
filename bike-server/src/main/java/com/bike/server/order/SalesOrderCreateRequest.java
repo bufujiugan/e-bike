@@ -17,7 +17,18 @@ public record SalesOrderCreateRequest(@NotNull(message = "客户不能为空") L
                                       @Min(value = 1, message = "订单数量必须大于 0") int orderQty,
                                       LocalDate plannedShipDate,
                                       @Size(max = 500, message = "备注长度不能超过 500") String remark,
-                                      @Pattern(regexp = "DOMESTIC|EXPORT|EUROPE", message = "销售类型无效") String salesType) {
+                                      @Pattern(regexp = "DOMESTIC|EXPORT|EUROPE", message = "销售类型无效") String salesType,
+                                      String transportArrangement,
+                                      @Size(max = 500, message = "运输备注长度不能超过 500") String transportRemark) {
+    public SalesOrderCreateRequest {
+        transportRemark = OrderTransportRequest.normalizeRemark(transportRemark);
+    }
+
+    public SalesOrderCreateRequest(Long customerId, Long agentId, Long modelId, int orderQty, LocalDate plannedShipDate,
+                                   String remark, String salesType) {
+        this(customerId, agentId, modelId, orderQty, plannedShipDate, remark, salesType, null, null);
+    }
+
     /** 兼容原有调用方：不指定销售类型。 */
     public SalesOrderCreateRequest(Long customerId, Long agentId, Long modelId, int orderQty, LocalDate plannedShipDate, String remark) {
         this(customerId, agentId, modelId, orderQty, plannedShipDate, remark, null);

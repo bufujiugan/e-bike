@@ -11,4 +11,9 @@ public interface ModuleService {
     default ModulePageResponse list(String module, String keyword, String salesTypes, long page, long pageSize) {
         return list(module, keyword, page, pageSize);
     }
+
+    default ModulePageResponse list(String module, String keyword, String salesTypes, String transportArrangement,
+                                    long page, long pageSize) {
+        return list(module, keyword, salesTypes, page, pageSize);
+    }
 }

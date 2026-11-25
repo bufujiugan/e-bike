@@ -4,6 +4,7 @@ import com.bike.server.common.BusinessException;
 import com.bike.server.common.CurrentOperator;
 import com.bike.server.common.PageResponse;
 import com.bike.server.production.ProductionGuard;
+import java.util.HashMap;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -36,6 +37,7 @@ public class OrderServiceImpl implements OrderService {
         }
         var types = SalesType.filter(salesTypes);
         var records = orderMapper.selectPage(normalized, status, agentId, types, (p - 1) * size, size);
+        if (!canReadOrderOperations()) records.forEach(order -> order.setTransportRemark(null));
         records.forEach(OrderServiceImpl::redactReservationForAgent);
         return new PageResponse<>(records, p, size, orderMapper.count(normalized, status, agentId, types));
     }
@@ -66,6 +68,10 @@ public class OrderServiceImpl implements OrderService {
     public SalesOrderView create(SalesOrderCreateRequest request) {
         requireWrite();
         validateReferences(request);
+        if (request.transportArrangement() != null || request.transportRemark() != null) {
+            requireDomesticTransport(request.salesType());
+            OrderTransportRequest.validateArrangement(request.transportArrangement());
+        }
         String no = "SO" + UUID.randomUUID().toString().replace("-", "").substring(0, 14).toUpperCase();
         Long operatorId = CurrentOperator.id();
         if (orderMapper.insertOrder(no, request, operatorId) != 1 || orderMapper.insertItem(no, request) != 1) {
@@ -74,6 +80,30 @@ public class OrderServiceImpl implements OrderService {
         orderMapper.insertOperationLog("ORDER_CREATE", no, "创建订单", operatorId, CurrentOperator.username(),
                 null, "DRAFT", CurrentOperator.clientIp(), request.remark());
         return orderMapper.selectByNo(no);
+    }
+
+    @Override
+    @Transactional
+    public SalesOrderView updateTransport(long id, OrderTransportRequest request) {
+        requireWrite();
+        String arrangement = OrderTransportRequest.validateArrangement(request.transportArrangement());
+        String remark = request.transportRemark();
+        SalesOrderView order = orderMapper.selectForUpdate(id);
+        if (order == null) throw new BusinessException("ORDER_NOT_FOUND", "订单不存在");
+        checkAgentScope(order);
+        requireDomesticTransport(order.getSalesType());
+        if (Set.of("CANCELLED", "CLOSED").contains(order.getStatus())) {
+            throw new BusinessException("INVALID_STATUS_TRANSITION", "已作废或关闭的订单不能修改运输信息");
+        }
+        if (Objects.equals(arrangement, order.getTransportArrangement()) && Objects.equals(remark, order.getTransportRemark())) {
+            return enrichDetails(order);
+        }
+        if (orderMapper.updateTransport(id, arrangement, remark) != 1) {
+            throw new BusinessException("ORDER_UPDATE_FAILED", "运输信息保存失败");
+        }
+        orderMapper.insertOperationLog("ORDER_UPDATE", order.getOrderNo(), "更新运输信息", CurrentOperator.id(),
+                CurrentOperator.username(), order.getStatus(), order.getStatus(), CurrentOperator.clientIp(), arrangement);
+        return enrichDetails(orderMapper.selectById(id));
     }
 
     @Override
@@ -181,6 +211,7 @@ public class OrderServiceImpl implements OrderService {
         if (!CurrentOperator.hasRole("WEB_AGENT")) return;
         order.setPurchaseContractParty(null);
         order.setPurchaseContractNo(null);
+        order.setTransportRemark(null);
         order.setReservationHoldMode(null);
         order.setReservationHeldAt(null);
         order.setReservationExpiresAt(null);
@@ -201,6 +232,14 @@ public class OrderServiceImpl implements OrderService {
     private SalesOrderView enrichDetails(SalesOrderView order) {
         if (contractLinks != null) order.setHasLinkedPi(contractLinks.existsPiForOrder(order.getId()));
         order.setShippedVehicles(orderMapper.selectShippedVehicles(order.getId()));
+        if (SalesType.DOMESTIC.equals(order.getSalesType()) && !order.getShippedVehicles().isEmpty() && canReadOrderOperations()) {
+            var notes = new HashMap<String, String>();
+            for (OrderDispatchNote note : orderMapper.selectDispatchNotes(order.getId())) {
+                notes.put(note.stockOutNo(), note.remark());
+            }
+            order.setDispatchNotes(notes);
+        }
+        if (!canReadOrderOperations()) order.setTransportRemark(null);
         if ("SHIPPED".equals(order.getStatus()) && canReadOrderOperations()) {
             order.setOperations(orderMapper.selectOrderOperations(order.getId(), order.getOrderNo()));
         }
@@ -213,6 +252,12 @@ public class OrderServiceImpl implements OrderService {
         }
         redactReservationForAgent(order);
         return order;
+    }
+
+    private static void requireDomesticTransport(String salesType) {
+        if (!SalesType.DOMESTIC.equals(salesType)) {
+            throw new BusinessException("ORDER_TRANSPORT_DOMESTIC_ONLY", "仅国内内销订单可登记运输信息");
+        }
     }
 
     private static boolean canReadOrderOperations() {

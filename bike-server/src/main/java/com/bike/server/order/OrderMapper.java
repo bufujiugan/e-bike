@@ -15,6 +15,8 @@ public interface OrderMapper {
     SalesOrderView selectById(@Param("id") long id);
     SalesOrderView selectByNo(@Param("orderNo") String orderNo);
     List<OrderVehicleView> selectShippedVehicles(@Param("orderId") long orderId);
+    List<OrderDispatchNote> selectDispatchNotes(@Param("orderId") long orderId);
+    int updateTransport(@Param("id") long id, @Param("arrangement") String arrangement, @Param("remark") String remark);
     List<OrderOperationView> selectOrderOperations(@Param("orderId") long orderId, @Param("orderNo") String orderNo);
     int insertOrder(@Param("orderNo") String orderNo, @Param("request") SalesOrderCreateRequest request, @Param("createdBy") Long createdBy);
     int insertItem(@Param("orderNo") String orderNo, @Param("request") SalesOrderCreateRequest request);

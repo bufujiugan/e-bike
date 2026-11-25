@@ -16,6 +16,10 @@ public class OrderController {
     @GetMapping("/{id}") public ApiResponse<SalesOrderView> get(@PathVariable long id){return ApiResponse.success("查询成功",orderService.get(id));}
     @PostMapping public ApiResponse<SalesOrderView> create(@Valid @RequestBody SalesOrderCreateRequest request){return ApiResponse.success("创建成功",orderService.create(request));}
     @PutMapping("/{id}") public ApiResponse<SalesOrderView> update(@PathVariable long id,@Valid @RequestBody SalesOrderCreateRequest request){return ApiResponse.success("更新成功",orderService.update(id,request));}
+    @PutMapping("/{id}/transport")
+    public ApiResponse<SalesOrderView> updateTransport(@PathVariable long id, @Valid @RequestBody OrderTransportRequest request) {
+        return ApiResponse.success("运输信息已保存", orderService.updateTransport(id, request));
+    }
     @PostMapping("/{id}/confirm") public ApiResponse<SalesOrderView> confirm(@PathVariable long id){return ApiResponse.success("订单已确认",orderService.confirm(id));}
     @PostMapping("/{id}/cancel") public ApiResponse<SalesOrderView> cancel(@PathVariable long id,@RequestParam(required=false,defaultValue="业务作废") String reason){return ApiResponse.success("订单已作废",orderService.cancel(id,reason));}
 }

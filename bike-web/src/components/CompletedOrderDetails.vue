@@ -3,6 +3,7 @@ import { tr } from '../i18n/language'
 import { computed, ref, watch } from 'vue'
 import api from '../api'
 import { salesTypeLabel } from '../sales-routing'
+import { transportLabel, type TransportArrangement } from '../order-transport'
 import StatusTag from './business/StatusTag.vue'
 import EmptyState from './common/EmptyState.vue'
 import DataTable from './table/DataTable.vue'
@@ -38,6 +39,9 @@ type OrderDetails = {
   createdAt: string
   updatedAt: string
   remark: string | null
+  transportArrangement?: TransportArrangement | null
+  transportRemark?: string | null
+  dispatchNotes?: Record<string, string>
   shippedVehicles: Shipment[]
   operations?: OrderOperation[]
 }
@@ -124,6 +128,8 @@ watch([visible, () => props.orderNo, refreshVersion], async ([isVisible, orderNo
           <div><dt>{{ tr("订单数量") }}</dt><dd>{{ order.orderQty }} {{ tr("台") }}</dd></div>
           <div><dt>{{ tr("已出库") }}</dt><dd>{{ order.shippedQty }} {{ tr("台") }}</dd></div>
           <div><dt>{{ tr("计划出库日") }}</dt><dd>{{ order.plannedShipDate || '—' }}</dd></div>
+          <div v-if="order.salesType === 'DOMESTIC'"><dt>{{ tr("运输安排") }}</dt><dd>{{ tr(transportLabel(order.transportArrangement)) }}</dd></div>
+          <div v-if="order.transportRemark" class="detail-remark"><dt>{{ tr("运输备注") }}</dt><dd>{{ order.transportRemark }}</dd></div>
           <div><dt>{{ tr("最新出库时间") }}</dt><dd>{{ formatTime(order.shippedVehicles[0]?.stockOutTime) }}</dd></div>
           <div v-if="order.operations"><dt>{{ tr("创建人") }}</dt><dd>{{ createOperation?.operatorName || tr('未记录') }}</dd></div>
           <div><dt>{{ tr("创建时间") }}</dt><dd>{{ formatTime(order.createdAt) }}</dd></div>
@@ -164,6 +170,9 @@ watch([visible, () => props.orderNo, refreshVersion], async ([isVisible, orderNo
           </el-table-column>
           <el-table-column prop="vehicleQrCode" :label='tr("整车总码")' min-width="160" show-overflow-tooltip />
           <el-table-column prop="frameSn" :label='tr("车架码")' min-width="140" show-overflow-tooltip />
+          <el-table-column v-if="order.dispatchNotes" :label='tr("出库备注")' min-width="200" show-overflow-tooltip>
+            <template #default="{ row }">{{ order.dispatchNotes[row.stockOutNo] || '—' }}</template>
+          </el-table-column>
         </DataTable>
       </section>
     </div>

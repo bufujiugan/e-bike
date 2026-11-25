@@ -43,6 +43,12 @@ public class ModuleServiceImpl implements ModuleService {
 
     @Override
     public ModulePageResponse list(String module, String keyword, String salesTypes, long page, long pageSize) {
+        return list(module, keyword, salesTypes, null, page, pageSize);
+    }
+
+    @Override
+    public ModulePageResponse list(String module, String keyword, String salesTypes, String transportArrangement,
+                                   long page, long pageSize) {
         if (!SUPPORTED_MODULES.contains(module)) {
             throw new BusinessException("MODULE_NOT_SUPPORTED", "不支持的业务模块");
         }
@@ -64,14 +70,16 @@ public class ModuleServiceImpl implements ModuleService {
                 .stream().filter(definition.columns()::contains).findFirst().orElse(definition.columns().getFirst());
         boolean financialAudit = com.bike.server.common.FinancialAuditAccess.allowed();
         var salesTypeFilter = "orders".equals(module) ? com.bike.server.order.SalesType.filter(salesTypes) : null;
+        String transportFilter = "orders".equals(module)
+                ? com.bike.server.order.OrderTransportRequest.validateArrangement(transportArrangement) : null;
         long offset = (normalizedPage - 1) * normalizedSize;
         // 未按销售类型筛选时沿用原查询签名。
-        long total = salesTypeFilter == null
+        long total = salesTypeFilter == null && transportFilter == null
                 ? moduleMapper.countRows(normalize(module), agentId, definition.columns(), normalizedKeyword, financialAudit)
-                : moduleMapper.countRows(normalize(module), agentId, definition.columns(), normalizedKeyword, financialAudit, salesTypeFilter);
-        var records = salesTypeFilter == null
+                : moduleMapper.countRows(normalize(module), agentId, definition.columns(), normalizedKeyword, financialAudit, salesTypeFilter, transportFilter);
+        var records = salesTypeFilter == null && transportFilter == null
                 ? moduleMapper.selectRowsPage(normalize(module), agentId, definition.columns(), normalizedKeyword, sortColumn, offset, normalizedSize, financialAudit)
-                : moduleMapper.selectRowsPage(normalize(module), agentId, definition.columns(), normalizedKeyword, sortColumn, offset, normalizedSize, financialAudit, salesTypeFilter);
+                : moduleMapper.selectRowsPage(normalize(module), agentId, definition.columns(), normalizedKeyword, sortColumn, offset, normalizedSize, financialAudit, salesTypeFilter, transportFilter);
         var columns = new java.util.ArrayList<>(definition.columns());
         if ("parts".equals(module)) columns.add("图片");
         if ("stock-out".equals(module)) {
@@ -183,13 +191,14 @@ public class ModuleServiceImpl implements ModuleService {
         definitions.put("agent-inventory", definitions.get("inventory"));
         definitions.put("agent-locks", definitions.get("inventory-locks"));
         definitions.put("purchase-intents", definition("代理商采购意向与后续订单线索", List.of("代理商", "授权车型", "意向数量", "有效期", "状态", "创建时间", "修改时间"), "新增采购意向"));
-        // ID 追加到响应末尾，保留现有按列下标读取的编辑、状态变更和详情逻辑。
+        // ID 和新增列追加到响应末尾，保留现有按列下标读取的编辑、状态变更和详情逻辑。
         definitions.replaceAll((module, definition) -> {
             List<String> identifiers = switch (module) {
                 case "inventory", "agent-inventory" -> List.of("车型 ID", "仓库 ID", "库位 ID");
                 case "warehouses" -> List.of("仓库 ID", "库位 ID");
                 case "locations" -> List.of("ID", "仓库 ID");
-                case "orders" -> List.of("ID", "订单明细 ID");
+                case "orders" -> List.of("ID", "订单明细 ID", "运输安排");
+                case "inventory-locks" -> List.of("ID", "SKU");
                 default -> List.of("ID");
             };
             List<String> columns = new java.util.ArrayList<>(definition.columns());

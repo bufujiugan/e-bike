@@ -17,14 +17,24 @@ public interface ModuleMapper {
     List<Map<String, Object>> selectRowsPage(@Param("module") String module, @Param("agentId") Long agentId,
             @Param("columns") List<String> columns, @Param("keyword") String keyword,
             @Param("sortColumn") String sortColumn, @Param("offset") long offset, @Param("limit") long limit,
-            @Param("financialAudit") boolean financialAudit, @Param("salesTypes") List<String> salesTypes);
+            @Param("financialAudit") boolean financialAudit, @Param("salesTypes") List<String> salesTypes,
+            @Param("transportArrangement") String transportArrangement);
+    default List<Map<String, Object>> selectRowsPage(String module, Long agentId, List<String> columns, String keyword,
+            String sortColumn, long offset, long limit, boolean financialAudit, List<String> salesTypes) {
+        return selectRowsPage(module, agentId, columns, keyword, sortColumn, offset, limit, financialAudit, salesTypes, null);
+    }
     default List<Map<String, Object>> selectRowsPage(String module, Long agentId, List<String> columns, String keyword,
             String sortColumn, long offset, long limit, boolean financialAudit) {
         return selectRowsPage(module, agentId, columns, keyword, sortColumn, offset, limit, financialAudit, null);
     }
     long countRows(@Param("module") String module, @Param("agentId") Long agentId,
             @Param("columns") List<String> columns, @Param("keyword") String keyword,
-            @Param("financialAudit") boolean financialAudit, @Param("salesTypes") List<String> salesTypes);
+            @Param("financialAudit") boolean financialAudit, @Param("salesTypes") List<String> salesTypes,
+            @Param("transportArrangement") String transportArrangement);
+    default long countRows(String module, Long agentId, List<String> columns, String keyword, boolean financialAudit,
+            List<String> salesTypes) {
+        return countRows(module, agentId, columns, keyword, financialAudit, salesTypes, null);
+    }
     default long countRows(String module, Long agentId, List<String> columns, String keyword, boolean financialAudit) {
         return countRows(module, agentId, columns, keyword, financialAudit, null);
     }

@@ -14,7 +14,7 @@
             ORDER BY sp.id DESC LIMIT 1))</sql>
     <!-- salesTypes 由 Service 固定校验为 DOMESTIC/EXPORT/EUROPE/PENDING。 -->
     <sql id="salesTypeFilter"><if test="salesTypes != null and salesTypes.size() > 0"> AND (<foreach collection="salesTypes" item="salesTypeItem" separator=" OR "><choose><when test="salesTypeItem == 'PENDING'">(<include refid="com.bike.server.order.OrderMapper.effectiveSalesType"/>) IS NULL</when><otherwise>(<include refid="com.bike.server.order.OrderMapper.effectiveSalesType"/>)=#{salesTypeItem}</otherwise></choose></foreach>)</if></sql>
-    <sql id="orderSelect">SELECT <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationStatus"/> reservation_status,r.hold_mode reservation_hold_mode,r.payment_held_at reservation_held_at,r.expires_at reservation_expires_at,il.lock_no source_lock_no,r.reserved_qty,o.id,o.order_no,o.customer_id,c.customer_name,o.agent_id,a.agent_name,i.product_model_id model_id,m.model_name,i.ordered_qty order_qty,i.shipped_qty,o.status,(<include refid="com.bike.server.order.OrderMapper.effectiveSalesType"/>) sales_type,o.sales_type selected_sales_type,o.planned_ship_date,o.remark,o.created_at,o.updated_at FROM bike_sales_order o JOIN bike_customer c ON c.id=o.customer_id LEFT JOIN bike_agent a ON a.id=o.agent_id JOIN bike_sales_order_item i ON i.order_id=o.id JOIN bike_product_model m ON m.id=i.product_model_id LEFT JOIN bike_order_reservation r ON r.order_id=o.id LEFT JOIN bike_inventory_lock il ON il.id=r.source_lock_id</sql>
+    <sql id="orderSelect">SELECT <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationStatus"/> reservation_status,r.hold_mode reservation_hold_mode,r.payment_held_at reservation_held_at,r.expires_at reservation_expires_at,il.lock_no source_lock_no,r.reserved_qty,o.id,o.order_no,o.customer_id,c.customer_name,o.agent_id,a.agent_name,i.product_model_id model_id,m.model_name,i.ordered_qty order_qty,i.shipped_qty,o.status,(<include refid="com.bike.server.order.OrderMapper.effectiveSalesType"/>) sales_type,o.sales_type selected_sales_type,o.planned_ship_date,o.remark,o.transport_arrangement,o.transport_remark,o.created_at,o.updated_at FROM bike_sales_order o JOIN bike_customer c ON c.id=o.customer_id LEFT JOIN bike_agent a ON a.id=o.agent_id JOIN bike_sales_order_item i ON i.order_id=o.id JOIN bike_product_model m ON m.id=i.product_model_id LEFT JOIN bike_order_reservation r ON r.order_id=o.id LEFT JOIN bike_inventory_lock il ON il.id=r.source_lock_id</sql>
     <sql id="orderWhere"><where><bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=o.customer_id)</if><if test="keyword != null and keyword != ''">AND (o.order_no LIKE CONCAT('%',#{keyword},'%') OR c.customer_name LIKE CONCAT('%',#{keyword},'%'))</if><if test="status != null and status != ''">AND o.status=#{status}</if><if test="agentId != null">AND o.agent_id=#{agentId}</if><include refid="salesTypeFilter"/></where></sql>
     <select id="selectPage" resultType="com.bike.server.order.SalesOrderView"><include refid="orderSelect"/><include refid="orderWhere"/> ORDER BY o.created_at DESC,o.id DESC LIMIT #{offset},#{limit}</select>
     <select id="count" resultType="long">SELECT COUNT(*) FROM bike_sales_order o JOIN bike_customer c ON c.id=o.customer_id <include refid="orderWhere"/></select>
@@ -27,6 +27,20 @@
         JOIN bike_stock_out_record so ON so.id=ov.stock_out_record_id AND so.status='COMPLETED'
         WHERE ov.order_id=#{orderId}
         ORDER BY so.operation_time DESC
+    </select>
+    <select id="selectDispatchNotes" resultType="com.bike.server.order.OrderDispatchNote">
+        SELECT shipment.stock_out_no,
+               SUBSTRING(shipment.remark, LOCATE('；出库备注：', shipment.remark) + CHAR_LENGTH('；出库备注：')) remark
+        FROM (
+            SELECT so.stock_out_no,
+                   (SELECT log.remark FROM bike_operation_log log
+                    WHERE log.business_type='STOCK_OUT' AND log.business_id=so.stock_out_no
+                    ORDER BY log.id DESC LIMIT 1) remark
+            FROM bike_sales_order_vehicle ov
+            JOIN bike_stock_out_record so ON so.id=ov.stock_out_record_id AND so.status='COMPLETED'
+            WHERE ov.order_id=#{orderId}
+        ) shipment
+        WHERE LOCATE('；出库备注：', shipment.remark) &gt; 0
     </select>
     <select id="selectOrderOperations" resultType="com.bike.server.order.OrderOperationView">
         SELECT business_type, action, operator_name, operation_time, stock_out_no
@@ -70,7 +84,10 @@
     <select id="countEnabledCustomer" resultType="int">SELECT COUNT(*) FROM bike_customer WHERE id=#{customerId} AND status='ENABLED'</select>
     <select id="countEnabledModel" resultType="int">SELECT COUNT(*) FROM bike_product_model WHERE id=#{modelId} AND enabled=1</select>
     <select id="countEnabledAgent" resultType="int">SELECT COUNT(*) FROM bike_agent WHERE id=#{agentId} AND status='ENABLED'</select>
-    <insert id="insertOrder">INSERT INTO bike_sales_order(order_no,customer_id,agent_id,planned_ship_date,status,sales_type,created_by,remark) VALUES(#{orderNo},#{request.customerId},#{request.agentId},#{request.plannedShipDate},'DRAFT',#{request.salesType},#{createdBy},#{request.remark})</insert>
+    <insert id="insertOrder">INSERT INTO bike_sales_order(order_no,customer_id,agent_id,planned_ship_date,status,sales_type,created_by,remark,transport_arrangement,transport_remark) VALUES(#{orderNo},#{request.customerId},#{request.agentId},#{request.plannedShipDate},'DRAFT',#{request.salesType},#{createdBy},#{request.remark},#{request.transportArrangement},#{request.transportRemark})</insert>
+    <update id="updateTransport">
+        UPDATE bike_sales_order SET transport_arrangement=#{arrangement}, transport_remark=#{remark} WHERE id=#{id}
+    </update>
     <!-- 只允许为待选类型订单补选一次，已有类型不可覆盖。 -->
     <update id="assignSalesType">UPDATE bike_sales_order SET sales_type=#{salesType} WHERE id=#{id} AND sales_type IS NULL</update>
     <insert id="insertItem">INSERT INTO bike_sales_order_item(order_id,product_model_id,ordered_qty,shipped_qty) SELECT id,#{request.modelId},#{request.orderQty},0 FROM bike_sales_order WHERE order_no=#{orderNo}</insert>

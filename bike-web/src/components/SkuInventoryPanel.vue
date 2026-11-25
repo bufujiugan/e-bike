@@ -2,8 +2,8 @@
 import { tr, trInline } from '../i18n/language'
 import RecordIdColumn from './table/RecordIdColumn.vue'
 import { createUuid } from '../utils/uuid'
-import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { ElMessage, type ButtonInstance } from 'element-plus'
 import api from '../api'
 import { hasPermission, hasRole, isSuperAdmin, type PermissionContext } from '../permissions'
 import SkuInventoryOverview from './business/SkuInventoryOverview.vue'
@@ -18,16 +18,26 @@ const props = defineProps<{ context: PermissionContext | null; initialSkuId?: nu
 const emit = defineEmits<{ navigate: [view: string]; convert: [lockNo: string] }>()
 type Row = { skuId: number; modelId: number; skuCode: string; productName: string; specification: string; modelName: string; physicalQty: number; quarantinedQty: number; temporaryLockedQty: number; orderReservedQty: number; availableQty: number; shortageQty: number; legacyModelCommittedQty: number; modelAvailableQty: number; maxNewLockQty: number }
 type Option = { id: number; name: string; code: string; status: string }
-type Lock = { id: number; lockNo: string; skuCode: string; lockQty: number; expireTime: string }
+type Lock = { id: number; lockNo: string; skuCode: string; lockQty: number }
 const rows = ref<Row[]>([]), models = ref<Option[]>([]), customers = ref<Option[]>([]), agents = ref<Option[]>([])
 const page = ref(1), total = ref(0), modelId = ref<number | undefined>(Number.isFinite(props.initialModelId) ? props.initialModelId : undefined), busy = ref(false), error = ref('')
 const focusedSkuId = ref(props.initialSkuId)
 const canConvert = computed(() => canWrite.value && !hasRole(props.context, 'PDA_OPERATOR') && hasPermission(props.context, 'ORDER_WRITE'))
 const selected = ref<Array<{ skuId: number; skuCode: string; quantity: number }>>([])
+const selectedQuantity = computed(() => selected.value.reduce((total, item) => total + (item.quantity ?? 0), 0))
+const hasValidQuantities = computed(() => selected.value.length > 0 &&
+  selected.value.every(item => Number.isInteger(item.quantity) && item.quantity >= 1 && item.quantity <= 1_000_000))
 const canWrite = computed(() => !hasRole(props.context, 'WEB_AGENT') && hasPermission(props.context, 'AGENT_LOCK_WRITE'))
 const canSeeLocks = computed(() => hasPermission(props.context, 'AGENT_INVENTORY_READ') || hasPermission(props.context, 'AGENT_LOCK_WRITE'))
 const canCreateMasterData = computed(() => isSuperAdmin(props.context))
 const visible = ref(false), saving = ref(false), saveError = ref(''), result = ref<Lock[]>([])
+const dialogStep = ref<'confirm' | 'result'>('confirm')
+const doneButton = ref<ButtonInstance>()
+const resultQuantity = computed(() => result.value.reduce((total, lock) => total + lock.lockQty, 0))
+const resultTitle = computed(() => tr('预锁已登记 · {count} 张锁定单，共 {quantity} 件', {
+  count: result.value.length,
+  quantity: resultQuantity.value,
+}))
 const form = reactive({ customerId: undefined as number | undefined, agentId: undefined as number | undefined, expiresAt: '', remark: '' })
 let retryKey = '', retryPayload = ''
 function message(cause: unknown, fallback: string) { return api.isAxiosError(cause) ? cause.response?.data?.message ?? fallback : fallback }
@@ -59,7 +69,8 @@ function navigateToMasterData(view: 'customers' | 'agents') {
   emit('navigate', view)
 }
 async function begin() {
-  if (selected.value.length === 0) return
+  if (!hasValidQuantities.value) return
+  dialogStep.value = 'confirm'
   saveError.value = ''; visible.value = true
   const responses = await Promise.allSettled(['customers', 'agents'].map(type => api.get(`/api/master/${type}`)))
   for (const [index, response] of responses.entries()) {
@@ -69,6 +80,7 @@ async function begin() {
   }
 }
 async function save() {
+  if (saving.value || dialogStep.value !== 'confirm' || !hasValidQuantities.value) return
   if (!form.customerId) { saveError.value = '请选择客户'; return }
   const body = { customerId: form.customerId, agentId: form.agentId ?? null, expiresAt: form.expiresAt || null, remark: form.remark || null,
     items: selected.value.map(({ skuId, quantity }) => ({ skuId, quantity })).sort((a, b) => a.skuId - b.skuId) }
@@ -77,11 +89,21 @@ async function save() {
   saving.value = true; saveError.value = ''
   try {
     result.value = (await api.post('/api/sku-locks', { requestId: retryKey, ...body })).data.data
-    selected.value = []; visible.value = false; retryKey = ''; retryPayload = ''
-    ElMessage.success(tr('SKU预锁已登记，可在库存锁定页面继续转订单'))
-    await load()
+    selected.value = []; retryKey = ''; retryPayload = ''
+    dialogStep.value = 'result'
+    void load()
+    await nextTick()
+    doneButton.value?.ref?.focus()
   } catch (cause) { saveError.value = message(cause, '锁定结果未确认，可重试当前内容') }
   finally { saving.value = false }
+}
+function showResult() {
+  dialogStep.value = 'result'
+  visible.value = true
+}
+function convertLock(lockNo: string) {
+  visible.value = false
+  emit('convert', lockNo)
 }
 watch(modelId, () => { focusedSkuId.value = undefined; page.value = 1; void load() })
 onMounted(async () => {
@@ -97,7 +119,18 @@ onMounted(async () => {
     <SkuInventoryOverview :rows="rows" :loading="busy" :error="error" />
     <el-alert v-if="error" type="error" :title="tr(error)" :closable="false" show-icon />
     <section class="sm-card">
-    <FilterBar><el-select v-model="modelId" :aria-label='tr("车型筛选")' :placeholder='tr("全部车型")' clearable filterable><el-option v-for="model in models" :key="model.id" :value="model.id" :label="model.name" /></el-select><template #actions><el-button :loading="busy" @click="load"><AppIcon name="refresh" />{{ tr("刷新库存") }}</el-button><el-button v-if="canSeeLocks" @click="emit('navigate', hasRole(context, 'WEB_AGENT') ? 'agent-locks' : 'inventory-locks')">{{ tr("查看库存锁定") }}</el-button><el-button v-if="canWrite && selected.length" type="primary" @click="begin"><AppIcon name="lock" />{{ trInline("锁定所选") }} {{ selected.length }} {{ trInline("个 SKU") }}</el-button></template></FilterBar>
+    <FilterBar>
+      <el-select v-model="modelId" :aria-label='tr("车型筛选")' :placeholder='tr("全部车型")' clearable filterable>
+        <el-option v-for="model in models" :key="model.id" :value="model.id" :label="model.name" />
+      </el-select>
+      <template #actions>
+        <el-button :loading="busy" @click="load"><AppIcon name="refresh" />{{ tr("刷新库存") }}</el-button>
+        <el-button v-if="canSeeLocks" @click="emit('navigate', hasRole(context, 'WEB_AGENT') ? 'agent-locks' : 'inventory-locks')">{{ tr("查看库存锁定") }}</el-button>
+        <el-button v-if="canWrite && selected.length" type="primary" :disabled="!hasValidQuantities" @click="begin">
+          <AppIcon name="lock" />{{ tr("预锁所选 {count} 个 SKU", { count: selected.length }) }}
+        </el-button>
+      </template>
+    </FilterBar>
     <SectionHeader :title='tr("SKU 库存锁定列表")' :description='tr("按具体规格核对库存与占用")' />
     <DataTable :rows="rows" :loading="busy" :error="error" :empty-title='tr("暂无 SKU 库存")' row-key="skuId">
       <RecordIdColumn prop="skuId" label="SKU ID" />
@@ -111,10 +144,39 @@ onMounted(async () => {
     <Pagination :total="total" :page-size="20" v-model:page="page" :disabled="busy" @change="load" />
     </section>
     <AlertCard :title='tr("锁定规则")' :description='tr("SKU预锁数量不受当前库存限制。客户累计收款达到PI约定定金后优先占库；剩余库存不足以满足的其他未付款订单将整单取消并记录原因。预锁不保证供货，已收款和已出库订单不自动取消。")' />
-    <section v-if="canWrite && selected.length" class="selection"><h3>{{ trInline("待锁定商品（") }}{{ selected.length }} {{ trInline("个 SKU）") }}</h3><div v-for="item in selected" :key="item.skuId" class="selected-row"><strong>{{ item.skuCode }}</strong><el-input-number v-model="item.quantity" :min="1" :max="1000000" :precision="0" /><el-button link type="danger" @click="selected = selected.filter(row => row.skuId !== item.skuId)">{{ tr("移除") }}</el-button></div><el-button type="primary" @click="begin">{{ tr("选择客户并锁定") }}</el-button></section>
-    <section v-if="result.length" class="selection"><h3>{{ tr("本次锁定已保存 · 继续创建订单") }}</h3><el-table :data="result">
-      <RecordIdColumn /><el-table-column prop="lockNo" :label='tr("锁定单号")' min-width="180" /><el-table-column prop="skuCode" label="SKU" /><el-table-column prop="lockQty" :label='tr("数量")' /><el-table-column prop="expireTime" :label='tr("截止时间")' min-width="180" /><el-table-column v-if="canConvert" :label='tr("下一步")' width="130" fixed="right"><template #default="{row}"><el-button link type="primary" @click="emit('convert',row.lockNo)">{{ tr("直接转订单") }}</el-button></template></el-table-column></el-table><el-button @click="emit('navigate', 'inventory-locks')">{{ tr("查看全部锁定与关联订单") }}</el-button></section>
-    <el-dialog v-model="visible" :title='tr("锁定所选 SKU")' width="560px" :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving">
+    <section v-if="canWrite && selected.length" class="selection">
+      <h3>{{ trInline("待锁定商品（") }}{{ selected.length }} {{ trInline("个 SKU）") }}</h3>
+      <div v-for="item in selected" :key="item.skuId" class="selected-row">
+        <strong>{{ item.skuCode }}</strong>
+        <el-input-number v-model="item.quantity" :min="1" :max="1000000" :precision="0" />
+        <el-button link type="danger" @click="selected = selected.filter(row => row.skuId !== item.skuId)">{{ tr("移除") }}</el-button>
+      </div>
+      <p v-if="!hasValidQuantities" class="note">{{ tr("每个 SKU 的预锁数量须为 1 至 1000000 的整数。") }}</p>
+      <el-button type="primary" :disabled="!hasValidQuantities" @click="begin">{{ tr("选择客户并预锁") }}</el-button>
+    </section>
+    <el-button v-if="result.length" class="reopen-result" @click="showResult">{{ tr("查看本次预锁结果") }}</el-button>
+    <el-dialog v-model="visible" :title="dialogStep === 'result' ? resultTitle : tr('确认 SKU 预锁')"
+      :width="dialogStep === 'result' ? 'min(620px, calc(100vw - 32px))' : 'min(560px, calc(100vw - 32px))'"
+      :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving">
+      <div v-if="dialogStep === 'result'" class="lock-result">
+        <table class="lock-result-table">
+          <thead>
+            <tr><th scope="col">SKU</th><th scope="col">{{ tr("锁定单号") }}</th><th scope="col">{{ tr("数量（件）") }}</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="lock in result" :key="lock.id">
+              <td>{{ lock.skuCode }}</td>
+              <td>
+                {{ lock.lockNo }}
+                <el-button v-if="canConvert" class="lock-result-action" link type="primary" @click="convertLock(lock.lockNo)">{{ tr("直接转订单") }}</el-button>
+              </td>
+              <td>{{ lock.lockQty }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <template v-else>
+      <p class="lock-preview">{{ tr("本次预锁 {count} 个 SKU，共 {quantity} 件，将为每个 SKU 生成一张锁定单（共 {count} 张）。", { count: selected.length, quantity: selectedQuantity }) }}</p>
       <el-alert v-if="saveError" type="error" :title="tr(saveError)" :closable="false" />
       <el-form label-width="100px" :disabled="saving">
         <el-form-item :label='tr("客户")' required>
@@ -127,8 +189,19 @@ onMounted(async () => {
         </el-form-item>
         <el-form-item :label='tr("截止时间")'><el-date-picker v-model="form.expiresAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" :placeholder='tr("留空采用系统默认时长")' /></el-form-item>
         <el-form-item :label='tr("备注")'><el-input v-model="form.remark" type="textarea" maxlength="500" /></el-form-item>
-      </el-form><p class="note">{{ trInline("本次") }} {{ selected.length }} {{ trInline("个 SKU 将一起预锁，允许超过当前库存。达到PI约定定金后优先占库，其他未付款订单库存不足时整单取消并记录原因。转单客户须与锁定客户一致。") }}</p>
-      <template #footer><el-button :disabled="saving" @click="visible = false">{{ tr("返回") }}</el-button><el-button type="primary" :loading="saving" @click="save">{{ tr("确认锁定") }}</el-button></template>
+      </el-form>
+      <p class="note">{{ tr("预锁允许超过当前库存。达到 PI 约定定金后优先占库，剩余库存不足的其他未付款订单将整单取消并记录原因。转单客户须与锁定客户一致。") }}</p>
+      </template>
+      <template #footer>
+        <div v-if="dialogStep === 'result'" class="lock-result-footer">
+          <el-button v-if="canSeeLocks" @click="emit('navigate', 'inventory-locks')">{{ tr("查看全部锁定与关联订单") }}</el-button>
+          <el-button ref="doneButton" type="primary" @click="visible = false">{{ tr("关闭") }}</el-button>
+        </div>
+        <template v-else>
+          <el-button :disabled="saving" @click="visible = false">{{ tr("返回") }}</el-button>
+          <el-button type="primary" :loading="saving" @click="save">{{ tr("确认预锁") }}</el-button>
+        </template>
+      </template>
     </el-dialog>
   </section>
 </template>
@@ -136,4 +209,14 @@ onMounted(async () => {
 <style scoped>
 .sku-workspace{padding:24px;background:#fff;border:1px solid #e3e9ef;border-radius:12px}.sku-workspace header,.toolbar,.selected-row{display:flex;align-items:center;justify-content:space-between;gap:16px}.sku-workspace h2{margin:0;color:#203446}.sku-workspace header p,.note{color:#6d7d89;font-size:13px;line-height:1.7}.toolbar{justify-content:flex-start;margin:20px 0 12px}.el-pagination{margin-top:18px}.selection{margin-top:22px;padding:18px;background:#f6f9fc;border-radius:8px}.selected-row{justify-content:flex-start;margin-bottom:12px}.selected-row strong{min-width:160px}.shortage{font-weight:700;color:#c1392b}.el-select{width:100%}.selection>.el-button{margin-top:12px}
 .quick-create-link{height:auto;margin-top:4px;padding:0;font-size:12px}
+.lock-preview { margin: 0 0 16px; font-weight: 600; color: var(--el-text-color-primary); }
+.lock-result { max-height: min(360px, 50vh); overflow: auto; }
+.lock-result-table { width: 100%; border-collapse: collapse; text-align: start; }
+.lock-result-table th, .lock-result-table td { padding: 10px 8px; border-bottom: 1px solid var(--el-border-color-lighter); overflow-wrap: anywhere; }
+.lock-result-table th { background: var(--el-fill-color-light); text-align: start; }
+.lock-result-table th:last-child, .lock-result-table td:last-child { text-align: end; }
+.lock-result-action { display: block; margin-top: 4px; text-align: start; }
+.lock-result-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.lock-result-footer .el-button { margin: 0; }
+.reopen-result { align-self: flex-start; }
 </style>

@@ -12,6 +12,8 @@ import { componentLocale, tr, trInline } from './i18n/language'
 import AccountSettingsDialog from './components/layout/AccountSettingsDialog.vue'
 import BusinessModulePage from './views/BusinessModulePage.vue'
 import { salesTypeOptions, salesTypeNavKey, setSalesIntent, type SalesIntent, type SalesType } from './sales-routing'
+import { transportOptions, type TransportArrangement } from './order-transport'
+import OrderTransportFields from './components/OrderTransportFields.vue'
 import DashboardPage from './views/DashboardPage.vue'
 import RecordDetails from './components/RecordDetails.vue'
 import PartPhotoEditor from './components/PartPhotoEditor.vue'
@@ -309,6 +311,8 @@ function moduleColumnWidth(column: string) {
 }
 const moduleTableWidth = computed(() => activeModule.value.columns.reduce((width, column) => width + moduleColumnWidth(column), 200))
 const moduleSearch = ref('')
+const transportFilter = ref<TransportArrangement | null>(null)
+const newOrderTransport = reactive({ arrangement: null as TransportArrangement | null, remark: '' })
 const modulePage = ref(1)
 const modulePageSize = ref(20)
 const moduleTotal = computed(() => modulePageData.value[activeView.value]?.total ?? 0)
@@ -655,7 +659,7 @@ async function loadModule(module: string) {
   dataLoading.value = true
   dataError.value = ''
   try {
-    const response = await axios.get(`/api/modules/${module}`, { params: { keyword: moduleSearch.value.trim() || undefined, salesType: module === 'orders' && !isAgentAccount.value ? 'DOMESTIC,PENDING' : undefined, page: modulePage.value, pageSize: modulePageSize.value }, headers: { Authorization: `Bearer ${localStorage.getItem('bike_access_token')}` } })
+    const response = await axios.get(`/api/modules/${module}`, { params: { keyword: moduleSearch.value.trim() || undefined, salesType: module === 'orders' && !isAgentAccount.value ? 'DOMESTIC,PENDING' : undefined, transportArrangement: module === 'orders' ? transportFilter.value ?? undefined : undefined, page: modulePage.value, pageSize: modulePageSize.value }, headers: { Authorization: `Bearer ${localStorage.getItem('bike_access_token')}` } })
     if (requestVersion !== moduleRequestVersion || activeView.value !== module || !loggedIn.value) return
     modulePageData.value[module] = response.data.data
     lastLoadedAt.value = new Date().toLocaleString('zh-CN', {hour12:false})
@@ -696,10 +700,15 @@ watch([loggedIn, activeView], ([isLoggedIn]) => {
   if (isLoggedIn && !authContext.value?.mustChangePassword) void loadModule(activeView.value)
 })
 
-watch(moduleSearch, () => {
+watch([moduleSearch, transportFilter], () => {
   modulePage.value = 1
   if (loggedIn.value && activeView.value !== 'dashboard') void loadModule(activeView.value)
 })
+
+function resetModuleSearch() {
+  moduleSearch.value = ''
+  transportFilter.value = null
+}
 
 
 function changeModulePage(nextPage: number) {
@@ -838,6 +847,8 @@ async function submitPasswordChange() {
 }
 
 function resetActionForm() {
+  newOrderTransport.arrangement = null
+  newOrderTransport.remark = ''
   clearPartPhoto()
   editingId.value = null
   selectedPermissionIds.value = []
@@ -1017,7 +1028,7 @@ async function cancelStockRecord(row: string[]) {
 
 async function downloadModule(module: string) {
   try {
-    const response = await axios.get(`/api/export/${module}`, { params: {keyword: moduleSearch.value.trim() || undefined}, headers: { Authorization: `Bearer ${localStorage.getItem('bike_access_token')}` }, responseType: 'blob' })
+    const response = await axios.get(`/api/export/${module}`, { params: { keyword: moduleSearch.value.trim() || undefined, salesType: module === 'orders' && !isAgentAccount.value ? 'DOMESTIC,PENDING' : undefined, transportArrangement: module === 'orders' ? transportFilter.value ?? undefined : undefined }, headers: { Authorization: `Bearer ${localStorage.getItem('bike_access_token')}` }, responseType: 'blob' })
     const url = URL.createObjectURL(response.data)
     const anchor = document.createElement('a')
     anchor.href = url
@@ -1197,7 +1208,7 @@ async function submitPrimaryAction() {
     } else if (actionKind.value === 'order') {
       endpoint = editingId.value === null ? '/api/orders' : `/api/orders/${editingId.value}`
       actionMethod = editingId.value === null ? 'post' : 'put'
-      payload = { customerId: Number(actionForm.customerId), agentId: actionForm.agentId ? Number(actionForm.agentId) : null, modelId: Number(actionForm.modelId), orderQty: Number(actionForm.orderQty), plannedShipDate: actionForm.plannedShipDate || null, remark: actionForm.remark || null, ...(editingId.value === null ? { salesType: 'DOMESTIC' } : {}) }
+      payload = { customerId: Number(actionForm.customerId), agentId: actionForm.agentId ? Number(actionForm.agentId) : null, modelId: Number(actionForm.modelId), orderQty: Number(actionForm.orderQty), plannedShipDate: actionForm.plannedShipDate || null, remark: actionForm.remark || null, ...(editingId.value === null ? { salesType: 'DOMESTIC', transportArrangement: newOrderTransport.arrangement, transportRemark: newOrderTransport.remark.trim() || null } : {}) }
     } else if (actionKind.value === 'user') {
       endpoint = editingId.value === null ? '/api/users' : `/api/users/${editingId.value}`
       actionMethod = editingId.value === null ? 'post' : 'put'
@@ -1312,9 +1323,14 @@ async function submitPrimaryAction() {
       <CustomerScopeManager v-else-if="activeView === 'customer-scopes' && !passwordChangeVisible && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'CUSTOMER_SCOPE_MANAGE')" />
       <FileReviewManager v-else-if="activeView === 'file-reviews' && !passwordChangeVisible && !isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'FILE_REVIEW_MANAGE')" />
       <AfterSalesWorkspace v-else-if="activeView === 'after-sales' && !passwordChangeVisible" :auth-context="authContext" />
-      <BusinessModulePage v-else :module-key="activeView" :module="activeModule" :title="activeNav?.label ?? tr('业务记录')" v-model:search="moduleSearch" v-model:page="modulePage" v-model:page-size="modulePageSize" :loading="dataLoading" :error="dataError" :context="authContext" :column-width="moduleColumnWidth" @refresh="loadModule(activeView)" @reset="moduleSearch = ''" @page-change="loadModule(activeView)" @size-change="modulePage = 1; loadModule(activeView)">
+      <BusinessModulePage v-else :module-key="activeView" :module="activeModule" :title="activeNav?.label ?? tr('业务记录')" v-model:search="moduleSearch" v-model:page="modulePage" v-model:page-size="modulePageSize" :loading="dataLoading" :error="dataError" :context="authContext" :column-width="moduleColumnWidth" @refresh="loadModule(activeView)" @reset="resetModuleSearch" @page-change="loadModule(activeView)" @size-change="modulePage = 1; loadModule(activeView)">
         <template #before-list><CustomerProfiles v-if="canOpenCustomerProfiles" ref="customerProfiles" :can-write="hasPermission(authContext, 'CUSTOMER_PROFILE_WRITE')" /></template>
-        <template #actions><CustomerAccountCreate v-if="activeView === 'users' && isSuperAdmin(authContext)" @created="loadModule('users')" /><div class="module-actions"><button v-if="hasPermission(authContext, 'DATA_EXPORT') && ['parts','inventory','stock-in','stock-out','stock','orders','rework'].includes(activeView)" class="secondary-action" @click="downloadModule(activeView === 'operation-logs' ? 'logs' : activeView)">{{ tr("导出当前查询") }}</button><button v-if="activeView === 'parts' && canImportActiveModule" class="secondary-action" @click="downloadPartsTemplate">{{ tr("下载部件导入模板") }}</button></div><PermissionGate :allowed="canShowPrimaryAction"><div class="module-actions"><button v-if="canImportActiveModule" class="secondary-action" @click="chooseImport(activeView)">{{ tr("导入 Excel") }}</button><button class="primary-action" @click="openPrimaryAction">＋ {{ tr(activeModule?.action) }}</button><input ref="importInput" class="hidden-file-input" type="file" accept=".xlsx,.xls" @change="importModule" /></div></PermissionGate></template>
+        <template #actions>
+          <el-select v-if="activeView === 'orders' && !isAgentAccount" v-model="transportFilter"
+            :aria-label='tr("按运输安排筛选")' :placeholder='tr("全部运输安排")' :value-on-clear="null" clearable style="width: 190px">
+            <el-option v-for="option in transportOptions" :key="option.value" :label="tr(option.label)" :value="option.value" />
+          </el-select>
+          <CustomerAccountCreate v-if="activeView === 'users' && isSuperAdmin(authContext)" @created="loadModule('users')" /><div class="module-actions"><button v-if="hasPermission(authContext, 'DATA_EXPORT') && ['parts','inventory','stock-in','stock-out','stock','orders','rework'].includes(activeView)" class="secondary-action" @click="downloadModule(activeView === 'operation-logs' ? 'logs' : activeView)">{{ tr("导出当前查询") }}</button><button v-if="activeView === 'parts' && canImportActiveModule" class="secondary-action" @click="downloadPartsTemplate">{{ tr("下载部件导入模板") }}</button></div><PermissionGate :allowed="canShowPrimaryAction"><div class="module-actions"><button v-if="canImportActiveModule" class="secondary-action" @click="chooseImport(activeView)">{{ tr("导入 Excel") }}</button><button class="primary-action" @click="openPrimaryAction">＋ {{ tr(activeModule?.action) }}</button><input ref="importInput" class="hidden-file-input" type="file" accept=".xlsx,.xls" @change="importModule" /></div></PermissionGate></template>
         <template #row-actions="{ row }">
           <button v-if="canOpenCustomerProfiles" type="button" class="row-action" @click="customerProfiles?.openForCustomer(row[0], row[1])">{{ tr("PI 商务资料") }}</button>
           <button v-if="activeView === 'orders'" class="row-action" @click="journeyOrderNo = row[0]">{{ tr("订单办理") }}</button><button v-if="['inventory-locks', 'agent-locks', 'agent-dashboard'].includes(activeView) && hasPermission(authContext, 'ORDER_READ')" class="row-action" @click="openLinkedOrders(row)">{{ tr("关联订单") }}</button><button v-if="activeView === 'orders' && canRenewOrderReservation(row)" class="row-action" @click="manageOrderReservation(row, 'renew')">{{ ['FULFILLED', '已履约'].includes(row[9]) ? tr('续占用以撤销出库') : tr('重新占用') }}</button><button v-if="activeView === 'orders' && canWriteActiveModule && ['PARTIAL_SHIPPED', '部分出库'].includes(row[6])" class="row-action" @click="manageOrderReservation(row, 'close')">{{ tr("关闭剩余") }}</button><button v-if="activeView === 'agents' && isSuperAdmin(authContext)" class="row-action" @click="editAgentAccess(row)">{{ tr("车型授权") }}</button><CustomerScopeEditor v-if="activeView === 'users' && hasPermission(authContext, 'CUSTOMER_SCOPE_MANAGE') && ['WEB_ADMIN', 'WEB_OPERATOR'].includes(row[2])" :username="row[0]" /><button v-if="!(activeView === 'users' && row[2] === 'CUSTOMER')" class="row-action" @click="openRowAction(row)">{{ activeView === 'orders' && ((row[7] && row[7] !== '-') || !['DRAFT','PENDING','草稿','待确认'].includes(row[6])) ? tr('查看详情') : tr(rowActionLabel) }}</button><button v-if="canWriteActiveModule && ['users', 'roles', 'workstations', 'locations'].includes(activeView)" class="row-action" @click="toggleSystemStatus(row)">{{ row[activeView === 'locations' ? 4 : 3] === '启用' ? tr('停用') : tr('启用') }}</button><button v-if="canWriteActiveModule && activeView === 'orders' && !['SHIPPED', 'PARTIAL_SHIPPED', 'CANCELLED', 'CLOSED', '已完成', '部分出库', '已作废', '已关闭'].includes(row[6])" class="row-action danger-action" @click="changeOrderStatus(row, 'cancel')">{{ tr("作废") }}</button><button v-if="canWriteActiveModule && ['inventory-locks', 'agent-locks'].includes(activeView) && ['锁定中', '部分转订单', 'LOCKED', 'PARTIAL_CONVERTED'].includes(row[7])" class="row-action" @click="changeInventoryLock(row, 'release')">{{ tr("释放") }}</button><button v-if="canWriteActiveModule && ['inventory-locks', 'agent-locks'].includes(activeView) && ['锁定中', '部分转订单', 'LOCKED', 'PARTIAL_CONVERTED'].includes(row[7]) && canConvertLock && Number(row[3]) - Number(row[4]) - Number(row[5]) > 0" class="row-action" @click="changeInventoryLock(row, 'convert')">{{ tr("转订单 / PI") }}</button><button v-if="canWriteActiveModule && ['stock-in', 'stock-out'].includes(activeView) && ['已完成', 'COMPLETED'].includes(row[6])" class="row-action danger-action" @click="cancelStockRecord(row)">{{ tr("撤销") }}</button></template>
@@ -1349,6 +1365,7 @@ async function submitPrimaryAction() {
         <el-form-item :label='tr("车型")'><el-select v-model="actionForm.modelId" filterable :placeholder='tr("请选择车型")'><el-option v-for="item in masterOptions.models" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
         <el-form-item :label='tr("订单数量")'><el-input-number v-model="actionForm.orderQty" :min="1" /></el-form-item>
         <el-form-item :label='tr("计划发货")'><el-date-picker v-model="actionForm.plannedShipDate" type="date" value-format="YYYY-MM-DD" /></el-form-item>
+        <OrderTransportFields v-if="editingId === null" v-model:arrangement="newOrderTransport.arrangement" v-model:remark="newOrderTransport.remark" />
         <el-form-item :label='tr("备注")'><el-input v-model="actionForm.remark" type="textarea" /></el-form-item>
       </el-form>
       <el-form v-else-if="actionKind === 'user'" label-width="100px">

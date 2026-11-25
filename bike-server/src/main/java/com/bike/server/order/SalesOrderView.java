@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 public class SalesOrderView {
     /** 生效销售类型（含历史 PI 推断）；为空表示待选类型。 */
@@ -56,6 +57,21 @@ public class SalesOrderView {
     private LocalDateTime updatedAt;
     private List<OrderVehicleView> shippedVehicles = List.of();
     private List<OrderOperationView> operations;
+    private String transportArrangement;
+    private String transportRemark;
+    private Map<String, String> dispatchNotes;
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public String getTransportArrangement() { return transportArrangement; }
+    public void setTransportArrangement(String value) { transportArrangement = value; }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public String getTransportRemark() { return transportRemark; }
+    public void setTransportRemark(String value) { transportRemark = value; }
+
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    public Map<String, String> getDispatchNotes() { return dispatchNotes; }
+    public void setDispatchNotes(Map<String, String> value) { dispatchNotes = Map.copyOf(value); }
     public Long getId(){return id;} public void setId(Long v){id=v;}
     public String getOrderNo(){return orderNo;} public void setOrderNo(String v){orderNo=v;}
     public Long getCustomerId(){return customerId;} public void setCustomerId(Long v){customerId=v;}

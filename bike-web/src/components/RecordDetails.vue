@@ -4,6 +4,7 @@ import { computed } from 'vue'
 import PurchaseContractNumber from './PurchaseContractNumber.vue'
 import PartPhoto from './PartPhoto.vue'
 import { reservationLabel, type ReservationStatus } from '../pi-api'
+import { transportLabel, type TransportArrangement } from '../order-transport'
 const props = defineProps<{ value: unknown }>()
 const labels: Record<string, string> = {
   purchaseContractParty: '购销合同方', purchaseContractNo: '购销合同号',
@@ -20,6 +21,7 @@ const labels: Record<string, string> = {
   currentOrderNo: '当前订单号', orderNo: '订单号', orderId: '订单记录编号', stockOutNo: '出库单号', stockNo: '库存单号',
   reservationStatus: '占用状态', reservationHoldMode: '占用保留方式', reservationHeldAt: '占用保留时间', reservationExpiresAt: '占用截止时间',
   orderQty: '订单数量', orderedQty: '订购数量', shippedQty: '已出库数量', plannedShipDate: '计划发货日期',
+  transportArrangement: '运输安排', transportRemark: '运输备注', dispatchNotes: '出库备注',
   createdAt: '创建时间', updatedAt: '修改时间', inboundTime: '来料时间', operationTime: '操作时间',
   supplierId: '供应商编号', supplierName: '供应商', remark: '备注', reason: '原因', cancelReason: '取消原因',
   hasPhoto: '图片',
@@ -49,6 +51,7 @@ function label(key: string) { return labels[key] ?? key }
 function display(value: unknown, key = '') {
   if (value === null || value === undefined || value === '') return '—'
   if (key === 'reservationStatus') return reservationLabel(value as ReservationStatus)
+  if (key === 'transportArrangement') return tr(transportLabel(value as TransportArrangement))
   if (key === 'purchaseContractParty' && value === 'YINSANHUAN') return '银三环'
   if (typeof value === 'boolean') return value ? '是' : '否'
   if (['status', 'qcStatus', 'bindStatus', 'partType', 'holdMode', 'reservationHoldMode', 'type'].includes(key)) return statusLabels[String(value)] ?? String(value)

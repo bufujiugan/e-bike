@@ -12,6 +12,7 @@ public interface OrderService {
     SalesOrderView getByNo(String orderNo);
     SalesOrderView create(SalesOrderCreateRequest request);
     SalesOrderView update(long id, SalesOrderCreateRequest request);
+    SalesOrderView updateTransport(long id, OrderTransportRequest request);
     SalesOrderView confirm(long id);
     default SalesOrderView cancel(long id) { return cancel(id, "业务作废"); }
     SalesOrderView cancel(long id, String reason);

@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import com.bike.server.auth.UserAuthRecord;
 import com.bike.server.common.*;
 import com.bike.server.lock.*;
+import com.bike.server.module.ModuleServiceImpl;
 import com.bike.server.order.*;
 import com.bike.server.pi.PiMapper;
 import com.bike.server.production.*;
@@ -73,6 +74,32 @@ class SkuCommitmentMysqlTest {
             assertThat(results).containsExactlyInAnyOrder("OK","OK");
             assertThat(f.reservations.snapshot(4,0).getCommittedQty()).isEqualTo(2);
             assertThat(f.scalar("SELECT COUNT(*) FROM @inventory_lock")).isEqualTo(2);
+        }
+    }
+
+    @Test void lockHistoryShowsAndSearchesSkuWithoutShiftingExistingColumns() throws Exception {
+        try (var fixture = new Fixture()) {
+            fixture.legacyLock(5);
+            var request = new SkuLockRequest("lock-history", 1L, null, null, null,
+                    List.of(new SkuLockRequest.Item(10L, 3), new SkuLockRequest.Item(11L, 1)));
+            var createdLocks = fixture.tx(() -> fixture.locks.create(request));
+            var service = CustomerScopeTestSupport.isolated(new ModuleServiceImpl(fixture.modules));
+            var history = fixture.tx(() -> service.list("inventory-locks", null, 1, 20));
+
+            assertThat(history.columns()).containsExactly("锁定单号", "代理商", "车型", "锁定数量", "已释放",
+                    "已转订单", "到期时间", "状态", "创建时间", "修改时间", "ID", "SKU");
+            assertThat(history.total()).isEqualTo(3);
+            assertThat(history.rows()).anySatisfy(row -> {
+                assertThat(row.getFirst()).isEqualTo("LEGACY");
+                assertThat(row.getLast()).isEqualTo("-");
+            });
+            var redHistory = fixture.tx(() -> service.list("inventory-locks", "RED", 1, 20));
+            assertThat(redHistory.total()).isEqualTo(1);
+            assertThat(redHistory.rows()).singleElement().satisfies(row -> {
+                assertThat(row.getFirst()).isEqualTo(createdLocks.getFirst().getLockNo());
+                assertThat(row.get(3)).isEqualTo("3");
+                assertThat(row.getLast()).isEqualTo("RED");
+            });
         }
     }
 

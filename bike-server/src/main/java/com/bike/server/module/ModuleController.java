@@ -20,8 +20,9 @@ public class ModuleController {
     public ApiResponse<ModulePageResponse> list(@PathVariable String module,
                                                 @RequestParam(required = false) String keyword,
                                                 @RequestParam(required = false) String salesType,
+                                                @RequestParam(required = false) String transportArrangement,
                                                 @RequestParam(defaultValue = "1") long page,
                                                 @RequestParam(defaultValue = "100") long pageSize) {
-        return ApiResponse.success("查询成功", moduleService.list(module, keyword, salesType, page, pageSize));
+        return ApiResponse.success("查询成功", moduleService.list(module, keyword, salesType, transportArrangement, page, pageSize));
     }
 }
