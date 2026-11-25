@@ -5,15 +5,19 @@
         FROM bike_sales_order o
         JOIN bike_sales_order_item i ON i.order_id=o.id
         JOIN bike_product_model m ON m.id=i.product_model_id
+        LEFT JOIN bike_domestic_sku_order d ON d.order_id=o.id
         WHERE o.customer_id=#{customerId}
           AND o.status IN ('CONFIRMED','PARTIAL_SHIPPED')
           AND i.ordered_qty&gt;i.shipped_qty
         <if test="keyword != null">
-            AND (o.order_no LIKE CONCAT('%',#{keyword},'%') OR m.model_name LIKE CONCAT('%',#{keyword},'%'))
+            AND (o.order_no LIKE CONCAT('%',#{keyword},'%') OR (d.order_id IS NULL AND m.model_name LIKE CONCAT('%',#{keyword},'%'))
+                OR EXISTS(SELECT 1 FROM bike_order_reservation_item si JOIN bike_production_sku s ON s.id=si.sku_id
+                    JOIN bike_product_model sm ON sm.id=s.model_id WHERE si.order_id=d.order_id
+                    AND (s.sku_code LIKE CONCAT('%',#{keyword},'%') OR sm.model_name LIKE CONCAT('%',#{keyword},'%'))))
         </if>
     </sql>
     <select id="selectPage" resultType="com.bike.server.order.StockOutOrderOption">
-        SELECT o.id,o.order_no,o.customer_id,m.model_name,i.ordered_qty order_qty,i.shipped_qty,o.status
+        SELECT o.id,o.order_no,o.customer_id,CASE WHEN d.order_id IS NOT NULL THEN CONCAT((SELECT COUNT(*) FROM bike_order_reservation_item si WHERE si.order_id=o.id),' SKU') ELSE m.model_name END model_name,i.ordered_qty order_qty,i.shipped_qty,o.status
         <include refid="eligibleOrders"/>
         ORDER BY o.created_at DESC,o.id DESC LIMIT #{offset},#{limit}
     </select>

@@ -38,6 +38,10 @@ public class SalesOrderView {
     private String sourceLockNo;
     private LocalDateTime reservationExpiresAt;
     private Integer reservedQty;
+    private Integer sourceConvertedQty;
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public Integer getSourceConvertedQty() { return sourceConvertedQty; }
+    public void setSourceConvertedQty(Integer value) { sourceConvertedQty = value; }
     public String getSourceLockNo(){return sourceLockNo;} public void setSourceLockNo(String v){sourceLockNo=v;}
     public LocalDateTime getReservationExpiresAt(){return reservationExpiresAt;} public void setReservationExpiresAt(LocalDateTime v){reservationExpiresAt=v;}
     public Integer getReservedQty(){return reservedQty;} public void setReservedQty(Integer v){reservedQty=v;}
@@ -60,6 +64,18 @@ public class SalesOrderView {
     private String transportArrangement;
     private String transportRemark;
     private Map<String, String> dispatchNotes;
+    private boolean domesticSkuOrder;
+    private List<DomesticOrderLine> skuLines = List.of();
+    private List<DomesticOrderLockSource> lockSources = List.of();
+
+    public boolean isDomesticSkuOrder() { return domesticSkuOrder; }
+    public void setDomesticSkuOrder(boolean value) { domesticSkuOrder = value; }
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    public List<DomesticOrderLine> getSkuLines() { return skuLines; }
+    public void setSkuLines(List<DomesticOrderLine> value) { skuLines = List.copyOf(value); }
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    public List<DomesticOrderLockSource> getLockSources() { return lockSources; }
+    public void setLockSources(List<DomesticOrderLockSource> value) { lockSources = List.copyOf(value); }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public String getTransportArrangement() { return transportArrangement; }

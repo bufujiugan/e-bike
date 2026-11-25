@@ -31,6 +31,7 @@
         LEFT JOIN bike_order_reservation_item ri ON ri.order_id=o.id
         LEFT JOIN bike_production_sku sku ON sku.id=ri.sku_id
         WHERE o.status IN ('DRAFT','PENDING','CONFIRMED') AND i.shipped_qty=0
+        AND NOT EXISTS(SELECT 1 FROM bike_domestic_sku_order domestic WHERE domestic.order_id=o.id)
         AND NOT EXISTS(SELECT 1 FROM bike_pi p WHERE p.source_order_id=o.id) <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=o.customer_id)</if>
         <if test="keyword != null">AND o.order_no LIKE CONCAT('%',#{keyword},'%')</if>
         ORDER BY o.id DESC LIMIT 200
@@ -202,8 +203,9 @@
     </select>
     <select id="countForOrder" resultType="int">SELECT COUNT(*) FROM bike_pi WHERE source_order_id=#{id} FOR UPDATE</select>
     <select id="countOrder" resultType="int">
-        SELECT COUNT(*) FROM bike_sales_order WHERE id=#{id} AND customer_id=#{customerId}
-        AND agent_id &lt;=&gt; #{agentId} AND status NOT IN ('CANCELLED','CLOSED')
+        SELECT COUNT(*) FROM bike_sales_order o WHERE o.id=#{id} AND o.customer_id=#{customerId}
+        AND o.agent_id &lt;=&gt; #{agentId} AND o.status NOT IN ('CANCELLED','CLOSED')
+        AND NOT EXISTS(SELECT 1 FROM bike_domestic_sku_order domestic WHERE domestic.order_id=o.id)
         FOR UPDATE
     </select>
     <select id="selectOrderLines" resultType="com.bike.server.pi.PiOrderLine">

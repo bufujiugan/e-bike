@@ -17,7 +17,9 @@
     JOIN bike_sales_order_item item ON item.order_id=o.id
     WHERE r.scope_type='SKU' AND r.hold_mode='TIMED' AND r.expires_at&gt;NOW(3)
       AND o.status IN ('DRAFT','PENDING','CONFIRMED') AND item.shipped_qty=0
-      AND r.model_id IN <foreach collection="modelIds" item="modelId" open="(" separator="," close=")">#{modelId}</foreach>
+      AND EXISTS(SELECT 1 FROM bike_order_reservation_item si JOIN bike_production_sku s ON s.id=si.sku_id
+        WHERE si.order_id=o.id AND <include refid="com.bike.server.stock.InventoryPolicyMapper.activeSkuQty"/>&gt;0
+          AND s.model_id IN <foreach collection="modelIds" item="modelId" open="(" separator="," close=")">#{modelId}</foreach>)
       AND NOT EXISTS(SELECT 1 FROM bike_pi_order_link link WHERE link.order_id=o.id)
       AND NOT EXISTS(SELECT 1 FROM bike_pi p WHERE p.source_order_id=o.id)
     UNION ALL
@@ -26,6 +28,12 @@
       AND l.lock_qty&gt;l.released_qty+l.converted_qty
       AND l.product_model_id IN <foreach collection="modelIds" item="modelId" open="(" separator="," close=")">#{modelId}</foreach>
     ORDER BY created_at,id,kind
+  </select>
+  <select id="selectOrderDemand" resultType="com.bike.server.order.PaymentPriorityMapper$OrderDemand">
+    SELECT si.sku_id,s.model_id,<include refid="com.bike.server.stock.InventoryPolicyMapper.activeSkuQty"/> quantity
+    FROM bike_order_reservation_item si JOIN bike_production_sku s ON s.id=si.sku_id
+    JOIN bike_order_reservation r ON r.order_id=si.order_id
+    WHERE si.order_id=#{orderId} HAVING quantity&gt;0 ORDER BY si.sku_id
   </select>
   <select id="selectDraftRevisions" resultType="long">
     SELECT draft.id FROM bike_pi draft JOIN bike_pi current_pi ON current_pi.series_id=draft.series_id

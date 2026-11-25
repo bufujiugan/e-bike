@@ -38,7 +38,8 @@ class LegacyConversionAuditMysqlTest {
                     "agent(id BIGINT,agent_name VARCHAR(30),status VARCHAR(20))",
                     "product_model(id BIGINT,model_name VARCHAR(30))",
                     "inventory_lock(id BIGINT,lock_no VARCHAR(50),agent_id BIGINT,product_model_id BIGINT,lock_qty INT,released_qty INT,converted_qty INT,status VARCHAR(30),expire_time DATETIME,created_at DATETIME,remark VARCHAR(100))",
-                    "order_reservation(order_id BIGINT,source_lock_id BIGINT)")) {
+                    "order_reservation(order_id BIGINT,source_lock_id BIGINT)",
+                    "domestic_order_lock_source(order_id BIGINT,lock_id BIGINT)")) {
                     String table=prefix+ddl.substring(0,ddl.indexOf('('));
                     sql.execute("CREATE TABLE "+prefix+ddl);tables.add(table);
                 }

@@ -11,9 +11,11 @@ public class OrderReservationExpiryJob {
     private final OrderReservationMapper reservations;
     private final OrderMapper orders;
     private final ProductionGuard guard;
+    private final DomesticSkuOrderMapper domesticOrders;
 
-    public OrderReservationExpiryJob(OrderReservationMapper reservations, OrderMapper orders, ProductionGuard guard) {
-        this.reservations=reservations; this.orders=orders; this.guard=guard;
+    public OrderReservationExpiryJob(OrderReservationMapper reservations, OrderMapper orders, ProductionGuard guard,
+            DomesticSkuOrderMapper domesticOrders) {
+        this.reservations=reservations; this.orders=orders; this.guard=guard; this.domesticOrders=domesticOrders;
     }
 
     @Scheduled(fixedDelayString="${bike.inventory-lock.expiry-check-ms:60000}")
@@ -26,6 +28,15 @@ public class OrderReservationExpiryJob {
                 "system", "ACTIVE", "EXPIRED", null,
                 "来源锁定："+order.getSourceLockNo()+"；到期："+order.getReservationExpiresAt()
                     +"；释放未发数量："+(order.getOrderQty()-order.getShippedQty())) != 1) {
+                throw new com.bike.server.common.BusinessException("ORDER_AUDIT_FAILED", "订单占用到期审计保存失败");
+            }
+        }
+        for (var source : domesticOrders.selectExpiredSources()) {
+            if (domesticOrders.markSourceExpiryAudited(source.orderId(), source.lockId()) != 1) continue;
+            if (orders.insertOperationLog("ORDER_RESERVATION_EXPIRE", source.orderNo(), "订单库存占用到期", null,
+                "system", "ACTIVE", "EXPIRED", null,
+                "来源锁定：" + source.lockNo() + "；SKU：" + source.skuCode() + "；到期：" + source.expiresAt()
+                    + "；释放未发数量：" + source.remainingQty()) != 1) {
                 throw new com.bike.server.common.BusinessException("ORDER_AUDIT_FAILED", "订单占用到期审计保存失败");
             }
         }

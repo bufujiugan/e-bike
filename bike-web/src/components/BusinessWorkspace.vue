@@ -9,8 +9,8 @@ import PiWorkspace from './PiWorkspace.vue'
 import AppIcon from './AppIcon.vue'
 import MascotCompanion from './common/MascotCompanion.vue'
 
-const props = defineProps<{ context: PermissionContext | null; username: string; refreshKey: number }>()
-const emit = defineEmits<{ navigate: [key: string]; guide: []; convert: [lockNo: string]; order: [orderNo: string] }>()
+const props = defineProps<{ context: PermissionContext | null; username: string; refreshKey: number; domesticSkuCreationEnabled: boolean }>()
+const emit = defineEmits<{ navigate: [key: string]; guide: []; convert: [lockNo: string, lockNos?: string[]]; order: [orderNo: string] }>()
 const stepIcons: Record<string, string> = { tasks: 'tasks', skus: 'inventory', prints: 'printer', inventory: 'network', orders: 'orders', locks: 'tasks', pis: 'info' }
 const areaWatermarks: Record<string, string> = { production: 'chart', sales: 'truck', warehouse: 'home' }
 type SkuContext = { id:number; skuCode:string; modelId:number }
@@ -139,7 +139,10 @@ onUnmounted(() => window.removeEventListener('popstate',syncStage))
     </section>
     <template v-if="currentStep">
     <ProductionManager v-if="['skus','tasks','prints'].includes(stage) && productionRead" :key="stage + ':' + (selectedSku?.id ?? '')" :view="stage" :username="username" :context="context" :initial-sku-id="selectedSku?.id" :initial-keyword="stage === 'skus' ? selectedSku?.skuCode : undefined" :can-manage="internal && hasPermission(context,'PRODUCTION_MANAGE')" :can-operate="hasPermission(context,'ASSEMBLY_OPERATE')" :can-report-issue="hasAnyPermission(context,['ASSEMBLY_OPERATE','REWORK_OPERATE'])" @navigate="navigate" @order="emit('order',$event)" @continue="nextStage" />
-    <SkuInventoryPanel v-else-if="stage === 'inventory'" :key="selectedSku?.id ?? 'all'" :context="context" :initial-sku-id="selectedSku?.id" :initial-model-id="selectedSku?.modelId" @navigate="navigate" @convert="emit('convert',$event)" />
+    <SkuInventoryPanel v-else-if="stage === 'inventory'" :key="selectedSku?.id ?? 'all'" :context="context"
+      :initial-sku-id="selectedSku?.id" :initial-model-id="selectedSku?.modelId"
+      :domestic-sku-creation-enabled="domesticSkuCreationEnabled" @navigate="navigate"
+      @convert="(lockNo, lockNos) => emit('convert', lockNo, lockNos)" />
     <FulfillmentQueue v-else-if="stage === 'locks' || stage === 'orders'" :key="stage" :kind="stage" :context="context" :refresh-key="refreshKey" @convert="emit('convert',$event)" @order="emit('order',$event)" />
     <PiWorkspace v-else-if="stage === 'pis'" :context="context" :allow-create="false" generic-entry @navigate="navigate" />
     </template>

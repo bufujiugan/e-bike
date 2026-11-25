@@ -17,7 +17,14 @@ public interface SkuInventoryMapper {
     List<SkuReservationItem> reservationItems(@Param("orderId") long orderId);
     int markSkuScope(@Param("orderId") long orderId);
     int insertReservationItem(@Param("orderId") long orderId, @Param("skuId") long skuId, @Param("quantity") int quantity);
+    int insertDomesticReservationItem(@Param("orderId") long orderId, @Param("skuId") long skuId, @Param("quantity") int quantity);
     int increaseShipped(@Param("orderId") long orderId, @Param("skuId") long skuId);
     int decreaseShipped(@Param("orderId") long orderId, @Param("skuId") long skuId);
+    int countLockSources(@Param("orderId") long orderId, @Param("skuId") long skuId);
+    Long selectShipmentSource(@Param("orderId") long orderId, @Param("skuId") long skuId);
+    int increaseSourceShipped(@Param("orderId") long orderId, @Param("lockId") long lockId);
+    int insertShipmentSource(@Param("stockNo") String stockNo, @Param("orderId") long orderId, @Param("lockId") long lockId);
+    Long selectStockOutSource(@Param("stockOutId") long stockOutId);
+    int decreaseSourceShipped(@Param("orderId") long orderId, @Param("lockId") long lockId);
     int closeRemainder(@Param("orderId") long orderId);
 }

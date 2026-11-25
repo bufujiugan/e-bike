@@ -285,7 +285,7 @@ class PiMysqlTest {
         Fixture() throws Exception {
             var config = new Configuration(new Environment("pi-business", new SpringManagedTransactionFactory(), source));
             config.setMapUnderscoreToCamelCase(true);
-            for (String name : List.of("InventoryPolicyMapper", "OrderMapper", "OrderReservationMapper", "ProductionMapper", "PiMapper", "PiShipmentMapper", "OperationLogMapper", "PiReservationSchemaFixtureMapper")) {
+            for (String name : List.of("InventoryPolicyMapper", "OrderMapper", "OrderReservationMapper", "ProductionMapper", "PiMapper", "PiShipmentMapper", "OperationLogMapper", "PiReservationSchemaFixtureMapper", "DomesticSkuOrderMapper")) {
                 try (var input = Resources.getResourceAsStream("mapper/" + name + ".xml")) {
                     String xml = new String(input.readAllBytes(), StandardCharsets.UTF_8).replace("bike_", prefix);
                     new XMLMapperBuilder(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)), config, name, config.getSqlFragments()).parse();
@@ -300,7 +300,8 @@ class PiMysqlTest {
             guard = new ProductionGuard(session.getMapper(ProductionMapper.class));
             coordinator = new OrderReservationCoordinator(guard, reservations, logs, json);
             reservationService = com.bike.server.common.CustomerScopeTestSupport.isolated(new OrderReservationService(orders, reservations, coordinator, mapper));
-            expiryJob = new OrderReservationExpiryJob(reservations, orders, guard);
+            expiryJob = new OrderReservationExpiryJob(reservations, orders, guard,
+                    session.getMapper(com.bike.server.order.DomesticSkuOrderMapper.class));
             service = service(mapper);
             try {
                 for (String ddl : List.of(
@@ -312,6 +313,8 @@ class PiMysqlTest {
                         "sales_order_item(id BIGINT PRIMARY KEY,order_id BIGINT,product_model_id BIGINT,ordered_qty INT,shipped_qty INT)",
                         "production_mutex(id INT PRIMARY KEY)",
                         "factory_sales_order_link(factory_order_id BIGINT,order_id BIGINT)",
+                        "domestic_sku_order(order_id BIGINT PRIMARY KEY)",
+                        "domestic_order_lock_source(order_id BIGINT,lock_id BIGINT,sku_id BIGINT,quantity INT,shipped_qty INT,expires_at DATETIME(3),renewed_expires_at DATETIME(3),expiry_audited_at DATETIME(3))",
                         "inventory_lock(id BIGINT PRIMARY KEY,lock_no VARCHAR(64),product_model_id BIGINT,lock_qty INT,released_qty INT,converted_qty INT,status VARCHAR(32),expire_time DATETIME(3))",
                         "order_reservation(order_id BIGINT PRIMARY KEY,source_lock_id BIGINT,request_id VARCHAR(64),model_id BIGINT,reserved_qty INT,expires_at DATETIME(3),expiry_audited_at DATETIME(3))",
                         "vehicle(id BIGINT PRIMARY KEY,model_id BIGINT,status INT,frame_sn VARCHAR(64),vehicle_qr_code VARCHAR(200))",

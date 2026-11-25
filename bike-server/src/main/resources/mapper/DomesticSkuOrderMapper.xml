@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.order.DomesticSkuOrderMapper">
+    <select id="findRequest" resultType="com.bike.server.order.DomesticSkuOrderMapper$ExistingOrder">
+        SELECT order_id,payload_hash FROM bike_domestic_sku_order WHERE operator_id=#{operatorId} AND request_id=#{requestId}
+    </select>
+    <insert id="insertRequest">
+        INSERT INTO bike_domestic_sku_order(order_id,operator_id,request_id,payload_hash)
+        VALUES(#{orderId},#{operatorId},#{requestId},#{payloadHash})
+    </insert>
+    <insert id="insertSource">
+        INSERT INTO bike_domestic_order_lock_source(order_id,lock_id,sku_id,quantity,expires_at)
+        VALUES(#{orderId},#{source.lockId},#{source.skuId},#{source.quantity},#{source.expiresAt})
+    </insert>
+    <select id="selectLines" resultType="com.bike.server.order.DomesticOrderLine">
+        SELECT s.id sku_id,s.sku_code,m.id model_id,m.model_name,s.product_name,s.specification,i.ordered_qty,i.shipped_qty,i.closed_qty
+        FROM bike_order_reservation_item i JOIN bike_production_sku s ON s.id=i.sku_id
+        JOIN bike_product_model m ON m.id=s.model_id WHERE i.order_id=#{orderId} ORDER BY i.sku_id
+    </select>
+    <resultMap id="lockSource" type="com.bike.server.order.DomesticOrderLockSource">
+        <constructor>
+            <arg column="lock_id" javaType="_long"/>
+            <arg column="lock_no" javaType="string"/>
+            <arg column="sku_id" javaType="_long"/>
+            <arg column="quantity" javaType="_int"/>
+            <arg column="expires_at" javaType="java.time.LocalDateTime"/>
+            <arg column="renewed_expires_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+    <select id="selectSources" resultMap="lockSource">
+        SELECT src.lock_id,l.lock_no,src.sku_id,src.quantity,src.expires_at,src.renewed_expires_at FROM bike_domestic_order_lock_source src
+        JOIN bike_inventory_lock l ON l.id=src.lock_id WHERE src.order_id=#{orderId} ORDER BY src.lock_id
+    </select>
+    <update id="renewSources">
+        UPDATE bike_domestic_order_lock_source src JOIN bike_order_reservation r ON r.order_id=src.order_id
+        SET src.renewed_expires_at=r.expires_at,src.expiry_audited_at=NULL WHERE src.order_id=#{orderId}
+    </update>
+    <select id="selectExpiredSources" resultType="com.bike.server.order.DomesticSkuOrderMapper$ExpiredSource">
+        SELECT src.order_id,src.lock_id,o.order_no,l.lock_no,s.sku_code,
+            COALESCE(src.renewed_expires_at,src.expires_at) expires_at,src.quantity-src.shipped_qty remaining_qty
+        FROM bike_domestic_order_lock_source src JOIN bike_order_reservation r ON r.order_id=src.order_id
+        JOIN bike_sales_order o ON o.id=src.order_id JOIN bike_inventory_lock l ON l.id=src.lock_id
+        JOIN bike_production_sku s ON s.id=src.sku_id
+        WHERE r.hold_mode='TIMED' AND o.status IN ('DRAFT','PENDING','CONFIRMED','PARTIAL_SHIPPED')
+          AND src.expiry_audited_at IS NULL AND src.quantity&gt;src.shipped_qty
+          AND COALESCE(src.renewed_expires_at,src.expires_at)&lt;=NOW(3)
+        ORDER BY expires_at,src.order_id,src.lock_id LIMIT 200
+    </select>
+    <update id="markSourceExpiryAudited">
+        UPDATE bike_domestic_order_lock_source SET expiry_audited_at=NOW(3)
+        WHERE order_id=#{orderId} AND lock_id=#{lockId} AND expiry_audited_at IS NULL
+    </update>
+    <select id="selectSkuOptions" resultType="com.bike.server.order.DomesticSkuOption">
+        SELECT s.id sku_id,s.sku_code,m.model_name,s.product_name,s.specification
+        FROM bike_production_sku s JOIN bike_product_model m ON m.id=s.model_id
+        WHERE s.enabled=1 AND m.enabled=1
+        <if test="keyword != null and keyword != ''">
+            AND (s.sku_code LIKE CONCAT('%',#{keyword},'%') OR s.product_name LIKE CONCAT('%',#{keyword},'%')
+                OR m.model_name LIKE CONCAT('%',#{keyword},'%'))
+        </if>
+        ORDER BY s.id DESC LIMIT 100
+    </select>
+</mapper>

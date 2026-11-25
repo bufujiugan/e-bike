@@ -6,6 +6,8 @@ import org.apache.ibatis.annotations.Param;
 
 @Mapper
 public interface PaymentPriorityMapper {
+    record OrderDemand(long skuId, long modelId, int quantity) {}
+    List<OrderDemand> selectOrderDemand(@Param("orderId") long orderId);
     List<UnpaidInventoryCandidate> selectUnpaidCandidates(@Param("modelIds") List<Long> modelIds,
             @Param("paidPiId") long paidPiId);
     List<Long> selectDraftRevisions(@Param("piId") long piId);

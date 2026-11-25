@@ -39,6 +39,8 @@ springdoc:
     path: /swagger-ui.html
 
 bike:
+  orders:
+    domestic-sku-creation-enabled: ${BIKE_DOMESTIC_SKU_CREATION_ENABLED:true}
   after-sales:
     mail:
       enabled: ${BIKE_AFTER_SALES_MAIL_ENABLED:false}

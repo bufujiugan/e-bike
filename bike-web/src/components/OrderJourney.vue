@@ -11,6 +11,7 @@ import PurchaseContractNumber from './PurchaseContractNumber.vue'
 import PiWorkspace from './PiWorkspace.vue'
 import AppIcon from './AppIcon.vue'
 import OrderPurchaseContract from './OrderPurchaseContract.vue'
+import OrderSkuLines from './OrderSkuLines.vue'
 import { salesTypeLabel, salesTypeOptions, type SalesIntent, type SalesType } from '../sales-routing'
 import OrderTransportFields from './OrderTransportFields.vue'
 import { transportLabel, type TransportArrangement } from '../order-transport'
@@ -160,6 +161,7 @@ watch(() => props.orderNo, () => { showPi.value = false; showContract.value = fa
         <div class="journey-heading"><div><span class="journey-eyebrow">{{ tr("当前办理订单") }}</span><h2>{{ order.orderNo }}</h2><p>{{ order.customerName }} · {{ order.modelName }}</p></div><div class="journey-heading-actions"><el-tag :type="salesType ? 'success' : 'warning'">{{ tr(salesTypeLabel(salesType)) }}</el-tag><el-tag>{{ tr(names[order.status] ?? order.status) }}</el-tag><el-button :loading="busy" :disabled="editingTransport || saving" @click="load">{{ tr("刷新进度") }}</el-button></div></div>
         <ol v-if="journeyStages.length" class="journey-stages" :aria-label='tr("订单办理进度")'><li v-for="(step, index) in journeyStages" :key="step.title" :class="step.state" :aria-current="step.state === 'current' ? 'step' : undefined"><span><AppIcon v-if="step.state === 'done'" name="check" /><template v-else>{{ index + 1 }}</template></span><strong>{{ tr(step.title) }}</strong></li></ol>
         <div class="journey-counts"><div>{{ tr("订购数量") }}<strong>{{ order.orderQty }} {{ tr("台") }}</strong></div><div>{{ tr("已出库") }}<strong>{{ order.shippedQty }} {{ tr("台") }}</strong></div><div>{{ tr("未出库") }}<strong>{{ Math.max(0, order.orderQty - order.shippedQty) }} {{ tr("台") }}</strong></div><div>{{ tr("库存占用") }}<strong>{{ tr(reservationLabel(order.reservationStatus)) }}</strong></div></div>
+        <OrderSkuLines v-if="order.skuLines?.length" :lines="order.skuLines" :sources="order.lockSources" />
         <el-alert :title="nextStep" type="info" :closable="false" show-icon />
         <el-alert v-if="order.status === 'CANCELLED' && order.remark?.startsWith('自动取消：')" :title='tr("订单已自动取消")' :description="order.remark" type="warning" :closable="false" show-icon />
         <section v-if="active && !salesType" class="journey-step-card" :aria-label='tr("选择销售类型")'>
@@ -194,7 +196,20 @@ watch(() => props.orderNo, () => { showPi.value = false; showContract.value = fa
           <el-descriptions-item :label='tr("销售类型")'>{{ tr(salesTypeLabel(salesType)) }}<template v-if="salesType && !order.selectedSalesType"> {{ tr("（按已关联单据归类）") }}</template></el-descriptions-item>
           <el-descriptions-item v-if="internal" :label='tr("购销合同方")'>{{ order.purchaseContractParty === 'YINSANHUAN' ? tr('银三环') : order.purchaseContractParty || tr('未登记') }}</el-descriptions-item>
           <el-descriptions-item v-if="internal" :label='tr("购销合同号")'><PurchaseContractNumber :value="order.purchaseContractNo" /></el-descriptions-item>
-          <el-descriptions-item :label='tr("来源锁定")'>{{ order.sourceLockNo || tr('无来源锁定') }}<span v-if="sourceLock"> · {{ sourceLock.skuCode || sourceLock.modelName }} {{ trInline("· 锁定") }} {{ sourceLock.lockQty }} {{ trInline("台 · 已转") }} {{ sourceLock.convertedQty }} {{ tr("台") }}</span></el-descriptions-item>
+          <el-descriptions-item v-if="!order.domesticSkuOrder" :label='tr("来源锁定")'>
+            {{ order.sourceLockNo || tr('无来源锁定') }}
+            <span v-if="sourceLock">
+              · {{ sourceLock.skuCode || sourceLock.modelName }} ·
+              {{ tr("原锁定 {locked} 台，累计已转 {converted} 台", { locked: sourceLock.lockQty, converted: sourceLock.convertedQty }) }}
+            </span>
+          </el-descriptions-item>
+          <el-descriptions-item v-if="order.reservationExpiresAt && order.domesticSkuOrder"
+            :label='tr(order.lockSources?.length ? "最晚占用截止" : "占用截止")'>
+            {{ time(order.reservationExpiresAt) }}
+          </el-descriptions-item>
+          <el-descriptions-item v-if="order.sourceLockNo" :label='tr("本订单数量")'>
+            {{ tr("{quantity} 台", { quantity: order.orderQty }) }}
+          </el-descriptions-item>
           <el-descriptions-item :label='tr("计划出库日")'>{{ order.plannedShipDate || '—' }}</el-descriptions-item>
           <el-descriptions-item v-if="salesType === 'DOMESTIC'" :label='tr("运输安排")'>
             {{ tr(transportLabel(order.transportArrangement)) }}

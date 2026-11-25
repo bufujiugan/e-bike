@@ -35,12 +35,25 @@ public class OrderContractWorkbook {
         try (var input = new ClassPathResource(TEMPLATE).getInputStream(); var workbook = new XSSFWorkbook(input);
                 var output = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.getSheetAt(0);
+            int extraRows = Math.max(0, order.getSkuLines().size() - 9);
+            if (extraRows > 0) {
+                sheet.shiftRows(21, sheet.getLastRowNum(), extraRows);
+                Row templateRow = sheet.getRow(20);
+                for (int index = 21; index < 21 + extraRows; index++) {
+                    Row row = sheet.createRow(index);
+                    row.setHeight(templateRow.getHeight());
+                    for (int column = 0; column <= 10; column++) {
+                        row.createCell(column).setCellStyle(templateRow.getCell(column,
+                                Row.MissingCellPolicy.CREATE_NULL_AS_BLANK).getCellStyle());
+                    }
+                }
+            }
             text(sheet, "K1", request.signedDate().toString());
             text(sheet, "K2", request.contractNo());
             writeParty(sheet, "B", request.buyer());
             writeParty(sheet, "F", request.seller());
             text(sheet, "A11", "销售订单：" + order.getOrderNo());
-            // 普通销售订单只有一个车型；数量、规格始终以本次读取的订单为准。
+            if (order.getSkuLines().isEmpty()) {
             number(sheet, "A13", BigDecimal.ONE);
             text(sheet, "B13", request.customsModel());
             text(sheet, "C13", request.productName());
@@ -51,29 +64,46 @@ public class OrderContractWorkbook {
             number(sheet, "H13", request.usdUnitPrice());
             number(sheet, "I13", request.costUnitPrice());
             number(sheet, "J13", request.unitPrice());
-            sheet.setColumnHidden(7, request.usdUnitPrice() == null);
-            sheet.setColumnHidden(8, request.costUnitPrice() == null);
+            } else {
+                var prices = request.skuPrices().stream().collect(java.util.stream.Collectors.toMap(
+                        OrderContractRequest.SkuPrice::skuId, OrderContractRequest.SkuPrice::unitPrice));
+                for (int index = 0; index < order.getSkuLines().size(); index++) {
+                    var line = order.getSkuLines().get(index);
+                    int row = 13 + index;
+                    number(sheet, "A" + row, BigDecimal.valueOf(index + 1L));
+                    text(sheet, "B" + row, request.customsModel());
+                    text(sheet, "C" + row, line.productName() == null || line.productName().isBlank()
+                            ? request.productName() : line.productName());
+                    text(sheet, "D" + row, line.skuCode() + " / " + line.modelName());
+                    text(sheet, "E" + row, line.specification());
+                    number(sheet, "F" + row, BigDecimal.valueOf(line.orderedQty()));
+                    text(sheet, "G" + row, "辆");
+                    number(sheet, "J" + row, prices.get(line.skuId()));
+                }
+            }
+            sheet.setColumnHidden(7, !order.getSkuLines().isEmpty() || request.usdUnitPrice() == null);
+            sheet.setColumnHidden(8, !order.getSkuLines().isEmpty() || request.costUnitPrice() == null);
             // 修正原模板错行引用与 #REF!，金额按人民币逐行四舍五入到分。
-            for (int row = 13; row <= 21; row++) {
+            for (int row = 13; row <= 21 + extraRows; row++) {
                 cell(sheet, "K" + row).setCellFormula("IF(F" + row + "=\"\",\"\",ROUND(F" + row + "*J" + row + ",2))");
             }
-            cell(sheet, "F22").setCellFormula("SUM(F13:F21)");
-            cell(sheet, "K22").setCellFormula("SUM(K13:K21)");
+            cell(sheet, "F" + (22 + extraRows)).setCellFormula("SUM(F13:F" + (21 + extraRows) + ")");
+            cell(sheet, "K" + (22 + extraRows)).setCellFormula("SUM(K13:K" + (21 + extraRows) + ")");
             for (int index = 0; index < CLAUSE_CELLS.size(); index++) {
-                text(sheet, CLAUSE_CELLS.get(index), request.clauses().get(index));
+                text(sheet, shifted(CLAUSE_CELLS.get(index), extraRows), request.clauses().get(index));
             }
-            text(sheet, "A25", "二、签订时间：" + request.signedDate());
-            text(sheet, "C31", request.paymentTerms());
-            text(sheet, "C32", request.bankName());
-            text(sheet, "C33", request.bankAccount());
-            text(sheet, "C34", request.seller().name());
-            text(sheet, "C35", request.seller().address());
-            text(sheet, "B42", request.signedDate().toString());
-            text(sheet, "G42", request.signedDate().toString());
-            formatAmounts(workbook, sheet);
+            text(sheet, shifted("A25", extraRows), "二、签订时间：" + request.signedDate());
+            text(sheet, shifted("C31", extraRows), request.paymentTerms());
+            text(sheet, shifted("C32", extraRows), request.bankName());
+            text(sheet, shifted("C33", extraRows), request.bankAccount());
+            text(sheet, shifted("C34", extraRows), request.seller().name());
+            text(sheet, shifted("C35", extraRows), request.seller().address());
+            text(sheet, shifted("B42", extraRows), request.signedDate().toString());
+            text(sheet, shifted("G42", extraRows), request.signedDate().toString());
+            formatAmounts(workbook, sheet, extraRows);
             fitTextRows(workbook, sheet);
             workbook.getCreationHelper().createFormulaEvaluator().evaluateAll();
-            workbook.setPrintArea(0, "$A$1:$K$42");
+            workbook.setPrintArea(0, "$A$1:$K$" + (42 + extraRows));
             sheet.setFitToPage(true);
             sheet.getPrintSetup().setFitWidth((short) 1);
             sheet.getPrintSetup().setFitHeight((short) 0);
@@ -94,9 +124,15 @@ public class OrderContractWorkbook {
         text(sheet, column + "9", party.email());
     }
 
-    private void formatAmounts(XSSFWorkbook workbook, Sheet sheet) {
+    private static String shifted(String address, int extraRows) {
+        var cell = new CellAddress(address);
+        return new CellAddress(cell.getRow() + (cell.getRow() >= 21 ? extraRows : 0),
+                cell.getColumn()).formatAsString();
+    }
+
+    private void formatAmounts(XSSFWorkbook workbook, Sheet sheet, int extraRows) {
         short format = workbook.createDataFormat().getFormat("#,##0.00");
-        for (int row = 12; row <= 21; row++) {
+        for (int row = 12; row <= 21 + extraRows; row++) {
             for (int column = 7; column <= 10; column++) {
                 Cell target = sheet.getRow(row).getCell(column, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
                 CellStyle style = workbook.createCellStyle();

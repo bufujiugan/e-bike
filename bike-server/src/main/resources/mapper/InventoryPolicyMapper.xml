@@ -6,6 +6,15 @@
     o.status IN ('DRAFT','PENDING','CONFIRMED','PARTIAL_SHIPPED','SHIPPED')
     AND (r.hold_mode IN ('PAID','CREDIT') OR (r.hold_mode='TIMED' AND r.expires_at&gt;NOW(3)))
   </sql>
+  <!-- 有锁定来源的限时 SKU 按仍有效的来源余额占用；手工建单及旧单沿用订单级截止。 -->
+  <sql id="activeSkuQty">
+    LEAST(si.ordered_qty-si.shipped_qty-si.closed_qty,
+      COALESCE((SELECT SUM(CASE WHEN COALESCE(src.renewed_expires_at,src.expires_at)&gt;NOW(3)
+          THEN src.quantity-src.shipped_qty ELSE 0 END)
+        FROM bike_domestic_order_lock_source src
+        WHERE r.hold_mode='TIMED' AND src.order_id=si.order_id AND src.sku_id=si.sku_id),
+        si.ordered_qty-si.shipped_qty-si.closed_qty))
+  </sql>
   <sql id="reservationStatus">
     CASE WHEN r.order_id IS NULL THEN 'NONE'
       WHEN r.hold_mode='RELEASED' OR o.status IN ('CANCELLED','CLOSED') THEN 'RELEASED'
@@ -22,16 +31,21 @@
     SELECT r.model_id,GREATEST(r.reserved_qty-i.shipped_qty,0) qty,'ORDER' kind FROM bike_order_reservation r
     JOIN bike_sales_order o ON o.id=r.order_id
     JOIN bike_sales_order_item i ON i.order_id=o.id AND i.product_model_id=r.model_id
-    WHERE <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/>
+    WHERE r.scope_type='MODEL_LEGACY' AND <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/>
+    UNION ALL
+    SELECT s.model_id,<include refid="com.bike.server.stock.InventoryPolicyMapper.activeSkuQty"/>,'ORDER'
+    FROM bike_order_reservation_item si JOIN bike_production_sku s ON s.id=si.sku_id
+    JOIN bike_order_reservation r ON r.order_id=si.order_id JOIN bike_sales_order o ON o.id=r.order_id
+    WHERE r.scope_type='SKU' AND <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/>
   </sql>
-  <!-- SKU明细只用于精度约束；车型commitments已包含其占用头，绝不能再累加此片段。 -->
+  <!-- SKU 明细按实际车型计入车型承诺，车型占用头仅用于旧车型订单。 -->
   <sql id="skuCommitments">
     SELECT sku_id,product_model_id model_id,lock_qty-released_qty-converted_qty qty,'TEMPORARY' kind,0 order_id
     FROM bike_inventory_lock WHERE scope_type='SKU' AND status IN ('LOCKED','PARTIAL_CONVERTED')
       AND expire_time&gt;NOW(3) AND lock_qty&gt;released_qty+converted_qty
     UNION ALL
-    SELECT si.sku_id,r.model_id,si.ordered_qty-si.shipped_qty-si.closed_qty qty,'ORDER' kind,r.order_id
-    FROM bike_order_reservation_item si JOIN bike_order_reservation r ON r.order_id=si.order_id
+    SELECT si.sku_id,s.model_id,<include refid="com.bike.server.stock.InventoryPolicyMapper.activeSkuQty"/> qty,'ORDER' kind,r.order_id
+    FROM bike_order_reservation_item si JOIN bike_production_sku s ON s.id=si.sku_id JOIN bike_order_reservation r ON r.order_id=si.order_id
     JOIN bike_sales_order o ON o.id=r.order_id
     WHERE r.scope_type='SKU' AND <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/>
   </sql>
@@ -43,7 +57,12 @@
     UNION ALL
     SELECT r.model_id,GREATEST(r.reserved_qty-i.shipped_qty,0) qty FROM bike_order_reservation r
     JOIN bike_sales_order o ON o.id=r.order_id JOIN bike_sales_order_item i ON i.order_id=o.id AND i.product_model_id=r.model_id
-    WHERE <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/> AND (r.scope_type='MODEL_LEGACY' OR r.hold_mode IN ('PAID','CREDIT'))
+    WHERE <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/> AND r.scope_type='MODEL_LEGACY'
+    UNION ALL
+    SELECT s.model_id,si.ordered_qty-si.shipped_qty-si.closed_qty
+    FROM bike_order_reservation_item si JOIN bike_production_sku s ON s.id=si.sku_id
+    JOIN bike_order_reservation r ON r.order_id=si.order_id JOIN bike_sales_order o ON o.id=r.order_id
+    WHERE r.scope_type='SKU' AND r.hold_mode IN ('PAID','CREDIT') AND <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/>
   </sql>
   <sql id="fulfillmentSkuCommitments">
     SELECT si.sku_id,si.ordered_qty-si.shipped_qty-si.closed_qty qty,r.order_id FROM bike_order_reservation_item si

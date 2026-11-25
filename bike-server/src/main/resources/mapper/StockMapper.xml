@@ -14,7 +14,12 @@
     </select>
     <select id="selectVehicleByQrForUpdate" resultType="com.bike.server.vehicle.VehicleView"><include refid="com.bike.server.vehicle.VehicleMapper.vehicleSelect"/> WHERE (v.vehicle_qr_code = #{qrCode} OR v.vehicle_qr_token = #{qrCode}) GROUP BY v.id FOR UPDATE</select>
     <update id="updateVehicleStockIn">UPDATE bike_vehicle SET status=2, current_warehouse_id=#{warehouseId}, current_location_id=#{locationId}, stock_in_time=NOW(3) WHERE id=#{vehicleId} AND status=1</update>
-    <update id="updateVehicleStockOut">UPDATE bike_vehicle v JOIN bike_sales_order o ON o.id=#{orderId} AND o.customer_id=#{customerId} JOIN bike_sales_order_item i ON i.order_id=o.id AND i.product_model_id=v.model_id SET v.status=3, v.stock_out_time=NOW(3), v.current_customer_id=#{customerId}, v.current_order_no=o.order_no WHERE v.id=#{vehicleId} AND v.status=2</update>
+    <update id="updateVehicleStockOut">UPDATE bike_vehicle v JOIN bike_sales_order o ON o.id=#{orderId} AND o.customer_id=#{customerId} SET v.status=3, v.stock_out_time=NOW(3), v.current_customer_id=#{customerId}, v.current_order_no=o.order_no WHERE v.id=#{vehicleId} AND v.status=2
+      AND (EXISTS(SELECT 1 FROM bike_domestic_sku_order d JOIN bike_order_reservation_item si ON si.order_id=d.order_id
+                   JOIN bike_production_vehicle pv ON pv.sku_id=si.sku_id WHERE d.order_id=o.id AND pv.vehicle_id=v.id)
+        OR (NOT EXISTS(SELECT 1 FROM bike_domestic_sku_order d WHERE d.order_id=o.id)
+            AND EXISTS(SELECT 1 FROM bike_sales_order_item i WHERE i.order_id=o.id AND i.product_model_id=v.model_id)))
+    </update>
     <update id="updateVehicleStockInCancel">UPDATE bike_vehicle SET status=1, current_warehouse_id=NULL, current_location_id=NULL, stock_in_time=NULL WHERE id=#{vehicleId} AND status=2</update>
     <update id="updateVehicleStockOutCancel">
         UPDATE bike_vehicle
@@ -35,7 +40,11 @@
     <update id="updateOrderStatusAfterCancel">UPDATE bike_sales_order o JOIN bike_sales_order_item i ON i.order_id=o.id SET o.status=CASE WHEN i.shipped_qty=0 THEN 'CONFIRMED' WHEN i.shipped_qty &lt; i.ordered_qty THEN 'PARTIAL_SHIPPED' ELSE 'SHIPPED' END WHERE o.id=#{orderId}</update>
     <insert id="insertStockIn">INSERT INTO bike_stock_in_record(stock_in_no,vehicle_id,warehouse_id,location_id,operator_id,status) VALUES(#{stockNo},#{vehicleId},#{warehouseId},#{locationId},#{operatorId},'COMPLETED')</insert>
     <insert id="insertStockOut">INSERT INTO bike_stock_out_record(stock_out_no,vehicle_id,customer_id,order_id,operator_id,status) VALUES(#{stockNo},#{vehicleId},#{customerId},#{orderId},#{operatorId},'COMPLETED')</insert>
-    <insert id="insertOrderVehicle">INSERT INTO bike_sales_order_vehicle(order_id,vehicle_id,stock_out_record_id) SELECT #{orderId},#{vehicleId},id FROM bike_stock_out_record WHERE stock_out_no=#{stockNo}</insert>
+    <insert id="insertOrderVehicle">
+        INSERT INTO bike_sales_order_vehicle(order_id,vehicle_id,stock_out_record_id)
+        SELECT #{orderId},#{vehicleId},so.id FROM bike_stock_out_record so WHERE so.stock_out_no=#{stockNo}
+        ON DUPLICATE KEY UPDATE stock_out_record_id=so.id
+    </insert>
     <sql id="stockInSelect">SELECT si.id,si.stock_in_no stock_no,'IN' type,si.vehicle_id,v.vehicle_qr_code,v.frame_sn,si.warehouse_id,w.warehouse_name,si.location_id,l.location_name,si.status,si.operation_time,si.cancel_reason FROM bike_stock_in_record si JOIN bike_vehicle v ON v.id=si.vehicle_id JOIN bike_warehouse w ON w.id=si.warehouse_id JOIN bike_warehouse_location l ON l.id=si.location_id</sql>
     <sql id="stockOutSelect">SELECT so.id,so.stock_out_no stock_no,'OUT' type,so.vehicle_id,v.vehicle_qr_code,v.frame_sn,so.customer_id,c.customer_name,so.order_id,o.order_no,so.status,so.operation_time,so.cancel_reason,(SELECT log.remark FROM bike_operation_log log WHERE log.business_type='STOCK_OUT' AND log.business_id=so.stock_out_no ORDER BY log.id DESC LIMIT 1) remark FROM bike_stock_out_record so JOIN bike_vehicle v ON v.id=so.vehicle_id JOIN bike_customer c ON c.id=so.customer_id JOIN bike_sales_order o ON o.id=so.order_id</sql>
     <select id="selectStockIn" resultType="com.bike.server.stock.StockRecordView"><include refid="stockInSelect"/> WHERE si.id=#{id}</select>

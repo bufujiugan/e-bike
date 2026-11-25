@@ -313,6 +313,32 @@ const moduleTableWidth = computed(() => activeModule.value.columns.reduce((width
 const moduleSearch = ref('')
 const transportFilter = ref<TransportArrangement | null>(null)
 const newOrderTransport = reactive({ arrangement: null as TransportArrangement | null, remark: '' })
+type DomesticSkuOption = { skuId: number; skuCode: string; modelName: string; productName: string; specification: string }
+const orderSkuOptions = ref<DomesticSkuOption[]>([])
+const orderSkuLines = ref<Array<DomesticSkuOption & { quantity: number | undefined }>>([])
+const orderSkuChoice = ref<number>()
+const orderSkuRequestId = ref('')
+const domesticSkuCreationEnabled = ref(false)
+let orderSkuSearch = 0
+const orderSkuTotal = computed(() => orderSkuLines.value.reduce((sum, line) => sum + (line.quantity ?? 0), 0))
+
+async function loadOrderSkuOptions(keyword = '') {
+  const search = ++orderSkuSearch
+  try {
+    const response = await axios.get('/api/orders/domestic-skus/options', { ...authConfig(), params: { keyword } })
+    if (search === orderSkuSearch) orderSkuOptions.value = response.data.data
+  } catch (cause) {
+    if (search === orderSkuSearch) ElMessage.error(tr(axios.isAxiosError(cause) ? cause.response?.data?.message ?? 'SKU 加载失败' : 'SKU 加载失败'))
+  }
+}
+
+function addOrderSku(skuId: number) {
+  const option = orderSkuOptions.value.find(sku => sku.skuId === skuId)
+  if (option && orderSkuLines.value.length < 100 && !orderSkuLines.value.some(line => line.skuId === skuId)) {
+    orderSkuLines.value.push({ ...option, quantity: 1 })
+  }
+  orderSkuChoice.value = undefined
+}
 const modulePage = ref(1)
 const modulePageSize = ref(20)
 const moduleTotal = computed(() => modulePageData.value[activeView.value]?.total ?? 0)
@@ -375,7 +401,7 @@ const linkedLockId = ref(0)
 const linkedLockNo = ref('')
 const linkedOrdersPage = ref(1)
 const linkedOrdersTotal = ref(0)
-const linkedOrders = ref<Array<{id:number; orderNo:string; customerName:string; orderQty:number; shippedQty:number; status:string; reservationExpiresAt:string | null; reservationStatus?:ReservationStatus | null}>>([])
+const linkedOrders = ref<Array<{id:number; orderNo:string; customerName:string; orderQty:number; sourceConvertedQty?:number; shippedQty:number; status:string; reservationExpiresAt:string | null; reservationStatus?:ReservationStatus | null}>>([])
 const orderStateNames: Record<string,string> = {DRAFT:'草稿',PENDING:'待确认',CONFIRMED:'待出库',PARTIAL_SHIPPED:'部分出库',SHIPPED:'已完成',CANCELLED:'已作废',CLOSED:'已关闭'}
 async function loadLinkedOrders() {
   linkedOrdersLoading.value=true
@@ -402,11 +428,42 @@ function locateLinkedOrder(orderNo: string) {
   linkedOrdersVisible.value = false
   journeyOrderNo.value = orderNo
 }
-const lockOrderForm = reactive({ lockId: 0, lockNo: '', quantity: 1, remaining: 1, fixedCustomer: false, skuCode: '', customerId: null as number | null, plannedShipDate: '', requestId: '', salesType: '' as '' | SalesType, europeTradeType: 'EXPORT' as 'DOMESTIC' | 'EXPORT' })
+const lockOrderForm = reactive({ lockId: 0, lockNo: '', quantity: 1, remaining: 1, fixedCustomer: false, skuCode: '', customerId: null as number | null, agentId: null as number | null, plannedShipDate: '', requestId: '', salesType: '' as '' | SalesType, europeTradeType: 'EXPORT' as 'DOMESTIC' | 'EXPORT' })
+const canMergeLockSources = computed(() => domesticSkuCreationEnabled.value && Boolean(lockOrderForm.skuCode))
+type LockSourceChoice = { id: number; lockNo: string; skuCode: string; expireTime: string; remaining: number }
+const lockSourceOptions = ref<LockSourceChoice[]>([])
+const selectedLockSources = ref<Array<LockSourceChoice & { quantity: number | undefined }>>([])
+const lockSourceChoice = ref<number>()
+let lockSourceSearch = 0
+const lockSourceTotal = computed(() => selectedLockSources.value.reduce((sum, source) => sum + (source.quantity ?? 0), 0))
+const selectedLockSkuCount = computed(() => new Set(selectedLockSources.value.map(source => source.skuCode)).size)
+
+async function loadLockSourceOptions(keyword = '') {
+  const search = ++lockSourceSearch
+  try {
+    const response = await axios.get(`/api/inventory-locks/${lockOrderForm.lockId}/domestic-order-sources`,
+      { ...authConfig(), params: { keyword } })
+    if (search !== lockSourceSearch || !lockOrderVisible.value) return
+    lockSourceOptions.value = response.data.data.map((lock: LockSourceChoice & { lockQty: number; releasedQty: number; convertedQty: number }) => ({
+      id: lock.id, lockNo: lock.lockNo, skuCode: lock.skuCode, expireTime: lock.expireTime,
+      remaining: lock.lockQty - lock.releasedQty - lock.convertedQty,
+    }))
+  } catch (cause) {
+    if (search === lockSourceSearch && lockOrderVisible.value) ElMessage.error(tr(axios.isAxiosError(cause) ? cause.response?.data?.message ?? '锁定来源加载失败' : '锁定来源加载失败'))
+  }
+}
+
+function addLockSource(id: number) {
+  const source = lockSourceOptions.value.find(option => option.id === id)
+  if (source && selectedLockSources.value.length < 100 && !selectedLockSources.value.some(option => option.id === id)) {
+    selectedLockSources.value.push({ ...source, quantity: source.remaining })
+  }
+  lockSourceChoice.value = undefined
+}
 const canConvertLock = computed(() => Boolean(authContext.value && !authContext.value.roles.includes('WEB_AGENT') &&
   (isSuperAdmin(authContext.value) || (hasPermission(authContext.value,'ORDER_WRITE') && hasPermission(authContext.value,'AGENT_LOCK_WRITE')))))
 function canRenewOrderReservation(row: string[]) {
-  return canConvertLock.value && Boolean(row[7] && row[7] !== '-') &&
+  return canConvertLock.value && Boolean(row[8] && row[8] !== '-') &&
     !['CANCELLED', 'CLOSED', '已作废', '已关闭'].includes(row[6]) &&
     (['TIMED_ACTIVE', 'EXPIRED_REQUIRES_REACQUIRE', '有效', '限时占用中', '已到期', '已到期，需重新占用'].includes(row[9]) ||
       (['FULFILLED', '已履约'].includes(row[9]) && Boolean(row[8] && row[8] !== '-')))
@@ -429,11 +486,20 @@ function continueOrderToPi(intent: SalesIntent) {
 async function submitLockOrder() {
   if (lockOrderForm.salesType !== 'DOMESTIC') { ElMessage.error(tr('请先选择转单去向')); return }
   if (!lockOrderForm.customerId) { ElMessage.error(tr('请选择订单客户')); return }
+  const skuOrder = canMergeLockSources.value
+  if (skuOrder && (!selectedLockSources.value.length || selectedLockSources.value.some(source =>
+    !Number.isInteger(source.quantity) || source.quantity! < 1 || source.quantity! > source.remaining))) {
+    ElMessage.error(tr('请选择至少一条锁定，并填写有效数量'))
+    return
+  }
   lockOrderSubmitting.value = true
   try {
-    const response = await axios.post(`/api/inventory-locks/${lockOrderForm.lockId}/orders`, {
-      customerId: lockOrderForm.customerId, quantity: lockOrderForm.quantity, requestId: lockOrderForm.requestId,
-      plannedShipDate: lockOrderForm.plannedShipDate || null, salesType: 'DOMESTIC'
+    const endpoint = skuOrder ? '/api/orders/domestic-skus' : `/api/inventory-locks/${lockOrderForm.lockId}/orders`
+    const response = await axios.post(endpoint, {
+      customerId: lockOrderForm.customerId, requestId: lockOrderForm.requestId,
+      plannedShipDate: lockOrderForm.plannedShipDate || null,
+      ...(skuOrder ? { agentId: lockOrderForm.agentId, sources: selectedLockSources.value.map(source => ({ lockId: source.id, quantity: source.quantity })) }
+        : { quantity: lockOrderForm.quantity, salesType: 'DOMESTIC' }),
     }, authConfig())
     lockOrderVisible.value = false
     ElMessage.success(tr("已创建内销订单 {value0}，库存占用已保留；请在订单办理中生成购销合同后确认订单", { value0: response.data.data.orderNo }))
@@ -647,6 +713,11 @@ async function loadAuthContext() {
   const response = await axios.get('/api/auth/context', authConfig())
   authContext.value = response.data.data
   username.value = response.data.data.username
+  domesticSkuCreationEnabled.value = false
+  if (!response.data.data.mustChangePassword && hasPermission(authContext.value, 'ORDER_WRITE')) {
+    const setting = await axios.get('/api/orders/domestic-skus/creation-enabled', authConfig()).catch(() => null)
+    domesticSkuCreationEnabled.value = setting?.data.data === true
+  }
 }
 
 let moduleRequestVersion = 0
@@ -849,6 +920,11 @@ async function submitPasswordChange() {
 function resetActionForm() {
   newOrderTransport.arrangement = null
   newOrderTransport.remark = ''
+  orderSkuLines.value = []
+  orderSkuOptions.value = []
+  orderSkuChoice.value = undefined
+  orderSkuRequestId.value = createUuid()
+  orderSkuSearch++
   clearPartPhoto()
   editingId.value = null
   selectedPermissionIds.value = []
@@ -874,6 +950,10 @@ async function openRowAction(row: string[]) {
     } else if (module === 'orders') {
       const response = await axios.get(`/api/orders/by-no/${encodeURIComponent(row[0])}`, authConfig())
       const order = response.data.data
+      if (order.domesticSkuOrder) {
+        journeyOrderNo.value = order.orderNo
+        return
+      }
       editingId.value = order.id
       Object.assign(actionForm, { customerId: order.customerId, agentId: order.agentId, modelId: order.modelId, orderQty: order.orderQty, plannedShipDate: order.plannedShipDate ?? '', remark: order.remark ?? '' })
       await loadMasterOptions()
@@ -980,7 +1060,7 @@ async function changeOrderStatus(row: string[], action: 'confirm' | 'cancel') {
   }
 }
 
-async function changeInventoryLock(row: string[], action: 'release' | 'convert') {
+async function changeInventoryLock(row: string[], action: 'release' | 'convert', preferredLocks?: string[]) {
   try {
     const agentPath = activeView.value === 'agent-locks' ? '/api/agent/inventory-locks' : '/api/inventory-locks'
     const response = await axios.get(`${agentPath}/by-no/${encodeURIComponent(row[0])}`, authConfig())
@@ -992,15 +1072,26 @@ async function changeInventoryLock(row: string[], action: 'release' | 'convert')
       ElMessage.success(tr('库存锁定已释放'))
     } else {
       const remaining = Number(lock.lockQty) - Number(lock.releasedQty) - Number(lock.convertedQty)
-      if (remaining <= 0 || !['LOCKED', 'PARTIAL_CONVERTED'].includes(lock.status)) {
+      if ((remaining <= 0 || !['LOCKED', 'PARTIAL_CONVERTED'].includes(lock.status)) && !preferredLocks?.length) {
         ElMessage.warning(tr('该锁定当前没有可转数量，请查看关联订单或刷新锁定列表'))
         workflowRefreshKey.value++
         return
       }
       const customers = await axios.get('/api/master/customers', authConfig())
       masterOptions.customers = customers.data.data.filter((customer: {status: string}) => customer.status === 'ENABLED')
-      Object.assign(lockOrderForm, { lockId: lock.id, lockNo: lock.lockNo, quantity: remaining, remaining, fixedCustomer: Boolean(lock.customerId), skuCode: lock.skuCode ?? '', customerId: lock.customerId ?? null, plannedShipDate: '', requestId: createUuid(), salesType: '', europeTradeType: 'EXPORT' })
+      Object.assign(lockOrderForm, { lockId: lock.id, lockNo: lock.lockNo, quantity: remaining, remaining, fixedCustomer: Boolean(lock.customerId), skuCode: lock.skuCode ?? '', customerId: lock.customerId ?? null, agentId: lock.agentId ?? null, plannedShipDate: '', requestId: createUuid(), salesType: preferredLocks?.length ? 'DOMESTIC' : '', europeTradeType: 'EXPORT' })
+      lockSourceOptions.value = []
+      lockSourceChoice.value = undefined
+      selectedLockSources.value = lock.skuCode && remaining > 0 ? [{ id: lock.id, lockNo: lock.lockNo, skuCode: lock.skuCode, expireTime: lock.expireTime, remaining, quantity: remaining }] : []
       lockOrderVisible.value = true
+      if (canMergeLockSources.value) {
+        if (preferredLocks?.length) {
+          selectedLockSources.value = []
+          await loadLockSourceOptions()
+          if (lockOrderVisible.value && lockOrderForm.lockId === lock.id)
+            lockSourceOptions.value.filter(source => preferredLocks.includes(source.lockNo)).forEach(source => addLockSource(source.id))
+        } else void loadLockSourceOptions()
+      }
       return
     }
     await loadModule(activeView.value)
@@ -1206,9 +1297,24 @@ async function submitPrimaryAction() {
         ? { partSn: actionForm.partSn, partType: actionForm.partType, supplierId: actionForm.supplierId || null, batchNo: actionForm.batchNo || null, qcStatus: actionForm.qcStatus, remark: actionForm.remark || null }
         : { supplierId: actionForm.supplierId || null, batchNo: actionForm.batchNo || null, qcStatus: actionForm.qcStatus, remark: actionForm.remark || null }
     } else if (actionKind.value === 'order') {
-      endpoint = editingId.value === null ? '/api/orders' : `/api/orders/${editingId.value}`
-      actionMethod = editingId.value === null ? 'post' : 'put'
-      payload = { customerId: Number(actionForm.customerId), agentId: actionForm.agentId ? Number(actionForm.agentId) : null, modelId: Number(actionForm.modelId), orderQty: Number(actionForm.orderQty), plannedShipDate: actionForm.plannedShipDate || null, remark: actionForm.remark || null, ...(editingId.value === null ? { salesType: 'DOMESTIC', transportArrangement: newOrderTransport.arrangement, transportRemark: newOrderTransport.remark.trim() || null } : {}) }
+      payload = { customerId: Number(actionForm.customerId), agentId: actionForm.agentId ? Number(actionForm.agentId) : null, plannedShipDate: actionForm.plannedShipDate || null, remark: actionForm.remark || null }
+      if (editingId.value === null && domesticSkuCreationEnabled.value) {
+        if (!actionForm.customerId) { ElMessage.warning(tr('请选择订单客户')); return }
+        if (!orderSkuLines.value.length || orderSkuLines.value.some(line => !Number.isInteger(line.quantity) || line.quantity! < 1)) {
+          ElMessage.warning(tr('请添加 SKU 并填写有效数量'))
+          return
+        }
+        endpoint = '/api/orders/domestic-skus'
+        Object.assign(payload, { requestId: orderSkuRequestId.value,
+          items: orderSkuLines.value.map(line => ({ skuId: line.skuId, quantity: line.quantity })),
+          transportArrangement: newOrderTransport.arrangement, transportRemark: newOrderTransport.remark.trim() || null })
+      } else {
+        endpoint = editingId.value === null ? '/api/orders' : `/api/orders/${editingId.value}`
+        actionMethod = editingId.value === null ? 'post' : 'put'
+        Object.assign(payload, { modelId: Number(actionForm.modelId), orderQty: Number(actionForm.orderQty) })
+        if (editingId.value === null) Object.assign(payload, { salesType: 'DOMESTIC',
+          transportArrangement: newOrderTransport.arrangement, transportRemark: newOrderTransport.remark.trim() || null })
+      }
     } else if (actionKind.value === 'user') {
       endpoint = editingId.value === null ? '/api/users' : `/api/users/${editingId.value}`
       actionMethod = editingId.value === null ? 'post' : 'put'
@@ -1309,13 +1415,18 @@ async function submitPrimaryAction() {
     <el-empty v-else-if="passwordChangeVisible" :description='tr("请先修改初始密码")' />
     <CustomerWorkspace v-else-if="isCustomerAccount" :key="username" />
     <el-empty v-else-if="isPdaJobAccount" :description='tr("请在 PDA 端使用此岗位账号")' />
-      <BusinessWorkspace v-else-if="activeView === 'workflow' && !passwordChangeVisible" :context="authContext" :username="username" :refresh-key="workflowRefreshKey" @navigate="navigate" @guide="operationGuideVisible = true" @convert="changeInventoryLock([$event], 'convert')" @order="journeyOrderNo = $event" />
+      <BusinessWorkspace v-else-if="activeView === 'workflow' && !passwordChangeVisible" :context="authContext"
+        :username="username" :refresh-key="workflowRefreshKey" :domestic-sku-creation-enabled="domesticSkuCreationEnabled"
+        @navigate="navigate" @guide="operationGuideVisible = true"
+        @convert="(lockNo, lockNos) => changeInventoryLock([lockNo], 'convert', lockNos)" @order="journeyOrderNo = $event" />
 
       <DashboardPage v-else-if="activeView === 'dashboard'" :metrics="metrics" :status-rows="statusRows" :points="trendRows" :operations="recentOperations" :actions="quickActions" :allowed-views="visibleNavItems.map(item => item.key)" :context="authContext" :loading="dataLoading" :error="dataError" @refresh="loadModule('dashboard')" @navigate="navigate" />
 
       <ProductionManager v-else-if="productionViewByNavKey[activeView] && !passwordChangeVisible" :key="activeView" :view="productionViewByNavKey[activeView]" :username="username" :context="authContext" @continue="continueProduction" :can-create-task="canCreateProductionTask" @loaded="lastLoadedAt = new Date().toLocaleString()" @navigate="navigate" @order="journeyOrderNo = $event" :can-manage="!isAgentAccount && !hasRole(authContext, 'PDA_OPERATOR') && hasPermission(authContext, 'PRODUCTION_MANAGE')" :can-operate="hasPermission(authContext, 'ASSEMBLY_OPERATE')" :can-report-issue="hasAnyPermission(authContext, ['ASSEMBLY_OPERATE','REWORK_OPERATE'])" />
       <TraceQuery v-else-if="activeView === 'trace' && !passwordChangeVisible" />
-      <SkuInventoryPanel v-else-if="activeView === 'sku-inventory' && !passwordChangeVisible" :context="authContext" @navigate="navigate" @convert="changeInventoryLock([$event], 'convert')" />
+      <SkuInventoryPanel v-else-if="activeView === 'sku-inventory' && !passwordChangeVisible" :context="authContext"
+        :domestic-sku-creation-enabled="domesticSkuCreationEnabled" @navigate="navigate"
+        @convert="(lockNo, lockNos) => changeInventoryLock([lockNo], 'convert', lockNos)" />
       <EuropeSalesWorkspace v-else-if="activeView === 'europe-orders' && !passwordChangeVisible" :context="authContext" @navigate="navigate" />
       <PiWorkspace v-else-if="activeView === 'pis' && !passwordChangeVisible" :context="authContext" :allow-create="false"
         :requested-detail-id="dispatchPiId" generic-entry @detail-requested="dispatchPiId = null" @navigate="navigate" />
@@ -1362,8 +1473,25 @@ async function submitPrimaryAction() {
       <el-form v-else-if="actionKind === 'order'" label-width="100px">
         <el-form-item :label='tr("客户")'><el-select v-model="actionForm.customerId" filterable :placeholder='tr("请选择客户")'><el-option v-for="item in masterOptions.customers" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
         <el-form-item :label='tr("代理商")'><el-select v-model="actionForm.agentId" clearable filterable :placeholder='tr("可选代理商")'><el-option v-for="item in masterOptions.agents" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
-        <el-form-item :label='tr("车型")'><el-select v-model="actionForm.modelId" filterable :placeholder='tr("请选择车型")'><el-option v-for="item in masterOptions.models" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
-        <el-form-item :label='tr("订单数量")'><el-input-number v-model="actionForm.orderQty" :min="1" /></el-form-item>
+        <template v-if="editingId === null && domesticSkuCreationEnabled">
+          <el-form-item :label='tr("订单 SKU")'>
+            <el-select v-model="orderSkuChoice" filterable remote :remote-method="loadOrderSkuOptions"
+              :placeholder='tr("搜索并添加 SKU")' @visible-change="$event && loadOrderSkuOptions()" @change="addOrderSku">
+              <el-option v-for="sku in orderSkuOptions" :key="sku.skuId" :value="sku.skuId"
+                :label="`${sku.skuCode} · ${sku.productName || sku.modelName}`"
+                :disabled="orderSkuLines.some(line => line.skuId === sku.skuId)" />
+            </el-select>
+          </el-form-item>
+          <el-form-item v-for="(line, index) in orderSkuLines" :key="line.skuId" :label="line.skuCode">
+            <el-input-number v-model="line.quantity" :aria-label="line.skuCode + ' ' + tr('数量')" :min="1" :max="1000000" :precision="0" />
+            <el-button link type="danger" @click="orderSkuLines.splice(index, 1)">{{ tr("移除") }}</el-button>
+          </el-form-item>
+          <el-form-item :label='tr("订单数量")'>{{ tr("{count} 个 SKU，共 {quantity} 台", { count: orderSkuLines.length, quantity: orderSkuTotal }) }}</el-form-item>
+        </template>
+        <template v-else>
+          <el-form-item :label='tr("车型")'><el-select v-model="actionForm.modelId" filterable :placeholder='tr("请选择车型")'><el-option v-for="item in masterOptions.models" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
+          <el-form-item :label='tr("订单数量")'><el-input-number v-model="actionForm.orderQty" :min="1" /></el-form-item>
+        </template>
         <el-form-item :label='tr("计划发货")'><el-date-picker v-model="actionForm.plannedShipDate" type="date" value-format="YYYY-MM-DD" /></el-form-item>
         <OrderTransportFields v-if="editingId === null" v-model:arrangement="newOrderTransport.arrangement" v-model:remark="newOrderTransport.remark" />
         <el-form-item :label='tr("备注")'><el-input v-model="actionForm.remark" type="textarea" /></el-form-item>
@@ -1440,17 +1568,43 @@ async function submitPrimaryAction() {
       </el-form>
       <template #footer><el-button :disabled="actionKind === 'part' && actionSubmitting" @click="actionDialogVisible = false">{{ tr("取消") }}</el-button><el-button type="primary" :loading="actionSubmitting" @click="submitPrimaryAction">{{ tr("保存") }}</el-button></template>
     </el-dialog>
-    <el-dialog v-model="lockOrderVisible" :title='tr("锁定转单 · 选择销售去向")' width="min(720px, 96vw)" :close-on-click-modal="false">
-      <p>{{ trInline("来源：") }}{{ lockOrderForm.lockNo }}<template v-if="lockOrderForm.skuCode"> {{ trInline("· 固定 SKU") }} {{ lockOrderForm.skuCode }}</template>{{ trInline("。系统不会根据客户或币种判断内外销，请先选择本次转单去向，选定后对应单据不可更改。") }}</p>
+    <el-dialog v-model="lockOrderVisible" :title='tr("锁定转单 · 选择销售去向")' width="min(800px, 96vw)" :close-on-click-modal="false">
+      <p>{{ trInline("来源：") }}{{ lockOrderForm.lockNo }}<template v-if="lockOrderForm.skuCode"> · {{ lockOrderForm.skuCode }}</template></p>
       <div class="lock-sales-types" role="radiogroup" :aria-label='tr("转单去向")'>
         <button v-for="option in salesTypeOptions" :key="option.value" type="button" role="radio" :aria-checked="lockOrderForm.salesType === option.value" :class="{ active: lockOrderForm.salesType === option.value }" @click="lockOrderForm.salesType = option.value">
           <strong>{{ tr(option.title) }}</strong><small>{{ tr(option.menu) }} {{ trInline("· 模板：") }}{{ option.template }}</small><span>{{ tr(option.description) }}</span>
         </button>
       </div>
       <el-form v-if="lockOrderForm.salesType === 'DOMESTIC'" label-width="100px">
-        <el-alert :title='tr("转单保留库存占用和原到期时间。订单办理第一步先生成并核对购销合同，再确认订单，确认后才能出库。")' type="info" :closable="false" />
         <el-form-item :label='tr("客户")'><el-select v-model="lockOrderForm.customerId" :disabled="lockOrderForm.fixedCustomer" filterable><el-option v-for="customer in masterOptions.customers" :key="customer.id" :value="customer.id" :label="`${customer.code} · ${customer.name}`" /></el-select></el-form-item>
-        <el-form-item :label='tr("转换数量")'><el-input-number v-model="lockOrderForm.quantity" :min="1" :max="lockOrderForm.remaining" :precision="0" /></el-form-item>
+        <template v-if="canMergeLockSources">
+          <el-form-item :label='tr("锁定来源")'>
+            <el-select v-model="lockSourceChoice" filterable remote :remote-method="loadLockSourceOptions"
+              :placeholder='tr("添加同一客户、同一代理商的锁定")' @visible-change="$event && loadLockSourceOptions()" @change="addLockSource">
+              <el-option v-for="source in lockSourceOptions" :key="source.id" :value="source.id"
+                :label="`${source.skuCode} · ${source.lockNo} · ${tr('剩余')} ${source.remaining} ${tr('台')}`"
+                :disabled="selectedLockSources.some(selected => selected.id === source.id)" />
+            </el-select>
+          </el-form-item>
+          <el-table :data="selectedLockSources" :empty-text='tr("请选择锁定来源")'>
+            <el-table-column prop="skuCode" label="SKU" min-width="140" />
+            <el-table-column prop="lockNo" :label='tr("锁定单号")' min-width="170" />
+            <el-table-column :label='tr("可转数量")' width="100" prop="remaining" />
+            <el-table-column :label='tr("本次转出")' width="140">
+              <template #default="{ row }"><el-input-number v-model="row.quantity" :aria-label="row.lockNo + ' ' + tr('本次转出')" :min="1" :max="row.remaining" :precision="0" size="small" /></template>
+            </el-table-column>
+            <el-table-column width="65">
+              <template #default="{ $index }"><el-button link type="danger" @click="selectedLockSources.splice($index, 1)">{{ tr("移除") }}</el-button></template>
+            </el-table-column>
+          </el-table>
+        </template>
+        <el-form-item v-else :label='tr("本单转出数量")'>
+          <el-input-number v-model="lockOrderForm.quantity" :aria-label='tr("本单转出数量")'
+            :min="1" :max="lockOrderForm.remaining" :precision="0" />
+          <div style="width: 100%">
+            {{ tr("本单最多可转 {quantity} 台。", { quantity: lockOrderForm.remaining }) }}
+          </div>
+        </el-form-item>
         <el-form-item :label='tr("计划出库日")'><el-date-picker v-model="lockOrderForm.plannedShipDate" value-format="YYYY-MM-DD" /></el-form-item>
       </el-form>
       <template v-else-if="lockOrderForm.salesType === 'EUROPE'">
@@ -1458,7 +1612,19 @@ async function submitPrimaryAction() {
         <el-alert :title='tr("将进入「欧洲销售与交付 → 正常 PI 销售」，按所选出货仓从这条锁定生成 PI，单据使用 France_1104_PI 模板。")' type="info" :closable="false" />
       </template>
       <el-alert v-else-if="lockOrderForm.salesType === 'EXPORT'" :title='tr("将进入「销售订单 → 外销」，从这条锁定生成 PI，单据使用 260728英国builtPI 模板；收款达标后由 PI 流程生成履约订单。")' type="info" :closable="false" />
-      <template #footer><el-button @click="lockOrderVisible = false">{{ tr("取消") }}</el-button><el-button v-if="lockOrderForm.salesType === 'DOMESTIC'" type="primary" :loading="lockOrderSubmitting" @click="submitLockOrder">{{ tr("创建内销订单") }}</el-button><el-button v-else type="primary" :disabled="!lockOrderForm.salesType" @click="continueLockToPi">{{ lockOrderForm.salesType ? tr('前往生成 PI') : tr('请先选择去向') }}</el-button></template>
+      <template #footer>
+        <div class="lock-order-footer">
+          <strong v-if="lockOrderForm.salesType === 'DOMESTIC' && canMergeLockSources">
+            {{ tr("生成 1 张内销订单 · {count} 个 SKU，共 {quantity} 台", { count: selectedLockSkuCount, quantity: lockSourceTotal }) }}
+          </strong>
+          <div>
+            <el-button @click="lockOrderVisible = false">{{ tr("取消") }}</el-button>
+            <el-button v-if="lockOrderForm.salesType === 'DOMESTIC'" type="primary" :loading="lockOrderSubmitting"
+              :disabled="canMergeLockSources && !selectedLockSources.length" @click="submitLockOrder">{{ tr("创建内销订单") }}</el-button>
+            <el-button v-else type="primary" :disabled="!lockOrderForm.salesType" @click="continueLockToPi">{{ lockOrderForm.salesType ? tr('前往生成 PI') : tr('请先选择去向') }}</el-button>
+          </div>
+        </div>
+      </template>
     </el-dialog>
     <el-dialog v-model="agentAccessVisible" :title="tr('{value0} · 车型授权', { value0: agentAccessName })" width="620px">
       <p>{{ tr("选择允许该代理商查看库存、锁定库存和提交采购意向的车型。清空后撤销全部车型授权；历史锁定仍可查看和释放。") }}</p>
@@ -1472,7 +1638,8 @@ async function submitPrimaryAction() {
         <RecordIdColumn />
         <el-table-column prop="orderNo" :label='tr("订单号")' min-width="190" />
         <el-table-column prop="customerName" :label='tr("客户")' />
-        <el-table-column prop="orderQty" :label='tr("订单数量")' />
+        <el-table-column prop="orderQty" :label='tr("订单总台数")' />
+        <el-table-column :label='tr("本锁定转入")' min-width="105"><template #default="{ row }">{{ row.sourceConvertedQty ?? '—' }}</template></el-table-column>
         <el-table-column prop="shippedQty" :label='tr("已发货")' />
         <el-table-column :label='tr("状态")'><template #default="scope">{{ tr(orderStateNames[scope.row.status] ?? scope.row.status) }}</template></el-table-column>
         <el-table-column :label='tr("占用状态")' min-width="185"><template #default="scope">{{ tr(reservationLabel(scope.row.reservationStatus, isAgentAccount)) }}</template></el-table-column>
@@ -1508,5 +1675,14 @@ async function submitPrimaryAction() {
 </template>
 
 <style scoped>
+.lock-order-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: start;
+}
+.lock-order-footer > div { margin-inline-start: auto; }
 .login-language { position: absolute; z-index: 3; top: max(.7rem, env(safe-area-inset-top)); right: max(1rem, env(safe-area-inset-right)); }
 </style>

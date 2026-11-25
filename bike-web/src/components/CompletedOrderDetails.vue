@@ -7,6 +7,7 @@ import { transportLabel, type TransportArrangement } from '../order-transport'
 import StatusTag from './business/StatusTag.vue'
 import EmptyState from './common/EmptyState.vue'
 import DataTable from './table/DataTable.vue'
+import OrderSkuLines from './OrderSkuLines.vue'
 
 type Shipment = {
   vehicleQrCode: string
@@ -44,6 +45,8 @@ type OrderDetails = {
   dispatchNotes?: Record<string, string>
   shippedVehicles: Shipment[]
   operations?: OrderOperation[]
+  skuLines?: InstanceType<typeof OrderSkuLines>['$props']['lines']
+  lockSources?: InstanceType<typeof OrderSkuLines>['$props']['sources']
 }
 
 const visible = defineModel<boolean>({ required: true })
@@ -136,12 +139,13 @@ watch([visible, () => props.orderNo, refreshVersion], async ([isVisible, orderNo
           <div v-if="order.operations"><dt>{{ tr("确认人") }}</dt><dd>{{ confirmOperation?.operatorName || tr('未记录') }}</dd></div>
           <div v-if="order.operations"><dt>{{ tr("确认时间") }}</dt><dd>{{ formatTime(confirmOperation?.operationTime) }}</dd></div>
           <div><dt>{{ tr("最近更新时间") }}</dt><dd>{{ formatTime(order.updatedAt) }}</dd></div>
-          <div><dt>{{ tr("来源锁定单号") }}</dt><dd>{{ order.sourceLockNo || '—' }}</dd></div>
+          <div v-if="!order.skuLines?.length"><dt>{{ tr("来源锁定单号") }}</dt><dd>{{ order.sourceLockNo || '—' }}</dd></div>
           <div v-if="order.purchaseContractNo"><dt>{{ tr("购销合同号") }}</dt><dd>{{ order.purchaseContractNo }}</dd></div>
           <div><dt>{{ tr("关联 PI") }}</dt><dd>{{ order.hasLinkedPi ? tr('已关联') : tr('未关联') }}</dd></div>
           <div class="detail-remark"><dt>{{ tr("备注") }}</dt><dd>{{ order.remark || '—' }}</dd></div>
         </dl>
       </section>
+      <OrderSkuLines v-if="order.skuLines?.length" :lines="order.skuLines" :sources="order.lockSources" />
 
       <section v-if="order.operations" :aria-label='tr("订单操作记录")'>
         <h3>{{ tr("操作记录") }}</h3>

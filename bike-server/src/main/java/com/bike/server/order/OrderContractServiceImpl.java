@@ -3,6 +3,7 @@ package com.bike.server.order;
 import com.bike.server.common.BusinessException;
 import com.bike.server.common.CurrentOperator;
 import jakarta.validation.Validator;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Objects;
 import org.slf4j.Logger;
@@ -36,9 +37,11 @@ public class OrderContractServiceImpl implements OrderContractService {
         if (reason != null) return new Preparation(false, reason, null, hasLinkedPi);
         var buyer = new OrderContractRequest.Party(order.getCustomerName(), "", "", "", "", "");
         var seller = new OrderContractRequest.Party("", "", "", "", "", "");
+        var skuPrices = order.getSkuLines().stream().map(line -> new OrderContractRequest.SkuPrice(
+                line.skuId(), line.skuCode(), line.modelName(), line.orderedQty(), null)).toList();
         return new Preparation(true, null, new OrderContractRequest("", LocalDate.now(), order.getUpdatedAt(), order.getModelId(), order.getOrderQty(),
                 buyer, seller, "", "电助力自行车", "", null, null, null,
-                "交货前付款", "", "", workbook.defaultClauses()), hasLinkedPi);
+                "交货前付款", "", "", workbook.defaultClauses(), skuPrices), hasLinkedPi);
     }
 
     @Override
@@ -56,13 +59,39 @@ public class OrderContractServiceImpl implements OrderContractService {
         if (!Objects.equals(order.getCustomerName(), request.buyer().name())) {
             throw new BusinessException("ORDER_CONTRACT_BUYER_INVALID", "合同需方必须与订单客户一致，请刷新订单后重试");
         }
-        if (request.unitPrice().multiply(java.math.BigDecimal.valueOf(order.getOrderQty()))
-                .compareTo(new java.math.BigDecimal("999999999999.99")) > 0) {
+        if (contractTotal(order, request).compareTo(new BigDecimal("999999999999.99")) > 0) {
             throw new BusinessException("ORDER_CONTRACT_AMOUNT_INVALID", "合同金额超过 Excel 可精确表示的范围，请拆分订单");
         }
         byte[] result = workbook.render(order, request);
         LOG.info("生成内销购销合同 orderId={} userId={}", orderId, CurrentOperator.id());
         return result;
+    }
+
+    private BigDecimal contractTotal(SalesOrderView order, OrderContractRequest request) {
+        if (order.getSkuLines().isEmpty()) {
+            if (request.unitPrice() == null || request.skuPrices() != null && !request.skuPrices().isEmpty()) {
+                throw new BusinessException("ORDER_CONTRACT_INVALID", "请填写订单单价");
+            }
+            return request.unitPrice().multiply(BigDecimal.valueOf(order.getOrderQty()));
+        }
+        if (request.skuPrices() == null || request.skuPrices().size() != order.getSkuLines().size()) {
+            throw new BusinessException("ORDER_CONTRACT_STALE", "请刷新订单并逐个核对 SKU 数量与单价");
+        }
+        var pricesBySku = new java.util.HashMap<Long, OrderContractRequest.SkuPrice>();
+        for (var price : request.skuPrices()) {
+            if (pricesBySku.putIfAbsent(price.skuId(), price) != null) {
+                throw new BusinessException("ORDER_CONTRACT_INVALID", "合同 SKU 单价重复");
+            }
+        }
+        BigDecimal total = BigDecimal.ZERO;
+        for (var line : order.getSkuLines()) {
+            var price = pricesBySku.get(line.skuId());
+            if (price == null || price.quantity() != line.orderedQty()) {
+                throw new BusinessException("ORDER_CONTRACT_STALE", "订单 SKU 或数量已变化，请刷新后重新核对");
+            }
+            total = total.add(price.unitPrice().multiply(BigDecimal.valueOf(line.orderedQty())));
+        }
+        return total;
     }
 
     private SalesOrderView authorizedOrder(long orderId) {

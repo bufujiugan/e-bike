@@ -90,8 +90,13 @@ public class PaymentPriorityServiceImpl implements PaymentPriorityService {
                 yield pis.selectItems(candidate.id()).stream().map(item->new Demand(item.getSkuId(),item.getProductModelId(),warehouseId,item.getQuantity())).toList();
             }
             case "ORDER" -> {
-                var order=orders.selectForUpdate(candidate.id());
-                yield inventory.reservationItems(candidate.id()).stream().map(item->new Demand(item.skuId(),order.getModelId(),null,item.remainingQty())).toList();
+                var order = orders.selectForUpdate(candidate.id());
+                if (order.isDomesticSkuOrder()) {
+                    yield mapper.selectOrderDemand(candidate.id()).stream()
+                            .map(line -> new Demand(line.skuId(), line.modelId(), null, line.quantity())).toList();
+                }
+                yield inventory.reservationItems(candidate.id()).stream()
+                        .map(item -> new Demand(item.skuId(), order.getModelId(), null, item.remainingQty())).toList();
             }
             case "LOCK" -> {
                 var lock=locks.selectById(candidate.id());

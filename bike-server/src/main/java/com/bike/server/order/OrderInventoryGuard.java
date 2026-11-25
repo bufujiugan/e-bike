@@ -13,11 +13,14 @@ public class OrderInventoryGuard {
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.stock.SkuInventoryGuard skuInventoryGuard;
     public OrderInventoryGuard(OrderReservationMapper mapper){this.mapper=mapper;}
     public void requireShipment(SalesOrderView order,int quantity){
+        requireShipment(order, order.getModelId(), quantity);
+    }
+    public void requireShipment(SalesOrderView order,long modelId,int quantity){
         if(factoryShipments!=null)factoryShipments.requireCollection(order.getId(),order.getCustomerId());
         // 限时占用可供本单出库，但必须保留其他有效锁定；已付款订单沿用付款优先口径。
         var snapshot="TIMED".equals(order.getReservationHoldMode())
-                ? mapper.snapshot(order.getModelId(),order.getId())
-                : mapper.selectFulfillmentSnapshot(order.getModelId(),order.getId());
+                ? mapper.snapshot(modelId,order.getId())
+                : mapper.selectFulfillmentSnapshot(modelId,order.getId());
         if(snapshot.getReservationCount()>0 && snapshot.getOwnedQty()<quantity)
             throw new BusinessException("ORDER_RESERVATION_EXPIRED","订单占用已到期、已释放或剩余数量不足，请核对有效占用后出库");
         if(snapshot.availableForOrder()<quantity)
@@ -34,6 +37,12 @@ public class OrderInventoryGuard {
     public void requireVehicle(SalesOrderView order,long vehicleId){if(factoryShipments!=null)factoryShipments.requireWarehouse(order.getId(),vehicleId);if(skuInventoryGuard!=null)skuInventoryGuard.requireVehicle(order.getId(),vehicleId);}
     public void recordShipment(long orderId,long vehicleId){if(skuInventoryGuard!=null)skuInventoryGuard.shipped(orderId,vehicleId);}
     public void restoreShipment(long orderId,long vehicleId){if(skuInventoryGuard!=null)skuInventoryGuard.restore(orderId,vehicleId);}
+    public void allocateShipmentSource(long orderId, long vehicleId, String stockNo) {
+        if (skuInventoryGuard != null) skuInventoryGuard.allocateShipmentSource(orderId, vehicleId, stockNo);
+    }
+    public void restoreShipmentSource(long orderId, long stockOutId) {
+        if (skuInventoryGuard != null) skuInventoryGuard.restoreShipmentSource(orderId, stockOutId);
+    }
     public void requireEditable(long orderId){
         if(europeSales!=null && europeSales.selectFactoryOrderForSalesOrder(orderId)!=null)
             throw new BusinessException("ORDER_LINKED_TO_FACTORY","订单已关联工厂直签业务，请先核对并解除关联后再修改客户或数量");

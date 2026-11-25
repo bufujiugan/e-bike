@@ -51,8 +51,37 @@
   </select>
   <select id="reservationItems" resultType="com.bike.server.stock.SkuReservationItem">SELECT sku_id,ordered_qty,shipped_qty,closed_qty FROM bike_order_reservation_item WHERE order_id=#{orderId} ORDER BY sku_id</select>
   <update id="markSkuScope">UPDATE bike_order_reservation SET scope_type='SKU' WHERE order_id=#{orderId}</update>
+  <insert id="insertDomesticReservationItem">
+    INSERT INTO bike_order_reservation_item(order_id,sku_id,ordered_qty) VALUES(#{orderId},#{skuId},#{quantity})
+  </insert>
   <insert id="insertReservationItem">INSERT INTO bike_order_reservation_item(order_id,sku_id,ordered_qty) SELECT r.order_id,s.id,#{quantity} FROM bike_order_reservation r JOIN bike_production_sku s ON s.model_id=r.model_id WHERE r.order_id=#{orderId} AND s.id=#{skuId} AND r.scope_type='SKU'</insert>
   <update id="increaseShipped">UPDATE bike_order_reservation_item SET shipped_qty=shipped_qty+1 WHERE order_id=#{orderId} AND sku_id=#{skuId} AND shipped_qty+closed_qty&lt;ordered_qty</update>
   <update id="decreaseShipped">UPDATE bike_order_reservation_item SET shipped_qty=shipped_qty-1 WHERE order_id=#{orderId} AND sku_id=#{skuId} AND shipped_qty&gt;0 AND closed_qty=0</update>
+  <select id="countLockSources" resultType="int">
+    SELECT COUNT(*) FROM bike_domestic_order_lock_source WHERE order_id=#{orderId} AND sku_id=#{skuId}
+  </select>
+  <select id="selectShipmentSource" resultType="long">
+    SELECT src.lock_id FROM bike_domestic_order_lock_source src JOIN bike_order_reservation r ON r.order_id=src.order_id
+    WHERE src.order_id=#{orderId} AND src.sku_id=#{skuId} AND src.shipped_qty&lt;src.quantity
+      AND (r.hold_mode IN ('PAID','CREDIT') OR (r.hold_mode='TIMED' AND COALESCE(src.renewed_expires_at,src.expires_at)&gt;NOW(3)))
+    ORDER BY COALESCE(src.renewed_expires_at,src.expires_at),src.lock_id LIMIT 1
+  </select>
+  <update id="increaseSourceShipped">
+    UPDATE bike_domestic_order_lock_source SET shipped_qty=shipped_qty+1
+    WHERE order_id=#{orderId} AND lock_id=#{lockId} AND shipped_qty&lt;quantity
+  </update>
+  <insert id="insertShipmentSource">
+    INSERT INTO bike_domestic_stock_out_source(stock_out_id,order_id,lock_id)
+    SELECT id,order_id,#{lockId} FROM bike_stock_out_record WHERE stock_out_no=#{stockNo} AND order_id=#{orderId}
+  </insert>
+  <select id="selectStockOutSource" resultType="long">
+    SELECT lock_id FROM bike_domestic_stock_out_source WHERE stock_out_id=#{stockOutId}
+  </select>
+  <update id="decreaseSourceShipped">
+    UPDATE bike_domestic_order_lock_source src JOIN bike_order_reservation r ON r.order_id=src.order_id
+    SET src.shipped_qty=src.shipped_qty-1
+    WHERE src.order_id=#{orderId} AND src.lock_id=#{lockId} AND src.shipped_qty&gt;0
+      AND (r.hold_mode IN ('PAID','CREDIT') OR (r.hold_mode='TIMED' AND COALESCE(src.renewed_expires_at,src.expires_at)&gt;NOW(3)))
+  </update>
   <update id="closeRemainder">UPDATE bike_order_reservation_item SET closed_qty=ordered_qty-shipped_qty WHERE order_id=#{orderId}</update>
 </mapper>

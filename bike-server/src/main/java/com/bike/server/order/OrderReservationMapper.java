@@ -6,6 +6,8 @@ import java.math.BigDecimal;
 
 @Mapper
 public interface OrderReservationMapper {
+    int insertDomesticSku(@Param("orderId") long orderId, @Param("requestId") String requestId,
+            @Param("modelId") long modelId, @Param("qty") int qty, @Param("expiresAt") java.time.LocalDateTime expiresAt);
     OrderReservationView selectForUpdate(@Param("orderId") long orderId);
     int holdAfterPayment(@Param("orderId") long orderId, @Param("piId") long piId,
                          @Param("paidAmount") BigDecimal paidAmount, @Param("operatorId") Long operatorId);

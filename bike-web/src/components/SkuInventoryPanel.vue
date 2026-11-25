@@ -14,8 +14,8 @@ import DataTable from './table/DataTable.vue'
 import Pagination from './table/Pagination.vue'
 import AppIcon from './AppIcon.vue'
 
-const props = defineProps<{ context: PermissionContext | null; initialSkuId?: number; initialModelId?: number }>()
-const emit = defineEmits<{ navigate: [view: string]; convert: [lockNo: string] }>()
+const props = defineProps<{ context: PermissionContext | null; initialSkuId?: number; initialModelId?: number; domesticSkuCreationEnabled: boolean }>()
+const emit = defineEmits<{ navigate: [view: string]; convert: [lockNo: string, batchLockNos?: string[]] }>()
 type Row = { skuId: number; modelId: number; skuCode: string; productName: string; specification: string; modelName: string; physicalQty: number; quarantinedQty: number; temporaryLockedQty: number; orderReservedQty: number; availableQty: number; shortageQty: number; legacyModelCommittedQty: number; modelAvailableQty: number; maxNewLockQty: number }
 type Option = { id: number; name: string; code: string; status: string }
 type Lock = { id: number; lockNo: string; skuCode: string; lockQty: number }
@@ -168,7 +168,7 @@ onMounted(async () => {
               <td>{{ lock.skuCode }}</td>
               <td>
                 {{ lock.lockNo }}
-                <el-button v-if="canConvert" class="lock-result-action" link type="primary" @click="convertLock(lock.lockNo)">{{ tr("直接转订单") }}</el-button>
+                <el-button v-if="canConvert" class="lock-result-action" link type="primary" @click="convertLock(lock.lockNo)">{{ tr("转订单 / PI") }}</el-button>
               </td>
               <td>{{ lock.lockQty }}</td>
             </tr>
@@ -194,6 +194,10 @@ onMounted(async () => {
       </template>
       <template #footer>
         <div v-if="dialogStep === 'result'" class="lock-result-footer">
+          <el-button v-if="canConvert && domesticSkuCreationEnabled && result.length > 1" type="primary"
+            @click="visible = false; emit('convert', result[0].lockNo, result.map(lock => lock.lockNo))">
+            {{ tr("合并转内销订单") }}
+          </el-button>
           <el-button v-if="canSeeLocks" @click="emit('navigate', 'inventory-locks')">{{ tr("查看全部锁定与关联订单") }}</el-button>
           <el-button ref="doneButton" type="primary" @click="visible = false">{{ tr("关闭") }}</el-button>
         </div>

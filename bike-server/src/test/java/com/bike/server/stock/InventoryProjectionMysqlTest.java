@@ -55,7 +55,9 @@ class InventoryProjectionMysqlTest {
                 "bike_inventory_lock(product_model_id BIGINT,lock_qty INT,released_qty INT,converted_qty INT,status VARCHAR(30),expire_time DATETIME,sku_id BIGINT,scope_type VARCHAR(16) DEFAULT 'MODEL_LEGACY')",
                 "bike_order_reservation(order_id BIGINT,model_id BIGINT,reserved_qty INT,expires_at DATETIME,hold_mode VARCHAR(16) DEFAULT 'TIMED',scope_type VARCHAR(16) DEFAULT 'MODEL_LEGACY')",
                 "bike_order_reservation_item(order_id BIGINT,sku_id BIGINT,ordered_qty INT,shipped_qty INT,closed_qty INT)",
+                "bike_domestic_order_lock_source(order_id BIGINT,sku_id BIGINT,quantity INT,shipped_qty INT,expires_at DATETIME(3),renewed_expires_at DATETIME(3))",
                 "bike_production_vehicle(vehicle_id BIGINT,sku_id BIGINT)",
+                "bike_production_sku(id BIGINT,model_id BIGINT)",
                 "bike_sales_order(id BIGINT,status VARCHAR(30))",
                 "bike_sales_order_item(order_id BIGINT,product_model_id BIGINT,shipped_qty INT)")) {
                 String isolated=ddl.replace("bike_",tablePrefix);

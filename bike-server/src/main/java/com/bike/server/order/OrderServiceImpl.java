@@ -22,6 +22,7 @@ public class OrderServiceImpl implements OrderService {
     @Autowired private ProductionGuard guard;
     @Autowired private OrderInventoryGuard inventoryGuard;
     @Autowired private OrderReservationCoordinator reservations;
+    @Autowired private DomesticSkuOrderMapper domesticSkuOrders;
 
     public OrderServiceImpl(OrderMapper orderMapper) { this.orderMapper = orderMapper; }
 
@@ -230,6 +231,13 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private SalesOrderView enrichDetails(SalesOrderView order) {
+        if (order.isDomesticSkuOrder()) {
+            order.setSkuLines(domesticSkuOrders.selectLines(order.getId()));
+            if (canReadOrderOperations()
+                    && (CurrentOperator.hasPermission("AGENT_INVENTORY_READ") || CurrentOperator.hasPermission("AGENT_LOCK_WRITE"))) {
+                order.setLockSources(domesticSkuOrders.selectSources(order.getId()));
+            }
+        }
         if (contractLinks != null) order.setHasLinkedPi(contractLinks.existsPiForOrder(order.getId()));
         order.setShippedVehicles(orderMapper.selectShippedVehicles(order.getId()));
         if (SalesType.DOMESTIC.equals(order.getSalesType()) && !order.getShippedVehicles().isEmpty() && canReadOrderOperations()) {

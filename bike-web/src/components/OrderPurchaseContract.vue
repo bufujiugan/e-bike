@@ -10,6 +10,7 @@ type Contract = {
   customsModel: string; productName: string; appearance: string; unitPrice: number | null
   usdUnitPrice: number | null; costUnitPrice: number | null; paymentTerms: string
   bankName: string; bankAccount: string; clauses: string[]
+  skuPrices?: { skuId: number; skuCode: string; modelName: string; quantity: number; unitPrice: number | null }[]
 }
 const props = defineProps<{ order: { id: number; orderNo: string; modelName: string; orderQty: number; updatedAt: string } }>()
 const emit = defineEmits<{ downloaded: [] }>()
@@ -22,13 +23,16 @@ const contactFields: { key: keyof Party; label: string; max: number }[] = [
 ]
 const clauseLabels = ['合同说明', '订单回复约定', '价格说明', '交货地点', '交货方式', '包装方式', '客诉期', '质量与验收', '违约责任', '争议处理', '数量变更', '合同生效']
 const required = (label: string) => ({ required: true, message: tr('请填写{field}', { field: tr(label) }), trigger: 'blur' })
+const skuPrices = computed(() => contract.value?.skuPrices ?? [])
 const rules = computed<FormRules>(() => ({
   contractNo: [required('合同编号')], signedDate: [required('签订日期')],
   'seller.name': [required('供方名称')], productName: [required('品名')],
-  unitPrice: [required('人民币单价'), { type: 'number', min: 0.01, message: tr('单价必须大于零'), trigger: 'change' }],
+  unitPrice: skuPrices.value.length ? [] : [required('人民币单价'), { type: 'number', min: 0.01, message: tr('单价必须大于零'), trigger: 'change' }],
   paymentTerms: [required('付款周期')],
 }))
-const total = computed(() => ((Math.round((contract.value?.unitPrice || 0) * 100) * props.order.orderQty) / 100)
+const total = computed(() => ((skuPrices.value.length
+  ? skuPrices.value.reduce((sum, line) => sum + Math.round((line.unitPrice || 0) * 100) * line.quantity, 0)
+  : Math.round((contract.value?.unitPrice || 0) * 100) * props.order.orderQty) / 100)
   .toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
 
 async function load() {
@@ -98,10 +102,17 @@ watch(() => [props.order.id, props.order.updatedAt], () => { void load() }, { im
       <div class="contract-grid">
         <el-form-item :label='tr("报关型号")'><el-input v-model="contract.customsModel" maxlength="40" /></el-form-item>
         <el-form-item :label='tr("品名")' prop="productName"><el-input v-model="contract.productName" maxlength="60" /></el-form-item>
-        <el-form-item :label='tr("外观 / 颜色")'><el-input v-model="contract.appearance" maxlength="40" /></el-form-item>
-        <el-form-item :label='tr("单价（RMB）")' prop="unitPrice"><el-input-number v-model="contract.unitPrice" :min="0.01" :max="99999999.99" :precision="2" :step="0.01" :controls="false" /></el-form-item>
+        <el-form-item v-if="!skuPrices.length" :label='tr("外观 / 颜色")'><el-input v-model="contract.appearance" maxlength="40" /></el-form-item>
+        <el-form-item v-if="!skuPrices.length" :label='tr("单价（RMB）")' prop="unitPrice"><el-input-number v-model="contract.unitPrice" :min="0.01" :max="99999999.99" :precision="2" :step="0.01" :controls="false" /></el-form-item>
       </div>
-      <el-collapse>
+      <div v-if="skuPrices.length" class="contract-grid">
+        <el-form-item v-for="(line, index) in skuPrices" :key="line.skuId" :label="`${line.skuCode} · ${line.quantity} ${tr('台')}`"
+          :prop="`skuPrices.${index}.unitPrice`" :rules="[required('人民币单价')]">
+          <el-input-number v-model="line.unitPrice" :aria-label="line.skuCode + ' ' + tr('人民币单价')"
+            :placeholder='tr("单价（RMB）")' :min="0.01" :max="99999999.99" :precision="2" :step="0.01" :controls="false" />
+        </el-form-item>
+      </div>
+      <el-collapse v-else>
         <el-collapse-item :title='tr("模板辅助价格（选填，填写后将出现在合同中）")' name="prices"><div class="contract-grid">
           <el-form-item :label='tr("单价（USD，不参与人民币合计）")'><el-input-number v-model="contract.usdUnitPrice" :min="0" :max="99999999.99" :precision="2" :step="0.01" :controls="false" /></el-form-item>
           <el-form-item :label='tr("成本单价（RMB）")'><el-input-number v-model="contract.costUnitPrice" :min="0" :max="99999999.99" :precision="2" :step="0.01" :controls="false" /></el-form-item>

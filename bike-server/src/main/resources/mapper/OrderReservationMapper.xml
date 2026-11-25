@@ -1,22 +1,34 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.bike.server.order.OrderReservationMapper">
+  <sql id="ownedModel">
+    SELECT SUM(qty) FROM (
+      SELECT GREATEST(r.reserved_qty-i.shipped_qty,0) qty
+      FROM bike_order_reservation r JOIN bike_sales_order o ON o.id=r.order_id
+      JOIN bike_sales_order_item i ON i.order_id=r.order_id AND i.product_model_id=r.model_id
+      WHERE r.order_id=#{orderId} AND r.model_id=#{modelId} AND r.scope_type='MODEL_LEGACY'
+        AND <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/>
+      UNION ALL
+      SELECT <include refid="com.bike.server.stock.InventoryPolicyMapper.activeSkuQty"/>
+      FROM bike_order_reservation_item si JOIN bike_production_sku s ON s.id=si.sku_id
+      JOIN bike_order_reservation r ON r.order_id=si.order_id JOIN bike_sales_order o ON o.id=r.order_id
+      WHERE r.order_id=#{orderId} AND s.model_id=#{modelId} AND r.scope_type='SKU'
+        AND <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/>
+        <if test="fulfillment">AND r.hold_mode IN ('PAID','CREDIT')</if>
+    ) owned
+  </sql>
   <sql id="snapshotQuery">
     SELECT (SELECT COUNT(*) FROM bike_vehicle v WHERE v.model_id=#{modelId} AND v.status=2 AND NOT <include refid="com.bike.server.stock.InventoryPolicyMapper.quarantined"/>) physical_qty,
       (SELECT COALESCE(SUM(qty),0) FROM (<include refid="com.bike.server.stock.InventoryPolicyMapper.commitments"/>) c WHERE model_id=#{modelId}) committed_qty,
       (SELECT COUNT(*) FROM bike_order_reservation WHERE order_id=#{orderId}) reservation_count,
-      (SELECT COALESCE(SUM(GREATEST(r.reserved_qty-i.shipped_qty,0)),0) FROM bike_order_reservation r JOIN bike_sales_order o ON o.id=r.order_id JOIN bike_sales_order_item i ON i.order_id=o.id AND i.product_model_id=r.model_id
-       WHERE r.order_id=#{orderId} AND <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/>) owned_qty
+      <bind name="fulfillment" value="false"/> COALESCE((<include refid="ownedModel"/>),0) owned_qty
   </sql>
   <select id="snapshot" resultType="com.bike.server.order.OrderInventorySnapshot"><include refid="snapshotQuery"/></select>
   <select id="selectFulfillmentSnapshot" resultType="com.bike.server.order.OrderInventorySnapshot">
     SELECT (SELECT COUNT(*) FROM bike_vehicle v WHERE v.model_id=#{modelId} AND v.status=2 AND NOT <include refid="com.bike.server.stock.InventoryPolicyMapper.quarantined"/>) physical_qty,
       (SELECT COALESCE(SUM(qty),0) FROM (<include refid="com.bike.server.stock.InventoryPolicyMapper.fulfillmentCommitments"/>) c WHERE model_id=#{modelId}) committed_qty,
       (SELECT COUNT(*) FROM bike_order_reservation WHERE order_id=#{orderId}) reservation_count,
-      (SELECT COALESCE(SUM(GREATEST(r.reserved_qty-i.shipped_qty,0)),0) FROM bike_order_reservation r
-       JOIN bike_sales_order o ON o.id=r.order_id JOIN bike_sales_order_item i ON i.order_id=o.id AND i.product_model_id=r.model_id
-       WHERE r.order_id=#{orderId} AND <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/>
-         AND (r.scope_type='MODEL_LEGACY' OR r.hold_mode IN ('PAID','CREDIT'))) owned_qty
+      <bind name="fulfillment" value="true"/> COALESCE((<include refid="ownedModel"/>),0) owned_qty
   </select>
   <select id="expiredForOrder" resultType="int">
     SELECT COUNT(*) FROM bike_order_reservation WHERE order_id=#{orderId}
@@ -26,11 +38,25 @@
     <include refid="com.bike.server.order.OrderMapper.orderSelect"/>
     WHERE r.hold_mode='TIMED' AND r.expiry_audited_at IS NULL AND r.expires_at&lt;=NOW(3)
       AND o.status IN ('DRAFT','PENDING','CONFIRMED','PARTIAL_SHIPPED') AND i.shipped_qty&lt;i.ordered_qty
+      AND NOT EXISTS(SELECT 1 FROM bike_domestic_order_lock_source src WHERE src.order_id=r.order_id)
     ORDER BY r.expires_at,o.id LIMIT 200
   </select>
   <update id="markExpiryAudited">UPDATE bike_order_reservation SET expiry_audited_at=NOW(3) WHERE order_id=#{orderId} AND hold_mode='TIMED' AND expiry_audited_at IS NULL AND expires_at&lt;=NOW(3)</update>
-  <select id="ordersForLock" resultType="com.bike.server.order.SalesOrderView"><include refid="com.bike.server.order.OrderMapper.orderSelect"/> WHERE r.source_lock_id=#{lockId} <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=o.customer_id)</if> ORDER BY o.id DESC LIMIT #{offset},#{limit}</select>
-  <select id="countForLock" resultType="long">SELECT COUNT(*) FROM bike_order_reservation r JOIN bike_sales_order o ON o.id=r.order_id WHERE r.source_lock_id=#{lockId} <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=o.customer_id)</if></select>
+  <select id="ordersForLock" resultType="com.bike.server.order.SalesOrderView">
+    SELECT linked.*,COALESCE(src.quantity,linked.reserved_qty) source_converted_qty
+    FROM (
+      <include refid="com.bike.server.order.OrderMapper.orderSelect"/>
+      WHERE (r.source_lock_id=#{lockId} OR EXISTS(SELECT 1 FROM bike_domestic_order_lock_source source
+         WHERE source.order_id=r.order_id AND source.lock_id=#{lockId}))
+      <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/>
+      <if test="customerScopeUser != null">
+        AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=o.customer_id)
+      </if>
+      ORDER BY o.id DESC LIMIT #{offset},#{limit}
+    ) linked LEFT JOIN bike_domestic_order_lock_source src ON src.order_id=linked.id AND src.lock_id=#{lockId}
+    ORDER BY linked.id DESC
+  </select>
+  <select id="countForLock" resultType="long">SELECT COUNT(*) FROM bike_order_reservation r JOIN bike_sales_order o ON o.id=r.order_id WHERE (r.source_lock_id=#{lockId} OR EXISTS(SELECT 1 FROM bike_domestic_order_lock_source src WHERE src.order_id=r.order_id AND src.lock_id=#{lockId})) <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=o.customer_id)</if></select>
   <select id="vehicleModel" resultType="long">SELECT model_id FROM bike_vehicle WHERE id=#{vehicleId}</select>
   <update id="renew">
     UPDATE bike_order_reservation SET expires_at=DATE_ADD(NOW(3),INTERVAL #{hours} HOUR),expiry_audited_at=NULL
@@ -59,6 +85,10 @@
   </update>
   <select id="findOrder" resultType="long">SELECT order_id FROM bike_order_reservation WHERE source_lock_id=#{lockId} AND request_id=#{requestId}</select>
   <insert id="insert">INSERT INTO bike_order_reservation(order_id,source_lock_id,request_id,model_id,reserved_qty,expires_at) VALUES(#{orderId},#{lockId},#{requestId},#{modelId},#{qty},#{expiresAt})</insert>
+  <insert id="insertDomesticSku">
+    INSERT INTO bike_order_reservation(order_id,request_id,model_id,reserved_qty,expires_at,scope_type)
+    VALUES(#{orderId},#{requestId},#{modelId},#{qty},#{expiresAt},'SKU')
+  </insert>
   <select id="countForOrder" resultType="int">SELECT COUNT(*) FROM bike_order_reservation WHERE order_id=#{orderId}</select>
   <select id="expiry" resultType="java.time.LocalDateTime">SELECT expires_at FROM bike_order_reservation WHERE order_id=#{orderId}</select>
 </mapper>

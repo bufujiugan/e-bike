@@ -15,6 +15,7 @@ public interface InventoryLockMapper {
     int insert(@Param("lockNo") String lockNo,@Param("request") InventoryLockCreateRequest request,@Param("expireTime") java.time.LocalDateTime expireTime,@Param("createdBy") Long createdBy);
     int insertDetail(@Param("lockNo") String lockNo, @Param("productModelId") long productModelId, @Param("lockQty") int lockQty);
     InventoryLockView selectById(@Param("id") long id);
+    List<InventoryLockView> selectConvertibleSources(@Param("id") long id, @Param("keyword") String keyword);
     long selectIdByNo(@Param("lockNo") String lockNo);
     List<InventoryLockView> selectPage(@Param("agentId") Long agentId,@Param("offset") long offset,@Param("limit") long limit);
     long count(@Param("agentId") Long agentId);

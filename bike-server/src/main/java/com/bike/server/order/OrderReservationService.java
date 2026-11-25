@@ -16,6 +16,7 @@ public class OrderReservationService {
     private final PiMapper pis;
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.stock.SkuInventoryGuard skuInventoryGuard;
     @org.springframework.beans.factory.annotation.Autowired private com.bike.server.pi.PiSeriesMapper series;
+    @org.springframework.beans.factory.annotation.Autowired private DomesticSkuOrderMapper domesticSkuOrders;
 
     public OrderReservationService(OrderMapper orders, OrderReservationMapper reservations,
             OrderReservationCoordinator coordinator, PiMapper pis) {
@@ -58,11 +59,22 @@ public class OrderReservationService {
         }
         // A paid hold remains paid; a legacy renewal request must not turn it back into a timed hold.
         if (java.util.Set.of("PAID","CREDIT").contains(reservation.holdMode())) return order;
-        if (reservations.snapshot(order.getModelId(), id).availableForOrder() < remaining) {
+        if (order.isDomesticSkuOrder()) {
+            var remainingByModel = new java.util.HashMap<Long, Integer>();
+            for (var line : domesticSkuOrders.selectLines(id)) {
+                remainingByModel.merge(line.modelId(), line.orderedQty() - line.shippedQty() - line.closedQty(), Integer::sum);
+            }
+            for (var model : remainingByModel.entrySet()) {
+                if (model.getValue() > 0 && reservations.snapshot(model.getKey(), id).availableForOrder() < model.getValue()) {
+                    throw new BusinessException("INVENTORY_NOT_ENOUGH", "订单车型库存不足，无法重新占用");
+                }
+            }
+        } else if (reservations.snapshot(order.getModelId(), id).availableForOrder() < remaining) {
             throw new BusinessException("INVENTORY_NOT_ENOUGH", "当前可用库存不足，不能重新占用；已登记的收款保持不变");
         }
         if(skuInventoryGuard!=null)skuInventoryGuard.requireReacquire(id);
         if (reservations.renew(id, hours) != 1) throw new BusinessException("ORDER_UPDATE_FAILED", "占用更新失败");
+        if (order.isDomesticSkuOrder()) domesticSkuOrders.renewSources(id);
         if (pi != null && java.util.Set.of("CONFIRMED", "RELEASED").contains(pi.getStatus())) {
             coordinator.retainOrderAfterPayment(pi, id, pis.paymentTotal(pi.getId()));
         }

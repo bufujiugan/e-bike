@@ -35,8 +35,11 @@ class StockOutOrderOptionsMysqlTest {
         try (var session = new SqlSessionFactoryBuilder().build(configuration).openSession();
                 var sql = session.getConnection().createStatement()) {
             for (String ddl : List.of(
-                    "bike_sales_order(id BIGINT PRIMARY KEY,order_no VARCHAR(64),customer_id BIGINT,status VARCHAR(32),updated_at DATETIME)",
+                    "bike_sales_order(id BIGINT PRIMARY KEY,order_no VARCHAR(64),customer_id BIGINT,status VARCHAR(32),created_at DATETIME)",
                     "bike_sales_order_item(order_id BIGINT,product_model_id BIGINT,ordered_qty INT,shipped_qty INT)",
+                    "bike_domestic_sku_order(order_id BIGINT PRIMARY KEY)",
+                    "bike_order_reservation_item(order_id BIGINT,sku_id BIGINT)",
+                    "bike_production_sku(id BIGINT,model_id BIGINT,sku_code VARCHAR(64))",
                     "bike_product_model(id BIGINT PRIMARY KEY,model_name VARCHAR(100))")) {
                 String isolated = ddl.replace("bike_", prefix);
                 sql.execute("CREATE TABLE " + isolated); tables.add(isolated.substring(0, isolated.indexOf('(')));

@@ -12,7 +12,20 @@
       ) available_qty
     FROM bike_product_model m WHERE m.enabled=1 ORDER BY m.model_name,m.id
   </select>
-  <sql id="orderSelect">SELECT o.id,o.order_no,o.customer_id,c.customer_name,i.model_id,i.model_name,i.order_qty,i.shipped_qty,o.status,o.planned_ship_date,o.remark,o.created_at FROM bike_sales_order o JOIN bike_customer c ON c.id=o.customer_id JOIN (SELECT oi.order_id,MIN(oi.product_model_id) model_id,GROUP_CONCAT(m.model_name ORDER BY m.model_name SEPARATOR '、') model_name,SUM(oi.ordered_qty) order_qty,SUM(oi.shipped_qty) shipped_qty FROM bike_sales_order_item oi JOIN bike_product_model m ON m.id=oi.product_model_id GROUP BY oi.order_id) i ON i.order_id=o.id</sql>
+  <sql id="orderSelect">
+    SELECT o.id,o.order_no,o.customer_id,c.customer_name,i.model_id,
+      CASE WHEN d.order_id IS NULL THEN i.model_name ELSE (
+        SELECT GROUP_CONCAT(DISTINCT m.model_name ORDER BY m.model_name SEPARATOR '、')
+        FROM bike_order_reservation_item si JOIN bike_production_sku s ON s.id=si.sku_id
+        JOIN bike_product_model m ON m.id=s.model_id WHERE si.order_id=d.order_id
+      ) END model_name,
+      i.order_qty,i.shipped_qty,o.status,o.planned_ship_date,o.remark,o.created_at
+    FROM bike_sales_order o JOIN bike_customer c ON c.id=o.customer_id
+    JOIN (SELECT oi.order_id,MIN(oi.product_model_id) model_id,GROUP_CONCAT(m.model_name ORDER BY m.model_name SEPARATOR '、') model_name,
+        SUM(oi.ordered_qty) order_qty,SUM(oi.shipped_qty) shipped_qty
+      FROM bike_sales_order_item oi JOIN bike_product_model m ON m.id=oi.product_model_id GROUP BY oi.order_id) i ON i.order_id=o.id
+    LEFT JOIN bike_domestic_sku_order d ON d.order_id=o.id
+  </sql>
   <select id="selectOrders" resultType="com.bike.server.customer.CustomerPortalService$Order"><include refid="orderSelect"/> WHERE o.customer_id=#{customerId} ORDER BY o.created_at DESC,o.id DESC LIMIT #{offset},20</select>
   <select id="countOrders" resultType="long">SELECT COUNT(*) FROM bike_sales_order WHERE customer_id=#{customerId}</select>
   <select id="selectOrder" resultType="com.bike.server.customer.CustomerPortalService$Order"><include refid="orderSelect"/> WHERE o.id=#{orderId}</select>
