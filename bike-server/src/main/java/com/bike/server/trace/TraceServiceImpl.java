@@ -32,6 +32,6 @@ public class TraceServiceImpl implements TraceService {
         }
         return records;
     }
-    private static void requireTrace(){com.bike.server.common.CurrentOperator.requirePermission("TRACE_READ");if(com.bike.server.common.CurrentOperator.hasRole("WEB_AGENT"))throw new BusinessException("FORBIDDEN","代理商不能访问内部追溯");}
+    private static void requireTrace(){com.bike.server.common.CurrentOperator.requirePermission("TRACE_READ");if(com.bike.server.common.CurrentOperator.hasRole("WEB_AGENT"))throw new BusinessException("FORBIDDEN","客户业务账号不能访问内部追溯");}
     private static String normalize(String value){if(value==null||value.isBlank())throw new BusinessException("INVALID_PARAMETER","追溯标识不能为空");return value.trim();}
 }

@@ -292,7 +292,7 @@ public class PiServiceImpl implements PiService {
             fail("CUSTOMER_NOT_FOUND", "客户不存在或已停用");
         }
         if (request.agentId() != null && mapper.countEnabledAgent(request.agentId()) != 1) {
-            fail("AGENT_NOT_FOUND", "代理商不存在或已停用");
+            fail("AGENT_NOT_FOUND", "客户不存在或已停用");
         }
         String trade = upper(request.tradeType());
         if (!Set.of("DOMESTIC", "EXPORT").contains(trade)) {
@@ -600,7 +600,7 @@ public class PiServiceImpl implements PiService {
         if (!editing && (mapper.countForOrder(request.sourceOrderId()) > 0
                 || series != null && series.currentPiForOrder(request.sourceOrderId()) != null)) fail("ORDER_PI_EXISTS", "来源订单已关联 PI");
         if (mapper.countOrder(request.sourceOrderId(), request.customerId(), request.agentId()) != 1) {
-            fail("ORDER_NOT_FOUND", "来源订单不存在、已关闭、已有发货，或与 PI 客户/代理商不一致");
+            fail("ORDER_NOT_FOUND", "来源订单不存在、已关闭、已有发货，或与 PI 的订单客户或所属客户不一致");
         }
         Map<Long, Long> requested = new TreeMap<>();
         for (PiCalculatedItem item : items) requested.merge(item.productModelId(), (long) item.quantity(), Long::sum);
@@ -735,7 +735,7 @@ public class PiServiceImpl implements PiService {
         if (current == null || current.currentPiId() != previous.getId() || !PUBLISHED.contains(previous.getStatus()))
             fail("PI_REVISION_CONFLICT", "修订基线已变化，请基于当前有效版本重新修订");
         if (!Objects.equals(previous.getCustomerId(), customerId) || !Objects.equals(previous.getAgentId(), agentId))
-            fail("PI_REVISION_PARTY_IMMUTABLE", "修订须保留原客户和代理商，不能转移既有收款或履约");
+            fail("PI_REVISION_PARTY_IMMUTABLE", "修订须保留原订单客户和所属客户，不能转移既有收款或履约");
         if (!Objects.equals(previous.getCurrencyCode(), currencyCode))
             fail("PI_REVISION_CURRENCY_IMMUTABLE", "同一PI系列须保持币种一致，不能转换既有到账金额");
         return previous;
@@ -765,7 +765,7 @@ public class PiServiceImpl implements PiService {
         var lines=series.fulfillment(pi.getId());
         if(lines.isEmpty()) return;
         if(!Objects.equals(pi.getCustomerId(),request.customerId())||!Objects.equals(pi.getAgentId(),request.agentId()))
-            fail("LOCK_CUSTOMER_MISMATCH","锁定转换的PI必须保留原客户和代理商");
+            fail("LOCK_CUSTOMER_MISMATCH","锁定转换的PI必须保留原订单客户和所属客户");
         if(pi.getPreviousRevisionId()!=null && quantityRevisions!=null) {
             var requested=new TreeMap<Long,Integer>();
             for(var item:request.items()) {
@@ -801,7 +801,7 @@ public class PiServiceImpl implements PiService {
 
     private static Long agentId() {
         Long id = CurrentOperator.agentId();
-        if (id == null) fail("AGENT_NOT_BOUND", "当前账号未绑定代理商");
+        if (id == null) fail("AGENT_NOT_BOUND", "当前账号未绑定所属客户");
         return id;
     }
 

@@ -44,13 +44,13 @@ class ModuleServiceTest {
         ModuleMapper mapper = mock(ModuleMapper.class);
         when(mapper.countRows(eq("agents"), isNull(), anyList(), isNull(), eq(false))).thenReturn(1L);
         when(mapper.selectRowsPage(eq("agents"), isNull(), anyList(), isNull(), eq("创建时间"), eq(0L), eq(20L), eq(false))).thenReturn(List.of(
-                Map.of("代理商编号", "AGT-001", "代理商名称", "Global E-Bike", "联系人", "Bob", "联系电话", "139", "状态", "启用", "创建时间", "2026-09-06 10:00:00", "修改时间", "2026-09-06 11:00:00", "ID", 123L)
+                Map.of("客户编号", "AGT-001", "客户名称", "Global E-Bike", "联系人", "Bob", "联系电话", "139", "状态", "启用", "创建时间", "2026-09-06 10:00:00", "修改时间", "2026-09-06 11:00:00", "ID", 123L)
         ));
 
         ModulePageResponse page = com.bike.server.common.CustomerScopeTestSupport.isolated(new ModuleServiceImpl(mapper)).list("agents", null, 1, 20);
 
         assertThat(page.total()).isEqualTo(1);
-        assertThat(page.columns()).containsExactly("代理商编号", "代理商名称", "联系人", "联系电话", "状态", "创建时间", "修改时间", "ID");
+        assertThat(page.columns()).containsExactly("客户编号", "客户名称", "联系人", "联系电话", "状态", "创建时间", "修改时间", "ID");
         assertThat(page.rows().get(0)).containsExactly("AGT-001", "Global E-Bike", "Bob", "139", "启用", "2026-09-06 10:00:00", "2026-09-06 11:00:00", "123");
     }
 

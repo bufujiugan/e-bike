@@ -87,7 +87,7 @@ public class ExcelTransferService {
     public ImportResult importMaster(String type, MultipartFile file) {
         CurrentOperator.requirePermission("DATA_IMPORT");
         CurrentOperator.requireRole("SUPER_ADMIN");
-        if (!List.of("customers", "agents").contains(type)) throw new BusinessException("IMPORT_TYPE_UNSUPPORTED", "仅支持客户和代理商导入");
+        if (!List.of("customers", "agents").contains(type)) throw new BusinessException("IMPORT_TYPE_UNSUPPORTED", "仅支持订单客户和所属客户资料导入");
         return importWorkbook(file, sheet -> (values, row) -> masterService.create(type, validated(new MasterCreateRequest(required(values, 0), required(values, 1), blankToNull(text(values, 2)), blankToNull(text(values, 3))))));
     }
 

@@ -86,7 +86,7 @@ class SkuCommitmentMysqlTest {
             var service = CustomerScopeTestSupport.isolated(new ModuleServiceImpl(fixture.modules));
             var history = fixture.tx(() -> service.list("inventory-locks", null, 1, 20));
 
-            assertThat(history.columns()).containsExactly("锁定单号", "代理商", "车型", "锁定数量", "已释放",
+            assertThat(history.columns()).containsExactly("锁定单号", "客户", "车型", "锁定数量", "已释放",
                     "已转订单", "到期时间", "状态", "创建时间", "修改时间", "ID", "SKU");
             assertThat(history.total()).isEqualTo(3);
             assertThat(history.rows()).anySatisfy(row -> {

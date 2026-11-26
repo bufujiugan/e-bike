@@ -34,7 +34,7 @@ public class OrderServiceImpl implements OrderService {
         String normalized = keyword == null || keyword.isBlank() ? null : keyword.trim();
         Long agentId = CurrentOperator.hasRole("WEB_AGENT") ? CurrentOperator.agentId() : null;
         if (CurrentOperator.hasRole("WEB_AGENT") && agentId == null) {
-            throw new BusinessException("AGENT_NOT_BOUND", "当前账号未绑定代理商");
+            throw new BusinessException("AGENT_NOT_BOUND", "当前账号未绑定所属客户");
         }
         var types = SalesType.filter(salesTypes);
         var records = orderMapper.selectPage(normalized, status, agentId, types, (p - 1) * size, size);
@@ -204,7 +204,7 @@ public class OrderServiceImpl implements OrderService {
     private void checkAgentScope(SalesOrderView order) {
         customerScope.requireCustomer(order.getCustomerId());
         if (CurrentOperator.hasRole("WEB_AGENT") && !Objects.equals(CurrentOperator.agentId(), order.getAgentId())) {
-            throw new BusinessException("FORBIDDEN", "无权访问其他代理商订单");
+            throw new BusinessException("FORBIDDEN", "无权访问其他客户订单");
         }
     }
 
@@ -226,7 +226,7 @@ public class OrderServiceImpl implements OrderService {
         if (orderMapper.countEnabledCustomer(request.customerId()) != 1) throw new BusinessException("CUSTOMER_NOT_FOUND", "客户不存在或已停用");
         if (orderMapper.countEnabledModel(request.modelId()) != 1) throw new BusinessException("MODEL_NOT_FOUND", "车型不存在或已停用");
         if (request.agentId() != null && orderMapper.countEnabledAgent(request.agentId()) != 1) {
-            throw new BusinessException("AGENT_NOT_FOUND", "代理商不存在或已停用");
+            throw new BusinessException("AGENT_NOT_FOUND", "客户不存在或已停用");
         }
     }
 

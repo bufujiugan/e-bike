@@ -73,7 +73,7 @@ export const fulfillmentSequence: SequencePhase[] = [
     groups: [
       { title: '核对库存并登记客户预锁', tag: '数量锁定', messages: [
         { from: 'sales', to: 'system', kind: 'action', title: '刷新 SKU 库存与可新增锁定量', summary: '查看在库、隔离、锁定及订单占用', location: 'Web → 业务办理工作台 → 库存与锁定', input: '按车型或 SKU 找到所需规格，读取“可新增锁定”。', check: '库存用于判断交付能力；预锁可以超过当前库存，不能视为已经留足实物。', result: '明确当前库存与客户意向数量的差额。', recovery: '计划数量、作业中数量不能当作库存；库存不符先核对入库与占用记录。', guideStep: 8 },
-        { from: 'sales', to: 'system', kind: 'action', title: '提交客户、SKU、数量与有效期', summary: '代理商可选，数量在待锁定商品填写', location: 'Web → 库存与锁定 → 加入锁定 → 选择客户并锁定', input: '填写每个 SKU 数量，选择客户、可选代理商和截止时间。', check: '客户及代理商应有效、数量和有效期合法；后续正式保留库存会重新核对库存。', result: '按指定数量创建临时锁定，不指定具体车架。', recovery: '库存变化导致失败时刷新后调整数量；结果不明先查看锁定记录。', guideStep: 8 },
+        { from: 'sales', to: 'system', kind: 'action', title: '提交客户、SKU、数量与有效期', summary: '所属客户可选，数量在待锁定商品填写', location: 'Web → 库存与锁定 → 加入锁定 → 选择客户并锁定', input: '填写每个 SKU 数量，选择订单客户、可选的所属客户和截止时间。', check: '订单客户和所属客户应有效、数量和有效期合法；后续正式保留库存会重新核对库存。', result: '按指定数量创建临时锁定，不指定具体车架。', recovery: '库存变化导致失败时刷新后调整数量；结果不明先查看锁定记录。', guideStep: 8 },
         { from: 'system', to: 'sales', kind: 'result', title: '返回锁定单与有效期', summary: 'A 锁 30 台，剩余仍可给其他客户', location: 'Web → 本次锁定已保存 / 库存锁定列表', input: '记录锁定单号、客户、SKU、数量与到期时间。', check: '例：100 台合格可用且无其他限制，A 锁 30、B 再锁 30，剩 40。', result: '临时锁定增加；未被占用的数量仍可销售。', recovery: '不要把“加入锁定”的本次选择去重理解成整个 SKU 被禁售。', guideStep: 8 },
       ] },
       { title: '有效锁定转订单', tag: '保留库存占用', messages: [

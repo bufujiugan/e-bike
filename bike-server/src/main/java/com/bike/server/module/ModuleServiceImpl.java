@@ -53,10 +53,10 @@ public class ModuleServiceImpl implements ModuleService {
             throw new BusinessException("MODULE_NOT_SUPPORTED", "不支持的业务模块");
         }
         if (CurrentOperator.hasRole("WEB_AGENT") && !Set.of("orders", "agent-dashboard", "agent-inventory", "agent-locks", "purchase-intents").contains(module)) {
-            throw new BusinessException("FORBIDDEN", "代理商账号无权访问该模块");
+            throw new BusinessException("FORBIDDEN", "客户业务账号无权访问该模块");
         }
         if (CurrentOperator.hasRole("WEB_AGENT") && CurrentOperator.agentId() == null) {
-            throw new BusinessException("AGENT_NOT_BOUND", "当前账号未绑定代理商");
+            throw new BusinessException("AGENT_NOT_BOUND", "当前账号未绑定所属客户");
         }
         requireModulePermission(module);
         requireModuleAccess(module);
@@ -170,7 +170,7 @@ public class ModuleServiceImpl implements ModuleService {
         definitions.put("stock-in", definition("整车入库记录及撤销状态", List.of("业务单号", "类型", "整车数量", "客户 / 仓库", "操作人", "操作时间", "状态", "聚合码", "创建时间", "修改时间"), "办理入库"));
         definitions.put("stock-out", definition("整车出库记录及撤销状态", List.of("业务单号", "类型", "整车数量", "客户 / 仓库", "操作人", "操作时间", "状态", "聚合码", "创建时间", "修改时间", "出库备注"), "办理出库"));
         definitions.put("orders", definition("客户订单、出库进度与车辆明细", List.of("订单号", "客户", "车型", "订单数量", "已出库", "计划发货", "状态", "来源锁定", "占用截止", "占用状态", "备注", "创建时间", "修改时间", "销售类型"), "新建销售订单"));
-        definitions.put("agents", definition("代理商基础资料与联系信息", List.of("代理商编号", "代理商名称", "联系人", "联系电话", "状态", "创建时间", "修改时间"), "新增代理商"));
+        definitions.put("agents", definition("客户基础资料与联系信息", List.of("客户编号", "客户名称", "联系人", "联系电话", "状态", "创建时间", "修改时间"), "新增客户"));
         definitions.put("trace", definition("通过聚合码查看完整链路，车架与部件编码支持辅助查询", List.of("查询对象", "聚合码", "当前状态", "最近操作", "订单号", "客户", "查询时间", "创建时间", "修改时间"), "开始追溯查询"));
         definitions.put("parts", definition("零部件来料、质检和绑定状态", List.of("零部件 SN", "类型", "供应商", "批次", "绑定状态", "当前车架", "状态", "聚合码", "创建时间", "修改时间"), "新增零部件"));
         definitions.put("customers", definition("销售客户和订单归属管理", List.of("客户编号", "客户名称", "联系人", "联系电话", "状态", "创建时间", "修改时间"), "新增客户"));
@@ -183,14 +183,14 @@ public class ModuleServiceImpl implements ModuleService {
         definitions.put("logs", definition("关键业务操作审计记录", List.of("时间", "操作", "业务对象", "操作人", "业务类型", "备注", "创建时间", "修改时间"), "导出操作日志"));
         definitions.put("customs", definition("已出库整车报关数据导出", List.of("聚合码", "车型", "车架 SN", "客户", "订单号", "出库时间", "报关状态", "创建时间", "修改时间"), "导出报关数据"));
         definitions.put("locations", definition("仓库库位、启用状态和库存承载位置", List.of("仓库", "仓库编码", "库位", "库位编码", "状态", "创建时间", "修改时间"), "新增库位"));
-        definitions.put("inventory-locks", definition("代理商按车型和数量锁定的库存", List.of("锁定单号", "代理商", "车型", "锁定数量", "已释放", "已转订单", "到期时间", "状态", "创建时间", "修改时间"), "创建库存锁定"));
+        definitions.put("inventory-locks", definition("客户按车型和数量锁定的库存", List.of("锁定单号", "客户", "车型", "锁定数量", "已释放", "已转订单", "到期时间", "状态", "创建时间", "修改时间"), "创建库存锁定"));
         definitions.put("rework", definition("返工原因、换件记录和操作历史", List.of("返工单号", "聚合码", "车架码", "返工原因", "状态", "操作人", "操作时间", "创建时间", "修改时间"), "创建返工记录"));
         definitions.put("operation-logs", definitions.get("logs"));
         definitions.put("config", definition("扫码、锁库和系统运行参数", List.of("配置键", "配置值", "说明", "创建时间", "修改时间"), "刷新配置"));
-        definitions.put("agent-dashboard", definition("代理商锁定历史与来源订单；到期和释放记录保留，当前授权车型请查看代理商库存", List.of("代理商", "车型", "有效临时锁定", "有效期", "关联订单数", "创建人", "状态", "锁定单号", "创建时间", "修改时间"), "刷新概览"));
+        definitions.put("agent-dashboard", definition("客户锁定历史与来源订单；到期和释放记录保留，当前授权车型请查看客户库存", List.of("客户", "车型", "有效临时锁定", "有效期", "关联订单数", "创建人", "状态", "锁定单号", "创建时间", "修改时间"), "刷新概览"));
         definitions.put("agent-inventory", definitions.get("inventory"));
         definitions.put("agent-locks", definitions.get("inventory-locks"));
-        definitions.put("purchase-intents", definition("代理商采购意向与后续订单线索", List.of("代理商", "授权车型", "意向数量", "有效期", "状态", "创建时间", "修改时间"), "新增采购意向"));
+        definitions.put("purchase-intents", definition("客户采购意向与后续订单线索", List.of("客户", "授权车型", "意向数量", "有效期", "状态", "创建时间", "修改时间"), "新增采购意向"));
         // ID 和新增列追加到响应末尾，保留现有按列下标读取的编辑、状态变更和详情逻辑。
         definitions.replaceAll((module, definition) -> {
             List<String> identifiers = switch (module) {

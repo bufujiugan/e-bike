@@ -124,8 +124,8 @@ watch([visible, () => props.orderNo, refreshVersion], async ([isVisible, orderNo
       <section :aria-label='tr("订单基本信息")'>
         <h3>{{ tr("基本信息") }}</h3>
         <dl class="detail-fields">
-          <div><dt>{{ tr("客户") }}</dt><dd>{{ order.customerName || '—' }}</dd></div>
-          <div><dt>{{ tr("代理商") }}</dt><dd>{{ order.agentName || '—' }}</dd></div>
+          <div><dt>{{ tr("订单客户") }}</dt><dd>{{ order.customerName || '—' }}</dd></div>
+          <div><dt>{{ tr("所属客户") }}</dt><dd>{{ order.agentName || '—' }}</dd></div>
           <div><dt>{{ tr("车型") }}</dt><dd>{{ order.modelName || '—' }}</dd></div>
           <div><dt>{{ tr("销售类型") }}</dt><dd>{{ order.salesType ? tr(salesTypeLabel(order.salesType)) : '—' }}</dd></div>
           <div><dt>{{ tr("订单数量") }}</dt><dd>{{ order.orderQty }} {{ tr("台") }}</dd></div>

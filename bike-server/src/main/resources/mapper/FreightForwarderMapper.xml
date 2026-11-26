@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.master.FreightForwarderMapper">
+    <sql id="columns">id, name, contact_name, phone, address, remark, revision</sql>
+
+    <select id="listForwarders" resultType="com.bike.server.master.FreightForwarder">
+        SELECT <include refid="columns"/>
+        FROM bike_freight_forwarder
+        ORDER BY name, id
+    </select>
+
+    <select id="selectForwarder" resultType="com.bike.server.master.FreightForwarder">
+        SELECT <include refid="columns"/>
+        FROM bike_freight_forwarder
+        WHERE id = #{id}
+    </select>
+
+    <insert id="insertForwarder">
+        INSERT INTO bike_freight_forwarder (name, contact_name, phone, address, remark)
+        VALUES (#{forwarder.name}, #{forwarder.contactName}, #{forwarder.phone}, #{forwarder.address}, #{forwarder.remark})
+    </insert>
+
+    <select id="selectInsertedId" resultType="long">SELECT LAST_INSERT_ID()</select>
+
+    <update id="updateForwarder">
+        UPDATE bike_freight_forwarder
+        SET name = #{forwarder.name}, contact_name = #{forwarder.contactName}, phone = #{forwarder.phone},
+            address = #{forwarder.address}, remark = #{forwarder.remark}, revision = revision + 1
+        WHERE id = #{id} AND revision = #{revision}
+    </update>
+</mapper>

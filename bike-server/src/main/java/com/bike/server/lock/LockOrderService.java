@@ -26,7 +26,7 @@ public class LockOrderService {
         if(lock==null)throw new BusinessException("INVENTORY_LOCK_NOT_FOUND","库存锁定不存在");
         customerScope.requireCustomer(lock.getCustomerId());
         if(CurrentOperator.hasRole("WEB_AGENT")&&!java.util.Objects.equals(CurrentOperator.agentId(),lock.getAgentId()))
-            throw new BusinessException("FORBIDDEN","无权查看其他代理商锁定的订单");
+            throw new BusinessException("FORBIDDEN","无权查看其他客户锁定的订单");
         long p=Math.min(10000000,Math.max(1,page)),size=Math.min(100,Math.max(1,pageSize));
         var records=reservations.ordersForLock(id,(p-1)*size,size);
         records.forEach(OrderServiceImpl::redactReservationForAgent);
@@ -68,7 +68,7 @@ public class LockOrderService {
         if(lock.getLockRequestId()!=null)
             lockBatches.requireWholeBatch(java.util.List.of(lock),java.util.Map.of(id,request.quantity()));
         if(orders.countEnabledCustomer(request.customerId())!=1||(lock.getAgentId()!=null&&orders.countEnabledAgent(lock.getAgentId())!=1)||orders.countEnabledModel(lock.getProductModelId())!=1)
-            throw new BusinessException("INVALID_PARAMETER","客户、代理商或车型不存在或已停用");
+            throw new BusinessException("INVALID_PARAMETER","订单客户、所属客户或车型不存在或已停用");
         if(lock.getSkuId()!=null && skuInventory.lockSkuModel(lock.getSkuId())==null)
             throw new BusinessException("SKU_NOT_FOUND","SKU或车型不存在或已停用");
         if(lock.getSkuId()==null && reservations.snapshot(lock.getProductModelId(),0).availableForOrder()<0)

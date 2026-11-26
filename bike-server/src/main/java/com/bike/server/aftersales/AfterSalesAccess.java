@@ -13,7 +13,7 @@ final class AfterSalesAccess {
     static boolean isPda() { return userType("PDA_OPERATOR") || CurrentOperator.hasRole("PDA_OPERATOR"); }
     static Long requiredAgent() {
         Long id = CurrentOperator.agentId();
-        if (id == null) throw new BusinessException("AGENT_NOT_BOUND", "当前账号未绑定代理商");
+        if (id == null) throw new BusinessException("AGENT_NOT_BOUND", "当前账号未绑定所属客户");
         return id;
     }
     static void requireWeb() {
@@ -36,7 +36,7 @@ final class AfterSalesAccess {
     }
     static void requireInternal(String... permissions) {
         requireWeb();
-        if (isAgent()) throw new BusinessException("FORBIDDEN", "代理商不能执行内部售后操作");
+        if (isAgent()) throw new BusinessException("FORBIDDEN", "客户业务账号不能执行内部售后操作");
         CurrentOperator.requireAnyPermission(permissions);
     }
     static boolean canReadInternal() {

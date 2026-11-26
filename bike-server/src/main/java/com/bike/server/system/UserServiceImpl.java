@@ -128,22 +128,22 @@ public class UserServiceImpl implements UserService {
 
     private void validateBindings(String userType, Long agentId, Long workstationId) {
         if ("AGENT".equals(userType) && agentId == null) {
-            throw new BusinessException("AGENT_REQUIRED", "代理商账号必须绑定代理商");
+            throw new BusinessException("AGENT_REQUIRED", "客户业务账号必须绑定所属客户");
         }
         if ("PDA_OPERATOR".equals(userType) && workstationId == null) {
             throw new BusinessException("WORKSTATION_REQUIRED", "PDA 操作员必须绑定工位");
         }
         if (agentId != null && (agentId <= 0 || mapper.countEnabledAgent(agentId) != 1)) {
-            throw new BusinessException("AGENT_NOT_FOUND", "代理商不存在或已停用");
+            throw new BusinessException("AGENT_NOT_FOUND", "客户不存在或已停用");
         }
         if (workstationId != null && (workstationId <= 0 || mapper.countEnabledWorkstation(workstationId) != 1)) {
             throw new BusinessException("WORKSTATION_NOT_FOUND", "工位不存在或已停用");
         }
         if (!"AGENT".equals(userType) && agentId != null) {
-            throw new BusinessException("USER_BINDING_INVALID", "只有代理商账号可以绑定代理商");
+            throw new BusinessException("USER_BINDING_INVALID", "只有客户业务账号可以绑定所属客户");
         }
         if ("AGENT".equals(userType) && workstationId != null) {
-            throw new BusinessException("USER_BINDING_INVALID", "代理商账号不能绑定内部工位");
+            throw new BusinessException("USER_BINDING_INVALID", "客户业务账号不能绑定内部工位");
         }
     }
 

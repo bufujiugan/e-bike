@@ -141,7 +141,7 @@ public class PiQuantityService {
             if(lock==null)fail("INVENTORY_LOCK_NOT_FOUND","新增来源锁定不存在");
             customerScope.requireCustomer(lock.getCustomerId());
             if(!Objects.equals(pi.getCustomerId(),lock.getCustomerId()) || !Objects.equals(pi.getAgentId(),lock.getAgentId()))
-                fail("LOCK_CUSTOMER_MISMATCH","新增来源必须属于同一客户和代理商");
+                fail("LOCK_CUSTOMER_MISMATCH","新增来源必须属于同一订单客户和所属客户");
             if(!"SKU".equals(lock.getScopeType()) || lock.getSkuId()==null)
                 fail("PI_SKU_LOCK_REQUIRED","新增来源须为明确SKU的锁定");
             if(!Set.of("LOCKED","PARTIAL_CONVERTED").contains(lock.getStatus()) || lock.getExpireTime()==null

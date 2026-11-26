@@ -55,6 +55,12 @@ const profileRepairSeedId = ref<number>()
 const requiresProfile = computed(() => editingId.value == null || Boolean(detail.value?.document?.business?.fulfillmentProfileId))
 const draftProfile = computed(() => fulfillmentProfiles.value.find(p => p.id === draft.document.business?.fulfillmentProfileId))
 const detailProfile = computed(() => fulfillmentProfiles.value.find(p => p.id === detail.value?.document?.business?.fulfillmentProfileId))
+const detailIsChinaExport = computed(() => {
+  const business = detail.value?.document?.business
+  return detail.value?.tradeType === 'EXPORT' && !props.europe
+    && (business?.salesChannel === 'CHINA_SALES'
+      || !business?.salesChannel && business?.domesticShipment !== false)
+})
 const manualWorkflow = computed(() => detail.value?.document?.business?.workflowMode === 'USER_CONFIRMED')
 let profileSelectionVersion = 0
 async function loadProfiles() {
@@ -524,7 +530,7 @@ function chooseSourceOrder(id?: number) {
   draft.plannedShipDate = source.plannedShipDate || ''
   if (draft.document.business) draft.document.business.orderSource = 'EXISTING_ORDER'
   if (source.agentId && !options.value.agents.some(agent => agent.id === source.agentId))
-    options.value.agents.push({ id: source.agentId, code: '', name: source.agentName || '原订单代理商' })
+    options.value.agents.push({ id: source.agentId, code: '', name: source.agentName || '原订单所属客户' })
   draft.items = sources.filter(order => order.skuId && (order.skuQuantity ?? 0) > 0).map(order => {
     if (!options.value.skus.some(sku => sku.id === order.skuId)) options.value.skus.push({ id: order.skuId!, modelId: order.modelId, skuCode: order.skuCode || '', productName: order.productName || '', specification: order.specification, enabled: order.enabled })
     return { ...(draft.items.find(item => item.skuId === order.skuId) || newItem()), skuId: order.skuId!, quantity: order.skuQuantity! }
@@ -586,7 +592,7 @@ const lockEmptyReasons = computed(() => {
   if (!Number(summary.totalCount)) { reasons.push('该客户还没有做过 SKU 锁定'); return reasons }
   if (Number(summary.expiredCount)) reasons.push(`${summary.expiredCount} 条已到期${summary.lastExpiredAt ? `（最近一条 ${String(summary.lastExpiredAt).replace('T', ' ').slice(0, 16)} 到期）` : ''}，需到锁定页重新锁定或延期`)
   if (Number(summary.finishedCount)) reasons.push(`${summary.finishedCount} 条已全部转单或已释放`)
-  if (Number(summary.otherAgentCount)) reasons.push(`${summary.otherAgentCount} 条属于其他代理商，可清空上方「所属代理商」后再查`)
+  if (Number(summary.otherAgentCount)) reasons.push(tr('{count} 条属于其他客户，可清空上方「所属客户」后再查', { count: summary.otherAgentCount }))
   return reasons
 })
 // 没有可用锁定时，直接改成普通新建 PI：保留客户、代理商和已填的单据信息，商品改为手动选 SKU。
@@ -609,10 +615,10 @@ function addLock(lock: PiLockOption, quantity = lock.remainingQty) {
   if (fromLocks.value && !revisionFulfillment.value) {
     const lockAgent = lock.agentId ?? undefined
     const first = selectedLocks.value[0]
-    if (first && (first.agentId ?? undefined) !== lockAgent) { ElMessage.warning(tr('同一份 PI 只能合并同一代理商的锁定，请分开生成')); return }
+    if (first && (first.agentId ?? undefined) !== lockAgent) { ElMessage.warning(tr('同一份 PI 只能合并同一客户的锁定，请分开生成')); return }
     if ((draft.agentId ?? undefined) !== lockAgent) {
-      if (draft.agentId) { ElMessage.warning(tr('该锁定属于其他代理商，请先清空「所属代理商」再加入')); return }
-      if (lockAgent && !options.value.agents.some(agent => agent.id === lockAgent)) options.value.agents.push({ id: lockAgent, code: '', name: lock.agentName || '锁定代理商' })
+      if (draft.agentId) { ElMessage.warning(tr('该锁定属于其他客户，请先清空「所属客户」再加入')); return }
+      if (lockAgent && !options.value.agents.some(agent => agent.id === lockAgent)) options.value.agents.push({ id: lockAgent, code: '', name: lock.agentName || '锁定所属客户' })
       agentFromLock = true; draft.agentId = lockAgent
     }
   }
@@ -892,7 +898,7 @@ async function openEdit() {
   })
   options.value = {
     customers: [{ id: current.customerId, code: current.customerCode || '', name: current.customerName }],
-    agents: current.agentId ? [{ id: current.agentId, code: '', name: current.agentName || '所属代理商' }] : [],
+    agents: current.agentId ? [{ id: current.agentId, code: '', name: current.agentName || '所属客户' }] : [],
     orders: current.sourceOrderId ? [{ id: current.sourceOrderId, orderNo: '原来源订单', customerId: current.customerId, agentId: current.agentId, status: 'CONFIRMED' }] : [],
     skus: current.items.map(item => ({ id: item.skuId, productModelId: item.productModelId, skuCode: item.skuCode, productName: item.productName, specification: item.specification })),
   }
@@ -978,7 +984,7 @@ async function confirmPi() {
     return
   }
   try {
-    await ElMessageBox.confirm(tr('确认后，单据将向所属代理商发布。请核对商品、金额、双方资料和条款。'), tr('确认 PI'), { confirmButtonText: tr('确认发布'), cancelButtonText: tr('返回核对'), type: 'warning' })
+    await ElMessageBox.confirm(tr('确认后，单据将向所属客户发布。请核对商品、金额、双方资料和条款。'), tr('确认 PI'), { confirmButtonText: tr('确认发布'), cancelButtonText: tr('返回核对'), type: 'warning' })
     actionBusy.value = true; operationError.value = ''; detail.value = await piApi.confirm(detail.value.id); await loadWorkflow(detail.value.id); await load(); ElMessage.success(tr('PI 已确认'))
   } catch (error) { if (error !== 'cancel' && error !== 'close') operationError.value = message(error, 'PI 确认失败') }
   finally { actionBusy.value = false }
@@ -1366,7 +1372,7 @@ onBeforeUnmount(() => {
               <section class="pi-form-card" data-draft-field="options">
                 <div class="pi-section-heading"><h3>{{ tr("客户信息") }}</h3><span class="pi-muted">{{ tr("带 * 的为必填项") }}</span></div>
                 <div class="pi-draft-grid">
-                  <el-form-item :label='tr("客户")' required data-draft-field="customer" :error="fieldError('customer')"><el-select v-model="draft.customerId" :aria-label='tr("客户")' :loading="customerBusy || optionsBusy" @change="chooseCustomer" :disabled="editingRevision || fixedItems && !fromLocks" filterable :placeholder='tr("搜索或选择客户")'><el-option v-for="customer in options.customers" :key="customer.id" :value="customer.id" :label="customer.code + ' · ' + customer.name" /></el-select></el-form-item>
+                  <el-form-item :label='tr("订单客户")' required data-draft-field="customer" :error="fieldError('customer')"><el-select v-model="draft.customerId" :aria-label='tr("订单客户")' :loading="customerBusy || optionsBusy" @change="chooseCustomer" :disabled="editingRevision || fixedItems && !fromLocks" filterable :placeholder='tr("搜索或选择客户")'><el-option v-for="customer in options.customers" :key="customer.id" :value="customer.id" :label="customer.code + ' · ' + customer.name" /></el-select></el-form-item>
                   <div v-if="draft.document.business" class="pi-draft-grid" data-draft-field="warehouse">
                   <el-form-item :label='tr("出库仓库（不同仓库分别开 PI）")' required :error="fieldError('warehouse')"><el-select v-model="draft.document.business.warehouseId" :disabled="europe || editingRevision && Boolean(detail?.document?.business)" filterable :placeholder='tr("先选择实际出库仓库")' @change="changeWarehouse"><el-option v-for="warehouse in options.warehouses || []" :key="warehouse.id" :value="warehouse.id" :label="warehouse.name" /></el-select></el-form-item>
                   <el-form-item :label='tr("履约配置")' :required="requiresProfile" data-draft-field="fulfillmentProfile" :error="fieldError('fulfillmentProfile')"><el-select :model-value="draft.document.business.fulfillmentProfileId" :clearable="!requiresProfile" filterable :loading="profilesLoading" :disabled="!selectedWarehouseId || editingRevision || optionsBusy || profilesLoading" :placeholder="!selectedWarehouseId ? tr('请先选择出库仓库') : requiresProfile ? tr('选择适用于当前仓库和贸易类型的配置') : tr('历史单据可沿用原规则')" @change="chooseProfile"><el-option v-for="p in selectableProfiles" :key="p.id" :value="p.id" :label="`${p.name} · ${p.version}`" /></el-select></el-form-item>
@@ -1390,15 +1396,15 @@ onBeforeUnmount(() => {
                   <div class="pi-draft-grid"><el-form-item v-for="[key, label, maxLength] in buyerFields" :key="key" :label="tr(label)" :required="isBuyerRequired(key)" :data-draft-field="key" :error="fieldError(key)" :class="{ 'pi-span-two': key === 'buyerAddress' }"><el-input v-model="draft.document[key]" :aria-label="tr(label)" :aria-required="isBuyerRequired(key)" :disabled="customerBusy" :type="key === 'buyerAddress' ? 'textarea' : 'text'" :rows="2" :maxlength="maxLength" /></el-form-item></div>
                 </section>
                 <div class="pi-disclosure">
-                  <h3>{{ tr("订单来源与代理商") }}</h3>
+                  <h3>{{ tr("订单来源与所属客户") }}</h3>
                   <el-form-item v-if="!fromLocks && !hasBoundOrders && draft.document.business" :label='tr("订单来源")' required data-draft-field="orderSource" :error="fieldError('orderSource')">
                     <el-radio-group v-model="draft.document.business.orderSource" :aria-label='tr("订单来源")' @change="changeOrderSource"><el-radio value="EXISTING_ORDER">{{ tr("关联已有订单") }}</el-radio><el-radio value="NEW_BUSINESS">{{ tr("无原订单的新业务") }}</el-radio></el-radio-group>
                   </el-form-item>
                   <el-alert v-if="fromLocks" :title='tr(selectedLocks.some(lock => lock.lockRequestId) ? "商品数量沿用本批各 SKU 的预锁数量。" : "商品数量按所选锁定的本次转出数量汇总，可在来源锁定表中调整。")' type="info" :closable="false" />
                   <el-alert v-else-if="!hasBoundOrders && draft.document.business?.orderSource === 'NEW_BUSINESS'" :title='tr("仅用于没有原订单的新业务。发出 PI 后付款达到收款门槛，或客户收到货后付款获批后，按所选仓库保留库存并生成关联订单；已有锁单或订单请使用对应入口。")' type="warning" :closable="false" />
                   <div class="pi-draft-grid">
-                    <el-form-item v-if="!fromLocks && (draft.sourceOrderId || !hasBoundOrders && draft.document.business?.orderSource === 'EXISTING_ORDER')" :label='tr("来源销售订单")' required data-draft-field="sourceOrder" :error="fieldError('sourceOrder')"><el-select v-model="draft.sourceOrderId" :aria-label='tr("来源销售订单")' clearable filterable :disabled="!draft.customerId || hasBoundOrders || editingRevision" :placeholder='tr("先选择客户，再选择原订单")' @change="chooseSourceOrder"><el-option v-for="order in filteredOrders" :key="order.id" :value="order.id" :label="order.orderNo" /></el-select><p class="pi-field-help">{{ tr("自动带入原订单的代理商、SKU 和数量，复用原库存占用。") }}<template v-if="scenarioSalesType">{{ trInline("仅显示已确定为「") }}{{ tr(salesTypeLabel(scenarioSalesType)) }}{{ trInline("」的订单") }}<template v-if="hiddenTypeOrders">{{ trInline("，该客户另有") }} {{ hiddenTypeOrders }} {{ trInline("笔其他类型或待选类型订单未显示（请先在订单办理中选择类型）") }}</template>。</template></p></el-form-item>
-                    <el-form-item :label='tr("所属代理商")'><el-select v-model="draft.agentId" :aria-label='tr("所属代理商")' :disabled="editingRevision || fixedItems && !fromLocks" clearable filterable :placeholder='tr("选择代理商；关联订单后自动带入")'><el-option v-for="agent in options.agents" :key="agent.id" :value="agent.id" :label="agent.code + ' · ' + agent.name" /></el-select></el-form-item>
+                    <el-form-item v-if="!fromLocks && (draft.sourceOrderId || !hasBoundOrders && draft.document.business?.orderSource === 'EXISTING_ORDER')" :label='tr("来源销售订单")' required data-draft-field="sourceOrder" :error="fieldError('sourceOrder')"><el-select v-model="draft.sourceOrderId" :aria-label='tr("来源销售订单")' clearable filterable :disabled="!draft.customerId || hasBoundOrders || editingRevision" :placeholder='tr("先选择客户，再选择原订单")' @change="chooseSourceOrder"><el-option v-for="order in filteredOrders" :key="order.id" :value="order.id" :label="order.orderNo" /></el-select><p class="pi-field-help">{{ tr("自动带入原订单的所属客户、SKU 和数量，复用原库存占用。") }}<template v-if="scenarioSalesType">{{ trInline("仅显示已确定为「") }}{{ tr(salesTypeLabel(scenarioSalesType)) }}{{ trInline("」的订单") }}<template v-if="hiddenTypeOrders">{{ trInline("，该客户另有") }} {{ hiddenTypeOrders }} {{ trInline("笔其他类型或待选类型订单未显示（请先在订单办理中选择类型）") }}</template>。</template></p></el-form-item>
+                    <el-form-item :label='tr("所属客户")'><el-select v-model="draft.agentId" :aria-label='tr("所属客户")' :disabled="editingRevision || fixedItems && !fromLocks" clearable filterable :placeholder='tr("选择所属客户，关联订单后自动带入")'><el-option v-for="agent in options.agents" :key="agent.id" :value="agent.id" :label="agent.code + ' · ' + agent.name" /></el-select></el-form-item>
                   </div>
                 </div>
               </section>
@@ -1422,7 +1428,7 @@ onBeforeUnmount(() => {
             </div>
           </template>
       <RecordIdColumn />
-          <el-table-column prop="lockNo" :label='tr("来源锁定")' min-width="180" /><el-table-column prop="skuCode" label="SKU" /><el-table-column :label='tr("代理商")' min-width="120"><template #default="{ row }">{{ row.agentName || tr('无代理商') }}</template></el-table-column><el-table-column prop="remainingQty" :label='tr("剩余可转")' width="100" /><el-table-column prop="expireTime" :label='tr("原截止")' min-width="170" />
+          <el-table-column prop="lockNo" :label='tr("来源锁定")' min-width="180" /><el-table-column prop="skuCode" label="SKU" /><el-table-column :label='tr("客户")' min-width="120"><template #default="{ row }">{{ row.agentName || tr('未关联客户') }}</template></el-table-column><el-table-column prop="remainingQty" :label='tr("剩余可转")' width="100" /><el-table-column prop="expireTime" :label='tr("原截止")' min-width="170" />
           <el-table-column :label='tr("选择")' width="110"><template #default="{ row }"><el-button link :disabled="lockBusy || selectedLocks.some(item => item.id === row.id)" @click="selectLock(row)">{{ tr(row.lockRequestId ? "加入整批" : "加入") }}</el-button></template></el-table-column>
         </el-table>
         <el-pagination v-model:current-page="lockPage" :total="lockTotal" :page-size="20" layout="total, prev, pager, next" @current-change="loadLocks" />
@@ -1475,7 +1481,7 @@ onBeforeUnmount(() => {
             </section>
             <section v-if="draftStep === 2" class="pi-draft-step">
               <div class="pi-step-heading"><span class="pi-eyebrow">STEP 03</span><h2>{{ tr("最后，核对一下。") }}</h2><p>{{ tr("本次仅保存草稿，不会发布单据或触发收款、放行。") }}</p></div>
-              <section class="pi-form-card"><div class="pi-section-heading"><h3>{{ tr("客户与商品") }}</h3><el-button text type="primary" @click="goToDraftStep(0)">{{ tr("返回修改") }}</el-button></div><dl class="pi-detail-grid"><div><dt>{{ tr("客户") }}</dt><dd>{{ selectedCustomer?.name }}</dd></div><div><dt>{{ tr("贸易 / 币种") }}</dt><dd>{{ draft.tradeType === 'EXPORT' ? tr('外销') : tr('内销') }} · {{ draft.currencyCode.toUpperCase() }}</dd></div><div><dt>{{ tr("所属代理商") }}</dt><dd>{{ selectedAgent?.name || tr('未关联') }}</dd></div><div><dt>{{ tr("来源订单") }}</dt><dd>{{ options.orders.find(order => order.id === draft.sourceOrderId)?.orderNo || (fromLocks ? tr('由来源锁定生成') : hasBoundOrders ? tr('已关联履约订单') : draft.document.business?.orderSource === 'NEW_BUSINESS' ? tr('新业务，收款达标后自动生成') : tr('请选择来源订单')) }}</dd></div></dl><div class="pi-review-items"><article v-for="item in draft.items" :key="item.key"><div><strong>{{ options.skus.find(sku => sku.id === item.skuId)?.skuCode }}</strong><span>{{ options.skus.find(sku => sku.id === item.skuId)?.productName }}</span><small>{{ item.quantity }} {{ item.unit }} × {{ money(item.unitPrice) }} {{ trInline("· 折扣") }} {{ money(item.discountAmount) }} {{ trInline("· 税费") }} {{ money(item.taxAmount) }}</small></div><strong>{{ lineTotal(item) == null ? '—' : fromCents(lineTotal(item)!) }}</strong></article></div><p v-if="selectedLocks.length" class="pi-field-help">{{ trInline("关联") }} {{ selectedLocks.length }} {{ trInline("笔来源锁定，沿用原截止时间。") }}</p></section>
+              <section class="pi-form-card"><div class="pi-section-heading"><h3>{{ tr("客户与商品") }}</h3><el-button text type="primary" @click="goToDraftStep(0)">{{ tr("返回修改") }}</el-button></div><dl class="pi-detail-grid"><div><dt>{{ tr("订单客户") }}</dt><dd>{{ selectedCustomer?.name }}</dd></div><div><dt>{{ tr("贸易 / 币种") }}</dt><dd>{{ draft.tradeType === 'EXPORT' ? tr('外销') : tr('内销') }} · {{ draft.currencyCode.toUpperCase() }}</dd></div><div><dt>{{ tr("所属客户") }}</dt><dd>{{ selectedAgent?.name || tr('未关联') }}</dd></div><div><dt>{{ tr("来源订单") }}</dt><dd>{{ options.orders.find(order => order.id === draft.sourceOrderId)?.orderNo || (fromLocks ? tr('由来源锁定生成') : hasBoundOrders ? tr('已关联履约订单') : draft.document.business?.orderSource === 'NEW_BUSINESS' ? tr('新业务，收款达标后自动生成') : tr('请选择来源订单')) }}</dd></div></dl><div class="pi-review-items"><article v-for="item in draft.items" :key="item.key"><div><strong>{{ options.skus.find(sku => sku.id === item.skuId)?.skuCode }}</strong><span>{{ options.skus.find(sku => sku.id === item.skuId)?.productName }}</span><small>{{ item.quantity }} {{ item.unit }} × {{ money(item.unitPrice) }} {{ trInline("· 折扣") }} {{ money(item.discountAmount) }} {{ trInline("· 税费") }} {{ money(item.taxAmount) }}</small></div><strong>{{ lineTotal(item) == null ? '—' : fromCents(lineTotal(item)!) }}</strong></article></div><p v-if="selectedLocks.length" class="pi-field-help">{{ trInline("关联") }} {{ selectedLocks.length }} {{ trInline("笔来源锁定，沿用原截止时间。") }}</p></section>
               <section class="pi-form-card"><div class="pi-section-heading"><h3>{{ tr("交易与交付") }}</h3><el-button text type="primary" @click="goToDraftStep(1)">{{ tr("返回修改") }}</el-button></div><dl class="pi-detail-grid"><div><dt>{{ tr("模板") }}</dt><dd>{{ draft.document.templateCode }} · {{ draft.document.templateVersion }}</dd></div><div><dt>{{ tr("卖方") }}</dt><dd>{{ draft.document.sellerName }}</dd></div><div><dt>{{ tr("收款人") }}</dt><dd>{{ draft.document.beneficiary }}</dd></div><div><dt>{{ tr("收款银行 / 账号") }}</dt><dd>{{ draft.document.bankName }}<br />{{ draft.document.bankAccount }}</dd></div><div><dt>{{ tr("库存保留门槛") }}</dt><dd>{{ draft.currencyCode.toUpperCase() }} {{ money(draft.depositRequiredAmount) }}</dd></div><div><dt>{{ tr("发货放行门槛") }}</dt><dd>{{ draft.currencyCode.toUpperCase() }} {{ money(draft.shipmentRequiredAmount.trim() || '0') }}</dd></div><div class="pi-span-two"><dt>{{ tr("付款条款") }}</dt><dd>{{ draft.document.paymentTerms }}</dd></div><div class="pi-span-two"><dt>{{ tr("交付条款") }}</dt><dd>{{ draft.document.deliveryTerms }}</dd></div><div><dt>{{ tr("计划发货 / 运输方式") }}</dt><dd>{{ draft.plannedShipDate || tr('待补充') }} · {{ draft.document.transportMode || tr('待补充') }}</dd></div><div><dt>{{ tr("开单日期 / 有效期") }}</dt><dd>{{ draft.document.issueDate || tr('待补充') }} / {{ draft.document.validUntil || tr('待补充') }}</dd></div><div v-if="draft.tradeType === 'EXPORT'"><dt>{{ tr("贸易术语") }}</dt><dd>{{ draft.document.tradeTerms || tr('未填写 / 不适用') }}</dd></div><div class="pi-span-two"><dt>{{ tr("收货地址") }}</dt><dd>{{ draft.document.shippingAddress || tr('待补充') }}</dd></div><div v-if="draft.remark" class="pi-span-two"><dt>{{ tr("备注") }}</dt><dd>{{ draft.remark }}</dd></div></dl></section>
               <div class="pi-save-notice"><strong>{{ tr("保存后还可以继续编辑") }}</strong><p>{{ tr("客户发布、收款确认与发货放行仍须在 PI 详情中分别操作。") }}</p></div>
             </section>
@@ -1522,7 +1528,7 @@ onBeforeUnmount(() => {
           </div>
           <el-alert v-if="detail.reservationStatus === 'EXPIRED_REQUIRES_REACQUIRE'" :title='tr("来源订单库存占用已到期")' type="warning" :closable="false" show-icon>
             {{ isAgent ? tr('请联系业务人员核对库存并处理占用。') : tr('到账记录保留；请在流程中重试按仓锁库。系统重新核对指定仓库和全局可用库存，历史缺少精确SKU的子单须先核对。') }}
-            <span v-if="internal && !canManageReservation">{{ tr("请交由有订单及代理锁库维护权限的业务人员处理。") }}</span>
+            <span v-if="internal && !canManageReservation">{{ tr("请交由有订单及客户锁库维护权限的业务人员处理。") }}</span>
           </el-alert>
           <el-alert v-if="internal && detail.reservationStatus === 'CREDIT_HELD'" :title="manualWorkflow ? tr('人工确认保留库存，实际到账另行登记') : tr('客户收到货后付款授权保留')" :description='tr("库存已按授权保留；本状态不代表实际收到款项，仍须按 PI 付款条款跟进收款。")' type="info" :closable="false" />
           <el-alert v-if="internal && detail.reservationStatus === 'PAID_HELD'" :title='tr("收款达标保留，待履约或人工关闭")' :description='tr("该占用不按原截止时间自动释放；本状态不代表已全额到账。")' type="success" :closable="false" show-icon />
@@ -1530,10 +1536,10 @@ onBeforeUnmount(() => {
           <p v-if="internal && detail.reservationStatus === 'FULFILLED'" class="pi-hint">{{ tr("来源订单已履约。需要撤销出库时，请先核对订单占用及可撤销条件。") }}<a v-if="allowed('ORDER_READ')" href="/orders">{{ tr("查看销售订单") }}</a></p>
           <el-alert v-if="detail.status === 'CANCELLED' && detail.remark?.startsWith('自动取消：')" :title='tr("PI已自动取消")' :description="detail.remark" type="warning" :closable="false" show-icon />
           <p class="pi-hint">{{ trInline("库存占用：") }}{{ tr(reservationLabel(detail.reservationStatus, isAgent)) }}</p>
-          <el-descriptions :column="2" border><el-descriptions-item :label='tr("所属代理商")'>{{ detail.agentName || '—' }}</el-descriptions-item><el-descriptions-item :label='tr("计划发货")'>{{ detail.plannedShipDate || '—' }}</el-descriptions-item><el-descriptions-item :label='tr("创建时间")'>{{ detail.createdAt }}</el-descriptions-item><el-descriptions-item :label='tr("备注")'>{{ detail.remark || '—' }}</el-descriptions-item></el-descriptions>
+          <el-descriptions :column="2" border><el-descriptions-item :label='tr("所属客户")'>{{ detail.agentName || '—' }}</el-descriptions-item><el-descriptions-item :label='tr("计划发货")'>{{ detail.plannedShipDate || '—' }}</el-descriptions-item><el-descriptions-item :label='tr("创建时间")'>{{ detail.createdAt }}</el-descriptions-item><el-descriptions-item :label='tr("备注")'>{{ detail.remark || '—' }}</el-descriptions-item></el-descriptions>
           <p v-if="detailProfile">{{ trInline("履约配置：") }}{{ detailProfile.name }} · {{ detailProfile.version }}{{ trInline("；收款主体：") }}{{ detailProfile.collectionEntity }}<span v-if="detail.document?.business?.paymentDueDate">{{ trInline("；付款到期：") }}{{ detail.document.business.paymentDueDate }}</span></p>
           <PiManualWorkflowPanel v-if="internal && manualWorkflow" :workflow="workflow" :busy="workflowBusy || workflowActionBusy || actionBusy" :error="workflowError || releaseError" :can-write="canWrite" :can-release="canRelease" :pi-status="detail.status" @complete="completeWorkflow" @confirm-pi="handleWorkflowAction('CONFIRM_PI')" @release="releaseManualPi" />
-          <PiWorkflowPanel v-if="internal && !manualWorkflow" :related-actions="workflowRelatedActions" :workflow="workflow" :rules="detailProfile?.rules" :busy="workflowBusy" :error="workflowError" :action-busy="workflowActionBusy || actionBusy" :can-write="canWrite" :can-pay="canPay" :can-release="canRelease" :can-logistics="canLogistics" :can-after-sales="canAfterSales" :pi-id="detail.id" :logistics="detail.logistics" :domestic-shipment="detail.document?.business?.domesticShipment" :pi-status="detail.status" :currency-code="detail.currencyCode" :gate-met="gateMet" :reservation-blocked="reservationBlocked" @action="handleWorkflowAction" @complete="completeWorkflow" @related="openRelatedSection" @production-update="recordProductionUpdate" @after-sales="emit('navigate', 'after-sales')" />
+          <PiWorkflowPanel v-if="internal && !manualWorkflow" :related-actions="workflowRelatedActions" :workflow="workflow" :rules="detailProfile?.rules" :busy="workflowBusy" :error="workflowError" :action-busy="workflowActionBusy || actionBusy" :can-write="canWrite" :can-pay="canPay" :can-release="canRelease" :can-logistics="canLogistics" :can-after-sales="canAfterSales" :pi-id="detail.id" :logistics="detail.logistics" :domestic-shipment="detail.document?.business?.domesticShipment" :china-export="detailIsChinaExport" :pi-status="detail.status" :currency-code="detail.currencyCode" :gate-met="gateMet" :reservation-blocked="reservationBlocked" @action="handleWorkflowAction" @complete="completeWorkflow" @related="openRelatedSection" @production-update="recordProductionUpdate" @after-sales="emit('navigate', 'after-sales')" />
           <div ref="detailTabsElement"></div>
           <el-button v-if="relatedReturn" link type="primary" :disabled="actionBusy" @click="resumeRelatedForm">{{ tr("返回放行发货") }}</el-button>
           <el-tabs v-model="detailTab">

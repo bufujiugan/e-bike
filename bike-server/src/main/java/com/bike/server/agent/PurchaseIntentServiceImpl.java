@@ -40,13 +40,13 @@ public class PurchaseIntentServiceImpl implements PurchaseIntentService {
         CurrentOperator.requirePermission("PURCHASE_INTENT_WRITE");
         Long requestedAgentId = request.agentId();
         long agentId = CurrentOperator.hasRole("WEB_AGENT") ? requireAgent() : requestedAgentId == null ? 0L : requestedAgentId;
-        if (agentId <= 0) throw new BusinessException("AGENT_REQUIRED", "代理商不能为空");
+        if (agentId <= 0) throw new BusinessException("AGENT_REQUIRED", "请选择所属客户");
         // 与管理员替换授权共用代理商行锁，持有到意向及审计一并提交。
         if (mapper.lockAgentAccess(agentId) == null) {
-            throw new BusinessException("AGENT_NOT_FOUND", "代理商不存在或已停用");
+            throw new BusinessException("AGENT_NOT_FOUND", "客户不存在或已停用");
         }
         if (request.productModelId() == null || mapper.countAuthorizedModel(agentId, request.productModelId()) == 0) {
-            throw new BusinessException("MODEL_NOT_AUTHORIZED", "当前代理商未授权该车型或授权已失效");
+            throw new BusinessException("MODEL_NOT_AUTHORIZED", "当前客户无权使用该车型或授权已失效");
         }
         if (request.expireTime() != null && !request.expireTime().isAfter(java.time.LocalDateTime.now())) {
             throw new BusinessException("INVALID_PARAMETER", "采购意向有效期必须晚于当前时间");
@@ -66,7 +66,7 @@ public class PurchaseIntentServiceImpl implements PurchaseIntentService {
 
     private static long requireAgent() {
         Long agentId = CurrentOperator.agentId();
-        if (agentId == null) throw new BusinessException("AGENT_NOT_BOUND", "当前账号未绑定代理商");
+        if (agentId == null) throw new BusinessException("AGENT_NOT_BOUND", "当前账号未绑定所属客户");
         return agentId;
     }
 }

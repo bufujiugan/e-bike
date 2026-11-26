@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.part.PartPricingMapper">
+    <sql id="partName">
+        CASE part.part_type
+            WHEN 'FRAME' THEN '车架'
+            WHEN 'MOTOR' THEN '电机'
+            WHEN 'BATTERY' THEN '电池'
+            WHEN 'DISPLAY' THEN '仪表'
+            ELSE part.part_type
+        END
+    </sql>
+    <sql id="columns">
+        part.id, part.part_sn part_no, (<include refid="partName"/>) part_name,
+        COALESCE(price.sellable, 0) sellable, price.unit_price, price.currency
+    </sql>
+    <sql id="prices">
+        FROM bike_part part LEFT JOIN bike_part_price price ON price.part_id = part.id
+    </sql>
+    <sql id="filters">
+        <where>
+            <if test="published">AND price.sellable = 1 AND price.unit_price IS NOT NULL AND price.currency IS NOT NULL</if>
+            <if test="keyword != null and keyword != ''">
+                AND (LOCATE(#{keyword}, part.part_sn) &gt; 0
+                     OR LOCATE(#{keyword}, part.part_type) &gt; 0
+                     OR LOCATE(#{keyword}, (<include refid="partName"/>)) &gt; 0)
+            </if>
+        </where>
+    </sql>
+    <select id="selectPrices" resultType="com.bike.server.part.PartPricingService$Price">
+        SELECT <include refid="columns"/> <include refid="prices"/> <include refid="filters"/>
+        ORDER BY part.part_sn, part.id LIMIT #{offset}, 20
+    </select>
+    <select id="countPrices" resultType="long">
+        SELECT COUNT(*) <include refid="prices"/> <include refid="filters"/>
+    </select>
+    <select id="lockPart" resultType="long">SELECT id FROM bike_part WHERE id = #{id} FOR UPDATE</select>
+    <select id="selectPrice" resultType="com.bike.server.part.PartPricingService$Price">
+        SELECT <include refid="columns"/> <include refid="prices"/> WHERE part.id = #{id}
+    </select>
+    <insert id="upsertPrice">
+        INSERT INTO bike_part_price(part_id, sellable, unit_price, currency)
+        VALUES (#{id}, #{request.sellable}, #{request.unitPrice,jdbcType=DECIMAL}, #{request.currency,jdbcType=CHAR})
+        ON DUPLICATE KEY UPDATE sellable = VALUES(sellable), unit_price = VALUES(unit_price), currency = VALUES(currency)
+    </insert>
+</mapper>

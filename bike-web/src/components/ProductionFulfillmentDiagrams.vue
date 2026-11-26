@@ -23,7 +23,7 @@ const phases: { title: string; timing: string; outcome: string; nodes: FlowNode[
   ] },
   { title: '接单时 · 按数量为客户留货', timing: '已有合格库存、客户确定需求后', outcome: '交接：销售订单、客户与待发数量', nodes: [
     { step: 8, title: '核对可新增锁定量', owner: '业务员 · 库存与锁定', detail: '扣除隔离、临时锁定和订单占用', tag: '先查余量' },
-    { step: 8, title: '为客户锁定数量', owner: '业务员 · 库存与锁定', detail: '填写数量，选择客户 / 代理商及有效期', tag: '留货' },
+    { step: 8, title: '为客户锁定数量', owner: '业务员 · 库存与锁定', detail: '填写数量，选择订单客户、所属客户及有效期', tag: '留货' },
     { step: 9, title: '锁定转销售订单', owner: '业务员 · 锁定转订单', detail: '核对 SKU、客户、数量及计划出库日', tag: '保留占用' },
     { step: 10, title: '确认销售订单', owner: '订单员 · 订单与出库', detail: '确认后进入待出库状态', tag: '准备交仓库' },
   ] },

@@ -15,7 +15,7 @@ public class SkuInventoryService {
         Long agentId=null;
         if(CurrentOperator.hasRole("WEB_AGENT")) {
             agentId=CurrentOperator.agentId();
-            if(agentId==null) throw new BusinessException("AGENT_NOT_BOUND","当前账号未绑定代理商");
+            if(agentId==null) throw new BusinessException("AGENT_NOT_BOUND","当前账号未绑定所属客户");
         }
         long p=Math.min(10000000,Math.max(1,page)),size=Math.min(100,Math.max(1,pageSize));
         return new PageResponse<>(mapper.list(modelId,agentId,(p-1)*size,size),p,size,mapper.count(modelId,agentId));

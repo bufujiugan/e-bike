@@ -91,7 +91,7 @@ public class PiDispatchService {
     private String hash(PiDispatchRequest request) {try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(json.writeValueAsBytes(request)));}catch(Exception e){throw new IllegalStateException(e);}}
     private static void requireWarehouse() {
         CurrentOperator.requirePermission("STOCK_OUT_OPERATE");CurrentOperator.requireWorkstation("STOCK_OUT");
-        if(CurrentOperator.hasRole("WEB_AGENT"))fail("FORBIDDEN","代理商不能办理内部出库");
+        if(CurrentOperator.hasRole("WEB_AGENT"))fail("FORBIDDEN","客户业务账号不能办理内部出库");
     }
     private static void fail(String code,String message){throw new BusinessException(code,message);}
 }

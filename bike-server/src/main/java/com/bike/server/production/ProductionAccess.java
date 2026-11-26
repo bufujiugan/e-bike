@@ -16,7 +16,7 @@ public final class ProductionAccess {
         "STOCK_IN_OPERATE",
         "STOCK_OUT_OPERATE");
     if (CurrentOperator.hasRole("WEB_AGENT"))
-      throw new BusinessException("PERMISSION_DENIED", "代理商不能访问生产作业");
+      throw new BusinessException("PERMISSION_DENIED", "客户业务账号不能访问生产作业");
   }
 
   public static void operate() {

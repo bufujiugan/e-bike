@@ -59,6 +59,7 @@ const emit = defineEmits<{ 'update:search': [value: string]; 'update:page': [val
           <ProgressBar v-else-if="column === '完成进度'" :value="bindingProgress(row[index])" :label="row[index]" />
           <PurchaseContractNumber v-else-if="column === '购销合同号'" :value="row[index] === '-' ? null : row[index]" />
           <span v-else-if="column === '运输安排'">{{ row[index] && row[index] !== '-' ? tr(row[index]) : '—' }}</span>
+          <span v-else-if="column === '账号类型' && row[index] === 'AGENT'">{{ tr('客户业务账号') }}</span>
           <span v-else :class="{ 'sm-code-cell': /聚合码|订单号|业务单号/.test(column) }">{{ row[index] || '—' }}</span>
         </template>
       </el-table-column>

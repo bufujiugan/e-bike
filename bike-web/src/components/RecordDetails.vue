@@ -17,7 +17,7 @@ const labels: Record<string, string> = {
   assembleOperatorId: '组装人员编号', assembleOperatorName: '组装人员', assembleTime: '组装时间',
   warehouseName: '仓库', currentWarehouseId: '当前仓库编号', warehouseId: '仓库编号', locationName: '库位',
   locationId: '库位编号', currentLocationId: '当前库位编号', stockInTime: '入库时间', stockOutTime: '出库时间',
-  currentCustomerId: '当前客户编号', customerId: '客户编号', customerName: '客户', agentId: '代理商编号', agentName: '代理商',
+  currentCustomerId: '当前客户编号', customerId: '订单客户编号', customerName: '订单客户', agentId: '所属客户编号', agentName: '所属客户',
   currentOrderNo: '当前订单号', orderNo: '订单号', orderId: '订单记录编号', stockOutNo: '出库单号', stockNo: '库存单号',
   reservationStatus: '占用状态', reservationHoldMode: '占用保留方式', reservationHeldAt: '占用保留时间', reservationExpiresAt: '占用截止时间',
   orderQty: '订单数量', orderedQty: '订购数量', shippedQty: '已出库数量', plannedShipDate: '计划发货日期',

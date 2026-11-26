@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 
 public record AfterSalesCaseCreateRequest(
         @Positive(message = "客户ID必须大于0") Long customerId,
-        @Positive(message = "代理商ID必须大于0") Long agentId,
+        @Positive(message = "所属客户 ID 必须大于 0") Long agentId,
         @Positive(message = "车辆ID必须大于0") Long vehicleId,
         @Size(max = 128, message = "车架号长度不能超过128") String frameSn,
         @Positive(message = "车型ID必须大于0") Long productModelId,

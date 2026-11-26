@@ -34,9 +34,9 @@ public class MasterServiceImpl implements MasterService {
             throw new BusinessException("FORBIDDEN", "PDA 账号只能读取出入库作业所需基础资料");
         }
         if (CurrentOperator.hasRole("WEB_AGENT")) {
-            if (!"models".equals(type)) throw new BusinessException("FORBIDDEN", "代理商账号无权访问该基础资料");
+            if (!"models".equals(type)) throw new BusinessException("FORBIDDEN", "客户业务账号无权访问该基础资料");
             Long agentId = CurrentOperator.agentId();
-            if (agentId == null) throw new BusinessException("AGENT_NOT_BOUND", "当前账号未绑定代理商");
+            if (agentId == null) throw new BusinessException("AGENT_NOT_BOUND", "当前账号未绑定所属客户");
             return masterMapper.selectAuthorizedModels(agentId, clean(keyword));
         }
         return masterMapper.select(type, clean(keyword));
@@ -90,7 +90,7 @@ public class MasterServiceImpl implements MasterService {
         CurrentOperator.requireAnyPermission("MASTER_READ", "INVENTORY_READ", "STOCK_IN_OPERATE", "PRODUCTION_MANAGE");
         if (CurrentOperator.hasRole("PDA_OPERATOR")) CurrentOperator.requireWorkstation("STOCK_IN");
         else CurrentOperator.requireWebAccess();
-        if (CurrentOperator.hasRole("WEB_AGENT")) throw new BusinessException("FORBIDDEN", "代理商账号无权访问仓库库位");
+        if (CurrentOperator.hasRole("WEB_AGENT")) throw new BusinessException("FORBIDDEN", "客户业务账号无权访问仓库库位");
         MasterItem warehouse = warehouseId <= 0 ? null : masterMapper.selectById("warehouses", warehouseId);
         if (warehouse == null) throw new BusinessException("WAREHOUSE_NOT_FOUND", "仓库不存在");
         if (!"ENABLED".equals(warehouse.status())) throw new BusinessException("WAREHOUSE_DISABLED", "仓库已停用，无法读取库位");

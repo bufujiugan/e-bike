@@ -54,7 +54,7 @@ public class SkuLockService {
             return mapper.locks(prior.id());
         }
         if(request.agentId()!=null && locks.lockAgentAccess(request.agentId())==null)
-            throw new BusinessException("AGENT_NOT_FOUND","代理商不存在或已停用");
+            throw new BusinessException("AGENT_NOT_FOUND","客户不存在或已停用");
         if(orders.countEnabledCustomer(request.customerId())!=1)
             throw new BusinessException("CUSTOMER_NOT_FOUND","客户不存在或已停用");
         var now=mapper.now();

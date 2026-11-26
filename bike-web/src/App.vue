@@ -20,6 +20,7 @@ import PartPhotoEditor from './components/PartPhotoEditor.vue'
 import ProductionManager from './components/ProductionManager.vue'
 import TraceQuery from './components/TraceQuery.vue'
 import { hasAnyPermission, hasPermission, hasRole, isSuperAdmin } from './permissions'
+import type { CustomerStatusView } from './customer-status-api'
 import { reservationLabel, type ReservationStatus } from './pi-api'
 import type { NavGroup, NavItem } from './config/page-presentation'
 
@@ -45,7 +46,9 @@ const CustomerScopeEditor = defineAsyncComponent(() => import('./components/Cust
 const CustomerScopeManager = defineAsyncComponent(() => import('./components/CustomerScopeManager.vue'))
 const FileReviewManager = defineAsyncComponent(() => import('./components/FileReviewManager.vue'))
 const CustomerProfiles = defineAsyncComponent(() => import('./components/CustomerProfiles.vue'))
+const FreightForwardersPage = defineAsyncComponent(() => import('./views/FreightForwardersPage.vue'))
 const customerProfiles = ref<InstanceType<typeof CustomerProfiles> | null>(null)
+const PartPricingWorkspace = defineAsyncComponent(() => import('./components/PartPricingWorkspace.vue'))
 const CustomerWorkspace = defineAsyncComponent(() => import('./components/CustomerWorkspace.vue'))
 const CustomerAccountCreate = defineAsyncComponent(() => import('./components/CustomerAccountCreate.vue'))
 const CustomerOrderNotifications = defineAsyncComponent(() => import('./components/CustomerOrderNotifications.vue'))
@@ -87,7 +90,11 @@ type ModulePage = { subtitle: string; stats: { label: string; value: string; ton
 const modulePageData = ref<Record<string, ModulePage>>({})
 
 const navGroups: NavGroup[] = [
-  { label: '客户工作台', items: [{ key: 'customer-orders', label: '我的订单', shortLabel: '订单', path: '/customer/orders', icon: 'orders' }] },
+  { label: '客户工作台', items: [
+    { key: 'customer-orders', label: '我的订单', shortLabel: '订单', path: '/customer/orders', icon: 'orders' },
+    { key: 'customer-inventory', label: '当前库存', shortLabel: '库存', path: '/customer/inventory', icon: 'inventory' },
+    { key: 'customer-part-prices', label: '可购零件', shortLabel: '零件', path: '/customer/part-prices', icon: 'parts' },
+  ] },
   { label: '工作台', items: [{ key: 'workflow', label: '我的工作台', shortLabel: '工作台', path: '/workflow', icon: 'home' }, { key: 'dashboard', label: '运营概览', shortLabel: '总览', path: '/dashboard' }] },
   {
     label: '生产作业',
@@ -128,10 +135,11 @@ const navGroups: NavGroup[] = [
     items: [
       { key: 'orders', label: '销售订单', shortLabel: '订单', path: '/orders' },
       { key: 'pis', label: 'PI 与履约', shortLabel: 'PI', path: '/pis' },
+      { key: 'freight-forwarders', label: '货代信息管理', shortLabel: '货代', path: '/freight-forwarders', icon: 'orders' },
       { key: 'completed-orders', label: '已完成订单', shortLabel: '已完成', path: '/completed-orders', icon: 'check' },
       { key: 'europe-orders', label: '欧洲销售与交付', shortLabel: '欧洲', path: '/europe-orders', icon: 'orders' },
-      { key: 'customers', label: '客户管理', shortLabel: '客户', path: '/master/customers' },
-      { key: 'agents', label: '代理商管理', shortLabel: '代理商', path: '/master/agents' },
+      { key: 'customers', label: '订单客户档案', shortLabel: '档案', path: '/master/customers' },
+      { key: 'agents', label: '客户管理', shortLabel: '客户', path: '/master/agents' },
       { key: 'inventory-locks', label: '客户锁定记录', shortLabel: '锁库', path: '/inventory-locks' },
     ],
   },
@@ -147,6 +155,7 @@ const navGroups: NavGroup[] = [
   {
     label: '资料与设置',
     items: [
+      { key: 'part-pricing', label: '零件管理', shortLabel: '零件管理', path: '/part-pricing', icon: 'parts' },
       { key: 'parts', label: '零部件管理', shortLabel: '部件', path: '/parts' },
       { key: 'suppliers', label: '供应商管理', shortLabel: '供应', path: '/master/suppliers' },
       { key: 'models', label: '车型管理', shortLabel: '车型', path: '/master/models' },
@@ -162,11 +171,11 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    label: '代理商工作台',
+    label: '客户业务工作台',
     items: [
-      { key: 'agent-dashboard', label: '代理商概览', shortLabel: '概览', path: '/agent/dashboard' },
-      { key: 'agent-inventory', label: '代理商库存', shortLabel: '库存', path: '/agent/inventory' },
-      { key: 'agent-locks', label: '代理商锁库', shortLabel: '锁库', path: '/agent/locks' },
+      { key: 'agent-dashboard', label: '客户概览', shortLabel: '概览', path: '/agent/dashboard' },
+      { key: 'agent-inventory', label: '客户库存', shortLabel: '库存', path: '/agent/inventory' },
+      { key: 'agent-locks', label: '客户锁库', shortLabel: '锁库', path: '/agent/locks' },
       { key: 'purchase-intents', label: '采购意向', shortLabel: '意向', path: '/agent/purchase-intents' },
     ],
   },
@@ -177,6 +186,7 @@ const navPermissionMap: Record<string, string[]> = {
   'file-reviews': ['FILE_REVIEW_MANAGE'],
   'customer-scopes': ['CUSTOMER_SCOPE_MANAGE'],
   pis: ['PI_READ'],
+  'freight-forwarders': ['PI_WRITE'],
   'completed-orders': ['ORDER_READ'],
   'europe-orders': ['PI_READ'],
   'sku-inventory': ['INVENTORY_READ', 'AGENT_INVENTORY_READ'],
@@ -193,11 +203,15 @@ const navPermissionMap: Record<string, string[]> = {
   dashboard: ['DASHBOARD_READ'], assembly: ['ASSEMBLY_OPERATE'], vehicles: ['VEHICLE_READ'], inventory: ['INVENTORY_READ'],
   'stock-in': ['STOCK_READ'], 'stock-out': ['STOCK_READ'], stock: ['STOCK_READ'], orders: ['ORDER_READ'],
   agents: ['MASTER_READ'], 'inventory-locks': ['AGENT_INVENTORY_READ', 'AGENT_LOCK_WRITE'], rework: ['REWORK_OPERATE'], trace: ['TRACE_READ'],
+  'customer-orders': ['ORDER_READ'], 'customer-inventory': ['AGENT_INVENTORY_READ'],
+  'part-pricing': ['PART_PRICING_MANAGE'],
   parts: ['PART_READ'], customers: ['MASTER_READ', 'CUSTOMER_PROFILE_WRITE'], suppliers: ['MASTER_READ'], models: ['MASTER_READ'], warehouses: ['MASTER_READ'], locations: ['MASTER_READ'],
   users: ['USER_READ'], roles: ['ROLE_READ'], workstations: ['WORKSTATION_READ'], config: ['SYSTEM_CONFIG_WRITE'],
   logs: ['DATA_EXPORT'], 'operation-logs': ['DATA_EXPORT'], customs: ['DATA_EXPORT'], 'agent-dashboard': ['AGENT_INVENTORY_READ'],
   'agent-inventory': ['AGENT_INVENTORY_READ'], 'agent-locks': ['AGENT_INVENTORY_READ', 'AGENT_LOCK_WRITE'], 'purchase-intents': ['AGENT_INVENTORY_READ', 'PURCHASE_INTENT_WRITE'],
 }
+const customerStatusViews = new Set<string>(['customer-orders', 'customer-inventory', 'customer-part-prices'])
+const customerStatusView = computed(() => customerStatusViews.has(activeView.value) ? activeView.value as CustomerStatusView : null)
 const agentOnlyViews = new Set(['agent-dashboard', 'agent-inventory', 'agent-locks', 'purchase-intents'])
 const agentExcludedViews = new Set(['inventory', 'inventory-locks'])
 const pdaJobWorkstations: Record<string, string> = {
@@ -218,10 +232,12 @@ function filterVisibleNavItems(items: NavItem[], context: AuthContext): NavItem[
   const isAgent = hasRole(context, 'WEB_AGENT')
   return items.flatMap(item => {
     const children = filterVisibleNavItems(item.children ?? [], context)
-    const excluded = (['customer-scopes', 'file-reviews', 'europe-orders'].includes(item.key) && (isAgent || hasRole(context, 'PDA_OPERATOR')))
-      || (isAgent && agentExcludedViews.has(item.key))
+    const excluded = (['customer-scopes', 'file-reviews', 'europe-orders', 'freight-forwarders'].includes(item.key) && (isAgent || hasRole(context, 'PDA_OPERATOR')))
+      || (isAgent && (agentExcludedViews.has(item.key) || item.key === 'part-pricing'))
+      || (item.key === 'part-pricing' && hasRole(context, 'PDA_OPERATOR'))
+      || (!isAgent && customerStatusViews.has(item.key))
       || (!isAgent && agentOnlyViews.has(item.key))
-    const allowed = !excluded && (navPermissionMap[item.key] ?? []).some(permission => permissions.has(permission))
+    const allowed = !excluded && (item.key === 'customer-part-prices' || (navPermissionMap[item.key] ?? []).some(permission => permissions.has(permission)))
     return allowed || children.length ? [{ ...item, children: children.length ? children : undefined }] : []
   })
 }
@@ -248,7 +264,7 @@ function toggleNavGroup(label: string) {
   else next.add(label)
   expandedNavGroups.value = next
 }
-const userRoleLabel = computed(() => isCustomerAccount.value ? '客户' : hasRole(authContext.value, 'WEB_AGENT') ? '代理商' : hasRole(authContext.value, 'PDA_OPERATOR') ? 'PDA操作员' : isSuperAdmin(authContext.value) ? '超级管理员' : 'Web业务员')
+const userRoleLabel = computed(() => isCustomerAccount.value ? '客户' : hasRole(authContext.value, 'WEB_AGENT') ? '客户业务账号' : hasRole(authContext.value, 'PDA_OPERATOR') ? 'PDA操作员' : isSuperAdmin(authContext.value) ? '超级管理员' : 'Web业务员')
 const canCreateProductionTask = computed(() => !isAgentAccount.value && hasPermission(authContext.value, 'ASSEMBLY_OPERATE') &&
   (isSuperAdmin(authContext.value) || authContext.value?.workstations.some(type => ['ASSEMBLY', 'FRAME', 'MOTOR', 'BATTERY', 'DISPLAY'].includes(type))))
 
@@ -260,6 +276,7 @@ if (allNavItems.some(item => item.key === initialKey)) activeView.value = initia
 function defaultViewForContext(context: AuthContext) {
   if (context.userType === 'CUSTOMER') return 'customer-orders'
   const visibleKeys = new Set(visibleNavItems.value.map(item => item.key))
+  if (hasRole(context, 'WEB_AGENT') && visibleKeys.has('customer-orders')) return 'customer-orders'
   if (hasRole(context, 'WEB_AGENT') && visibleKeys.has('agent-dashboard')) return 'agent-dashboard'
   if ((isSuperAdmin(context) || context.userType === 'WEB_ADMIN') && visibleKeys.has('dashboard')) return 'dashboard'
   if (visibleKeys.has('workflow')) return 'workflow'
@@ -369,7 +386,7 @@ const permissionTreeData = computed(() => {
     ASSEMBLY: '生产与库存', PRODUCTION: '生产与库存', INVENTORY: '生产与库存', STOCK: '生产与库存', VEHICLE: '生产与库存', PDA: '生产与库存',
     ORDER: '订单与履约', PI: '订单与履约', AFTER: '售后服务', CUSTOMER: '基础资料', MASTER: '基础资料',
     USER: '系统管理', ROLE: '系统管理', WORKSTATION: '系统管理', SYSTEM: '系统管理', FILE: '系统管理',
-    AGENT: '代理商业务', DATA: '数据与导出', TRACE: '数据与导出', DASHBOARD: '数据与导出', PART: '基础资料', REWORK: '生产与库存', PURCHASE: '代理商业务',
+    AGENT: '客户业务', DATA: '数据与导出', TRACE: '数据与导出', DASHBOARD: '数据与导出', PART: '基础资料', REWORK: '生产与库存', PURCHASE: '客户业务',
   }
   const groups = new Map<string, { id: string; label: string; children: { id: number; label: string; permissionCode: string }[] }>()
   for (const item of permissionOptions.value) {
@@ -550,7 +567,7 @@ async function editAgentAccess(row: string[]) {
   try {
     const agents = await axios.get('/api/master/agents', { params: { keyword: row[0] }, ...authConfig() })
     const agent = agents.data.data.find((item: {code: string}) => item.code === row[0])
-    if (!agent) throw new Error('代理商不存在')
+    if (!agent) throw new Error('客户不存在')
     const [models, access] = await Promise.all([
       axios.get('/api/master/models', authConfig()),
       axios.get(`/api/master/agents/${agent.id}/model-access`, authConfig())
@@ -733,8 +750,8 @@ let moduleRequestVersion = 0
 async function loadModule(module: string) {
   const requestVersion = ++moduleRequestVersion
   dataLoading.value = false
-  if (!authContext.value || authContext.value.mustChangePassword || isCustomerAccount.value || isPdaJobAccount.value || module === 'customer-orders') return
-  if (module.startsWith('production') || ['workflow', 'trace', 'pis', 'completed-orders', 'europe-orders', 'after-sales', 'sku-inventory', 'customer-scopes', 'file-reviews'].includes(module)) return
+  if (!authContext.value || authContext.value.mustChangePassword || isCustomerAccount.value || isPdaJobAccount.value || customerStatusViews.has(module) || module === 'part-pricing') return
+  if (module.startsWith('production') || ['workflow', 'trace', 'pis', 'freight-forwarders', 'completed-orders', 'europe-orders', 'after-sales', 'sku-inventory', 'customer-scopes', 'file-reviews'].includes(module)) return
   if (module === 'dashboard') return loadDashboard(requestVersion)
   dataLoading.value = true
   dataError.value = ''
@@ -1195,7 +1212,7 @@ function openPrimaryAction() {
   else if (module === 'users') actionKind.value = 'user'
   else if (module === 'roles') actionKind.value = 'role'
   else if (module === 'workstations') actionKind.value = 'workstation'
-  else if (module.startsWith('agent-')) return ElMessage.info(tr('代理商业务请使用对应专用接口'))
+  else if (module.startsWith('agent-')) return ElMessage.info(tr('客户业务请使用对应专用接口'))
   else actionKind.value = module === 'parts' ? 'part' : module === 'orders' ? 'order' : 'master'
   resetActionForm()
   if (actionKind.value === 'order' || actionKind.value === 'part' || actionKind.value === 'lock' || actionKind.value === 'intent' || actionKind.value === 'location') {
@@ -1424,7 +1441,8 @@ async function submitPrimaryAction() {
     </template>
     <el-empty v-if="!authContext" :description='tr("正在加载账号信息…")' />
     <el-empty v-else-if="passwordChangeVisible" :description='tr("请先修改初始密码")' />
-    <CustomerWorkspace v-else-if="isCustomerAccount" :key="username" />
+    <CustomerWorkspace v-else-if="customerStatusView && (isCustomerAccount || isAgentAccount)" :key="username" :view="customerStatusView" :can-submit="isCustomerAccount" />
+    <PartPricingWorkspace v-else-if="activeView === 'part-pricing' && !isAgentAccount && hasPermission(authContext, 'PART_PRICING_MANAGE')" :key="username" />
     <el-empty v-else-if="isPdaJobAccount" :description='tr("请在 PDA 端使用此岗位账号")' />
       <BusinessWorkspace v-else-if="activeView === 'workflow' && !passwordChangeVisible" :context="authContext"
         :username="username" :refresh-key="workflowRefreshKey"
@@ -1439,6 +1457,7 @@ async function submitPrimaryAction() {
         @navigate="navigate"
         @convert="lockNo => changeInventoryLock([lockNo], 'convert')" />
       <EuropeSalesWorkspace v-else-if="activeView === 'europe-orders' && !passwordChangeVisible" :context="authContext" @navigate="navigate" />
+      <FreightForwardersPage v-else-if="activeView === 'freight-forwarders' && !passwordChangeVisible && visibleNavItems.some(item => item.key === activeView)" />
       <PiWorkspace v-else-if="activeView === 'pis' && !passwordChangeVisible" :context="authContext" :allow-create="false"
         :requested-detail-id="dispatchPiId" generic-entry @detail-requested="dispatchPiId = null" @navigate="navigate" />
       <CompletedOrdersPage v-else-if="activeView === 'completed-orders' && hasPermission(authContext, 'ORDER_READ')" />
@@ -1482,8 +1501,8 @@ async function submitPrimaryAction() {
         <el-form-item :label='tr("备注")'><el-input v-model="actionForm.remark" type="textarea" /></el-form-item>
       </el-form>
       <el-form v-else-if="actionKind === 'order'" label-width="100px">
-        <el-form-item :label='tr("客户")'><el-select v-model="actionForm.customerId" filterable :placeholder='tr("请选择客户")'><el-option v-for="item in masterOptions.customers" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
-        <el-form-item :label='tr("代理商")'><el-select v-model="actionForm.agentId" clearable filterable :placeholder='tr("可选代理商")'><el-option v-for="item in masterOptions.agents" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
+        <el-form-item :label='tr("订单客户")'><el-select v-model="actionForm.customerId" filterable :placeholder='tr("请选择订单客户")'><el-option v-for="item in masterOptions.customers" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
+        <el-form-item :label='tr("所属客户")'><el-select v-model="actionForm.agentId" clearable filterable :placeholder='tr("可选的所属客户")'><el-option v-for="item in masterOptions.agents" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
         <template v-if="editingId === null && domesticSkuCreationEnabled">
           <el-form-item :label='tr("订单 SKU")'>
             <el-select v-model="orderSkuChoice" filterable remote :remote-method="loadOrderSkuOptions"
@@ -1516,10 +1535,10 @@ async function submitPrimaryAction() {
             <el-option :label='tr("后台账号")' value="WEB_OPERATOR" />
             <el-option :label='tr("后台账号（管理员类型）")' value="WEB_ADMIN" />
             <el-option :label='tr("PDA操作员")' value="PDA_OPERATOR" />
-            <el-option :label='tr("代理商")' value="AGENT" />
+            <el-option :label='tr("客户业务账号")' value="AGENT" />
           </el-select>
         </el-form-item>
-        <el-form-item v-if="actionForm.userType === 'AGENT'" :label='tr("代理商")'><el-select v-model="actionForm.agentId" clearable filterable><el-option v-for="item in masterOptions.agents" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
+        <el-form-item v-if="actionForm.userType === 'AGENT'" :label='tr("所属客户")'><el-select v-model="actionForm.agentId" clearable filterable><el-option v-for="item in masterOptions.agents" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
         <el-form-item :label='tr("角色")'>
           <el-select v-model="selectedRoleIds" multiple clearable filterable :placeholder='tr("选择岗位角色")'>
             <el-option v-for="item in userRoleOptions" :key="item.id" :label="`${item.roleName}（${item.roleCode}）`" :value="item.id" />
@@ -1552,7 +1571,7 @@ async function submitPrimaryAction() {
         <el-form-item :label='tr("库位名称")'><el-input v-model="actionForm.name" /></el-form-item>
       </el-form>
       <el-form v-else-if="actionKind === 'lock'" label-width="100px">
-        <el-form-item v-if="!isAgentAccount" :label='tr("代理商")'><el-select v-model="actionForm.agentId" filterable><el-option v-for="item in masterOptions.agents" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
+        <el-form-item v-if="!isAgentAccount" :label='tr("客户")'><el-select v-model="actionForm.agentId" filterable><el-option v-for="item in masterOptions.agents" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
         <el-form-item :label='tr("车型")'><el-select v-model="actionForm.modelId" filterable><el-option v-for="item in masterOptions.models" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
         <el-form-item :label='tr("锁定数量")'><el-input-number v-model="actionForm.lockQty" :min="1" /></el-form-item>
         <el-form-item :label='tr("有效期")'><el-date-picker v-model="actionForm.expireTime" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" /></el-form-item>
@@ -1565,7 +1584,7 @@ async function submitPrimaryAction() {
         <el-form-item :label='tr("返工原因")'><el-input v-model="actionForm.reason" type="textarea" /></el-form-item>
       </el-form>
       <el-form v-else-if="actionKind === 'intent'" label-width="100px">
-        <el-form-item v-if="!isAgentAccount" :label='tr("代理商")'><el-select v-model="actionForm.agentId" filterable><el-option v-for="item in masterOptions.agents" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
+        <el-form-item v-if="!isAgentAccount" :label='tr("客户")'><el-select v-model="actionForm.agentId" filterable><el-option v-for="item in masterOptions.agents" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
         <el-form-item :label='tr("车型")'><el-select v-model="actionForm.modelId" filterable><el-option v-for="item in masterOptions.models" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select></el-form-item>
         <el-form-item :label='tr("意向数量")'><el-input-number v-model="actionForm.orderQty" :min="1" /></el-form-item>
         <el-form-item :label='tr("有效期")'><el-date-picker v-model="actionForm.expireTime" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" /></el-form-item>
@@ -1592,7 +1611,7 @@ async function submitPrimaryAction() {
         <template v-if="canSelectLockSources">
           <el-form-item v-if="!hasBatchLockSelection" :label='tr("锁定来源")'>
             <el-select v-model="lockSourceChoice" filterable remote :remote-method="loadLockSourceOptions"
-              :placeholder='tr("添加同一客户、同一代理商的锁定")' @visible-change="$event && loadLockSourceOptions()" @change="addLockSource">
+              :placeholder='tr("添加同一订单客户、同一所属客户的锁定")' @visible-change="$event && loadLockSourceOptions()" @change="addLockSource">
               <el-option v-for="source in lockSourceOptions" :key="source.id" :value="source.id"
                 :label="`${source.skuCode} · ${source.lockNo} · ${tr('剩余')} ${source.remaining} ${tr('台')}`"
                 :disabled="selectedLockSources.some(selected => selected.id === source.id)" />
@@ -1644,7 +1663,7 @@ async function submitPrimaryAction() {
       </template>
     </el-dialog>
     <el-dialog v-model="agentAccessVisible" :title="tr('{value0} · 车型授权', { value0: agentAccessName })" width="620px">
-      <p>{{ tr("选择允许该代理商查看库存、锁定库存和提交采购意向的车型。清空后撤销全部车型授权；历史锁定仍可查看和释放。") }}</p>
+      <p>{{ tr("选择允许该客户查看库存、锁定库存和提交采购意向的车型。清空后撤销全部车型授权；历史锁定仍可查看和释放。") }}</p>
       <el-select v-model="agentAccessModels" multiple filterable :placeholder='tr("选择授权车型")' style="width: 100%">
         <el-option v-for="model in agentAccessOptions" :key="model.id" :value="model.id" :label="`${model.code} · ${model.name}${model.status === 'ENABLED' ? '' : tr('（停用）')}`" :disabled="model.status !== 'ENABLED'" />
       </el-select>

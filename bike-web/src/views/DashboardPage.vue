@@ -102,6 +102,9 @@ async function showTask(id: string) {
 <template>
   <DashboardHero :date="today" :loading="loading" :error="error" />
   <div class="sm-page cc-dashboard">
+    <div v-if="allowedViews.includes('part-pricing')">
+      <el-button @click="navigate('part-pricing')"><AppIcon name="tag" />{{ tr('零件管理') }}</el-button>
+    </div>
     <AlertCard v-if="error" tone="error" :title='tr("运营数据加载失败")' :description="tr(error)"><template #action><el-button size="small" @click="refresh">{{ tr("重试") }}</el-button></template></AlertCard>
     <AlertCard v-if="taskError || failureError" tone="error" :title='tr("部分生产数据未能加载")' :description="tr(taskError || failureError)"><template #action><el-button size="small" @click="refreshProduction">{{ tr("重试生产数据") }}</el-button></template></AlertCard>
     <MetricGrid class="cc-primary-metrics" :items="primaryMetrics" />

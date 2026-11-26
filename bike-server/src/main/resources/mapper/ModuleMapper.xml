@@ -57,12 +57,12 @@
                 FROM bike_sales_order o LEFT JOIN bike_domestic_sku_order d ON d.order_id=o.id JOIN bike_customer c ON c.id = o.customer_id JOIN bike_sales_order_item i ON i.order_id = o.id JOIN bike_product_model m ON m.id = i.product_model_id LEFT JOIN bike_order_reservation r ON r.order_id=o.id LEFT JOIN bike_inventory_lock il ON il.id=r.source_lock_id WHERE 1=1 <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=o.customer_id)</if><if test="agentId != null">AND o.agent_id = #{agentId}</if><include refid="com.bike.server.order.OrderMapper.salesTypeFilter"/> ORDER BY o.created_at DESC, o.id DESC
             </when>
             <when test="module == 'agents'">
-                SELECT agent_code AS `代理商编号`, agent_name AS `代理商名称`, COALESCE(contact_name, '-') AS `联系人`, COALESCE(contact_phone, '-') AS `联系电话`, CASE status WHEN 'ENABLED' THEN '启用' ELSE status END AS `状态`,created_at AS `创建时间`,id AS _sort_id,id AS `ID`,updated_at AS `修改时间`
+                SELECT agent_code AS `客户编号`, agent_name AS `客户名称`, COALESCE(contact_name, '-') AS `联系人`, COALESCE(contact_phone, '-') AS `联系电话`, CASE status WHEN 'ENABLED' THEN '启用' ELSE status END AS `状态`,created_at AS `创建时间`,id AS _sort_id,id AS `ID`,updated_at AS `修改时间`
                 FROM bike_agent
                 ORDER BY created_at DESC,id DESC
             </when>
             <when test="module == 'agent-dashboard'">
-                SELECT COALESCE(a.agent_name,'直接客户') AS `代理商`, m.model_name AS `车型`, CONCAT(CASE WHEN il.status IN ('LOCKED','PARTIAL_CONVERTED') AND il.expire_time&gt;NOW(3) THEN il.lock_qty-il.released_qty-il.converted_qty ELSE 0 END, ' 台') AS `有效临时锁定`,
+                SELECT COALESCE(a.agent_name,'直接客户') AS `客户`, m.model_name AS `车型`, CONCAT(CASE WHEN il.status IN ('LOCKED','PARTIAL_CONVERTED') AND il.expire_time&gt;NOW(3) THEN il.lock_qty-il.released_qty-il.converted_qty ELSE 0 END, ' 台') AS `有效临时锁定`,
                   il.expire_time AS `有效期`, (SELECT COUNT(*) FROM bike_order_reservation r WHERE r.source_lock_id=il.id) AS `关联订单数`, COALESCE(u.display_name,'历史未记录') AS `创建人`,
                   CASE WHEN il.status IN ('LOCKED','PARTIAL_CONVERTED') AND il.expire_time&lt;=NOW(3) THEN '已到期'
                     ELSE CASE il.status WHEN 'LOCKED' THEN '锁定中' WHEN 'PARTIAL_CONVERTED' THEN '部分转订单' WHEN 'CONVERTED' THEN '已转订单' WHEN 'RELEASED' THEN '已释放' WHEN 'EXPIRED' THEN '已到期' WHEN 'CANCELLED' THEN '已取消' ELSE il.status END END AS `状态`,il.lock_no AS `锁定单号`,il.created_at AS `创建时间`,il.id AS _sort_id,il.id AS `ID`,il.updated_at AS `修改时间`
@@ -70,7 +70,7 @@
                 WHERE 1=1 <bind name="customerScopeUser" value="@com.bike.server.common.CurrentOperator@customerScopeUserId()"/><if test="customerScopeUser != null"> AND EXISTS(SELECT 1 FROM bike_user_customer_scope cs WHERE cs.user_id=#{customerScopeUser} AND cs.customer_id=il.customer_id)</if><if test="agentId != null">AND il.agent_id=#{agentId}</if> ORDER BY il.created_at DESC
             </when>
             <when test="module == 'inventory-locks'">
-                SELECT il.lock_no AS `锁定单号`, COALESCE(a.agent_name,'直接客户') AS `代理商`, m.model_name AS `车型`, il.lock_qty AS `锁定数量`, il.released_qty AS `已释放`, il.converted_qty AS `已转订单`, il.expire_time AS `到期时间`,
+                SELECT il.lock_no AS `锁定单号`, COALESCE(a.agent_name,'直接客户') AS `客户`, m.model_name AS `车型`, il.lock_qty AS `锁定数量`, il.released_qty AS `已释放`, il.converted_qty AS `已转订单`, il.expire_time AS `到期时间`,
                        CASE WHEN il.status IN ('LOCKED','PARTIAL_CONVERTED') AND il.expire_time&lt;=NOW(3) THEN '已到期'
                          ELSE CASE il.status WHEN 'LOCKED' THEN '锁定中' WHEN 'PARTIAL_CONVERTED' THEN '部分转订单' WHEN 'CONVERTED' THEN '已转订单' WHEN 'RELEASED' THEN '已释放' WHEN 'EXPIRED' THEN '已到期' WHEN 'CANCELLED' THEN '已取消' ELSE il.status END END AS `状态`,il.created_at AS `创建时间`,il.id AS _sort_id,il.id AS `ID`,il.updated_at AS `修改时间`,sku.sku_code AS `SKU`
                 FROM bike_inventory_lock il LEFT JOIN bike_agent a ON a.id=il.agent_id JOIN bike_product_model m ON m.id=il.product_model_id
@@ -142,7 +142,7 @@
                 FROM bike_system_config ORDER BY created_at DESC,id DESC
             </when>
             <when test="module == 'purchase-intents'">
-                SELECT a.agent_name AS `代理商`, m.model_name AS `授权车型`, i.intent_qty AS `意向数量`, i.expire_time AS `有效期`, i.status AS `状态`,i.created_at AS `创建时间`,i.id AS _sort_id,i.id AS `ID`,i.updated_at AS `修改时间`
+                SELECT a.agent_name AS `客户`, m.model_name AS `授权车型`, i.intent_qty AS `意向数量`, i.expire_time AS `有效期`, i.status AS `状态`,i.created_at AS `创建时间`,i.id AS _sort_id,i.id AS `ID`,i.updated_at AS `修改时间`
                 FROM bike_agent_purchase_intent i JOIN bike_agent a ON a.id=i.agent_id JOIN bike_product_model m ON m.id=i.product_model_id
                 <where><if test="agentId != null">i.agent_id=#{agentId}</if></where> ORDER BY i.created_at DESC
             </when>

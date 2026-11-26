@@ -95,7 +95,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     static boolean isCustomerPath(String path) {
         return java.util.Set.of("/api/auth/login", "/api/auth/me", "/api/auth/context", "/api/auth/logout",
                 "/api/auth/password", "/api/auth/avatar", "/api/customer/company", "/api/customer/models",
-                "/api/customer/orders").contains(path);
+                "/api/customer/orders", "/api/customer/order-status", "/api/customer/order-detail",
+                "/api/customer/inventory-status", "/api/customer/part-prices").contains(path);
     }
 
     private static boolean requiresPasswordChange(HttpServletRequest request) {

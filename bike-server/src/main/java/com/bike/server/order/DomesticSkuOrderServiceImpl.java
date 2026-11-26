@@ -91,7 +91,7 @@ public class DomesticSkuOrderServiceImpl implements DomesticSkuOrderService {
         if (!creationEnabled) throw new BusinessException("DOMESTIC_SKU_CREATION_DISABLED", "内销 SKU 建单入口暂未开放");
         if (orders.countEnabledCustomer(request.customerId()) != 1
                 || request.agentId() != null && orders.countEnabledAgent(request.agentId()) != 1) {
-            throw new BusinessException("INVALID_PARAMETER", "客户或代理商不存在或已停用");
+            throw new BusinessException("INVALID_PARAMETER", "订单客户或所属客户不存在或已停用");
         }
         LocalDateTime now = skuLocks.now();
         var quantities = new TreeMap<Long, Integer>();
@@ -185,7 +185,7 @@ public class DomesticSkuOrderServiceImpl implements DomesticSkuOrderService {
             }
             if (!Objects.equals(lock.getCustomerId(), request.customerId())
                     || !Objects.equals(lock.getAgentId(), request.agentId())) {
-                throw new BusinessException("LOCK_CUSTOMER_MISMATCH", "合并转单须选择同一客户、同一代理商的锁定");
+                throw new BusinessException("LOCK_CUSTOMER_MISMATCH", "合并转单须选择同一订单客户、同一所属客户的锁定");
             }
             if (lock.getExpireTime() == null || !lock.getExpireTime().isAfter(now)) {
                 throw new BusinessException("INVENTORY_LOCK_EXPIRED", "锁定 " + lock.getLockNo() + " 已到期");

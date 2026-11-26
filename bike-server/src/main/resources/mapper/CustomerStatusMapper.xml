@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bike.server.customer.CustomerStatusMapper">
+    <sql id="accountScope">
+        <choose>
+            <when test="customerId != null">AND document.customer_id = #{customerId}</when>
+            <when test="agentId != null">
+                AND document.agent_id = #{agentId}
+                AND EXISTS (SELECT 1 FROM bike_agent a WHERE a.id = #{agentId} AND a.status = 'ENABLED')
+            </when>
+            <otherwise>AND 1 = 0</otherwise>
+        </choose>
+    </sql>
+    <sql id="salesOrderScope">
+        <include refid="accountScope"/>
+        <if test="id != null">AND document.id = #{id}</if>
+    </sql>
+    <sql id="standalonePiScope">
+        <include refid="accountScope"/>
+        AND (document.status IN ('CONFIRMED', 'RELEASED')
+             OR (document.status = 'CANCELLED' AND document.confirmed_by IS NOT NULL))
+        AND document.source_order_id IS NULL
+        AND NOT EXISTS (SELECT 1 FROM bike_pi_order_link ol WHERE ol.series_id = series.id)
+    </sql>
+    <select id="selectOrders" resultType="com.bike.server.customer.CustomerStatusService$OrderSummary">
+        SELECT id, kind, order_no, model_name, order_qty, shipped_qty, status
+        FROM (
+            <if test="kind == null or kind == 'ORDER'">
+                SELECT document.id, 'ORDER' kind, document.order_no,
+                    COALESCE(
+                        (SELECT GROUP_CONCAT(DISTINCT m.model_name ORDER BY m.model_name SEPARATOR '、')
+                            FROM bike_order_reservation_item ri
+                            JOIN bike_production_sku sku ON sku.id = ri.sku_id
+                            JOIN bike_product_model m ON m.id = sku.model_id
+                            WHERE ri.order_id = document.id),
+                        (SELECT GROUP_CONCAT(DISTINCT m.model_name ORDER BY m.model_name SEPARATOR '、')
+                            FROM bike_sales_order_item oi JOIN bike_product_model m ON m.id = oi.product_model_id
+                            WHERE oi.order_id = document.id)
+                    ) model_name,
+                    (SELECT COALESCE(SUM(oi.ordered_qty), 0) FROM bike_sales_order_item oi WHERE oi.order_id = document.id) order_qty,
+                    (SELECT COALESCE(SUM(oi.shipped_qty), 0) FROM bike_sales_order_item oi WHERE oi.order_id = document.id) shipped_qty,
+                    CASE WHEN document.status IN ('DRAFT', 'PENDING') AND pi.status IN ('CONFIRMED', 'RELEASED')
+                         THEN pi.status ELSE document.status END status,
+                    document.created_at
+                FROM bike_sales_order document
+                LEFT JOIN bike_pi_order_link ol ON ol.order_id = document.id
+                LEFT JOIN bike_pi_series series ON series.id = ol.series_id
+                LEFT JOIN bike_pi pi ON pi.id = series.current_pi_id AND pi.customer_id = document.customer_id
+                    AND (document.agent_id IS NULL OR pi.agent_id = document.agent_id)
+                WHERE 1 = 1 <include refid="salesOrderScope"/>
+            </if>
+            <if test="kind == null">UNION ALL</if>
+            <if test="kind == null or kind == 'PI'">
+                SELECT series.id, 'PI' kind, series.pi_no order_no,
+                    (SELECT GROUP_CONCAT(DISTINCT item.model_name ORDER BY item.model_name SEPARATOR '、')
+                        FROM bike_pi_item item WHERE item.pi_id = document.id) model_name,
+                    (SELECT COALESCE(SUM(item.ordered_qty), 0) FROM bike_pi_item item WHERE item.pi_id = document.id) order_qty,
+                    0 shipped_qty, document.status, series.created_at
+                FROM bike_pi_series series JOIN bike_pi document ON document.id = series.current_pi_id
+                WHERE 1 = 1 <include refid="standalonePiScope"/>
+                <if test="id != null">AND series.id = #{id}</if>
+            </if>
+        ) visible_orders
+        ORDER BY created_at DESC, id DESC, kind
+        LIMIT #{offset}, 20
+    </select>
+    <select id="countOrders" resultType="long">
+        SELECT
+            (SELECT COUNT(*) FROM bike_sales_order document WHERE 1 = 1 <include refid="accountScope"/>)
+            + (SELECT COUNT(*) FROM bike_pi_series series JOIN bike_pi document ON document.id = series.current_pi_id
+                WHERE 1 = 1 <include refid="standalonePiScope"/>)
+    </select>
+    <sql id="piLogisticsColumns">
+        logistics.batch_no, logistics.carrier, logistics.tracking_no, logistics.status, logistics.shipped_at
+    </sql>
+    <sql id="visibleLogistics">
+        AND logistics.status IN ('PLANNED', 'SHIPPED')
+        AND (NULLIF(TRIM(logistics.carrier), '') IS NOT NULL OR NULLIF(TRIM(logistics.tracking_no), '') IS NOT NULL
+             OR logistics.shipped_at IS NOT NULL)
+    </sql>
+    <select id="selectOrderLogistics" resultType="com.bike.server.customer.CustomerStatusService$Logistics">
+        SELECT <include refid="piLogisticsColumns"/>
+        FROM bike_sales_order orders
+        JOIN bike_pi_order_link ol ON ol.order_id = orders.id
+        JOIN bike_pi original ON original.series_id = ol.series_id AND original.customer_id = orders.customer_id
+            AND (orders.agent_id IS NULL OR original.agent_id = orders.agent_id)
+        JOIN bike_pi_logistics logistics ON logistics.pi_id = original.id
+        WHERE orders.id = #{orderId}
+        <include refid="visibleLogistics"/>
+        AND (
+            EXISTS (
+                SELECT 1 FROM bike_stock_out_batch_item item
+                JOIN bike_stock_out_record shipment ON shipment.id = item.stock_out_id
+                WHERE item.batch_id = logistics.stock_out_batch_id
+                  AND shipment.order_id = orders.id AND shipment.status = 'COMPLETED'
+            )
+            OR (logistics.stock_out_batch_id IS NULL AND NOT EXISTS (
+                SELECT 1 FROM bike_pi_order_link other WHERE other.series_id = ol.series_id AND other.order_id != orders.id
+            ))
+        )
+        ORDER BY logistics.shipped_at DESC, logistics.id DESC
+    </select>
+    <select id="selectSeriesLogistics" resultType="com.bike.server.customer.CustomerStatusService$Logistics">
+        SELECT <include refid="piLogisticsColumns"/>
+        FROM bike_pi_series series JOIN bike_pi current_pi ON current_pi.id = series.current_pi_id
+        JOIN bike_pi original ON original.series_id = series.id AND original.customer_id = current_pi.customer_id
+            AND original.agent_id &lt;=> current_pi.agent_id
+        JOIN bike_pi_logistics logistics ON logistics.pi_id = original.id
+        WHERE series.id = #{seriesId} <include refid="visibleLogistics"/>
+        ORDER BY logistics.shipped_at DESC, logistics.id DESC
+    </select>
+    <sql id="visibleModels">
+        WHERE model.enabled = 1
+        <if test="agentId != null">
+            AND EXISTS (
+                SELECT 1 FROM bike_agent_model_access access
+                JOIN bike_agent agent ON agent.id = access.agent_id AND agent.status = 'ENABLED'
+                WHERE access.agent_id = #{agentId} AND access.model_id = model.id AND access.enabled = 1
+            )
+        </if>
+    </sql>
+    <select id="selectInventory" resultType="com.bike.server.customer.CustomerStatusService$Inventory">
+        SELECT model.id model_id, model.model_name,
+            (SELECT COUNT(*) FROM bike_vehicle vehicle WHERE vehicle.model_id = model.id AND vehicle.status = 2) quantity
+        FROM bike_product_model model <include refid="visibleModels"/>
+        ORDER BY model.model_name, model.id LIMIT #{offset}, 20
+    </select>
+    <select id="countInventory" resultType="long">
+        SELECT COUNT(*) FROM bike_product_model model <include refid="visibleModels"/>
+    </select>
+</mapper>

@@ -88,7 +88,7 @@ public class PiOrderBindingServiceImpl implements PiOrderBindingService {
             if (!Objects.equals(order.getCustomerId(), pi.getCustomerId()))
                 fail("PI_ORDER_CUSTOMER_MISMATCH", "PI与来源订单 " + order.getOrderNo() + " 的客户不一致");
             if (!Objects.equals(order.getAgentId(), pi.getAgentId()))
-                fail("PI_ORDER_AGENT_MISMATCH", "PI与来源订单 " + order.getOrderNo() + " 的代理商不一致，请以原订单为准");
+                fail("PI_ORDER_AGENT_MISMATCH", "PI与来源订单 " + order.getOrderNo() + " 的所属客户不一致，请以原订单为准");
             requireMatchingSalesType(pi, order);
         }
         Map<Long, Long> expected = new TreeMap<>(), actual = new TreeMap<>();

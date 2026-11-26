@@ -79,7 +79,7 @@ public class PiConversionService {
             if(lock==null) fail("INVENTORY_LOCK_NOT_FOUND","来源锁定不存在");
             if(lock.getSkuId()==null||!"SKU".equals(lock.getScopeType())) fail("PI_SKU_LOCK_REQUIRED","原子转换须使用明确客户和SKU的锁定");
             if(!Objects.equals(lock.getCustomerId(),request.pi().customerId())||!Objects.equals(lock.getAgentId(),request.pi().agentId()))
-                fail("LOCK_CUSTOMER_MISMATCH","所有锁定必须属于PI所选的同一客户与代理商");
+                fail("LOCK_CUSTOMER_MISMATCH","所有锁定必须属于PI所选的同一订单客户与所属客户");
             expected.merge(lock.getSkuId(),(long)source.quantity(),Long::sum);
         }
         var actual=new TreeMap<Long,Long>();

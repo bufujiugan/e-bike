@@ -80,7 +80,7 @@ public class AfterSalesServiceImpl implements AfterSalesService {
         var before = requireCase(id, true);
         requireState(before, "DRAFT", "NEEDS_INFO");
         if (request.agentId() != null && !Objects.equals(before.getAgentId(), request.agentId()))
-            throw new BusinessException("AFTER_SALES_SCOPE_IMMUTABLE", "已有案例不能变更代理商归属");
+            throw new BusinessException("AFTER_SALES_SCOPE_IMMUTABLE", "已有案例不能变更所属客户");
         var normalized = validateRequest(request, before.getAgentId(), before);
         changed(mapper.updateCase(id, normalized, CurrentOperator.id()));
         changed(mapper.updateContactSnapshot(id, normalized.contact(), normalized.endCustomerPurchaseDate()));
@@ -272,19 +272,19 @@ public class AfterSalesServiceImpl implements AfterSalesService {
     private AfterSalesCaseCreateRequest validateRequest(AfterSalesCaseCreateRequest r, Long agentId, AfterSalesCaseView existing) {
         r = resolveAggregateCode(r);
         if (isAgent() && r.agentId() != null && !Objects.equals(r.agentId(), requiredAgent()))
-            throw new BusinessException("FORBIDDEN", "不能提交其他代理商案例");
-        if (r.customerId() == null && agentId == null) throw new BusinessException("CUSTOMER_OR_AGENT_REQUIRED", "客户或代理商不能为空");
+            throw new BusinessException("FORBIDDEN", "不能提交其他客户案例");
+        if (r.customerId() == null && agentId == null) throw new BusinessException("CUSTOMER_OR_AGENT_REQUIRED", "订单客户或所属客户不能为空");
         // Typed IDs alone are not proof of ownership. A current shipped vehicle is required for
         // a legacy agent/customer link; unlinked vehicle details remain self-reported claims.
         if (isAgent() && r.customerId() != null && r.vehicleId() == null)
-            throw new BusinessException("FORBIDDEN", "代理商不能关联未经车辆归属验证的客户");
+            throw new BusinessException("FORBIDDEN", "客户业务账号只能关联已通过车辆归属验证的订单客户");
         if (!isAgent() && !canReadAllCompanies() && r.customerId()!=null && r.vehicleId()==null)
             throw new BusinessException("FORBIDDEN","负责公司范围内的账号不能关联未经车辆归属验证的客户");
         String warranty = normalize(r.warrantyStatus());
         if (warranty == null) warranty = "PENDING";
         if (!WARRANTY.contains(warranty)) throw invalid("保修状态不合法");
         if (isAgent() && !Set.of("PENDING", "UNKNOWN").contains(warranty))
-            throw new BusinessException("FORBIDDEN", "代理商不能判定保修责任");
+            throw new BusinessException("FORBIDDEN", "客户业务账号不能判定保修责任");
         if (isAgent() && existing != null) warranty = existing.getWarrantyStatus();
         String frame = optional(r.frameSn(), 128, "车架号长度不能超过128");
         String motor = optional(r.motorSn(), 128, "电机序列号长度不能超过128");
@@ -304,10 +304,10 @@ public class AfterSalesServiceImpl implements AfterSalesService {
             customer = vehicle.customerId(); model = vehicle.modelId(); frame = vehicle.frameSn();
             motor = vehicle.motorSn(); battery = vehicle.batterySn(); display = vehicle.displaySn();
         }
-        if (agentId != null && mapper.countEnabledAgent(agentId) != 1) throw new BusinessException("AGENT_NOT_FOUND", "代理商不存在或已停用");
+        if (agentId != null && mapper.countEnabledAgent(agentId) != 1) throw new BusinessException("AGENT_NOT_FOUND", "客户不存在或已停用");
         if (customer != null && mapper.countEnabledCustomer(customer) != 1) throw new BusinessException("CUSTOMER_NOT_FOUND", "客户不存在或已停用");
         if (model != null && isAgent() && mapper.countAccessibleModel(model, requiredAgent()) != 1)
-            throw new BusinessException("MODEL_NOT_AUTHORIZED", "车型未授权且没有本代理商的已出库车辆");
+            throw new BusinessException("MODEL_NOT_AUTHORIZED", "车型未授权且没有本客户的已出库车辆");
         if(model != null && !isAgent() && !canReadAllCompanies() && (agentId==null || mapper.countAccessibleModel(model,agentId)!=1))
             throw new BusinessException("MODEL_NOT_AUTHORIZED","车型不在负责公司的授权或出库范围内");
         if (model != null && mapper.countEnabledModel(model) != 1) throw new BusinessException("MODEL_NOT_FOUND", "车型不存在或已停用");

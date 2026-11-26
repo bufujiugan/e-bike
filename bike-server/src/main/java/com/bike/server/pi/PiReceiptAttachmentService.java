@@ -102,7 +102,7 @@ public class PiReceiptAttachmentService {
         var auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth != null && auth.getDetails() instanceof UserAuthRecord user
                 && Set.of("AGENT", "PDA_OPERATOR").contains(user.userType()))
-            throw new BusinessException("PERMISSION_DENIED", "代理商及PDA账号不能访问收款凭证");
+            throw new BusinessException("PERMISSION_DENIED", "客户业务账号及 PDA 账号不能访问收款凭证");
         if (!FinancialAuditAccess.allowed()) throw new BusinessException("PERMISSION_DENIED", "当前账号无权查看收款凭证");
     }
     private static void requireReceipt(PiReceiptAttachmentMapper.Receipt receipt) { if (receipt == null) throw missing(); }

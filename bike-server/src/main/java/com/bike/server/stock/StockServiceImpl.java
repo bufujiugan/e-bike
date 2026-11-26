@@ -224,7 +224,7 @@ public class StockServiceImpl implements StockService {
     @Override public StockRecordView getByNo(String type, String stockNo) {
         CurrentOperator.requireAnyPermission("STOCK_READ", "INVENTORY_READ");
         CurrentOperator.requireInternalWebAccess();
-        if (CurrentOperator.hasRole("WEB_AGENT")) throw new BusinessException("FORBIDDEN", "代理商不能查看仓库记录");
+        if (CurrentOperator.hasRole("WEB_AGENT")) throw new BusinessException("FORBIDDEN", "客户业务账号不能查看仓库记录");
         if (stockNo == null || stockNo.isBlank()) throw new BusinessException("INVALID_PARAMETER", "业务单号不能为空");
         StockRecordView record = "IN".equals(type) ? stockMapper.selectStockInByNo(stockNo.trim()) : stockMapper.selectStockOutByNo(stockNo.trim());
         if(record!=null && !"IN".equals(type))customerScope.requireCustomer(record.getCustomerId());

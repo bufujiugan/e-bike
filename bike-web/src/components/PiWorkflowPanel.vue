@@ -3,9 +3,11 @@ import { tr, trInline } from '../i18n/language'
 import { computed, reactive, ref, watch } from 'vue'
 import PiRelatedActions, { type PiRelatedAction } from './PiRelatedActions.vue'
 import PurchaseContractNumber from './PurchaseContractNumber.vue'
+import FreightForwarderPicker from './FreightForwarderPicker.vue'
+import type { FreightForwarder } from '../freight-forwarder-api'
 import type { FulfillmentRules } from '../fulfillment-api'
 import { piApi, type PiWorkflow, type PiWorkflowComplete, type PiWorkflowStep, type PiLogistics } from '../pi-api'
-const props = defineProps<{ relatedActions?: PiRelatedAction[]; workflow: PiWorkflow | null; rules?: FulfillmentRules; busy: boolean; error: string; actionBusy: boolean; canWrite: boolean; canPay: boolean; canRelease: boolean; canLogistics: boolean; canAfterSales: boolean; piStatus: string; currencyCode: string; gateMet: boolean; reservationBlocked: boolean; piId: number; logistics: PiLogistics[]; domesticShipment?: boolean | null }>()
+const props = defineProps<{ relatedActions?: PiRelatedAction[]; workflow: PiWorkflow | null; rules?: FulfillmentRules; busy: boolean; error: string; actionBusy: boolean; canWrite: boolean; canPay: boolean; canRelease: boolean; canLogistics: boolean; canAfterSales: boolean; piStatus: string; currencyCode: string; gateMet: boolean; reservationBlocked: boolean; piId: number; logistics: PiLogistics[]; domesticShipment?: boolean | null; chinaExport?: boolean }>()
 const emit = defineEmits<{ action: [action: 'CONFIRM_PI' | 'REGISTER_PAYMENT' | 'RELEASE_PI' | 'REGISTER_LOGISTICS']; complete: [stepCode: string, body: PiWorkflowComplete]; productionUpdate: [body: PiWorkflowComplete]; afterSales: []; related: [key: string] }>()
 const current = computed(() => props.workflow?.steps.find(s => s.code === props.workflow?.currentStep && s.status !== 'COMPLETED') || null)
 const completed = computed(() => props.workflow?.steps.filter(s => s.status === 'COMPLETED') || [])
@@ -15,6 +17,7 @@ const customerForwarder = computed(() => props.rules?.deliveryMode === 'CUSTOMER
 const progress = computed(() => props.workflow?.totalCount ? Math.round(props.workflow.completedCount * 100 / props.workflow.totalCount) : 0)
 const dialogVisible = ref(false), formError = ref(''), activeCode = ref(''), attachmentsBusy = ref(false)
 const suspended = ref(false)
+let forwarderRemark = ''
 const proofsError = ref('')
 const proofs = ref<{ id: string; fileName: string }[]>([])
 let proofLoadVersion = 0
@@ -37,6 +40,7 @@ const actionLabel = computed(() => {
 })
 async function openForm(code: string) {
   suspended.value = false; activeCode.value = code; formError.value = ''; proofs.value = []
+  forwarderRemark = ''
   Object.assign(form, { note: '', contractNo: '', contractReady: false, paymentTableReady: false, purchaseContractNo: '', purchaseContractParty: '', forwarderResponsibility: 'SELLER', forwarderName: '', forwarderAddress: '', forwarderContact: '', domesticCarrier: '', domesticPrice: '', domesticTrackingNo: '', warehouseArrivalDate: '', arrivalProof: '', internationalTrackingNo: '', internationalPrice: '', internationalCurrency: props.currencyCode, receivedDate: '' })
   Object.assign(production, { productionStatus: '', expectedCompletionDate: '', materialStatus: '' })
   if (code === 'PURCHASE_CONTRACT_READY') {
@@ -49,6 +53,16 @@ async function openForm(code: string) {
   if (code === 'WAREHOUSE_ARRIVED') {
     form.domesticTrackingNo = props.workflow?.steps.find(step => step.code === 'DOMESTIC_EXPRESS_BOOKED')?.details?.domesticTrackingNo || ''
   }
+}
+function fillForwarder(forwarder: FreightForwarder) {
+  form.forwarderName = forwarder.name
+  form.forwarderAddress = forwarder.address
+  form.forwarderContact = `${forwarder.contactName} / ${forwarder.phone}`
+  if (!form.note.trim() || form.note === forwarderRemark) {
+    forwarderRemark = forwarder.remark ?? ''
+    form.note = forwarderRemark
+  }
+  formError.value = ''
 }
 async function loadProofs() {
   const version = ++proofLoadVersion, piId = props.piId
@@ -120,7 +134,14 @@ function submit() {
   }
   formError.value = ''; emit('complete', code, body)
 }
-function summary(step: PiWorkflowStep) { const d = step.details; return [d?.contractNo, d?.purchaseContractNo, d?.forwarderName, d?.domesticTrackingNo, d?.warehouseArrivalDate, d?.internationalTrackingNo, d?.receivedDate, step.note].filter(Boolean).join(' · ') }
+function summary(step: PiWorkflowStep) {
+  const details = step.details
+  const forwarderSnapshot = props.chinaExport && step.code === 'FORWARDER_SELECTED'
+    ? [details?.forwarderAddress, details?.forwarderContact] : []
+  return [details?.contractNo, details?.purchaseContractNo, details?.forwarderName, ...forwarderSnapshot,
+    details?.domesticTrackingNo, details?.warehouseArrivalDate, details?.internationalTrackingNo,
+    details?.receivedDate, step.note].filter(Boolean).join(' · ')
+}
 watch(() => props.workflow, () => { if (!suspended.value && props.workflow?.steps.some(s => s.code === activeCode.value && s.status === 'COMPLETED')) dialogVisible.value = false })
 watch(() => props.workflow?.updates.length, (count, before) => { if (activeCode.value === 'PRODUCTION_FOLLOW_UP' && count !== before) dialogVisible.value = false })
 function closeAfterSuccess() { dialogVisible.value = false; suspended.value = false }
@@ -152,7 +173,25 @@ defineExpose({ closeAfterSuccess })
       <template v-if="activeCode === 'PRODUCTION_FOLLOW_UP'"><el-form-item :label='tr("生产进度")' required><el-input v-model="production.productionStatus" type="textarea" maxlength="500" /></el-form-item><el-form-item :label='tr("预计完成日期")'><el-date-picker v-model="production.expectedCompletionDate" value-format="YYYY-MM-DD" /></el-form-item><el-form-item :label='tr("材料情况")'><el-input v-model="production.materialStatus" maxlength="500" /></el-form-item></template>
       <template v-else-if="activeCode === 'DOCUMENTS_READY'"><el-form-item :label='tr("销售合同号")' :required="rules?.salesContractRequired ?? true"><el-input v-model="form.contractNo" maxlength="128" /></el-form-item><el-checkbox v-model="form.contractReady">{{ tr("PI、销售合同及付款信息已确认") }}</el-checkbox><el-checkbox v-model="form.paymentTableReady">{{ tr("收付款表已建立（应收金额、币种、收款主体已核对）") }}</el-checkbox></template>
       <template v-else-if="activeCode === 'PURCHASE_CONTRACT_READY'"><el-form-item :label='tr("购销合同方")' required><el-select v-if="!rules" v-model="form.purchaseContractParty"><el-option value="SAVA" label="SAVA" /><el-option value="YINSANHUAN" :label='tr("银三环")' /></el-select><el-input v-else v-model="form.purchaseContractParty" maxlength="200" :placeholder='tr("实际合同方")' /></el-form-item><el-form-item :label='tr("购销合同号")' required><el-input v-model="form.purchaseContractNo" maxlength="128" /></el-form-item></template>
-      <template v-else-if="activeCode === 'FORWARDER_SELECTED'"><el-form-item :label='tr("由谁联系货代")' required><el-radio-group v-model="form.forwarderResponsibility" :disabled="Boolean(rules)"><el-radio value="CUSTOMER">{{ tr("客户联系") }}</el-radio><el-radio value="SELLER">{{ tr("我方联系") }}</el-radio></el-radio-group></el-form-item><el-form-item :label='tr("货代名称")' required><el-input v-model="form.forwarderName" maxlength="128" /></el-form-item><el-form-item :label="customerForwarder && rules ? tr('实际提货仓库地址') : tr('货代仓库地址')" required><el-input v-model="form.forwarderAddress" type="textarea" maxlength="1000" /></el-form-item><el-form-item :label="customerForwarder && rules ? tr('提货联系人及联系方式') : tr('收货人及联系方式')" required><el-input v-model="form.forwarderContact" maxlength="300" /></el-form-item></template>
+      <template v-else-if="activeCode === 'FORWARDER_SELECTED'">
+        <el-form-item :label="tr('由谁联系货代')" required>
+          <el-radio-group v-model="form.forwarderResponsibility" :disabled="Boolean(rules)">
+            <el-radio value="CUSTOMER">{{ tr('客户联系') }}</el-radio>
+            <el-radio value="SELLER">{{ tr('我方联系') }}</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <FreightForwarderPicker v-if="dialogVisible && canWrite && chinaExport && rules?.deliveryMode !== 'CUSTOMER_PICKUP'"
+          :disabled="actionBusy" @select="fillForwarder" />
+        <el-form-item :label="tr('货代名称')" required>
+          <el-input v-model="form.forwarderName" maxlength="128" />
+        </el-form-item>
+        <el-form-item :label="customerForwarder && rules ? tr('实际提货仓库地址') : tr('货代仓库地址')" required>
+          <el-input v-model="form.forwarderAddress" type="textarea" maxlength="1000" />
+        </el-form-item>
+        <el-form-item :label="customerForwarder && rules ? tr('提货联系人及联系方式') : tr('收货人及联系方式')" required>
+          <el-input v-model="form.forwarderContact" maxlength="300" />
+        </el-form-item>
+      </template>
       <template v-else-if="activeCode === 'DOMESTIC_EXPRESS_BOOKED'"><p v-if="customerForwarder">{{ tr("客户安排的运输按可获取信息登记，在补充说明中确认送仓安排。") }}</p><el-form-item :label='tr("送仓承运商")' :required="!customerForwarder"><el-input v-model="form.domesticCarrier" :placeholder='tr("货拉拉 / 跨越 / 顺丰 / 其他")' maxlength="128" /></el-form-item><el-form-item :label='tr("送仓运单号")' :required="!customerForwarder"><el-input v-model="form.domesticTrackingNo" maxlength="128" /></el-form-item><el-form-item :label="tr('运费 / ') + currencyCode" :required="!customerForwarder"><el-input v-model="form.domesticPrice" inputmode="decimal" /></el-form-item></template>
       <template v-else-if="activeCode === 'WAREHOUSE_ARRIVED'"><el-form-item :label='tr("实际到仓日期")' required><el-date-picker v-model="form.warehouseArrivalDate" value-format="YYYY-MM-DD" /></el-form-item><el-form-item :label='tr("物流单号")' required><el-input v-model="form.domesticTrackingNo" maxlength="128" :placeholder='tr("请输入送达货代仓库的物流单号")' /></el-form-item></template>
       <template v-else-if="activeCode === 'TRACKING_RECORDED'"><p class="workflow-logistics-hint">{{ tr("请先为每个实际出库批次登记发运信息。客户安排的按可获取信息填写。") }}<el-button link type="primary" :disabled="actionBusy" @click="openRelated('logistics')">{{ tr("去维护物流信息") }}</el-button></p><el-form-item :label='tr("货代发货号")' :required="!customerForwarder"><el-input v-model="form.internationalTrackingNo" maxlength="128" /></el-form-item><el-form-item :label='tr("实际运输费用")' :required="!customerForwarder"><el-input v-model="form.internationalPrice" inputmode="decimal" /></el-form-item><el-form-item :label='tr("费用币种")' :required="!customerForwarder"><el-input v-model="form.internationalCurrency" maxlength="3" /></el-form-item></template>

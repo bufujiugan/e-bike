@@ -76,7 +76,7 @@ async function begin() {
   saveError.value = ''; visible.value = true
   const responses = await Promise.allSettled(['customers', 'agents'].map(type => api.get(`/api/master/${type}`)))
   for (const [index, response] of responses.entries()) {
-    if (response.status === 'rejected') { saveError.value = message(response.reason, '客户或代理商资料加载失败'); continue }
+    if (response.status === 'rejected') { saveError.value = message(response.reason, '订单客户或所属客户资料加载失败'); continue }
     const options: Option[] = response.value.data.data.filter((item: Option) => item.status === 'ENABLED')
     if (index === 0) customers.value = options; else agents.value = options
   }
@@ -193,13 +193,13 @@ onMounted(async () => {
       <p v-if="!hasValidQuantities" class="note" role="status">{{ tr("每个 SKU 的预锁数量须为 1 至 1000000 的整数。") }}</p>
       <el-alert v-if="saveError" type="error" :title="tr(saveError)" :closable="false" />
       <el-form label-width="100px" :disabled="saving">
-        <el-form-item :label='tr("客户")' required>
+        <el-form-item :label='tr("订单客户")' required>
           <el-select v-model="form.customerId" filterable :placeholder='tr("选择锁定所属客户")'><el-option v-for="item in customers" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select>
           <el-button v-if="canCreateMasterData" class="quick-create-link" link type="primary" @click="navigateToMasterData('customers')">{{ tr("没有需要的客户？在这里新增客户") }}</el-button>
         </el-form-item>
-        <el-form-item :label='tr("代理商")'>
+        <el-form-item :label='tr("所属客户")'>
           <el-select v-model="form.agentId" clearable filterable :placeholder='tr("不选表示直接客户")'><el-option v-for="item in agents" :key="item.id" :label="`${item.name}（${item.code}）`" :value="item.id" /></el-select>
-          <el-button v-if="canCreateMasterData" class="quick-create-link" link type="primary" @click="navigateToMasterData('agents')">{{ tr("没有需要的代理商？在这里新增代理商") }}</el-button>
+          <el-button v-if="canCreateMasterData" class="quick-create-link" link type="primary" @click="navigateToMasterData('agents')">{{ tr("没有需要的客户？在这里新增客户") }}</el-button>
         </el-form-item>
         <el-form-item :label='tr("截止时间")'><el-date-picker v-model="form.expiresAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" :placeholder='tr("留空采用系统默认时长")' /></el-form-item>
         <el-form-item :label='tr("备注")'><el-input v-model="form.remark" type="textarea" maxlength="500" /></el-form-item>
