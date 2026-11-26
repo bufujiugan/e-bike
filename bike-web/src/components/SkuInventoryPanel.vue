@@ -23,10 +23,12 @@ const rows = ref<Row[]>([]), models = ref<Option[]>([]), customers = ref<Option[
 const page = ref(1), total = ref(0), modelId = ref<number | undefined>(Number.isFinite(props.initialModelId) ? props.initialModelId : undefined), busy = ref(false), error = ref('')
 const focusedSkuId = ref(props.initialSkuId)
 const canConvert = computed(() => canWrite.value && !hasRole(props.context, 'PDA_OPERATOR') && hasPermission(props.context, 'ORDER_WRITE'))
-const selected = ref<Array<{ skuId: number; skuCode: string; quantity: number }>>([])
+const maxLockQuantity = 1_000_000
+const selected = ref<Array<{ skuId: number; skuCode: string; quantity: number | null }>>([])
 const selectedQuantity = computed(() => selected.value.reduce((total, item) => total + (item.quantity ?? 0), 0))
 const hasValidQuantities = computed(() => selected.value.length > 0 &&
-  selected.value.every(item => Number.isInteger(item.quantity) && item.quantity >= 1 && item.quantity <= 1_000_000))
+  selected.value.every(({ quantity }) => quantity !== null && Number.isInteger(quantity) &&
+    quantity >= 1 && quantity <= maxLockQuantity))
 const canWrite = computed(() => !hasRole(props.context, 'WEB_AGENT') && hasPermission(props.context, 'AGENT_LOCK_WRITE'))
 const canSeeLocks = computed(() => hasPermission(props.context, 'AGENT_INVENTORY_READ') || hasPermission(props.context, 'AGENT_LOCK_WRITE'))
 const canCreateMasterData = computed(() => isSuperAdmin(props.context))
@@ -144,7 +146,7 @@ onMounted(async () => {
       <h3>{{ trInline("待锁定商品（") }}{{ selected.length }} {{ trInline("个 SKU）") }}</h3>
       <div v-for="item in selected" :key="item.skuId" class="selected-row">
         <strong>{{ item.skuCode }}</strong>
-        <el-input-number v-model="item.quantity" :aria-label="item.skuCode + ' ' + tr('预锁数量')" :min="1" :max="1000000" :precision="0" />
+        <el-input-number v-model="item.quantity" :aria-label="item.skuCode + ' ' + tr('预锁数量')" :min="1" :max="maxLockQuantity" :precision="0" />
         <el-button link type="danger" @click="selected = selected.filter(row => row.skuId !== item.skuId)">{{ tr("移除") }}</el-button>
       </div>
       <p v-if="!hasValidQuantities" class="note">{{ tr("每个 SKU 的预锁数量须为 1 至 1000000 的整数。") }}</p>
@@ -171,7 +173,24 @@ onMounted(async () => {
         </table>
       </div>
       <template v-else>
-      <p class="lock-preview">{{ tr("本次预锁 {count} 个 SKU，共 {quantity} 台。转单时整批生成一个订单号。", { count: selected.length, quantity: selectedQuantity }) }}</p>
+      <p class="lock-preview" aria-live="polite">{{ tr("本次预锁 {count} 个 SKU，共 {quantity} 台。转单时整批生成一个订单号。", { count: selected.length, quantity: selectedQuantity }) }}</p>
+      <div class="lock-quantities">
+        <table class="lock-quantity-table">
+          <thead>
+            <tr><th scope="col">SKU</th><th scope="col">{{ tr("锁定数量") }}</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in selected" :key="item.skuId">
+              <th scope="row">{{ item.skuCode }}</th>
+              <td>
+                <el-input-number v-model="item.quantity" :aria-label="item.skuCode + ' ' + tr('锁定数量')"
+                  :min="1" :max="maxLockQuantity" :precision="0" :value-on-clear="null" :disabled="saving" />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p v-if="!hasValidQuantities" class="note" role="status">{{ tr("每个 SKU 的预锁数量须为 1 至 1000000 的整数。") }}</p>
       <el-alert v-if="saveError" type="error" :title="tr(saveError)" :closable="false" />
       <el-form label-width="100px" :disabled="saving">
         <el-form-item :label='tr("客户")' required>
@@ -198,7 +217,7 @@ onMounted(async () => {
         </div>
         <template v-else>
           <el-button :disabled="saving" @click="visible = false">{{ tr("返回") }}</el-button>
-          <el-button type="primary" :loading="saving" @click="save">{{ tr("确认预锁") }}</el-button>
+          <el-button type="primary" :loading="saving" :disabled="!hasValidQuantities" @click="save">{{ tr("确认预锁") }}</el-button>
         </template>
       </template>
     </el-dialog>
@@ -209,6 +228,13 @@ onMounted(async () => {
 .sku-workspace{padding:24px;background:#fff;border:1px solid #e3e9ef;border-radius:12px}.sku-workspace header,.toolbar,.selected-row{display:flex;align-items:center;justify-content:space-between;gap:16px}.sku-workspace h2{margin:0;color:#203446}.sku-workspace header p,.note{color:#6d7d89;font-size:13px;line-height:1.7}.toolbar{justify-content:flex-start;margin:20px 0 12px}.el-pagination{margin-top:18px}.selection{margin-top:22px;padding:18px;background:#f6f9fc;border-radius:8px}.selected-row{justify-content:flex-start;margin-bottom:12px}.selected-row strong{min-width:160px}.shortage{font-weight:700;color:#c1392b}.el-select{width:100%}.selection>.el-button{margin-top:12px}
 .quick-create-link{height:auto;margin-top:4px;padding:0;font-size:12px}
 .lock-preview { margin: 0 0 16px; font-weight: 600; color: var(--el-text-color-primary); }
+.lock-quantities { max-height: min(240px, 36vh); overflow: auto; margin-bottom: 16px; }
+.lock-quantity-table { width: 100%; border-collapse: collapse; text-align: start; }
+.lock-quantity-table th, .lock-quantity-table td { padding: 8px; border-bottom: 1px solid var(--el-border-color-lighter); text-align: start; }
+.lock-quantity-table thead th { position: sticky; top: 0; z-index: 1; background: var(--el-fill-color-light); }
+.lock-quantity-table tbody th { font-weight: normal; overflow-wrap: anywhere; }
+.lock-quantity-table td { width: 140px; }
+.lock-quantity-table .el-input-number { width: 100%; }
 .lock-result { max-height: min(360px, 50vh); overflow: auto; }
 .lock-result-table { width: 100%; border-collapse: collapse; text-align: start; }
 .lock-result-table th, .lock-result-table td { padding: 10px 8px; border-bottom: 1px solid var(--el-border-color-lighter); overflow-wrap: anywhere; }
