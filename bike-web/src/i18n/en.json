@@ -2555,6 +2555,8 @@
   "折扣合计": "Total discounts",
   "报价币种必须是3位字母代码": "The quoted currency must be a three-digit letter code.",
   "报关型号": "Customs Model",
+  "SKU 资料未维护": "Missing in SKU details",
+  "SKU 报关型号已变化，请关闭订单办理窗口后重新打开并核对": "The SKU customs model changed. Close and reopen the order window to review it.",
   "报关状态": "Customs status",
   "拒绝": "Reject",
   "拒绝案例": "Cases of rejection",

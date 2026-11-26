@@ -38,7 +38,8 @@ public class OrderContractServiceImpl implements OrderContractService {
         var buyer = new OrderContractRequest.Party(order.getCustomerName(), "", "", "", "", "");
         var seller = new OrderContractRequest.Party("", "", "", "", "", "");
         var skuPrices = order.getSkuLines().stream().map(line -> new OrderContractRequest.SkuPrice(
-                line.skuId(), line.skuCode(), line.modelName(), line.orderedQty(), null)).toList();
+                line.skuId(), line.skuCode(), line.modelName(), line.orderedQty(), null,
+                Objects.toString(line.customsModel(), ""))).toList();
         return new Preparation(true, null, new OrderContractRequest("", LocalDate.now(), order.getUpdatedAt(), order.getModelId(), order.getOrderQty(),
                 buyer, seller, "", "电助力自行车", "", null, null, null,
                 "交货前付款", "", "", workbook.defaultClauses(), skuPrices), hasLinkedPi);
@@ -88,6 +89,9 @@ public class OrderContractServiceImpl implements OrderContractService {
             var price = pricesBySku.get(line.skuId());
             if (price == null || price.quantity() != line.orderedQty()) {
                 throw new BusinessException("ORDER_CONTRACT_STALE", "订单 SKU 或数量已变化，请刷新后重新核对");
+            }
+            if (price.customsModel() != null && !price.customsModel().equals(Objects.toString(line.customsModel(), ""))) {
+                throw new BusinessException("ORDER_CONTRACT_STALE", "SKU 报关型号已变化，请关闭订单办理窗口后重新打开并核对");
             }
             total = total.add(price.unitPrice().multiply(BigDecimal.valueOf(line.orderedQty())));
         }

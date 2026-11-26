@@ -15,8 +15,10 @@ import org.springframework.web.multipart.MultipartFile;
 public class ProductionExcelService {
   private static final org.slf4j.Logger LOG =
       org.slf4j.LoggerFactory.getLogger(ProductionExcelService.class);
+  private static final int CUSTOMS_MODEL_COLUMN = 8;
+  private static final String CUSTOMS_MODEL_HEADER = "报关型号";
   private static final List<String> HEADERS =
-      List.of("车型ID", "SKU编码", "商品名称", "规格", "EAN", "UPC", "模板ID", "启用(true/false)");
+      List.of("车型ID", "SKU编码", "商品名称", "规格", "EAN", "UPC", "模板ID", "启用(true/false)", CUSTOMS_MODEL_HEADER);
   private final ProductionService service;
   private final Validator validator;
 
@@ -58,11 +60,14 @@ public class ProductionExcelService {
       var sheet = workbook.getSheetAt(0);
       if (sheet.getLastRowNum() > 5000) throw new BusinessException("IMPORT_LIMIT", "每次最多导入5000行");
       var formatter = new DataFormatter();
+      var header = sheet.getRow(0);
+      boolean hasCustomsModel = header != null
+          && CUSTOMS_MODEL_HEADER.equals(formatter.formatCellValue(header.getCell(CUSTOMS_MODEL_COLUMN)).trim());
       for (int i = 1; i <= sheet.getLastRowNum(); i++) {
         var row = sheet.getRow(i);
         if (row == null) continue;
-        String[] values = new String[8];
-        for (int c = 0; c < 8; c++) values[c] = formatter.formatCellValue(row.getCell(c)).trim();
+        String[] values = new String[hasCustomsModel ? HEADERS.size() : CUSTOMS_MODEL_COLUMN];
+        for (int c = 0; c < values.length; c++) values[c] = formatter.formatCellValue(row.getCell(c)).trim();
         if (Arrays.stream(values).allMatch(String::isBlank)) continue;
         total++;
         try {
@@ -83,7 +88,8 @@ public class ProductionExcelService {
                   null,
                   null,
                   null,
-                  null);
+                  null,
+                  hasCustomsModel ? values[CUSTOMS_MODEL_COLUMN] : null);
           var errors = validator.validate(request);
           if (!errors.isEmpty()) throw new BusinessException("IMPORT_VALUE", "必填字段或长度不符合要求");
           service.saveSku(null, request);

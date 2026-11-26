@@ -143,6 +143,7 @@ const sku = reactive({
   skuCode: "",
   productName: "",
   specification: "",
+  customsModel: "",
   ean: "",
   upc: "",
   templateId: 1,
@@ -360,12 +361,13 @@ function editSku(row?: any) {
   Object.assign(
     sku,
     row
-      ? { ...row, enabled: !!row.enabled }
+      ? { ...row, customsModel: row.customsModel ?? "", enabled: !!row.enabled }
       : {
           modelId: models.value[0]?.id ?? 0,
           skuCode: "",
           productName: "",
           specification: "",
+          customsModel: "",
           ean: "",
           upc: "",
           templateId: 1,
@@ -710,6 +712,9 @@ onMounted(() =>
       <RecordIdColumn />
         <el-table-column prop="productName" :label='tr("标签标题")' min-width="180" show-overflow-tooltip />
         <el-table-column prop="modelCode" label="MODEL" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="customsModel" :label='tr("报关型号")' min-width="120" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.customsModel || '—' }}</template>
+        </el-table-column>
         <el-table-column prop="category" label="CATEGORY" min-width="100"><template #default="{ row }">{{ row.category || '—' }}</template></el-table-column>
         <el-table-column prop="batteryDescription" label="BATTERY" min-width="145" show-overflow-tooltip><template #default="{ row }">{{ row.batteryDescription || '—' }}</template></el-table-column>
         <el-table-column prop="packageQuantity" label="QUANTITY" width="100"><template #default="{ row }">{{ row.packageQuantity ? `${row.packageQuantity} PCS` : '—' }}</template></el-table-column>
@@ -843,6 +848,7 @@ onMounted(() =>
         </el-form-item>
         <el-form-item :label='tr("标签标题")' required><el-input v-model="sku.productName" maxlength="100" :placeholder='tr("如 TEEWING Flux One A")' /></el-form-item>
         <el-form-item :label='tr("规格")'><el-input v-model="sku.specification" maxlength="100" :placeholder='tr("如颜色、电池容量等")' /></el-form-item>
+        <el-form-item :label='tr("报关型号")'><el-input v-model="sku.customsModel" maxlength="40" clearable /></el-form-item>
         <el-form-item label="CATEGORY"><el-input v-model="sku.category" maxlength="64" :placeholder='tr("如 EBIKE、Frameset")' /></el-form-item>
         <el-form-item label="BATTERY"><el-input v-model="sku.batteryDescription" maxlength="100" :placeholder='tr("如 Battery included")' /></el-form-item>
         <el-form-item label="QUANTITY"><el-input-number v-model="sku.packageQuantity" :min="1" :max="10000" controls-position="right" /><span class="sku-field-unit">PCS</span></el-form-item>

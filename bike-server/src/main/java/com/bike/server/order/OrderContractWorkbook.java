@@ -71,7 +71,7 @@ public class OrderContractWorkbook {
                     var line = order.getSkuLines().get(index);
                     int row = 13 + index;
                     number(sheet, "A" + row, BigDecimal.valueOf(index + 1L));
-                    text(sheet, "B" + row, request.customsModel());
+                    text(sheet, "B" + row, line.customsModel());
                     text(sheet, "C" + row, line.productName() == null || line.productName().isBlank()
                             ? request.productName() : line.productName());
                     text(sheet, "D" + row, line.skuCode() + " / " + line.modelName());

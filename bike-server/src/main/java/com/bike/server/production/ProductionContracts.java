@@ -22,7 +22,16 @@ public final class ProductionContracts {
       @Min(1) @Max(10000) Integer packageQuantity,
       @Size(max = 64) String cartonSizeCm,
       @DecimalMin(value = "0.001") @Digits(integer = 7, fraction = 3) BigDecimal grossWeightKg,
-      @DecimalMin(value = "0.001") @Digits(integer = 7, fraction = 3) BigDecimal netWeightKg) {}
+      @DecimalMin(value = "0.001") @Digits(integer = 7, fraction = 3) BigDecimal netWeightKg,
+      @Size(max = 40) String customsModel) {
+    public SkuRequest(Long modelId, String skuCode, String productName, String specification,
+        String ean, String upc, Long templateId, boolean enabled, String category,
+        String batteryDescription, Integer packageQuantity, String cartonSizeCm,
+        BigDecimal grossWeightKg, BigDecimal netWeightKg) {
+      this(modelId, skuCode, productName, specification, ean, upc, templateId, enabled, category,
+          batteryDescription, packageQuantity, cartonSizeCm, grossWeightKg, netWeightKg, null);
+    }
+  }
 
   public record SkuNameRequest(
       Long id,

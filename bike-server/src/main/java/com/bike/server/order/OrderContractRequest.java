@@ -35,7 +35,12 @@ public record OrderContractRequest(
     }
 
     public record SkuPrice(@Positive long skuId, String skuCode, String modelName, @Positive int quantity,
-            @NotNull @DecimalMin("0.01") @Digits(integer = 8, fraction = 2) BigDecimal unitPrice) {}
+            @NotNull @DecimalMin("0.01") @Digits(integer = 8, fraction = 2) BigDecimal unitPrice,
+            @Size(max = 40) String customsModel) {
+        public SkuPrice(long skuId, String skuCode, String modelName, int quantity, BigDecimal unitPrice) {
+            this(skuId, skuCode, modelName, quantity, unitPrice, null);
+        }
+    }
 
     public record Party(
             @NotBlank @Size(max = 120) String name,

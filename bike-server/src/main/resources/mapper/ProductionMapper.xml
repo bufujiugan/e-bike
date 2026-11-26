@@ -12,7 +12,7 @@
         GROUP BY s.id,s.sku_code,s.product_name,m.id,m.model_name,w.id,w.warehouse_name,l.id,l.location_name ORDER BY s.id,w.id,l.id
     </select>
     <sql id="skuSelect">SELECT s.id,s.model_id modelId,m.model_code modelCode,m.model_name modelName,s.sku_code skuCode,s.product_name productName,s.specification,s.ean,s.upc,
-        s.category,s.battery_description batteryDescription,s.package_quantity packageQuantity,s.carton_size_cm cartonSizeCm,
+        s.customs_model customsModel,s.category,s.battery_description batteryDescription,s.package_quantity packageQuantity,s.carton_size_cm cartonSizeCm,
         s.gross_weight_kg grossWeightKg,s.net_weight_kg netWeightKg,s.template_id templateId,s.enabled,s.created_at createdAt,s.updated_at updatedAt,
         (SELECT COUNT(*) FROM bike_production_sku_name n WHERE n.sku_id=s.id) nameCount
         FROM bike_production_sku s JOIN bike_product_model m ON m.id=s.model_id</sql>
@@ -21,11 +21,14 @@
     <select id="selectSkuByCode" resultType="map"><include refid="skuSelect"/> WHERE s.sku_code=#{skuCode}</select>
     <select id="selectSkuNames" resultType="map">SELECT id,sku_id skuId,name,ean,sn,enabled,created_at createdAt,updated_at updatedAt FROM bike_production_sku_name WHERE sku_id=#{skuId} ORDER BY created_at DESC,id DESC</select>
     <select id="selectSkuName" resultType="map">SELECT id,sku_id skuId,name,ean,sn,enabled,created_at createdAt,updated_at updatedAt FROM bike_production_sku_name WHERE id=#{id}</select>
-    <insert id="insertSku">INSERT INTO bike_production_sku(model_id,sku_code,product_name,specification,ean,upc,category,battery_description,package_quantity,carton_size_cm,gross_weight_kg,net_weight_kg,template_id,enabled)
-        VALUES(#{r.modelId},#{r.skuCode},#{r.productName},#{r.specification},#{r.ean},#{r.upc},#{r.category},#{r.batteryDescription},#{r.packageQuantity},#{r.cartonSizeCm},#{r.grossWeightKg},#{r.netWeightKg},#{r.templateId},#{r.enabled})</insert>
+    <insert id="insertSku">INSERT INTO bike_production_sku(model_id,sku_code,product_name,specification,ean,upc,category,battery_description,package_quantity,carton_size_cm,gross_weight_kg,net_weight_kg,template_id,enabled,customs_model)
+        VALUES(#{r.modelId},#{r.skuCode},#{r.productName},#{r.specification},#{r.ean},#{r.upc},#{r.category},#{r.batteryDescription},#{r.packageQuantity},#{r.cartonSizeCm},#{r.grossWeightKg},#{r.netWeightKg},#{r.templateId},#{r.enabled},NULLIF(#{r.customsModel,jdbcType=VARCHAR},''))</insert>
     <update id="updateSku">UPDATE bike_production_sku SET product_name=#{r.productName},specification=#{r.specification},ean=#{r.ean},upc=#{r.upc},
         category=#{r.category},battery_description=#{r.batteryDescription},package_quantity=#{r.packageQuantity},carton_size_cm=#{r.cartonSizeCm},
-        gross_weight_kg=#{r.grossWeightKg},net_weight_kg=#{r.netWeightKg},template_id=#{r.templateId},enabled=#{r.enabled} WHERE id=#{id}</update>
+        gross_weight_kg=#{r.grossWeightKg},net_weight_kg=#{r.netWeightKg},template_id=#{r.templateId},enabled=#{r.enabled}
+        <!-- 旧客户端省略该字段时保留已维护的值，显式传空字符串时清除。 -->
+        <if test="r.customsModel != null">,customs_model=NULLIF(#{r.customsModel},'')</if>
+        WHERE id=#{id}</update>
     <insert id="insertSkuName">INSERT INTO bike_production_sku_name(sku_id,name,ean,sn,enabled) VALUES(#{skuId},#{r.name},#{r.ean},#{r.sn},#{r.enabled})</insert>
     <update id="updateSkuName">UPDATE bike_production_sku_name SET name=#{r.name},ean=#{r.ean},sn=#{r.sn},enabled=#{r.enabled} WHERE id=#{r.id} AND sku_id=#{skuId}</update>
     <sql id="templateSelect">SELECT id,name,width_mm widthMm,height_mm heightMm,layout,heading,version,created_at createdAt,updated_at updatedAt FROM bike_production_template</sql>

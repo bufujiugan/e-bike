@@ -125,6 +125,31 @@ class OrderContractServiceTest {
         }
     }
 
+    @Test void preparesAndExportsCustomsModelsFromEachSku() throws Exception {
+        order.setOrderQty(4);
+        order.setSkuLines(List.of(
+                new DomesticOrderLine(101L, "SKU-A", 20L, "车型 A", "电助力自行车", "黑色", 1, 0, 0, "CM-A"),
+                new DomesticOrderLine(102L, "SKU-B", 21L, "车型 B", "电助力自行车", "白色", 2, 0, 0, "CM-B"),
+                new DomesticOrderLine(103L, "SKU-C", 22L, "车型 C", "电助力自行车", "蓝色", 1, 0, 0)));
+        var payload = validPayload();
+        var skuPrices = payload.get("skuPrices");
+        assertThat(skuPrices.get(0).get("customsModel").asText()).isEqualTo("CM-A");
+        assertThat(skuPrices.get(1).get("customsModel").asText()).isEqualTo("CM-B");
+        assertThat(skuPrices.get(2).get("customsModel").asText()).isEmpty();
+        for (var price : skuPrices) ((ObjectNode) price).put("unitPrice", "100.00");
+        payload.put("customsModel", "旧客户端整单值");
+        ((ObjectNode) skuPrices.get(1)).remove("customsModel");
+        try (var excel = new XSSFWorkbook(new ByteArrayInputStream(generate(payload)))) {
+            var sheet = excel.getSheetAt(0);
+            assertThat(sheet.getRow(12).getCell(1).getStringCellValue()).isEqualTo("CM-A");
+            assertThat(sheet.getRow(13).getCell(1).getStringCellValue()).isEqualTo("CM-B");
+            assertThat(sheet.getRow(14).getCell(1).getStringCellValue()).isEmpty();
+            assertThat(sheet.getRow(21).getCell(10).getNumericCellValue()).isEqualTo(400);
+        }
+        ((ObjectNode) skuPrices.get(0)).put("customsModel", "CM-OLD");
+        assertThatThrownBy(() -> generate(payload)).isInstanceOf(BusinessException.class).hasMessageContaining("报关型号已变化");
+    }
+
     @Test void exposesOptionalPricesOnlyWhenFilled() throws Exception {
         var payload = validPayload(); payload.put("usdUnitPrice", "170.50"); payload.put("costUnitPrice", "1000.00");
         try (var excel = new XSSFWorkbook(new ByteArrayInputStream(generate(payload)))) {

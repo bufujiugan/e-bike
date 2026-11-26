@@ -10,7 +10,7 @@ type Contract = {
   customsModel: string; productName: string; appearance: string; unitPrice: number | null
   usdUnitPrice: number | null; costUnitPrice: number | null; paymentTerms: string
   bankName: string; bankAccount: string; clauses: string[]
-  skuPrices?: { skuId: number; skuCode: string; modelName: string; quantity: number; unitPrice: number | null }[]
+  skuPrices?: { skuId: number; skuCode: string; modelName: string; quantity: number; unitPrice: number | null; customsModel?: string }[]
 }
 const props = defineProps<{ order: { id: number; orderNo: string; modelName: string; orderQty: number; updatedAt: string } }>()
 const emit = defineEmits<{ downloaded: [] }>()
@@ -100,17 +100,22 @@ watch(() => [props.order.id, props.order.updatedAt], () => { void load() }, { im
       <h4>{{ tr("商品与金额") }}</h4>
       <p>{{ order.modelName }} · {{ order.orderQty }} {{ trInline("辆 · 合计人民币") }} <strong>¥{{ total }}</strong></p>
       <div class="contract-grid">
-        <el-form-item :label='tr("报关型号")'><el-input v-model="contract.customsModel" maxlength="40" /></el-form-item>
+        <el-form-item v-if="!skuPrices.length" :label='tr("报关型号")'><el-input v-model="contract.customsModel" maxlength="40" /></el-form-item>
         <el-form-item :label='tr("品名")' prop="productName"><el-input v-model="contract.productName" maxlength="60" /></el-form-item>
         <el-form-item v-if="!skuPrices.length" :label='tr("外观 / 颜色")'><el-input v-model="contract.appearance" maxlength="40" /></el-form-item>
         <el-form-item v-if="!skuPrices.length" :label='tr("单价（RMB）")' prop="unitPrice"><el-input-number v-model="contract.unitPrice" :min="0.01" :max="99999999.99" :precision="2" :step="0.01" :controls="false" /></el-form-item>
       </div>
-      <div v-if="skuPrices.length" class="contract-grid">
-        <el-form-item v-for="(line, index) in skuPrices" :key="line.skuId" :label="`${line.skuCode} · ${line.quantity} ${tr('台')}`"
-          :prop="`skuPrices.${index}.unitPrice`" :rules="[required('人民币单价')]">
-          <el-input-number v-model="line.unitPrice" :aria-label="line.skuCode + ' ' + tr('人民币单价')"
-            :placeholder='tr("单价（RMB）")' :min="0.01" :max="99999999.99" :precision="2" :step="0.01" :controls="false" />
-        </el-form-item>
+      <div v-if="skuPrices.length" class="contract-grid contract-sku-grid">
+        <fieldset v-for="(line, index) in skuPrices" :key="line.skuId">
+          <legend>{{ line.skuCode }} · {{ line.quantity }} {{ tr('台') }}</legend>
+          <dl class="contract-sku-model">
+            <dt>{{ tr("报关型号") }}</dt>
+            <dd>{{ line.customsModel || tr("SKU 资料未维护") }}</dd>
+          </dl>
+          <el-form-item :label='tr("单价（RMB）")' :prop="`skuPrices.${index}.unitPrice`" :rules="[required('人民币单价')]">
+            <el-input-number v-model="line.unitPrice" :min="0.01" :max="99999999.99" :precision="2" :step="0.01" :controls="false" />
+          </el-form-item>
+        </fieldset>
       </div>
       <el-collapse v-else>
         <el-collapse-item :title='tr("模板辅助价格（选填，填写后将出现在合同中）")' name="prices"><div class="contract-grid">
@@ -138,6 +143,10 @@ watch(() => [props.order.id, props.order.updatedAt], () => { void load() }, { im
 .order-contract{padding:18px;border:1px solid var(--el-border-color);border-radius:10px;margin:16px 0}
 .order-contract p{color:var(--el-text-color-secondary);line-height:1.7}
 .contract-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 20px}
+.contract-sku-grid{row-gap:12px}
+.contract-sku-model{margin:0 0 12px}
+.contract-sku-model dt{color:var(--el-text-color-regular)}
+.contract-sku-model dd{margin:4px 0 0;overflow-wrap:anywhere}
 fieldset{min-width:0;border:1px solid var(--el-border-color-light);border-radius:8px;padding:14px}
 legend{font-weight:600;padding:0 6px}.contract-actions{margin-top:18px}
 .contract-error{color:var(--el-color-danger);padding:12px;margin:12px 0;background:var(--el-color-danger-light-9)}

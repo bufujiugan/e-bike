@@ -13,7 +13,8 @@
         VALUES(#{orderId},#{source.lockId},#{source.skuId},#{source.quantity},#{source.expiresAt})
     </insert>
     <select id="selectLines" resultType="com.bike.server.order.DomesticOrderLine">
-        SELECT s.id sku_id,s.sku_code,m.id model_id,m.model_name,s.product_name,s.specification,i.ordered_qty,i.shipped_qty,i.closed_qty
+        SELECT s.id sku_id,s.sku_code,m.id model_id,m.model_name,s.product_name,s.specification,
+               i.ordered_qty,i.shipped_qty,i.closed_qty,s.customs_model
         FROM bike_order_reservation_item i JOIN bike_production_sku s ON s.id=i.sku_id
         JOIN bike_product_model m ON m.id=s.model_id WHERE i.order_id=#{orderId} ORDER BY i.sku_id
     </select>

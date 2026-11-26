@@ -179,7 +179,8 @@ public class ProductionServiceImpl implements ProductionService {
             request.packageQuantity(),
             clean(request.cartonSizeCm()),
             request.grossWeightKg(),
-            request.netWeightKg());
+            request.netWeightKg(),
+            request.customsModel() == null ? null : request.customsModel().strip());
     if (normalized.skuCode().isEmpty() || normalized.productName().isEmpty())
       fail("INVALID_PARAMETER", "SKU编码和名称不能为空");
     eanBarcodes.validate(normalized.ean());
