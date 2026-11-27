@@ -5,11 +5,11 @@ import api from '../api'
 import { tr } from '../i18n/language'
 import { createUuid } from '../utils/uuid'
 import {
-  customerStatusError, type CustomerInventory, type CustomerOrder, type CustomerOrderDetail,
+  customerStatusError, type CustomerInventory, type CustomerLockReceipt, type CustomerOrder, type CustomerOrderDetail,
   type CustomerStatusView, type Page, type PartPrice,
 } from '../customer-status-api'
 
-const props = defineProps<{ view: CustomerStatusView; canSubmit: boolean }>()
+const props = defineProps<{ view: CustomerStatusView; canSubmit: boolean; canLock: boolean }>()
 const orders = ref<CustomerOrder[]>([])
 const inventory = ref<CustomerInventory[]>([])
 const prices = ref<PartPrice[]>([])
@@ -179,10 +179,59 @@ async function submit() {
   }
 }
 
+const lockTarget = ref<CustomerInventory | null>(null)
+const lockVisible = ref(false)
+const locking = ref(false)
+const lockQuantity = ref<number | undefined>(1)
+const lockRequestId = ref('')
+const lockError = ref('')
+const lockReceipt = ref<CustomerLockReceipt | null>(null)
+const lockLimit = computed(() => inventory.value.find(row => row.modelId === lockTarget.value?.modelId)?.availableQty ?? 0)
+const lockQuantityValid = computed(() =>
+  lockQuantity.value !== undefined && Number.isInteger(lockQuantity.value) &&
+  lockQuantity.value >= 1 && lockQuantity.value <= lockLimit.value,
+)
+
+function openInventoryLock(row: CustomerInventory) {
+  if (!props.canLock || locking.value || row.availableQty <= 0) return
+  lockTarget.value = row
+  lockQuantity.value = 1
+  lockRequestId.value = createUuid()
+  lockError.value = ''
+  lockVisible.value = true
+}
+
+async function submitInventoryLock() {
+  const target = lockTarget.value
+  if (!target || !props.canLock || locking.value || !lockQuantityValid.value) return
+  locking.value = true
+  lockError.value = ''
+  try {
+    const { data } = await api.post<{ data: CustomerLockReceipt }>('/api/customer/inventory-locks', {
+      requestId: lockRequestId.value,
+      modelId: target.modelId,
+      quantity: lockQuantity.value,
+    })
+    if (props.view !== 'customer-inventory') return
+    lockVisible.value = false
+    lockReceipt.value = data.data
+    await load()
+  } catch (cause) {
+    lockError.value = customerStatusError(cause, '库存锁定失败，请重试')
+    if (props.view === 'customer-inventory' && api.isAxiosError(cause) && cause.response?.data?.code === 'INVENTORY_NOT_ENOUGH') {
+      await load()
+    }
+  } finally {
+    locking.value = false
+  }
+}
+
 watch(() => props.view, () => {
   detailVersion++
   detailVisible.value = false
   submitVisible.value = false
+  lockVisible.value = false
+  lockReceipt.value = null
   keyword.value = ''
   search.value = ''
   orders.value = []
@@ -210,6 +259,11 @@ onBeforeUnmount(() => { listVersion++; detailVersion++ })
       <el-button type="primary" native-type="submit">{{ tr('搜索') }}</el-button>
     </form>
     <el-alert v-if="error" :title="tr(error)" type="error" :closable="false" show-icon />
+    <el-alert v-if="view === 'customer-inventory' && lockReceipt" type="success" show-icon @close="lockReceipt = null"
+      :title="tr('已创建锁定单 {lockNo}，{expireTime} 到期自动释放。', {
+        lockNo: lockReceipt.lockNo,
+        expireTime: new Date(lockReceipt.expireTime).toLocaleString(),
+      })" />
     <el-table v-if="view === 'customer-orders'" :data="orders" v-loading="loading" :empty-text="tr('暂无订单')">
       <el-table-column prop="orderNo" :label="tr('订单编号')" min-width="145">
         <template #default="{ row }"><el-button link type="primary" @click="showDetail(row)">{{ row.orderNo }}</el-button></template>
@@ -228,9 +282,18 @@ onBeforeUnmount(() => { listVersion++; detailVersion++ })
       </el-table-column>
     </el-table>
     <el-table v-else-if="view === 'customer-inventory'" :data="inventory" v-loading="loading" :empty-text="tr('暂无可展示车型')">
-      <el-table-column prop="modelName" :label="tr('车型')" min-width="155" />
-      <el-table-column :label="tr('当前库存数量')" min-width="125" align="right">
-        <template #default="{ row }">{{ row.quantity }} {{ tr('台') }}</template>
+      <el-table-column prop="modelName" :label="tr('车型')" min-width="100" />
+      <el-table-column :label="tr('当前库存数量')" min-width="105" align="right">
+        <template #default="{ row }">
+          {{ row.quantity }} {{ tr('台') }}
+          <span v-if="canLock" class="lock-availability">{{ tr('可锁定 {quantity} 台', { quantity: row.availableQty }) }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column v-if="canLock" :label="tr('操作')" width="112" align="right">
+        <template #default="{ row }">
+          <el-button class="lock-action" link type="primary" :disabled="locking || !(row.availableQty > 0)"
+            @click="openInventoryLock(row)">{{ tr('锁定库存') }}</el-button>
+        </template>
       </el-table-column>
     </el-table>
     <el-table v-else :data="prices" v-loading="loading" :empty-text="tr('暂无可购零件')">
@@ -242,6 +305,27 @@ onBeforeUnmount(() => { listVersion++; detailVersion++ })
       <el-table-column prop="currency" :label="tr('币种')" width="72" />
     </el-table>
     <el-pagination v-if="total > 20" v-model:current-page="page" :total="total" :page-size="20" layout="prev, pager, next" @current-change="load" />
+
+    <el-dialog v-model="lockVisible" :title="tr('锁定库存')" width="min(440px, 94vw)"
+      :close-on-click-modal="!locking" :close-on-press-escape="!locking" :show-close="!locking">
+      <el-form v-if="lockTarget" label-position="top" @submit.prevent="submitInventoryLock">
+        <dl class="detail-fields">
+          <div><dt>{{ tr('车型') }}</dt><dd>{{ lockTarget.modelName }}</dd></div>
+          <div><dt>{{ tr('可锁数量') }}</dt><dd>{{ lockLimit }} {{ tr('台') }}</dd></div>
+        </dl>
+        <el-form-item :label="tr('锁定数量')" required
+          :error="!lockQuantityValid && !lockError ? tr('请输入 1 到 {quantity} 之间的整数', { quantity: lockLimit }) : ''">
+          <el-input-number v-model="lockQuantity" :min="1" :max="Math.max(1, lockLimit)" :step="1"
+            :disabled="locking || lockLimit === 0" />
+        </el-form-item>
+        <p class="lock-hint">{{ tr('系统设置锁定期限，到期自动释放库存。') }}</p>
+        <el-alert v-if="lockError" class="lock-hint" :title="tr(lockError)" type="error" :closable="false" show-icon />
+        <div class="customer-actions">
+          <el-button :disabled="locking" @click="lockVisible = false">{{ tr('取消') }}</el-button>
+          <el-button type="primary" native-type="submit" :loading="locking" :disabled="!lockQuantityValid">{{ tr('确认锁定') }}</el-button>
+        </div>
+      </el-form>
+    </el-dialog>
 
     <el-dialog v-model="detailVisible" :title="tr('订单详情')" width="min(650px, 94vw)">
       <div v-loading="detailLoading" class="customer-detail">
@@ -296,6 +380,9 @@ onBeforeUnmount(() => { listVersion++; detailVersion++ })
 .customer-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; }
 .customer-search { display: flex; gap: 8px; max-width: 420px; }
 .customer-detail { min-height: 72px; }
+.lock-availability { display: block; color: var(--el-text-color-regular); }
+.lock-action { min-height: 44px; white-space: normal; }
+.lock-hint { margin: 0 0 16px; }
 .detail-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 12px; margin: 0 0 20px; }
 .detail-fields dt { color: var(--el-text-color-secondary); }
 .detail-fields dd { margin: 3px 0 0; overflow-wrap: anywhere; }

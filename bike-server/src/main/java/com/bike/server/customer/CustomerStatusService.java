@@ -16,5 +16,5 @@ public interface CustomerStatusService {
                         long shippedQty, String status) {}
     record OrderDetail(OrderSummary order, List<Logistics> logistics) {}
     record Logistics(String batchNo, String carrier, String trackingNo, String status, LocalDateTime shippedAt) {}
-    record Inventory(long modelId, String modelName, long quantity) {}
+    record Inventory(long modelId, String modelName, long quantity, long availableQty) {}
 }

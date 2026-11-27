@@ -1,12 +1,23 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.bike.server.lock.InventoryLockMapper">
+    <select id="selectDatabaseTime" resultType="java.time.LocalDateTime">SELECT NOW(3)</select>
+    <select id="selectCustomerLock" resultType="com.bike.server.lock.InventoryLockMapper$CustomerLockRow">
+        SELECT lock_no, CAST(UNIX_TIMESTAMP(expire_time) * 1000 AS SIGNED) expires_at_millis
+        FROM bike_inventory_lock WHERE lock_request_id=#{lockRequestId} AND scope_type='MODEL_LEGACY'
+    </select>
     <select id="countAuthorizedModel" resultType="int">SELECT <include refid="com.bike.server.agent.AgentModelAccessMapper.authorized"/></select>
     <select id="lockAgentAccess" resultType="long">SELECT id FROM bike_agent WHERE id=#{agentId} AND status='ENABLED' FOR UPDATE</select>
     <select id="lockModelForUpdate" resultType="int">SELECT 1 FROM bike_product_model WHERE id=#{modelId} AND enabled=1 FOR UPDATE</select>
     <select id="selectPhysicalForUpdate" resultType="long">SELECT COUNT(*) FROM bike_vehicle v WHERE model_id=#{modelId} AND status=2 AND NOT <include refid="com.bike.server.stock.InventoryPolicyMapper.quarantined"/> FOR UPDATE</select>
     <select id="selectActiveLockedForUpdate" resultType="long">SELECT COALESCE(SUM(qty),0) FROM (<include refid="com.bike.server.stock.InventoryPolicyMapper.commitments"/>) c WHERE model_id=#{modelId}</select>
     <insert id="insert">INSERT INTO bike_inventory_lock(lock_no,agent_id,product_model_id,lock_qty,expire_time,created_by,status,remark) SELECT #{lockNo},a.id,#{request.productModelId},#{request.lockQty},#{expireTime},COALESCE(#{createdBy},0),'LOCKED',#{request.remark} FROM bike_agent a WHERE a.id=#{request.agentId} AND a.status='ENABLED'</insert>
+    <insert id="insertCustomerLock">
+        INSERT INTO bike_inventory_lock(lock_no, customer_id, agent_id, product_model_id, lock_qty, expire_time,
+                                        created_by, status, lock_request_id)
+        VALUES(#{lockNo}, #{customerId}, #{agentId}, #{request.modelId}, #{request.quantity}, #{expireTime},
+               #{operatorId}, 'LOCKED', #{lockRequestId})
+    </insert>
     <insert id="insertDetail">INSERT INTO bike_inventory_lock_detail(lock_id,product_model_id,lock_qty) SELECT id,#{productModelId},#{lockQty} FROM bike_inventory_lock WHERE lock_no=#{lockNo}</insert>
     <sql id="selectBase">SELECT l.id,l.lock_no,l.customer_id,l.sku_id,l.scope_type,l.lock_request_id,s.sku_code,s.product_name,a.id agent_id,a.agent_name,m.id product_model_id,m.model_name,l.lock_qty,l.released_qty,l.converted_qty,l.status,l.expire_time,l.created_at,l.updated_at,l.remark FROM bike_inventory_lock l LEFT JOIN bike_agent a ON a.id=l.agent_id JOIN bike_product_model m ON m.id=l.product_model_id LEFT JOIN bike_production_sku s ON s.id=l.sku_id</sql>
     <select id="selectById" resultType="com.bike.server.lock.InventoryLockView"><include refid="selectBase"/> WHERE l.id=#{id}</select>

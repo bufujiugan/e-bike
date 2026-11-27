@@ -166,7 +166,10 @@
     </sql>
     <select id="selectInventory" resultType="com.bike.server.customer.CustomerStatusService$Inventory">
         SELECT model.id model_id, model.model_name,
-            (SELECT COUNT(*) FROM bike_vehicle vehicle WHERE vehicle.model_id = model.id AND vehicle.status = 2) quantity
+            (SELECT COUNT(*) FROM bike_vehicle vehicle WHERE vehicle.model_id = model.id AND vehicle.status = 2) quantity,
+            <include refid="com.bike.server.stock.InventoryPolicyMapper.modelAvailableQty">
+                <property name="modelAlias" value="model"/>
+            </include> available_qty
         FROM bike_product_model model <include refid="visibleModels"/>
         ORDER BY model.model_name, model.id LIMIT #{offset}, 20
     </select>

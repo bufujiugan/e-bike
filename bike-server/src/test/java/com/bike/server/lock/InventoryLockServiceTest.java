@@ -1,17 +1,26 @@
 package com.bike.server.lock;
 
+import com.bike.server.agent.AgentController;
+import com.bike.server.agent.AgentInventoryService;
 import com.bike.server.common.BusinessException;
+import com.bike.server.common.GlobalExceptionHandler;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import com.bike.server.auth.UserAuthRecord;
 
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class InventoryLockServiceTest {
 
@@ -65,11 +74,12 @@ class InventoryLockServiceTest {
         Mockito.verifyNoInteractions(mapper);
     }
 
-    @Test
-    void releaseRejectsPdaOperatorEvenWithInventoryLockPermission() {
+    @ParameterizedTest
+    @ValueSource(strings = {"WEB_AGENT", "WEB_CUSTOMER", "WEB_OPERATOR", "PDA_OPERATOR"})
+    void releaseRejectsNonAdminsEvenWithInventoryLockPermission(String role) {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-                "pda", "N/A", java.util.List.of(
-                new SimpleGrantedAuthority("ROLE_PDA_OPERATOR"),
+                "non-admin", "N/A", java.util.List.of(
+                new SimpleGrantedAuthority("ROLE_" + role),
                 new SimpleGrantedAuthority("PERM_AGENT_LOCK_WRITE"))));
         InventoryLockMapper mapper = Mockito.mock(InventoryLockMapper.class);
 
@@ -100,6 +110,7 @@ class InventoryLockServiceTest {
     @Test
     void createUsesConfiguredExpiryAndWritesDetail() {
         InventoryLockMapper mapper = Mockito.mock(InventoryLockMapper.class);
+        Mockito.when(mapper.selectDatabaseTime()).thenReturn(LocalDateTime.now());
         Mockito.when(mapper.lockModelForUpdate(1L)).thenReturn(1);
         Mockito.when(mapper.selectPhysicalForUpdate(1L)).thenReturn(3L);
         Mockito.when(mapper.selectActiveLockedForUpdate(1L)).thenReturn(0L);
@@ -119,13 +130,15 @@ class InventoryLockServiceTest {
     }
 
     @Test
-    void agentCreateMayOmitAgentIdBecauseScopeComesFromAuthentication() {
+    void agentCreateUsesAccountScopeAndDefaultExpiryDespiteClientDeadline() {
         var authentication = UsernamePasswordAuthenticationToken.authenticated("agent-a", null, java.util.List.of(
                 new SimpleGrantedAuthority("ROLE_WEB_AGENT"),
                 new SimpleGrantedAuthority("PERM_AGENT_LOCK_WRITE")));
         authentication.setDetails(new UserAuthRecord(11L, "agent-a", "hash", "AGENT", 101L, null, true, false));
         SecurityContextHolder.getContext().setAuthentication(authentication);
         InventoryLockMapper mapper = Mockito.mock(InventoryLockMapper.class);
+        LocalDateTime databaseTime = LocalDateTime.of(2026, 11, 27, 10, 30);
+        Mockito.when(mapper.selectDatabaseTime()).thenReturn(databaseTime);
         Mockito.when(mapper.lockModelForUpdate(1L)).thenReturn(1);
         Mockito.when(mapper.selectPhysicalForUpdate(1L)).thenReturn(3L);
         Mockito.when(mapper.selectActiveLockedForUpdate(1L)).thenReturn(0L);
@@ -137,15 +150,17 @@ class InventoryLockServiceTest {
         Mockito.when(mapper.lockAgentAccess(101L)).thenReturn(101L);
 
         InventoryLockView result = com.bike.server.common.CustomerScopeTestSupport.isolated(new InventoryLockServiceImpl(mapper))
-                .create(new InventoryLockCreateRequest(null, 1L, 1, null, "agent lock"));
+                .create(new InventoryLockCreateRequest(null, 1L, 1, databaseTime.plusHours(120), "agent lock"));
 
         assertThat(result.getAgentId()).isEqualTo(101L);
-        Mockito.verify(mapper).insert(Mockito.anyString(), Mockito.argThat(request -> request.agentId().equals(101L)), Mockito.any(), Mockito.eq(11L));
+        Mockito.verify(mapper).insert(Mockito.anyString(), Mockito.argThat(request -> request.agentId().equals(101L)),
+                Mockito.eq(databaseTime.plusHours(48)), Mockito.eq(11L));
     }
 
     @Test
     void convertRejectsQuantityAboveRemainingLock() {
         InventoryLockMapper mapper = Mockito.mock(InventoryLockMapper.class);
+        Mockito.when(mapper.selectDatabaseTime()).thenReturn(LocalDateTime.now());
         InventoryLockView lock = lock(8L, 1L, "PARTIAL_CONVERTED", 5, 0, 4);
         Mockito.when(mapper.selectById(8L)).thenReturn(lock);
 
@@ -158,6 +173,7 @@ class InventoryLockServiceTest {
     @Test
     void releaseKeepsHistoryAndUpdatesRecord() {
         InventoryLockMapper mapper = Mockito.mock(InventoryLockMapper.class);
+        Mockito.when(mapper.selectDatabaseTime()).thenReturn(LocalDateTime.now());
         InventoryLockView before = lock(8L, 1L, "LOCKED", 5, 0, 0);
         InventoryLockView after = lock(8L, 1L, "RELEASED", 5, 5, 0);
         Mockito.when(mapper.selectById(8L)).thenReturn(before, after);
@@ -172,6 +188,7 @@ class InventoryLockServiceTest {
     @Test
     void releaseRejectsExpiredLockBeforeUpdate() {
         InventoryLockMapper mapper = Mockito.mock(InventoryLockMapper.class);
+        Mockito.when(mapper.selectDatabaseTime()).thenReturn(LocalDateTime.now());
         InventoryLockView expired = lock(8L, 1L, "LOCKED", 5, 0, 0);
         expired.setExpireTime(LocalDateTime.now().minusSeconds(1));
         Mockito.when(mapper.selectById(8L)).thenReturn(expired);
@@ -187,6 +204,7 @@ class InventoryLockServiceTest {
     @Test
     void convertRejectsExpiredLockBeforeUpdate() {
         InventoryLockMapper mapper = Mockito.mock(InventoryLockMapper.class);
+        Mockito.when(mapper.selectDatabaseTime()).thenReturn(LocalDateTime.now());
         InventoryLockView expired = lock(8L, 1L, "LOCKED", 5, 0, 0);
         expired.setExpireTime(LocalDateTime.now().minusSeconds(1));
         Mockito.when(mapper.selectById(8L)).thenReturn(expired);
@@ -218,21 +236,25 @@ class InventoryLockServiceTest {
     }
 
     @Test
-    void agentCannotReleaseAnotherAgentsLock() {
+    void agentCannotReleaseLocksThroughEitherEndpoint() throws Exception {
         var authentication = UsernamePasswordAuthenticationToken.authenticated("agent-a", null, java.util.List.of(
                 new SimpleGrantedAuthority("ROLE_WEB_AGENT"),
                 new SimpleGrantedAuthority("PERM_AGENT_LOCK_WRITE")));
         authentication.setDetails(new UserAuthRecord(11L, "agent-a", "hash", "AGENT", 101L, null, true, false));
         SecurityContextHolder.getContext().setAuthentication(authentication);
         InventoryLockMapper mapper = Mockito.mock(InventoryLockMapper.class);
-        Mockito.when(mapper.selectById(8L)).thenReturn(lock(8L, 202L, "LOCKED", 1, 0, 0));
+        var service = com.bike.server.common.CustomerScopeTestSupport.isolated(new InventoryLockServiceImpl(mapper));
+        var mvc = MockMvcBuilders.standaloneSetup(new InventoryLockController(service),
+                        new AgentController(Mockito.mock(AgentInventoryService.class), service))
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
 
-        assertThatThrownBy(() -> com.bike.server.common.CustomerScopeTestSupport.isolated(new InventoryLockServiceImpl(mapper)).release(8L, "越权测试"))
-                .isInstanceOf(BusinessException.class)
-                .extracting(BusinessException.class::cast)
-                .extracting(BusinessException::getCode)
-                .isEqualTo("FORBIDDEN");
-        Mockito.verify(mapper, Mockito.never()).release(Mockito.anyLong(), Mockito.anyString());
+        for (String path : java.util.List.of("/api/inventory-locks/8/release", "/api/agent/inventory-locks/8/release")) {
+            mvc.perform(post(path))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+        }
+        Mockito.verifyNoInteractions(mapper);
     }
 
     @Test

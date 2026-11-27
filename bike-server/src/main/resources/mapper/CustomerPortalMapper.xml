@@ -5,11 +5,9 @@
   <select id="selectCompany" resultType="com.bike.server.customer.CustomerPortalService$Company">SELECT id,customer_name name FROM bike_customer WHERE id=#{customerId} AND status='ENABLED'</select>
   <select id="selectModels" resultType="com.bike.server.customer.CustomerPortalService$Model">
     SELECT m.id,m.model_name name,
-      GREATEST(0,
-        (SELECT COUNT(*) FROM bike_vehicle v WHERE v.model_id=m.id AND v.status=2
-          AND NOT <include refid="com.bike.server.stock.InventoryPolicyMapper.quarantined"/>)
-        - COALESCE((SELECT SUM(c.qty) FROM (<include refid="com.bike.server.stock.InventoryPolicyMapper.commitments"/>) c WHERE c.model_id=m.id),0)
-      ) available_qty
+      <include refid="com.bike.server.stock.InventoryPolicyMapper.modelAvailableQty">
+        <property name="modelAlias" value="m"/>
+      </include> available_qty
     FROM bike_product_model m WHERE m.enabled=1 ORDER BY m.model_name,m.id
   </select>
   <sql id="orderSelect">

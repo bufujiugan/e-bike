@@ -2,10 +2,14 @@ package com.bike.server.lock;
 
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Mapper
 public interface InventoryLockMapper {
+    record CustomerLockRow(String lockNo, long expiresAtMillis) {}
+    LocalDateTime selectDatabaseTime();
+    CustomerLockRow selectCustomerLock(@Param("lockRequestId") long lockRequestId);
     InventoryLockView selectByNo(@Param("lockNo") String lockNo);
     Integer lockModelForUpdate(@Param("modelId") long modelId);
     int countAuthorizedModel(@Param("agentId") long agentId,@Param("modelId") long modelId);
@@ -13,6 +17,10 @@ public interface InventoryLockMapper {
     long selectPhysicalForUpdate(@Param("modelId") long modelId);
     long selectActiveLockedForUpdate(@Param("modelId") long modelId);
     int insert(@Param("lockNo") String lockNo,@Param("request") InventoryLockCreateRequest request,@Param("expireTime") java.time.LocalDateTime expireTime,@Param("createdBy") Long createdBy);
+    int insertCustomerLock(@Param("lockNo") String lockNo, @Param("customerId") Long customerId,
+                           @Param("agentId") Long agentId, @Param("request") InventoryLockService.CustomerLockRequest request,
+                           @Param("expireTime") LocalDateTime expireTime, @Param("operatorId") long operatorId,
+                           @Param("lockRequestId") long lockRequestId);
     int insertDetail(@Param("lockNo") String lockNo, @Param("productModelId") long productModelId, @Param("lockQty") int lockQty);
     InventoryLockView selectById(@Param("id") long id);
     List<InventoryLockView> selectConvertibleSources(@Param("id") long id, @Param("keyword") String keyword);

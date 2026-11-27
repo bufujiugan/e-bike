@@ -47,6 +47,12 @@ try{
   await a(`/api/inventory-locks/${otherLock.id}/release`,{});otherLock=null;
   ownLock=await req(token,'/api/agent/inventory-locks',lockRequest);assert.equal(ownLock.agentId,agent.id);assert(f.modelId>1);
   pass('他人锁定计入可用量，车型ID大于1可锁定且归属取登录账号');
+  for(const path of ['/api/inventory-locks', '/api/agent/inventory-locks']) {
+    const denied=await req(token,`${path}/${ownLock.id}/release`,{},'POST',403);
+    assert.equal(denied.code,'PERMISSION_DENIED');
+  }
+  assert.equal((await a(`/api/inventory-locks/by-no/${ownLock.lockNo}`)).status,'LOCKED');
+  pass('客户业务账号可锁库，两个释放接口均拒绝该账号');
   await a(`/api/master/agents/${agent.id}/model-access`,{modelIds:[]},'PUT');
   assert.deepEqual(await req(token,'/api/master/models'),[]);
   assert.equal((await req(token,'/api/agent/inventory')).total,0);
@@ -54,8 +60,8 @@ try{
   await req(token,`/api/inventory?modelId=${f.modelId}`,undefined,'GET',403);
   await req(token,'/api/agent/inventory-locks',lockRequest,'POST',400);
   await req(token,'/api/agent/purchase-intents',{productModelId:f.modelId,intentQty:1},'POST',400);
-  await req(token,`/api/agent/inventory-locks/${ownLock.id}/release`,{});ownLock=null;
-  pass('撤销授权立即阻止查询和新增，历史锁定仍可释放');
+  assert.equal((await a(`/api/inventory-locks/${ownLock.id}/release`,{})).status,'RELEASED');ownLock=null;
+  pass('撤销授权立即阻止查询和新增，管理员仍可释放历史锁定');
   evidence.fixtures={agentId:agent.id,modelId:f.modelId,accountId:account.id};
 }catch(error){evidence.error=error.message;process.exitCode=1;console.error(error.message);}
 finally{

@@ -442,7 +442,7 @@ try {
     await req('/api/stock-out',{customerId:customer.id,orderId:active.orderId,vehicleQrCodes:[vehicle.qrCode]},{token:warehouseOperator});
     pass('真实物流计划转发运、幂等与版本历史；在途禁止撤销，授权撤回后可撤；空批次拒发运；追溯返回真实运单');
   }
-  for (const l of sourceLocks) { await req(`/api/inventory-locks/${l.id}/release?reason=释放本次未转换一台`, {}, { token: sales }); locksToRelease.delete(l.id); }
+  for (const l of sourceLocks) { await req(`/api/inventory-locks/${l.id}/release?reason=释放本次未转换一台`, {}); locksToRelease.delete(l.id); }
   await expectSku(model.id, red.id, 1, 0, 0, 1); await expectSku(secondModel.id, blue.id, 1, 0, 0, 1);
   pass('同PI两车型经普通仓管真实出库，撤销后可重新履约；剩余锁释放，实物与承诺守恒且收款只记一次');
   const extraRequest = { requestId: randomUUID(), amount: '12.34', currencyCode: 'CNY', paymentMethod: 'BANK_TRANSFER', remark: '隔离核对方式' };
@@ -575,10 +575,10 @@ try {
     [`/api/pis/${pi.id}/payments`, { requestId: randomUUID(), amount: '1.00', currencyCode: 'CNY' }],
     [`/api/pis/${pi.id}/release`, { reason: '越权验收' }],
     [`/api/pis/${pi.id}/revisions`, { requestId: randomUUID(), expectedRevision: 1, reason: '越权验收' }],
-    [`/api/orders/${reds.orderId}/cancel?reason=越权验收`, {}],
-    [`/api/inventory-locks/${sourceLocks[0].id}/release?reason=越权验收`, {}]
+    [`/api/orders/${reds.orderId}/cancel?reason=越权验收`, {}]
   ];
   for(const [path, payload] of writes)await req(path, payload, { token: scopeB, code: 'CUSTOMER_SCOPE_DENIED' });
+  await req(`/api/inventory-locks/${sourceLocks[0].id}/release?reason=越权验收`, {}, { token: scopeB, code: 'PERMISSION_DENIED' });
   await uploadFile(scopeReceiptPath, imageBytes, { token: scopeB, code: 'CUSTOMER_SCOPE_DENIED' });
   await uploadFile(attachmentPath, imageBytes, { token: scopeB, code: 'CUSTOMER_SCOPE_DENIED' });
   assert.equal((await req(`/api/modules/orders?keyword=${encodeURIComponent(reds.orderNo)}`, undefined, { token: scopeB })).total, 0);

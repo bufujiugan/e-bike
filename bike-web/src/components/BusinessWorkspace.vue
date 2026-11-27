@@ -2,6 +2,7 @@
 import { tr } from '../i18n/language'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { hasAnyPermission, hasPermission, hasRole, type PermissionContext } from '../permissions'
+import type { NavItem } from '../config/page-presentation'
 import ProductionManager from './ProductionManager.vue'
 import SkuInventoryPanel from './SkuInventoryPanel.vue'
 import FulfillmentQueue from './FulfillmentQueue.vue'
@@ -9,7 +10,7 @@ import PiWorkspace from './PiWorkspace.vue'
 import AppIcon from './AppIcon.vue'
 import MascotCompanion from './common/MascotCompanion.vue'
 
-const props = defineProps<{ context: PermissionContext | null; username: string; refreshKey: number }>()
+const props = defineProps<{ context: PermissionContext | null; username: string; refreshKey: number; customerLinks?: NavItem[] }>()
 const emit = defineEmits<{ navigate: [key: string]; guide: []; convert: [lockNo: string]; order: [orderNo: string] }>()
 const stepIcons: Record<string, string> = { tasks: 'tasks', skus: 'inventory', prints: 'printer', inventory: 'network', orders: 'orders', locks: 'tasks', pis: 'info' }
 const areaWatermarks: Record<string, string> = { production: 'chart', sales: 'truck', warehouse: 'home' }
@@ -30,7 +31,7 @@ const steps = computed(() => [
   { key:'locks', title:'锁定转订单', detail:'原地转单 · 保留占用', allowed:internal.value && hasAnyPermission(props.context,['AGENT_INVENTORY_READ','AGENT_LOCK_WRITE']) },
   { key:'orders', title:'订单与出库', detail:'确认 · 发货 · 出库明细', allowed:hasPermission(props.context,'ORDER_READ') },
   { key:'pis', title:'PI 与履约', detail:'收款 · 放行 · 交付', allowed:hasPermission(props.context,'PI_READ') && !hasRole(props.context,'PDA_OPERATOR') },
-].filter(step => step.allowed))
+].filter(step => !props.customerLinks && step.allowed))
 const areas = computed(() => [
   { key: 'production', title: '生产作业', icon: 'production', description: '新建或打开一张生产单，在同一页完成扫码、打印和入库。', hint: '建单 → 扫码生产 → 标签打印 → 实物入库', keys: ['tasks', 'skus', 'prints'] },
   { key: 'sales', title: '销售与交付', icon: 'orders', description: '围绕一张订单，完成从锁定到交付的办理。', hint: '锁定转单 → 订单确认 → PI 与交付', keys: ['orders', 'locks', 'pis'] },
@@ -101,7 +102,17 @@ onUnmounted(() => window.removeEventListener('popstate',syncStage))
 </script>
 <template>
   <div class="business-workspace" :class="{ 'workbench-home': stage === 'home' }">
-    <template v-if="stage === 'home'">
+    <section v-if="customerLinks" class="workbench-shortcuts" :aria-label="tr('我的工作台')">
+      <div class="workbench-section-title"><h1>{{ tr('我的工作台') }}</h1></div>
+      <div class="shortcut-grid">
+        <button v-for="link in customerLinks" :key="link.key" type="button" @click="emit('navigate', link.key)">
+          <span class="shortcut-icon"><AppIcon :name="link.icon ?? link.key" /></span>
+          <span class="shortcut-copy"><strong>{{ tr(link.label) }}</strong></span>
+          <AppIcon name="arrow" />
+        </button>
+      </div>
+    </section>
+    <template v-else-if="stage === 'home'">
       <section class="workbench-welcome">
         <div class="workbench-companion"><MascotCompanion /></div>
         <div class="welcome-copy"><span class="workflow-eyebrow">{{ tr("BIKE / 工作空间") }}</span><h1>{{ tr("把手上的事，接着办好。") }}</h1><p>{{ tr('{username}，欢迎回来。从当前业务出发，找到下一步。', { username }) }}</p><button class="welcome-guide" @click="emit('guide')"><AppIcon name="layers" />{{ tr("查看操作说明") }}<AppIcon name="arrow" /></button></div>
@@ -181,6 +192,7 @@ onUnmounted(() => window.removeEventListener('popstate',syncStage))
 .resume-empty { display: block; padding-top: 11px; border-top: 1px solid #e8eef5; color: #6b82a3; font-size: 12px; }
 .workbench-section-title { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
 .workbench-section-title h2 { position: relative; margin: 0; padding-left: 18px; color: #09214b; font-size: 22px; font-weight: 700; line-height: 1.35; }
+.workbench-section-title h1 { margin: 0; color: inherit; font-size: 22px; line-height: 1.35; }
 .workbench-section-title h2::before { content: ''; position: absolute; left: 0; top: 4px; width: 4px; height: 23px; border-radius: 1px; background: #0066ff; }
 .workbench-section-title p { margin: 3px 0 0 16px; color: #5c769d; font-size: 13px; line-height: 1.6; }
 .workbench-section-title > span { padding-top: 7px; font-size: 13px; color: #526f96; }

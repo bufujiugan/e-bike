@@ -14,7 +14,8 @@ export type CustomerOrderDetail = {
   order: CustomerOrder
   logistics: { batchNo: string; carrier: string | null; trackingNo: string | null; status: string; shippedAt: string | null }[]
 }
-export type CustomerInventory = { modelId: number; modelName: string; quantity: number }
+export type CustomerInventory = { modelId: number; modelName: string; quantity: number; availableQty: number }
+export type CustomerLockReceipt = { lockNo: string; expireTime: string }
 export type PartPrice = {
   id: number
   partNo: string

@@ -38,6 +38,14 @@
     JOIN bike_order_reservation r ON r.order_id=si.order_id JOIN bike_sales_order o ON o.id=r.order_id
     WHERE r.scope_type='SKU' AND <include refid="com.bike.server.stock.InventoryPolicyMapper.reservationActive"/>
   </sql>
+  <sql id="modelAvailableQty">
+    GREATEST(0,
+      (SELECT COUNT(*) FROM bike_vehicle v WHERE v.model_id=${modelAlias}.id AND v.status=2
+        AND NOT <include refid="com.bike.server.stock.InventoryPolicyMapper.quarantined"/>)
+      - COALESCE((SELECT SUM(c.qty) FROM (<include refid="com.bike.server.stock.InventoryPolicyMapper.commitments"/>) c
+                  WHERE c.model_id=${modelAlias}.id),0)
+    )
+  </sql>
   <!-- SKU 明细按实际车型计入车型承诺，车型占用头仅用于旧车型订单。 -->
   <sql id="skuCommitments">
     SELECT sku_id,product_model_id model_id,lock_qty-released_qty-converted_qty qty,'TEMPORARY' kind,0 order_id

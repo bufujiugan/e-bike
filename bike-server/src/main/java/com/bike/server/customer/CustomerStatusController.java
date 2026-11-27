@@ -4,7 +4,11 @@ import com.bike.server.common.ApiResponse;
 import com.bike.server.common.BusinessException;
 import com.bike.server.common.PageResponse;
 import com.bike.server.customer.CustomerStatusService.*;
+import com.bike.server.lock.InventoryLockService;
+import com.bike.server.lock.InventoryLockService.CustomerLockReceipt;
+import com.bike.server.lock.InventoryLockService.CustomerLockRequest;
 import com.bike.server.part.PartPricingService;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import org.springframework.web.bind.annotation.*;
@@ -13,9 +17,11 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/customer")
 public class CustomerStatusController {
     private final CustomerStatusService service;
+    private final InventoryLockService inventoryLocks;
 
-    public CustomerStatusController(CustomerStatusService service) {
+    public CustomerStatusController(CustomerStatusService service, InventoryLockService inventoryLocks) {
         this.service = service;
+        this.inventoryLocks = inventoryLocks;
     }
 
     @GetMapping("/order-status")
@@ -38,6 +44,11 @@ public class CustomerStatusController {
     @GetMapping("/inventory-status")
     public ApiResponse<PageResponse<Inventory>> inventory(@RequestParam(defaultValue = "1") long page) {
         return ApiResponse.success(service.listInventory(page));
+    }
+
+    @PostMapping("/inventory-locks")
+    public ApiResponse<CustomerLockReceipt> lockInventory(@Valid @RequestBody CustomerLockRequest request) {
+        return ApiResponse.success(inventoryLocks.lockCustomerInventory(request));
     }
 
     @GetMapping("/part-prices")

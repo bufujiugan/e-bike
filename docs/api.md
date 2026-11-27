@@ -25,12 +25,15 @@
 - `GET /api/inventory`、`GET /api/inventory/summary`、`GET /api/inventory/by-model`：按车型、仓库查询物理、锁定和可用库存。锁库业务按车型数量执行，不绑定库位；当同一车型分布在多个库位时，明细接口按稳定的仓库/库位顺序分摊锁定量到展示行，避免重复显示，汇总口径仍以车型锁库记录为准。
 - `GET/POST /api/orders`、`GET /api/orders/{id}`、`GET /api/orders/by-no/{orderNo}`、`PUT /api/orders/{id}`、`POST /api/orders/{id}/confirm`、`POST /api/orders/{id}/cancel`：销售订单；订单详情额外返回有效 `shippedVehicles` 列表，已撤销出库记录不包含在内。
 - `GET/POST /api/inventory-locks`、`POST /api/inventory-locks/{id}/release`、`POST /api/inventory-locks/{id}/convert`：按车型数量锁库。
+- `GET /api/customer/inventory-status` 保留车型实物库存 `quantity`，并返回扣除库存隔离及有效占用后的 `availableQty`。
+- `POST /api/customer/inventory-locks` 按车型锁定可用库存。客户账号使用绑定公司，客户业务账号使用绑定客户和授权车型，并需具有 `AGENT_LOCK_WRITE` 权限。请求包含 `requestId`、`modelId`、`quantity`，同一账号重复提交同一请求返回原锁定单。响应包含 `lockNo` 和 UTC 格式的 `expireTime`。服务端按 `inventory.lock.hours` 设置有效期，缺省为 48 小时。到期即恢复可用量，定时任务更新锁定状态并记录审计。
 - `GET/POST /api/rework`：返工换件并保留历史绑定。
 - `GET /api/trace/frame/{frameSn}`、`GET /api/trace/part/{partSn}`：正向和反向追溯；响应包含整车、绑定历史、操作事件、入库记录、出库记录、返工记录及部件关联车辆。反向追溯不会丢失当前/历史整车对应的出入库和返工记录。
 - `GET/POST /api/master/{type}`、`PUT /api/master/{type}/{id}`、`PUT /api/master/{type}/{id}/status`、`GET/POST /api/master/warehouses/{warehouseId}/locations`、`PUT /api/master/locations/{id}`、`PUT /api/master/locations/{id}/status`：车型、客户、供应商、代理商、仓库和库位基础资料；编辑接口用于更新编码、名称及联系人资料，状态仍由独立状态接口控制，库位启用时同时校验所属仓库处于启用状态。
 - `GET/POST /api/users`、`PUT /api/users/{id}`、`GET /api/users/{id}/roles`、`PUT /api/users/{id}/roles`、`PUT /api/users/{id}/status`、`GET/POST /api/roles`、`GET/PUT /api/roles/{id}/permissions`、`GET /api/roles/permissions`、`PUT /api/roles/{id}/status`、`GET/POST/PUT /api/workstations`、`PUT /api/workstations/{id}/status`：系统基础管理。
 - `GET/PUT /api/system-config/{configKey}`、`GET /api/system-config`：系统配置管理；`PUT /api/auth/password` 会校验当前登录账号并持久化数据库密码。SN 校验相关配置（`sn.frame.*`、`sn.part.*` 及按部件类型覆盖项）由后端业务入口统一读取和校验。
 - `GET /api/agent/inventory`、`GET/POST /api/agent/inventory-locks`、`POST /api/agent/inventory-locks/{id}/release`、`POST /api/agent/inventory-locks/{id}/convert?quantity={quantity}`：代理商账号范围内的库存和锁库。代理商创建锁库时 `agentId` 可省略，后端从 JWT 绑定代理商确定；超级管理员创建时仍需提供 `agentId`。
+  客户业务账号创建锁库时由服务端使用默认有效期，历史请求中的 `expireTime` 字段继续兼容接收。
 - `GET/POST /api/agent/purchase-intents`：代理商采购意向查询和提交；代理商提交时 `agentId` 可省略并从 JWT 取值，超级管理员需提供 `agentId`；提交时后端强制校验当前代理商对车型存在有效锁库授权。
 - `POST /api/parts/import`、`POST /api/master/{type}/import`、`POST /api/orders/import`：Excel 逐行导入，返回总行数、成功数、失败行和原因。
 - `GET /api/export/{module}`：导出整车、零部件、库存、出入库、订单、返工、追溯、报关和操作日志等模块 xlsx。

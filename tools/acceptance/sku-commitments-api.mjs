@@ -85,7 +85,8 @@ try {
   const retry = await req('/api/sku-locks', { ...both, items: [...both.items].reverse() }, { token: sales });
   assert.deepEqual(retry.map(l => l.id), batch.map(l => l.id));
   await req('/api/sku-locks', { ...both, items: [{ skuId: red.id, quantity: 2 }] }, { token: sales, code: 'SKU_LOCK_REQUEST_CONFLICT' });
-  for (const lock of batch) { await req(`/api/inventory-locks/${lock.id}/release?reason=SKU批量验收释放`, {}, { token: sales }); locksToRelease.delete(lock.id); }
+  await req(`/api/inventory-locks/${batch[0].id}/release`, {}, { token: sales, code: 'PERMISSION_DENIED' });
+  for (const lock of batch) { await req(`/api/inventory-locks/${lock.id}/release?reason=SKU批量验收释放`, {}); locksToRelease.delete(lock.id); }
   pass('第二SKU不足整批回滚，失败请求可重试；排序无关幂等，改内容冲突，释放恢复');
 
   const redBody = lockBody([{ skuId: red.id, quantity: 2 }]);
