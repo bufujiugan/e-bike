@@ -7,6 +7,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
 @Service
@@ -124,6 +125,23 @@ public class UserServiceImpl implements UserService {
                 "roleIds="+previousRoles, "roleIds="+roleIds, CurrentOperator.clientIp())!=1)
             throw new BusinessException("ROLE_UPDATE_FAILED","用户角色审计保存失败");
         return updated;
+    }
+
+    @Override
+    @Transactional
+    public void assignPassword(long id, UserPasswordAssignmentRequest request) {
+        CurrentOperator.requireRole("SUPER_ADMIN");
+        String password = request.newPassword();
+        if (password.getBytes(StandardCharsets.UTF_8).length > 72) {
+            throw new BusinessException("PASSWORD_INVALID", "新密码至少 8 个字符，最多 72 字节");
+        }
+        if (mapper.updateAssignedPassword(id, encoder.encode(password)) != 1) {
+            throw new BusinessException("USER_NOT_FOUND", "用户不存在");
+        }
+        if (mapper.insertOperationLog(String.valueOf(id), "管理员修改用户密码", CurrentOperator.id(),
+                CurrentOperator.username(), null, null, CurrentOperator.clientIp()) != 1) {
+            throw new BusinessException("PASSWORD_UPDATE_FAILED", "密码修改失败");
+        }
     }
 
     private void validateBindings(String userType, Long agentId, Long workstationId) {

@@ -2,6 +2,8 @@ package com.bike.server.config;
 
 import com.bike.server.auth.*;
 import com.bike.server.system.UserMapper;
+import com.bike.server.system.UserPasswordAssignmentRequest;
+import com.bike.server.system.UserServiceImpl;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -9,6 +11,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -30,7 +34,8 @@ class SessionRevocationTest {
         when(users.selectRoleCodes("worker")).thenReturn(List.of("WORKER"));
         when(revoked.countRevoked(anyString())).thenAnswer(i -> revokedIds.contains(i.getArgument(0)) ? 1 : 0);
         when(revoked.revoke(anyString(), any())).thenAnswer(i -> { revokedIds.add(i.getArgument(0)); return 1; });
-        when(users.updatePassword(eq("worker"), anyString())).thenAnswer(i -> {
+        when(users.updatePassword(eq("worker"), anyString(), anyLong())).thenAnswer(i -> {
+            if (current.authVersion() != i.<Long>getArgument(2)) return 0;
             current = new UserAuthRecord(2, "worker", i.getArgument(1), "WEB_OPERATOR", null, null, true, false, current.authVersion()+1);
             return 1;
         });
@@ -62,5 +67,33 @@ class SessionRevocationTest {
         assertThat(accepts(second)).isFalse();
         assertThatThrownBy(() -> auth.login(new LoginRequest("worker", "old-password"))).isInstanceOf(com.bike.server.common.BusinessException.class);
         assertThat(accepts(auth.login(new LoginRequest("worker", "new-password")).accessToken())).isTrue();
+    }
+
+    @Test void administratorAssignmentReplacesPasswordAndClearsOldLoginLockAndSessions() throws Exception {
+        String oldToken = auth.login(new LoginRequest("worker", "old-password")).accessToken();
+        for (int attempt = 0; attempt < 5; attempt++) {
+            assertThatThrownBy(() -> auth.login(new LoginRequest("worker", "wrong-password")))
+                    .hasMessage("用户名或密码错误");
+        }
+        assertThatThrownBy(() -> auth.login(new LoginRequest("worker", "old-password")))
+                .hasMessage("登录失败次数过多，请稍后再试");
+
+        when(users.updateAssignedPassword(eq(2L), anyString())).thenAnswer(invocation -> {
+            current = new UserAuthRecord(2, "worker", invocation.getArgument(1), "WEB_OPERATOR",
+                    null, null, true, false, current.authVersion() + 1);
+            return 1;
+        });
+        when(users.insertOperationLog("2", "管理员修改用户密码", null, "admin", null, null, null)).thenReturn(1);
+        SecurityContextHolder.getContext().setAuthentication(UsernamePasswordAuthenticationToken.authenticated(
+                "admin", null, List.of(new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"))));
+        new UserServiceImpl(users, encoder).assignPassword(2L, new UserPasswordAssignmentRequest("assigned-password"));
+
+        verify(users).insertOperationLog("2", "管理员修改用户密码", null, "admin", null, null, null);
+        assertThat(accepts(oldToken)).isFalse();
+        assertThatThrownBy(() -> auth.login(new LoginRequest("worker", "old-password")))
+                .hasMessage("用户名或密码错误");
+        LoginResponse login = auth.login(new LoginRequest("worker", "assigned-password"));
+        assertThat(login.mustChangePassword()).isFalse();
+        assertThat(accepts(login.accessToken())).isTrue();
     }
 }

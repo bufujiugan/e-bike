@@ -5,13 +5,17 @@ import com.bike.server.common.CurrentOperator;
 import com.bike.server.common.PageResponse;
 import com.bike.server.part.PartPricingMapper;
 import com.bike.server.part.PartPricingService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 @Service
 @Transactional(readOnly = true)
 public class CustomerStatusServiceImpl implements CustomerStatusService {
+    private static final Logger LOGGER = LoggerFactory.getLogger(CustomerStatusServiceImpl.class);
     private static final int PAGE_SIZE = 20;
 
     private final CustomerPortalService customerPortal;
@@ -29,19 +33,35 @@ public class CustomerStatusServiceImpl implements CustomerStatusService {
     public PageResponse<OrderSummary> listOrders(long page) {
         var scope = requireScope("ORDER_READ");
         long current = pageNumber(page);
-        var orders = mapper.selectOrders(scope.customerId(), scope.agentId(), null, null, offset(current));
+        Long userId = CurrentOperator.id();
+        var orders = mapper.selectOrders(scope.customerId(), scope.agentId(), userId, null, null, offset(current));
         return new PageResponse<>(orders.stream().map(this::customerStatus).toList(), current, PAGE_SIZE,
-                mapper.countOrders(scope.customerId(), scope.agentId()));
+                mapper.countOrders(scope.customerId(), scope.agentId(), userId));
     }
 
     @Override
     public OrderDetail getOrder(String kind, long id) {
         var scope = requireScope("ORDER_READ");
         if (!"ORDER".equals(kind) && !"PI".equals(kind)) throw orderNotFound();
-        var matches = mapper.selectOrders(scope.customerId(), scope.agentId(), kind, id, 0);
+        var matches = mapper.selectOrders(scope.customerId(), scope.agentId(), CurrentOperator.id(), kind, id, 0);
         if (matches.isEmpty()) throw orderNotFound();
         var logistics = "ORDER".equals(kind) ? mapper.selectOrderLogistics(id) : mapper.selectSeriesLogistics(id);
         return new OrderDetail(customerStatus(matches.getFirst()), logistics);
+    }
+
+    @Override
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public void removeCancelledOrder(String kind, long id) {
+        var scope = requireScope("ORDER_READ");
+        if (!"ORDER".equals(kind) && !"PI".equals(kind)) throw orderNotFound();
+        Long userId = CurrentOperator.id();
+        if (userId == null) throw new BusinessException("UNAUTHORIZED", "请先登录");
+        int affected = mapper.insertCancelledOrderDismissal(scope.customerId(), scope.agentId(), userId, kind, id);
+        // 重复请求可能返回零更新行，需要读取并发事务刚提交的删除记录。
+        if (affected == 0 && !mapper.existsCancelledOrderDismissal(scope.customerId(), scope.agentId(), userId, kind, id)) {
+            throw new BusinessException("ORDER_NOT_REMOVABLE", "只能删除当前账号可见的已取消订单");
+        }
+        LOGGER.info("客户工作台删除已取消订单，userId={}, orderKind={}, orderId={}", userId, kind, id);
     }
 
     @Override

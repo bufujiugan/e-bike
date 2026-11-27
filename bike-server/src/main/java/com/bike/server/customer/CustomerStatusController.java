@@ -1,6 +1,7 @@
 package com.bike.server.customer;
 
 import com.bike.server.common.ApiResponse;
+import com.bike.server.common.BusinessException;
 import com.bike.server.common.PageResponse;
 import com.bike.server.customer.CustomerStatusService.*;
 import com.bike.server.part.PartPricingService;
@@ -25,6 +26,13 @@ public class CustomerStatusController {
     @GetMapping("/order-detail")
     public ApiResponse<OrderDetail> order(@RequestParam String kind, @RequestParam @Positive long id) {
         return ApiResponse.success(service.getOrder(kind, id));
+    }
+
+    @DeleteMapping("/order-status")
+    public ApiResponse<Void> removeOrder(@RequestParam String kind, @RequestParam long id) {
+        if (id <= 0) throw new BusinessException("INVALID_PARAMETER", "请求参数校验失败");
+        service.removeCancelledOrder(kind, id);
+        return ApiResponse.success(null);
     }
 
     @GetMapping("/inventory-status")

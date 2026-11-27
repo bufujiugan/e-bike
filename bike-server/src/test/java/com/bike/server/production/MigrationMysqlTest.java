@@ -14,7 +14,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 /** 仅针对两个新建的专用空库，禁止清库或重复覆盖已有业务数据。 */
 @EnabledIfEnvironmentVariable(named="BIKE_MIGRATION_CLEAN_URL",matches=".+")
 class MigrationMysqlTest {
-  private static final int LATEST_VERSION = 60;
+  private static final int DISPATCH_BASELINE = 60;
   private static final int COLLATION_BASELINE = 55;
   Flyway flyway(String url,String target) {
     assertThat(url).contains("/bike_migration_");
@@ -39,6 +39,7 @@ class MigrationMysqlTest {
       try(var result=sql.executeQuery("SELECT COUNT(*) FROM bike_pi_revision_source")){result.next();assertThat(result.getInt(1)).isZero();}
       verifyManagementPermission(sql); verifyAfterSalesAndPiSchema(sql); verifyProductionWorkOrderSchema(sql); verifyListTimestampSchema(sql);
     }
+    verifyCustomerOrderDismissalMigration(url);
   }
   @Test void upgradeFromV16PreservesExistingParts() throws Exception {
     String url=System.getenv("BIKE_MIGRATION_UPGRADE_URL");
@@ -86,6 +87,7 @@ class MigrationMysqlTest {
       try(var result=sql.executeQuery("SELECT stock_out_batch_id,link_type,status,tracking_no,revision FROM bike_pi_logistics WHERE id=9001")){assertThat(result.next()).isTrue();assertThat(result.getObject(1)).isNull();assertThat(result.getString(2)).isEqualTo("LEGACY_UNLINKED");assertThat(result.getString(3)).isEqualTo("SHIPPED");assertThat(result.getString(4)).isEqualTo("OLD-TRACK");assertThat(result.getInt(5)).isEqualTo(1);}
       try(var result=sql.executeQuery("SELECT action,JSON_UNQUOTE(JSON_EXTRACT(snapshot,'$.trackingNo')) FROM bike_pi_logistics_history WHERE logistics_id=9001")){assertThat(result.next()).isTrue();assertThat(result.getString(1)).isEqualTo("MIGRATED_CURRENT");assertThat(result.getString(2)).isEqualTo("OLD-TRACK");assertThat(result.next()).isFalse();}
     }
+    verifyCustomerOrderDismissalMigration(url);
   }
   private void migrateThroughDispatchNotifications(String url, Flyway baseline, int baselineMigrations) throws Exception {
     assertThat(baseline.migrate().migrationsExecuted).isEqualTo(baselineMigrations);
@@ -93,10 +95,10 @@ class MigrationMysqlTest {
       verifyDatabaseCollation(sql);
     }
 
-    var latest = flyway(url, null);
-    assertThat(latest.migrate().migrationsExecuted).isEqualTo(LATEST_VERSION - COLLATION_BASELINE);
+    var latest = flyway(url, Integer.toString(DISPATCH_BASELINE));
+    assertThat(latest.migrate().migrationsExecuted).isEqualTo(DISPATCH_BASELINE - COLLATION_BASELINE);
     latest.validate();
-    assertThat(latest.info().current().getVersion().getVersion()).isEqualTo(Integer.toString(LATEST_VERSION));
+    assertThat(latest.info().current().getVersion().getVersion()).isEqualTo(Integer.toString(DISPATCH_BASELINE));
     assertThat(latest.migrate().migrationsExecuted).isZero();
     try (var conn = connection(url); var sql = conn.createStatement()) {
       try (var result = sql.executeQuery("""
@@ -114,6 +116,18 @@ class MigrationMysqlTest {
         assertThat(result.next()).isTrue();
         assertThat(result.getInt(1)).isEqualTo(2);
       }
+    }
+  }
+  private void verifyCustomerOrderDismissalMigration(String url) throws Exception {
+    flyway(url, "69").migrate();
+    var dismissal = flyway(url, "70");
+    assertThat(dismissal.migrate().migrationsExecuted).isEqualTo(1);
+    dismissal.validate();
+    assertThat(dismissal.migrate().migrationsExecuted).isZero();
+    try(var conn=connection(url);var sql=conn.createStatement();
+        var result=sql.executeQuery("SELECT COUNT(*) FROM bike_customer_order_dismissal")) {
+      assertThat(result.next()).isTrue();
+      assertThat(result.getInt(1)).isZero();
     }
   }
   private void insertExpiredPaidReservation(Statement sql)throws Exception {

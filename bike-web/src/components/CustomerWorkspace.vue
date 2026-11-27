@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
 import { tr } from '../i18n/language'
 import { createUuid } from '../utils/uuid'
@@ -19,6 +19,7 @@ const page = ref(1)
 const total = ref(0)
 const loading = ref(false)
 const error = ref('')
+const removingOrder = ref<CustomerOrder | null>(null)
 let listVersion = 0
 
 const statuses: Record<string, { label: string; tone: 'info' | 'warning' | 'success' | 'danger' }> = {
@@ -44,6 +45,12 @@ async function load() {
     if (props.view === 'customer-orders') {
       const { data } = await api.get<{ data: Page<CustomerOrder> }>('/api/customer/order-status', { params: { page: currentPage } })
       if (version !== listVersion) return
+      const lastPage = Math.max(1, Math.ceil(data.data.total / data.data.pageSize))
+      if (currentPage > lastPage) {
+        page.value = lastPage
+        await load()
+        return
+      }
       orders.value = data.data.records
       total.value = data.data.total
     } else if (props.view === 'customer-inventory') {
@@ -64,6 +71,39 @@ async function load() {
     error.value = customerStatusError(cause, '请求失败，请重试')
   } finally {
     if (version === listVersion) loading.value = false
+  }
+}
+
+function isSameOrder(order: CustomerOrder | undefined | null, target: CustomerOrder) {
+  return order?.kind === target.kind && order.id === target.id
+}
+
+async function removeOrder(order: CustomerOrder) {
+  if (removingOrder.value || order.status !== 'CANCELLED') return
+  removingOrder.value = order
+  try {
+    await ElMessageBox.confirm(
+      tr('订单 {orderNo} 将从你的订单列表中移除。', { orderNo: order.orderNo }),
+      tr('删除订单'),
+      {
+        type: 'warning',
+        confirmButtonText: tr('删除'),
+        confirmButtonClass: 'el-button--danger',
+        cancelButtonText: tr('取消'),
+        closeOnClickModal: false,
+      },
+    )
+    await api.delete('/api/customer/order-status', { params: { kind: order.kind, id: order.id } })
+    ElMessage.success(tr('订单已删除'))
+    if (props.view === 'customer-orders') {
+      orders.value = orders.value.filter(row => !isSameOrder(row, order))
+      await load()
+    }
+  } catch (cause) {
+    if (cause === 'cancel' || cause === 'close') return
+    ElMessage.error(tr(customerStatusError(cause, '删除订单失败，请重试')))
+  } finally {
+    removingOrder.value = null
   }
 }
 
@@ -178,6 +218,13 @@ onBeforeUnmount(() => { listVersion++; detailVersion++ })
       <el-table-column prop="orderQty" :label="tr('订购数量')" min-width="85" align="right" />
       <el-table-column :label="tr('当前状态')" min-width="108">
         <template #default="{ row }"><el-tag :type="statuses[row.status]?.tone ?? 'info'">{{ tr(statuses[row.status]?.label ?? '待确认') }}</el-tag></template>
+      </el-table-column>
+      <el-table-column :label="tr('操作')" width="90">
+        <template #default="{ row }">
+          <el-button v-if="row.status === 'CANCELLED'" link type="danger"
+            :loading="isSameOrder(removingOrder, row)" :disabled="removingOrder !== null"
+            @click="removeOrder(row)">{{ tr('删除') }}</el-button>
+        </template>
       </el-table-column>
     </el-table>
     <el-table v-else-if="view === 'customer-inventory'" :data="inventory" v-loading="loading" :empty-text="tr('暂无可展示车型')">

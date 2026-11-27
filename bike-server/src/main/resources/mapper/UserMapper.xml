@@ -20,7 +20,16 @@
     <select id="selectPermissionCodes" resultType="string">SELECT p.permission_code FROM bike_sys_permission p JOIN bike_sys_role_permission rp ON rp.permission_id=p.id JOIN bike_sys_user_role ur ON ur.role_id=rp.role_id JOIN bike_sys_user u ON u.id=ur.user_id JOIN bike_sys_role r ON r.id=ur.role_id WHERE u.username=#{username} AND u.enabled=1 AND r.enabled=1</select>
     <select id="selectWorkstationTypes" resultType="string">SELECT w.workstation_type FROM bike_workstation w JOIN bike_sys_user u ON u.workstation_id=w.id WHERE u.username=#{username} AND u.enabled=1 AND w.enabled=1</select>
     <update id="updateLastLogin">UPDATE bike_sys_user SET last_login_at=NOW(3) WHERE username=#{username}</update>
-    <update id="updatePassword">UPDATE bike_sys_user SET auth_version=auth_version+1,password_hash=#{passwordHash},must_change_password=0 WHERE username=#{username} AND enabled=1</update>
+    <update id="updatePassword">
+        UPDATE bike_sys_user
+        SET auth_version=auth_version+1, password_hash=#{passwordHash}, must_change_password=0
+        WHERE username=#{username} AND enabled=1 AND auth_version=#{expectedAuthVersion}
+    </update>
+    <update id="updateAssignedPassword">
+        UPDATE bike_sys_user
+        SET auth_version=auth_version+1, password_hash=#{passwordHash}, must_change_password=0
+        WHERE id=#{id}
+    </update>
     <update id="updatePasswordForFirstLogin">UPDATE bike_sys_user SET auth_version=auth_version+1,password_hash=#{passwordHash},must_change_password=1 WHERE username=#{username} AND enabled=1 AND must_change_password=1</update>
     <insert id="insertOperationLog">INSERT INTO bike_operation_log(business_type,business_id,action,operator_id,operator_name,before_data,after_data,client_ip) VALUES('USER_CHANGE',#{businessId},#{action},#{operatorId},#{operatorName},JSON_OBJECT('value',#{beforeData}),JSON_OBJECT('value',#{afterData}),#{clientIp})</insert>
 </mapper>

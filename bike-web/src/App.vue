@@ -51,6 +51,7 @@ const customerProfiles = ref<InstanceType<typeof CustomerProfiles> | null>(null)
 const PartPricingWorkspace = defineAsyncComponent(() => import('./components/PartPricingWorkspace.vue'))
 const CustomerWorkspace = defineAsyncComponent(() => import('./components/CustomerWorkspace.vue'))
 const CustomerAccountCreate = defineAsyncComponent(() => import('./components/CustomerAccountCreate.vue'))
+const UserPasswordDialog = defineAsyncComponent(() => import('./components/UserPasswordDialog.vue'))
 const CustomerOrderNotifications = defineAsyncComponent(() => import('./components/CustomerOrderNotifications.vue'))
 const DispatchNotifications = defineAsyncComponent(() => import('./components/DispatchNotifications.vue'))
 const dispatchPiId = ref<number | null>(null)
@@ -319,6 +320,23 @@ const activeModule = computed(() => modulePageData.value[activeView.value] ?? {
   rows: [],
   action: '新增记录',
 })
+const userPasswordTarget = ref<{ id: string; username: string } | null>(null)
+function openUserPasswordDialog(row: string[]) {
+  const id = row[activeModule.value.columns.indexOf('ID')]
+  if (!id || !/^[1-9][0-9]*$/.test(id)) {
+    ElMessage.error(tr('用户记录不存在或已被更新'))
+    return
+  }
+  userPasswordTarget.value = { id, username: row[0] }
+}
+
+function finishUserPasswordAssignment(requiresSignIn: boolean) {
+  if (requiresSignIn) {
+    clearSession()
+  } else {
+    void loadModule('users')
+  }
+}
 function moduleColumnWidth(column: string) {
   if (column.includes('聚合码')) return 230
   if (/时间|日期/.test(column)) return 165
@@ -815,6 +833,7 @@ function changeModulePage(nextPage: number) {
 }
 
 function handleAuthExpired() {
+  userPasswordTarget.value = null
   loggedIn.value = false
   authContext.value = null
   passwordChangeVisible.value = false
@@ -880,6 +899,7 @@ function openOperationGuideStage(stage: string) {
 }
 
 function clearSession() {
+  userPasswordTarget.value = null
   dispatchPiId.value = null
   localStorage.removeItem('bike_access_token')
   loggedIn.value = false
@@ -1473,10 +1493,13 @@ async function submitPrimaryAction() {
           </el-select>
           <CustomerAccountCreate v-if="activeView === 'users' && isSuperAdmin(authContext)" @created="loadModule('users')" /><div class="module-actions"><button v-if="hasPermission(authContext, 'DATA_EXPORT') && ['parts','inventory','stock-in','stock-out','stock','orders','rework'].includes(activeView)" class="secondary-action" @click="downloadModule(activeView === 'operation-logs' ? 'logs' : activeView)">{{ tr("导出当前查询") }}</button><button v-if="activeView === 'parts' && canImportActiveModule" class="secondary-action" @click="downloadPartsTemplate">{{ tr("下载部件导入模板") }}</button></div><PermissionGate :allowed="canShowPrimaryAction"><div class="module-actions"><button v-if="canImportActiveModule" class="secondary-action" @click="chooseImport(activeView)">{{ tr("导入 Excel") }}</button><button class="primary-action" @click="openPrimaryAction">＋ {{ tr(activeModule?.action) }}</button><input ref="importInput" class="hidden-file-input" type="file" accept=".xlsx,.xls" @change="importModule" /></div></PermissionGate></template>
         <template #row-actions="{ row }">
+          <button v-if="activeView === 'users' && isSuperAdmin(authContext)" type="button" class="row-action" @click="openUserPasswordDialog(row)">{{ tr("修改密码") }}</button>
           <button v-if="canOpenCustomerProfiles" type="button" class="row-action" @click="customerProfiles?.openForCustomer(row[0], row[1])">{{ tr("PI 商务资料") }}</button>
           <button v-if="activeView === 'orders'" class="row-action" @click="journeyOrderNo = row[0]">{{ tr("订单办理") }}</button><button v-if="['inventory-locks', 'agent-locks', 'agent-dashboard'].includes(activeView) && hasPermission(authContext, 'ORDER_READ')" class="row-action" @click="openLinkedOrders(row)">{{ tr("关联订单") }}</button><button v-if="activeView === 'orders' && canRenewOrderReservation(row)" class="row-action" @click="manageOrderReservation(row, 'renew')">{{ ['FULFILLED', '已履约'].includes(row[9]) ? tr('续占用以撤销出库') : tr('重新占用') }}</button><button v-if="activeView === 'orders' && canWriteActiveModule && ['PARTIAL_SHIPPED', '部分出库'].includes(row[6])" class="row-action" @click="manageOrderReservation(row, 'close')">{{ tr("关闭剩余") }}</button><button v-if="activeView === 'agents' && isSuperAdmin(authContext)" class="row-action" @click="editAgentAccess(row)">{{ tr("车型授权") }}</button><CustomerScopeEditor v-if="activeView === 'users' && hasPermission(authContext, 'CUSTOMER_SCOPE_MANAGE') && ['WEB_ADMIN', 'WEB_OPERATOR'].includes(row[2])" :username="row[0]" /><button v-if="!(activeView === 'users' && row[2] === 'CUSTOMER')" class="row-action" @click="openRowAction(row)">{{ activeView === 'orders' && ((row[7] && row[7] !== '-') || !['DRAFT','PENDING','草稿','待确认'].includes(row[6])) ? tr('查看详情') : tr(rowActionLabel) }}</button><button v-if="canWriteActiveModule && ['users', 'roles', 'workstations', 'locations'].includes(activeView)" class="row-action" @click="toggleSystemStatus(row)">{{ row[activeView === 'locations' ? 4 : 3] === '启用' ? tr('停用') : tr('启用') }}</button><button v-if="canWriteActiveModule && activeView === 'orders' && !['SHIPPED', 'PARTIAL_SHIPPED', 'CANCELLED', 'CLOSED', '已完成', '部分出库', '已作废', '已关闭'].includes(row[6])" class="row-action danger-action" @click="changeOrderStatus(row, 'cancel')">{{ tr("作废") }}</button><button v-if="canWriteActiveModule && ['inventory-locks', 'agent-locks'].includes(activeView) && ['锁定中', '部分转订单', 'LOCKED', 'PARTIAL_CONVERTED'].includes(row[7])" class="row-action" @click="changeInventoryLock(row, 'release')">{{ tr("释放") }}</button><button v-if="canWriteActiveModule && ['inventory-locks', 'agent-locks'].includes(activeView) && ['锁定中', '部分转订单', 'LOCKED', 'PARTIAL_CONVERTED'].includes(row[7]) && canConvertLock && Number(row[3]) - Number(row[4]) - Number(row[5]) > 0" class="row-action" @click="changeInventoryLock(row, 'convert')">{{ tr("转订单 / PI") }}</button><button v-if="canWriteActiveModule && ['stock-in', 'stock-out'].includes(activeView) && ['已完成', 'COMPLETED'].includes(row[6])" class="row-action danger-action" @click="cancelStockRecord(row)">{{ tr("撤销") }}</button></template>
       </BusinessModulePage>
     <template #dialogs>
+    <UserPasswordDialog v-if="userPasswordTarget" :user-id="userPasswordTarget.id" :username="userPasswordTarget.username"
+      @closed="userPasswordTarget = null" @assigned="finishUserPasswordAssignment" />
     <OrderJourney v-if="journeyOrderNo && !passwordChangeVisible && !isCustomerAccount" :order-no="journeyOrderNo" :context="authContext" @close="journeyOrderNo = ''" @changed="refreshOrderJourney" @continue-pi="continueOrderToPi" />
     <ProductionFulfillmentGuide v-if="authContext && !isCustomerAccount" v-model="operationGuideVisible" :context="authContext" initial-view="flow" @navigate="navigate" @stage="openOperationGuideStage" />
     <el-dialog v-model="importDetailsVisible" :title='tr("导入结果")' width="min(720px, 95vw)">

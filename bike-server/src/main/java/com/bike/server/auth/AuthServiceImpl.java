@@ -53,11 +53,14 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public LoginResponse login(LoginRequest request, String clientIp) {
-        LoginAttempt attempt = failedAttempts.get(request.username());
-        if (attempt != null && attempt.lockedUntil().isAfter(Instant.now())) {
+        UserAuthRecord databaseUser = userMapper == null ? null : userMapper.selectAuthByUsername(request.username());
+        String loginKey = databaseUser == null ? request.username() : databaseUser.username();
+        long authVersion = databaseUser == null ? -1 : databaseUser.authVersion();
+        LoginAttempt attempt = failedAttempts.get(loginKey);
+        // 管理员分配新密码后，旧凭证版本的失败次数和锁定不再影响登录。
+        if (attempt != null && attempt.authVersion() == authVersion && attempt.lockedUntil().isAfter(Instant.now())) {
             throw new BusinessException("AUTH_TOO_MANY_ATTEMPTS", "登录失败次数过多，请稍后再试");
         }
-        UserAuthRecord databaseUser = userMapper == null ? null : userMapper.selectAuthByUsername(request.username());
         boolean databaseValid = databaseUser != null && databaseUser.enabled()
                 && passwordEncoder.matches(request.password(), databaseUser.passwordHash());
         // 配置账号只供无数据库的兼容测试使用；正式运行必须由数据库确认账号。
@@ -65,13 +68,15 @@ public class AuthServiceImpl implements AuthService {
                 && passwordEncoder.matches(request.password(), adminPasswordHash);
         if (!databaseValid && !configValid) {
             if (loginLogMapper != null) loginLogMapper.insert(request.username(), false, normalizeClientIp(clientIp), "用户名或密码错误");
-            failedAttempts.compute(request.username(), (key, previous) -> {
-                int failures = previous == null ? 1 : previous.failures() + 1;
-                return new LoginAttempt(failures, failures >= MAX_FAILURES ? Instant.now().plusSeconds(LOCK_SECONDS) : Instant.EPOCH);
+            failedAttempts.compute(loginKey, (key, previous) -> {
+                if (previous != null && previous.authVersion() > authVersion) return previous;
+                int failures = previous != null && previous.authVersion() == authVersion ? previous.failures() + 1 : 1;
+                return new LoginAttempt(authVersion, failures,
+                        failures >= MAX_FAILURES ? Instant.now().plusSeconds(LOCK_SECONDS) : Instant.EPOCH);
             });
             throw new BusinessException("AUTH_INVALID_CREDENTIALS", "用户名或密码错误");
         }
-        failedAttempts.remove(request.username());
+        failedAttempts.computeIfPresent(loginKey, (key, previous) -> previous.authVersion() <= authVersion ? null : previous);
         if (databaseValid) userMapper.updateLastLogin(databaseUser.username());
         if (loginLogMapper != null) loginLogMapper.insert(request.username(), true, normalizeClientIp(clientIp), null);
         JwtTokenService.Token token = jwtTokenService.issue(request.username(), databaseValid ? databaseUser.authVersion() : 0);
@@ -128,14 +133,17 @@ public class AuthServiceImpl implements AuthService {
         UserAuthRecord databaseUser = userMapper == null ? null : userMapper.selectAuthByUsername(username);
         if (databaseUser != null) {
             if (!passwordEncoder.matches(request.currentPassword(), databaseUser.passwordHash())) throw new BusinessException("AUTH_INVALID_CREDENTIALS", "当前密码错误");
-            if (userMapper.updatePassword(username, passwordEncoder.encode(request.newPassword())) != 1) throw new BusinessException("PASSWORD_UPDATE_FAILED", "密码修改失败");
+            // 防止验证旧密码后，覆盖管理员刚分配的新密码。
+            if (userMapper.updatePassword(username, passwordEncoder.encode(request.newPassword()), databaseUser.authVersion()) != 1) {
+                throw new BusinessException("PASSWORD_UPDATE_FAILED", "密码修改失败");
+            }
             return;
         }
         if (adminPasswordHash == null || !passwordEncoder.matches(request.currentPassword(), adminPasswordHash)) throw new BusinessException("AUTH_INVALID_CREDENTIALS", "当前密码错误");
         adminPasswordHash = passwordEncoder.encode(request.newPassword());
     }
 
-    private record LoginAttempt(int failures, Instant lockedUntil) { }
+    private record LoginAttempt(long authVersion, int failures, Instant lockedUntil) { }
 
     private static String normalizeClientIp(String clientIp) {
         if (clientIp == null || clientIp.isBlank()) return null;

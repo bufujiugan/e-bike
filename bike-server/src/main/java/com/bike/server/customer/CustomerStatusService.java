@@ -8,6 +8,7 @@ import java.util.List;
 public interface CustomerStatusService {
     PageResponse<OrderSummary> listOrders(long page);
     OrderDetail getOrder(String kind, long id);
+    void removeCancelledOrder(String kind, long id);
     PageResponse<Inventory> listInventory(long page);
     PageResponse<PartPricingService.Price> listParts(String keyword, long page);
 

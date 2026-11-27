@@ -22,6 +22,17 @@
         AND document.source_order_id IS NULL
         AND NOT EXISTS (SELECT 1 FROM bike_pi_order_link ol WHERE ol.series_id = series.id)
     </sql>
+    <sql id="dismissalMatch">
+        dismissal.user_id = #{userId}
+        AND dismissal.order_kind = '${documentKind}'
+        AND dismissal.document_id = document.id
+    </sql>
+    <sql id="visibleAfterDismissal">
+        AND (document.status &lt;&gt; 'CANCELLED' OR NOT EXISTS (
+            SELECT 1 FROM bike_customer_order_dismissal dismissal
+            WHERE <include refid="dismissalMatch"/>
+        ))
+    </sql>
     <select id="selectOrders" resultType="com.bike.server.customer.CustomerStatusService$OrderSummary">
         SELECT id, kind, order_no, model_name, order_qty, shipped_qty, status
         FROM (
@@ -48,6 +59,7 @@
                 LEFT JOIN bike_pi pi ON pi.id = series.current_pi_id AND pi.customer_id = document.customer_id
                     AND (document.agent_id IS NULL OR pi.agent_id = document.agent_id)
                 WHERE 1 = 1 <include refid="salesOrderScope"/>
+                <include refid="visibleAfterDismissal"><property name="documentKind" value="ORDER"/></include>
             </if>
             <if test="kind == null">UNION ALL</if>
             <if test="kind == null or kind == 'PI'">
@@ -58,6 +70,7 @@
                     0 shipped_qty, document.status, series.created_at
                 FROM bike_pi_series series JOIN bike_pi document ON document.id = series.current_pi_id
                 WHERE 1 = 1 <include refid="standalonePiScope"/>
+                <include refid="visibleAfterDismissal"><property name="documentKind" value="PI"/></include>
                 <if test="id != null">AND series.id = #{id}</if>
             </if>
         ) visible_orders
@@ -66,9 +79,41 @@
     </select>
     <select id="countOrders" resultType="long">
         SELECT
-            (SELECT COUNT(*) FROM bike_sales_order document WHERE 1 = 1 <include refid="accountScope"/>)
+            (SELECT COUNT(*) FROM bike_sales_order document WHERE 1 = 1 <include refid="accountScope"/>
+                <include refid="visibleAfterDismissal"><property name="documentKind" value="ORDER"/></include>)
             + (SELECT COUNT(*) FROM bike_pi_series series JOIN bike_pi document ON document.id = series.current_pi_id
-                WHERE 1 = 1 <include refid="standalonePiScope"/>)
+                WHERE 1 = 1 <include refid="standalonePiScope"/>
+                <include refid="visibleAfterDismissal"><property name="documentKind" value="PI"/></include>)
+    </select>
+    <sql id="cancelledOrderInScope">
+        <choose>
+            <when test="kind == 'ORDER'">
+                FROM bike_sales_order document
+                WHERE document.status = 'CANCELLED' <include refid="salesOrderScope"/>
+            </when>
+            <when test="kind == 'PI'">
+                <!-- 仅记录当前 PI 修订版，后续修订版仍按自身状态展示。 -->
+                FROM bike_pi_series series JOIN bike_pi document ON document.id = series.current_pi_id
+                WHERE series.id = #{id} AND document.status = 'CANCELLED'
+                <include refid="standalonePiScope"/>
+            </when>
+        </choose>
+    </sql>
+    <insert id="insertCancelledOrderDismissal">
+        INSERT INTO bike_customer_order_dismissal (user_id, order_kind, document_id)
+        SELECT #{userId}, #{kind}, document.id
+        <include refid="cancelledOrderInScope"/>
+        ON DUPLICATE KEY UPDATE dismissed_at = bike_customer_order_dismissal.dismissed_at
+    </insert>
+    <select id="existsCancelledOrderDismissal" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1 <include refid="cancelledOrderInScope"/>
+            AND EXISTS (
+                SELECT 1 FROM bike_customer_order_dismissal dismissal
+                WHERE dismissal.user_id = #{userId} AND dismissal.order_kind = #{kind}
+                  AND dismissal.document_id = document.id
+            )
+        )
     </select>
     <sql id="piLogisticsColumns">
         logistics.batch_no, logistics.carrier, logistics.tracking_no, logistics.status, logistics.shipped_at
