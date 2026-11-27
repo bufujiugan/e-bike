@@ -91,12 +91,13 @@ type ModulePage = { subtitle: string; stats: { label: string; value: string; ton
 const modulePageData = ref<Record<string, ModulePage>>({})
 
 const navGroups: NavGroup[] = [
-  { label: '客户工作台', items: [
+  { label: '工作台', items: [
+    { key: 'workflow', label: '我的工作台', shortLabel: '工作台', path: '/workflow', icon: 'home' },
+    { key: 'dashboard', label: '运营概览', shortLabel: '总览', path: '/dashboard' },
     { key: 'customer-orders', label: '我的订单', shortLabel: '订单', path: '/customer/orders', icon: 'orders' },
     { key: 'customer-inventory', label: '当前库存', shortLabel: '库存', path: '/customer/inventory', icon: 'inventory' },
     { key: 'customer-part-prices', label: '可购零件', shortLabel: '零件', path: '/customer/part-prices', icon: 'parts' },
   ] },
-  { label: '工作台', items: [{ key: 'workflow', label: '我的工作台', shortLabel: '工作台', path: '/workflow', icon: 'home' }, { key: 'dashboard', label: '运营概览', shortLabel: '总览', path: '/dashboard' }] },
   {
     label: '生产作业',
     items: [
@@ -244,14 +245,20 @@ function filterVisibleNavItems(items: NavItem[], context: AuthContext): NavItem[
 }
 const visibleNavGroups = computed(() => {
   const context = authContext.value
-  if (!context) return []
-  if (isCustomerAccount.value) return navGroups.filter(group => group.label === '客户工作台')
-  if (isSuperAdmin(context)) return navGroups.filter(group => group.label !== '客户工作台')
-  if (isPdaJobAccount.value) return []
-  return navGroups.map(group => ({
-    ...group,
-    items: filterVisibleNavItems(group.items, context),
-  })).filter(group => group.items.length > 0)
+  if (!context || isPdaJobAccount.value) return []
+  const isCustomer = isCustomerAccount.value
+  const isAdmin = isSuperAdmin(context)
+  return navGroups.map(group => {
+    let items: NavItem[]
+    if (isCustomer) {
+      items = group.items.filter(item => customerStatusViews.has(item.key))
+    } else if (isAdmin) {
+      items = group.items.filter(item => !customerStatusViews.has(item.key))
+    } else {
+      items = filterVisibleNavItems(group.items, context)
+    }
+    return { ...group, items }
+  }).filter(group => group.items.length > 0)
 })
 const allNavItems = navGroups.flatMap(group => flattenNavItems(group.items))
 const visibleNavItems = computed(() => visibleNavGroups.value.flatMap(group => flattenNavItems(group.items)))
